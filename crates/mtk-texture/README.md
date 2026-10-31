@@ -101,6 +101,13 @@ pub struct AtlasSpriteLocation {
     pub average_color: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AtlasTextureSlot {
+    pub role: String,
+    pub file_name: String,
+    pub colorspace: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AtlasChunkMeta {
     pub chunk_id: u16,
@@ -116,6 +123,7 @@ pub struct AtlasChunkMeta {
     pub has_aux: bool,
     pub has_tint: bool,
     pub pbr: Option<PbrMeta>,
+    pub textures: Vec<AtlasTextureSlot>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

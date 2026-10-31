@@ -99,6 +99,17 @@ fn default_local_uv_bounds() -> [f32; 4] {
     [0.0, 0.0, 1.0, 1.0]
 }
 
+/// Specification for an individual texture channel / file belonging to an Atlas Chunk.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AtlasTextureSlot {
+    /// Texture role: `"albedo"`, `"normal"`, `"orm"`, `"aux"`, `"overlay"`.
+    pub role: String,
+    /// Canonical file name on disk or in archive, e.g. `"blocks_chunk_001_orm.png"`.
+    pub file_name: String,
+    /// Texture color space required for DCC shader sampler: `"sRGB"` or `"Non-Color"`.
+    pub colorspace: String,
+}
+
 /// Metadata for an individual Atlas Chunk (sheet).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AtlasChunkMeta {
@@ -127,6 +138,9 @@ pub struct AtlasChunkMeta {
     /// Canonical PBR layout metadata; `None` means a legacy cache predating the current format.
     #[serde(default)]
     pub pbr: Option<PbrMeta>,
+    /// Authoritative texture slots for DCC shader loading and binding.
+    #[serde(default)]
+    pub textures: Vec<AtlasTextureSlot>,
 }
 
 fn default_has_tint() -> bool {
@@ -148,6 +162,67 @@ impl AtlasChunkMeta {
         } else {
             format!("{}_chunk_{:03}", self.category, self.category_chunk_index)
         }
+    }
+
+    /// Derives the canonical texture slots according to active channel flags and convention.
+    pub fn build_texture_slots(&self) -> Vec<AtlasTextureSlot> {
+        let stem = self.file_stem();
+        let mut slots = Vec::with_capacity(5);
+
+        // Albedo is always present for every atlas sheet
+        slots.push(AtlasTextureSlot {
+            role: "albedo".to_string(),
+            file_name: format!("{stem}.png"),
+            colorspace: "sRGB".to_string(),
+        });
+
+        if self.has_normal {
+            slots.push(AtlasTextureSlot {
+                role: "normal".to_string(),
+                file_name: format!("{stem}_n.png"),
+                colorspace: "Non-Color".to_string(),
+            });
+        }
+
+        if self.has_orm {
+            slots.push(AtlasTextureSlot {
+                role: "orm".to_string(),
+                file_name: format!("{stem}_orm.png"),
+                colorspace: "Non-Color".to_string(),
+            });
+        }
+
+        if self.has_aux {
+            slots.push(AtlasTextureSlot {
+                role: "aux".to_string(),
+                file_name: format!("{stem}_aux.png"),
+                colorspace: "Non-Color".to_string(),
+            });
+        }
+
+        if self.has_overlay {
+            slots.push(AtlasTextureSlot {
+                role: "overlay".to_string(),
+                file_name: format!("{stem}_overlay.png"),
+                colorspace: "sRGB".to_string(),
+            });
+        }
+
+        slots
+    }
+
+    /// Returns the active texture slots, automatically deriving them from channel flags if empty.
+    pub fn active_textures(&self) -> Vec<AtlasTextureSlot> {
+        if !self.textures.is_empty() {
+            self.textures.clone()
+        } else {
+            self.build_texture_slots()
+        }
+    }
+
+    /// Synchronizes `self.textures` with current flags.
+    pub fn refresh_textures(&mut self) {
+        self.textures = self.build_texture_slots();
     }
 }
 
@@ -253,14 +328,33 @@ impl AtlasAddressMap {
         self.anim_sprites.extend(other.anim_sprites);
     }
 
-    /// Serialize to formatted JSON.
-    pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string_pretty(self)
+    /// Synchronizes texture slots across all chunks based on their active channel flags.
+    pub fn refresh_textures(&mut self) {
+        for chunk in &mut self.chunks {
+            chunk.refresh_textures();
+        }
     }
 
-    /// Deserialize from JSON string.
+    /// Serialize to formatted JSON, ensuring all chunks have their authoritative textures populated.
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        if self.chunks.iter().all(|c| !c.textures.is_empty()) {
+            serde_json::to_string_pretty(self)
+        } else {
+            let mut copy = self.clone();
+            copy.refresh_textures();
+            serde_json::to_string_pretty(&copy)
+        }
+    }
+
+    /// Deserialize from JSON string, ensuring backward compatibility with older caches lacking `textures`.
     pub fn from_json(json_str: &str) -> Result<Self, serde_json::Error> {
-        serde_json::from_str(json_str)
+        let mut map: Self = serde_json::from_str(json_str)?;
+        for chunk in &mut map.chunks {
+            if chunk.textures.is_empty() {
+                chunk.refresh_textures();
+            }
+        }
+        Ok(map)
     }
 
     /// Lookup chunk descriptor by chunk ID.
@@ -304,5 +398,81 @@ impl AtlasAddressMap {
             .values()
             .find(|s| s.chunk_id == def_chunk)
             .or_else(|| self.sprites.values().next())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_texture_slots() {
+        let mut meta = AtlasChunkMeta {
+            chunk_id: 0,
+            category: "blocks".to_string(),
+            is_animated: false,
+            category_chunk_index: 1,
+            width: 1024,
+            height: 1024,
+            has_normal: true,
+            has_specular: false,
+            has_overlay: true,
+            has_orm: true,
+            has_aux: false,
+            has_tint: true,
+            pbr: None,
+            textures: Vec::new(),
+        };
+
+        meta.refresh_textures();
+        assert_eq!(meta.textures.len(), 4); // albedo, normal, orm, overlay
+
+        let albedo = meta.textures.iter().find(|s| s.role == "albedo").unwrap();
+        assert_eq!(albedo.file_name, "blocks_chunk_001.png");
+        assert_eq!(albedo.colorspace, "sRGB");
+
+        let normal = meta.textures.iter().find(|s| s.role == "normal").unwrap();
+        assert_eq!(normal.file_name, "blocks_chunk_001_n.png");
+        assert_eq!(normal.colorspace, "Non-Color");
+
+        let orm = meta.textures.iter().find(|s| s.role == "orm").unwrap();
+        assert_eq!(orm.file_name, "blocks_chunk_001_orm.png");
+        assert_eq!(orm.colorspace, "Non-Color");
+
+        let overlay = meta.textures.iter().find(|s| s.role == "overlay").unwrap();
+        assert_eq!(overlay.file_name, "blocks_chunk_001_overlay.png");
+        assert_eq!(overlay.colorspace, "sRGB");
+    }
+
+    #[test]
+    fn test_backward_compatibility_json() {
+        // Old JSON without `textures` array
+        let legacy_json = r#"{
+            "chunks": [
+                {
+                    "chunk_id": 0,
+                    "category": "blocks",
+                    "category_chunk_index": 1,
+                    "width": 1024,
+                    "height": 1024,
+                    "has_normal": false,
+                    "has_specular": false,
+                    "has_orm": true
+                }
+            ],
+            "sprites": {}
+        }"#;
+
+        let map = AtlasAddressMap::from_json(legacy_json).expect("deserialize legacy json");
+        let chunk = &map.chunks[0];
+        assert_eq!(chunk.textures.len(), 2); // albedo + orm
+        assert_eq!(chunk.textures[0].role, "albedo");
+        assert_eq!(chunk.textures[1].role, "orm");
+        assert_eq!(chunk.textures[1].colorspace, "Non-Color");
+
+        // Serialize back
+        let serialized = map.to_json().expect("serialize to json");
+        assert!(serialized.contains(r#""textures""#));
+        assert!(serialized.contains(r#""blocks_chunk_001_orm.png""#));
     }
 }

@@ -48,6 +48,7 @@ tiles=0-3
         has_aux: false,
         has_tint: false,
         pbr: None,
+        textures: Vec::new(),
     });
 
     for i in 0..4 {

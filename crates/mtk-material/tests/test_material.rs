@@ -341,6 +341,7 @@ fn animated_water_atlas() -> AtlasAddressMap {
         has_aux: false,
         has_tint: false,
         pbr: None,
+        textures: Vec::new(),
     });
     address_map.chunks.push(mtk_texture::AtlasChunkMeta {
         chunk_id: 1,
@@ -356,6 +357,7 @@ fn animated_water_atlas() -> AtlasAddressMap {
         has_aux: false,
         has_tint: false,
         pbr: None,
+        textures: Vec::new(),
     });
 
     address_map.sprites.insert(

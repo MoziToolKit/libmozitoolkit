@@ -276,7 +276,7 @@ impl DynamicAtlasChunk {
     pub fn to_chunk_meta(&self) -> AtlasChunkMeta {
         let category_chunk_index =
             (self.chunk_id.saturating_sub(DEFAULT_DYNAMIC_SKINS_CHUNK_ID) + 1) as usize;
-        AtlasChunkMeta {
+        let mut meta = AtlasChunkMeta {
             chunk_id: self.chunk_id,
             category: "skins".to_string(),
             is_animated: false,
@@ -290,7 +290,10 @@ impl DynamicAtlasChunk {
             has_aux: false,
             has_tint: false,
             pbr: None,
-        }
+            textures: Vec::new(),
+        };
+        meta.refresh_textures();
+        meta
     }
 }
 

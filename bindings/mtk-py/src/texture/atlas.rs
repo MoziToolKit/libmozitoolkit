@@ -19,6 +19,46 @@ pub struct PyBakedAtlas {
     pub(crate) inner: BakedAtlas,
 }
 
+fn chunk_meta_to_dict<'py>(
+    py: Python<'py>,
+    cm: &mtk_texture::AtlasChunkMeta,
+) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new(py);
+    dict.set_item("chunk_id", cm.chunk_id)?;
+    dict.set_item("category", &cm.category)?;
+    dict.set_item("is_animated", cm.is_animated)?;
+    dict.set_item("category_chunk_index", cm.category_chunk_index)?;
+    dict.set_item("width", cm.width)?;
+    dict.set_item("height", cm.height)?;
+    dict.set_item("has_normal", cm.has_normal)?;
+    dict.set_item("has_specular", cm.has_specular)?;
+    dict.set_item("has_orm", cm.has_orm)?;
+    dict.set_item("has_aux", cm.has_aux)?;
+    dict.set_item("has_overlay", cm.has_overlay)?;
+    dict.set_item("has_tint", cm.has_tint)?;
+    dict.set_item("file_stem", cm.file_stem())?;
+    dict.set_item(
+        "pbr",
+        cm.pbr
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?,
+    )?;
+
+    let textures_list = pyo3::types::PyList::empty(py);
+    for slot in cm.active_textures() {
+        let slot_dict = PyDict::new(py);
+        slot_dict.set_item("role", &slot.role)?;
+        slot_dict.set_item("file_name", &slot.file_name)?;
+        slot_dict.set_item("colorspace", &slot.colorspace)?;
+        textures_list.append(slot_dict)?;
+    }
+    dict.set_item("textures", textures_list)?;
+
+    Ok(dict)
+}
+
 #[pymethods]
 impl PyBakedAtlas {
     /// Create a BakedAtlas wrapper from an atlas mapping JSON string.
@@ -35,36 +75,14 @@ impl PyBakedAtlas {
     }
 
     /// Returns chunk metadata dictionary by chunk ID:
-    /// `{chunk_id, category, is_animated, width, height, has_normal, has_specular, has_orm, has_aux, has_overlay, file_stem, category_chunk_index, pbr}`.
+    /// `{chunk_id, category, is_animated, width, height, has_normal, has_specular, has_orm, has_aux, has_overlay, file_stem, category_chunk_index, pbr, textures}`.
     pub fn get_chunk_info<'py>(
         &self,
         py: Python<'py>,
         chunk_id: u16,
     ) -> PyResult<Option<Bound<'py, PyDict>>> {
         if let Some(cm) = self.inner.get_chunk_meta(chunk_id) {
-            let dict = PyDict::new(py);
-            dict.set_item("chunk_id", cm.chunk_id)?;
-            dict.set_item("category", &cm.category)?;
-            dict.set_item("is_animated", cm.is_animated)?;
-            dict.set_item("category_chunk_index", cm.category_chunk_index)?;
-            dict.set_item("width", cm.width)?;
-            dict.set_item("height", cm.height)?;
-            dict.set_item("has_normal", cm.has_normal)?;
-            dict.set_item("has_specular", cm.has_specular)?;
-            dict.set_item("has_orm", cm.has_orm)?;
-            dict.set_item("has_aux", cm.has_aux)?;
-            dict.set_item("has_overlay", cm.has_overlay)?;
-            dict.set_item("has_tint", cm.has_tint)?;
-            dict.set_item("file_stem", cm.file_stem())?;
-            dict.set_item(
-                "pbr",
-                cm.pbr
-                    .as_ref()
-                    .map(serde_json::to_string)
-                    .transpose()
-                    .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?,
-            )?;
-            Ok(Some(dict))
+            Ok(Some(chunk_meta_to_dict(py, cm)?))
         } else {
             Ok(None)
         }
@@ -77,29 +95,7 @@ impl PyBakedAtlas {
     ) -> PyResult<Bound<'py, pyo3::types::PyList>> {
         let list = pyo3::types::PyList::empty(py);
         for cm in self.inner.address_map.get_chunks() {
-            let dict = PyDict::new(py);
-            dict.set_item("chunk_id", cm.chunk_id)?;
-            dict.set_item("category", &cm.category)?;
-            dict.set_item("is_animated", cm.is_animated)?;
-            dict.set_item("category_chunk_index", cm.category_chunk_index)?;
-            dict.set_item("width", cm.width)?;
-            dict.set_item("height", cm.height)?;
-            dict.set_item("has_normal", cm.has_normal)?;
-            dict.set_item("has_specular", cm.has_specular)?;
-            dict.set_item("has_orm", cm.has_orm)?;
-            dict.set_item("has_aux", cm.has_aux)?;
-            dict.set_item("has_overlay", cm.has_overlay)?;
-            dict.set_item("has_tint", cm.has_tint)?;
-            dict.set_item("file_stem", cm.file_stem())?;
-            dict.set_item(
-                "pbr",
-                cm.pbr
-                    .as_ref()
-                    .map(serde_json::to_string)
-                    .transpose()
-                    .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?,
-            )?;
-            list.append(dict)?;
+            list.append(chunk_meta_to_dict(py, cm)?)?;
         }
         Ok(list)
     }

@@ -820,6 +820,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
         has_aux: false,
         has_tint: false,
         pbr: None,
+        textures: Vec::new(),
     });
     address_map.chunks.push(AtlasChunkMeta {
         chunk_id: 1,
@@ -835,6 +836,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
         has_aux: false,
         has_tint: false,
         pbr: None,
+        textures: Vec::new(),
     });
 
     let anim_textures = [

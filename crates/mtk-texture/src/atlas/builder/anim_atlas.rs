@@ -203,7 +203,7 @@ pub fn build_anim_atlas_chunks(
             }
         }
 
-        address_map.chunks.push(AtlasChunkMeta {
+        let mut chunk_meta = AtlasChunkMeta {
             chunk_id,
             category: category_name.to_string(),
             is_animated: true,
@@ -217,7 +217,10 @@ pub fn build_anim_atlas_chunks(
             has_aux: false,
             has_tint: category_name == "blocks",
             pbr: None,
-        });
+            textures: Vec::new(),
+        };
+        chunk_meta.refresh_textures();
+        address_map.chunks.push(chunk_meta);
 
         baked_chunks.push(BakedAtlasChunk {
             chunk_id,

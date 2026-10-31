@@ -63,6 +63,7 @@ pub fn decode_baked_atlas(
             chunk_meta.has_orm = has_orm;
             chunk_meta.has_aux = has_aux;
             chunk_meta.pbr = if is_empty { None } else { Some(meta) };
+            chunk_meta.refresh_textures();
         }
 
         summary.chunks += 1;

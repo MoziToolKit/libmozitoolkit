@@ -141,6 +141,7 @@ fn decode_baked_atlas_updates_mapping_metadata() {
         has_aux: false,
         has_tint: false,
         pbr: None,
+        textures: Vec::new(),
     });
 
     let mut atlas = BakedAtlas {
@@ -208,6 +209,7 @@ fn decode_baked_atlas_without_companions_leaves_metadata_empty() {
         has_aux: false,
         has_tint: false,
         pbr: None,
+        textures: Vec::new(),
     });
     let mut atlas = BakedAtlas {
         chunks: vec![BakedAtlasChunk {
