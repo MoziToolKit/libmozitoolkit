@@ -190,7 +190,6 @@ impl PyAssetCache {
         dict.set_item("fingerprint", m.fingerprint)?;
         dict.set_item("pack_count", m.pack_count)?;
         dict.set_item("atlas_chunks", m.atlas_chunks)?;
-        dict.set_item("standalone_textures", m.standalone_textures)?;
         dict.set_item("baked_models", m.baked_models)?;
         dict.set_item("created_at_epoch_secs", m.created_at_epoch_secs)?;
         Ok(dict)
@@ -303,7 +302,6 @@ pub fn get_cache_manifest<'py>(
         dict.set_item("fingerprint", m.fingerprint)?;
         dict.set_item("pack_count", m.pack_count)?;
         dict.set_item("atlas_chunks", m.atlas_chunks)?;
-        dict.set_item("standalone_textures", m.standalone_textures)?;
         dict.set_item("baked_models", m.baked_models)?;
         dict.set_item("created_at_epoch_secs", m.created_at_epoch_secs)?;
         Ok(Some(dict))

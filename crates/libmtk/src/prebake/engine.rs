@@ -392,7 +392,6 @@ fn precompile_all_assets_inner(
         fingerprint: fingerprint.clone(),
         pack_count: stack.len(),
         atlas_chunks: chunk_count,
-        standalone_textures: 0,
         baked_models: baked_count,
         created_at_epoch_secs: epoch_now,
     };

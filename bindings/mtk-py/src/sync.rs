@@ -347,44 +347,6 @@ impl PyLiveSyncSession {
         Ok(list)
     }
 
-    /// Export host-agnostic persisted session state as JSON.
-    #[pyo3(signature = (user_modified=false))]
-    pub fn export_persisted_state_json(&self, user_modified: bool) -> String {
-        self.inner.export_persisted_state_json(user_modified)
-    }
-
-    /// Start a session, restoring a cached HELLO from persisted state JSON when possible.
-    #[pyo3(signature = (
-        url="ws://localhost:8765",
-        auto_reconnect=true,
-        max_reconnect_attempts=5,
-        state_json=None,
-        auth_token=None
-    ))]
-    pub fn start_with_persisted_state(
-        &mut self,
-        url: &str,
-        auto_reconnect: bool,
-        max_reconnect_attempts: usize,
-        state_json: Option<&str>,
-        auth_token: Option<&str>,
-    ) -> PyResult<()> {
-        // Persisted state may not be a reconnect candidate (or the host may
-        // disable the fast path); the session still needs the token for the
-        // default HELLO it falls back to.
-        self.inner.set_auth_token(auth_token.unwrap_or(""));
-
-        self.inner
-            .start_with_persisted_state_json(
-                url,
-                auto_reconnect,
-                max_reconnect_attempts,
-                state_json,
-                auth_token,
-            )
-            .map_err(pyo3::exceptions::PyRuntimeError::new_err)
-    }
-
     /// Returns a copy of the underlying `VoxelStorage`.
     pub fn get_storage(&self) -> PyResult<PyVoxelStorage> {
         let w = self.inner.world.read().map_err(|e| {

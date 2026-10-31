@@ -4,7 +4,7 @@
 //! supporting both pre-1.20.5 Tag structures and 1.20.5+ Data Component structures.
 
 use crate::nbt::tag::NbtCompound;
-use mtk_model::entity::banner::{dye_id_to_name, BannerPatternLayer};
+use mtk_model::entity::banner::BannerPatternLayer;
 use mtk_model::entity::skull::{PlayerProfileData, SkullKind};
 use mtk_model::BlockEntityData;
 
@@ -75,19 +75,11 @@ fn decode_decorated_pot(comp: &NbtCompound) -> Option<BlockEntityData> {
 /// Decodes Banner NBT data (pre-1.20.5 `Patterns` list and 1.20.5+ `minecraft:banner_patterns` component).
 fn decode_banner(comp: &NbtCompound) -> Option<BlockEntityData> {
     // 1. Determine base color
-    let base_color = if let Some(base_str) = comp
+    let base_color = comp
         .string("BaseColor")
         .or_else(|| comp.string("base_color"))
-    {
-        base_str.as_str().to_string()
-    } else if let Some(base_idx) = comp
-        .int("Base")
-        .or_else(|| comp.byte("Base").map(|b| b as i32))
-    {
-        dye_id_to_name(base_idx.clamp(0, 15) as u8).to_string()
-    } else {
-        "white".to_string()
-    };
+        .map(|s| s.as_str().to_string())
+        .unwrap_or_else(|| "white".to_string());
 
     let mut patterns = Vec::new();
 
@@ -104,17 +96,11 @@ fn decode_banner(comp: &NbtCompound) -> Option<BlockEntityData> {
                 .map(|s| s.as_str().to_string())
                 .unwrap_or_else(|| "base".to_string());
 
-            let col = if let Some(col_idx) = p_comp
-                .int("Color")
-                .or_else(|| p_comp.byte("Color").map(|b| b as i32))
-            {
-                dye_id_to_name(col_idx.clamp(0, 15) as u8).to_string()
-            } else if let Some(col_str) = p_comp.string("Color").or_else(|| p_comp.string("color"))
-            {
-                col_str.as_str().to_string()
-            } else {
-                "white".to_string()
-            };
+            let col = p_comp
+                .string("Color")
+                .or_else(|| p_comp.string("color"))
+                .map(|s| s.as_str().to_string())
+                .unwrap_or_else(|| "white".to_string());
 
             patterns.push(BannerPatternLayer::new(pat, col));
         }
@@ -165,23 +151,19 @@ fn decode_nbt_uuid(comp: &NbtCompound, key: &str) -> Option<String> {
     None
 }
 
-/// Decodes Skull / Head NBT data (SkullType, Rot, SkullOwner, and 1.20.5+ `profile` / `minecraft:profile` component).
+/// Decodes Skull / Head NBT data (Rot, SkullOwner, and 1.20.5+ `profile` / `minecraft:profile` component).
 fn decode_skull(comp: &NbtCompound) -> Option<BlockEntityData> {
-    let type_id = comp
-        .byte("SkullType")
-        .or_else(|| comp.int("SkullType").map(|i| i as i8))
-        .unwrap_or(0);
-    let mut kind = SkullKind::from_type_id(type_id.clamp(0, 6) as u8);
-
     let rotation = comp
         .byte("Rot")
         .or_else(|| comp.int("Rot").map(|i| i as i8))
         .map(|r| (r as u8) & 0x0F);
 
     let profile = decode_profile(comp);
-    if profile.is_some() {
-        kind = SkullKind::Player;
-    }
+    let kind = if profile.is_some() {
+        SkullKind::Player
+    } else {
+        SkullKind::Skeleton
+    };
 
     Some(mtk_model::BlockEntityData::Skull {
         kind,
@@ -323,8 +305,8 @@ mod tests {
             NbtTag::String(NbtStr::from_borrowed("minecraft:banner")),
         ));
         banner_comp.entries.push((
-            NbtStr::from_borrowed("Base"),
-            NbtTag::Int(11), // 11: blue
+            NbtStr::from_borrowed("BaseColor"),
+            NbtTag::String(NbtStr::from_borrowed("blue")),
         ));
 
         let mut p1 = NbtCompound::new();
@@ -332,8 +314,10 @@ mod tests {
             NbtStr::from_borrowed("Pattern"),
             NbtTag::String(NbtStr::from_borrowed("ts")),
         ));
-        p1.entries
-            .push((NbtStr::from_borrowed("Color"), NbtTag::Int(1))); // orange
+        p1.entries.push((
+            NbtStr::from_borrowed("Color"),
+            NbtTag::String(NbtStr::from_borrowed("orange")),
+        ));
 
         banner_comp.entries.push((
             NbtStr::from_borrowed("Patterns"),

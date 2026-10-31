@@ -43,8 +43,6 @@ pub struct CacheManifest {
     pub fingerprint: String,
     pub pack_count: usize,
     pub atlas_chunks: usize,
-    #[serde(default)]
-    pub standalone_textures: usize,
     pub baked_models: usize,
     pub created_at_epoch_secs: u64,
 }

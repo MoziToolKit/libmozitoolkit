@@ -33,7 +33,6 @@ pub fn create_test_cache_package(
         fingerprint: fingerprint.to_string(),
         pack_count: 1,
         atlas_chunks: 1,
-        standalone_textures: 0,
         baked_models: 50,
         created_at_epoch_secs: created_at,
     };

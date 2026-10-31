@@ -19,6 +19,4 @@ pub use protocol::{
     DeltaChangeEntry, ErrorCode, Opcode, Packet, ProtocolError, ResyncReason, SyncDecision,
     PROTOCOL_MAGIC, PROTOCOL_VERSION,
 };
-#[cfg(feature = "serde")]
-pub use session::PersistedSessionState;
 pub use session::{BaselineAssembler, DeltaStagingBuffer, LiveSyncSession, SyncLifecycle};
