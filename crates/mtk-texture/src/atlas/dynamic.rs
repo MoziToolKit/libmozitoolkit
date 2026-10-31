@@ -17,8 +17,6 @@ pub const DYNAMIC_TOTAL_SLOTS: usize = 256;
 
 /// Default reserved chunk ID for the dynamic entity atlas (skins, banners, etc.)
 pub const DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID: u16 = 0xFFF0;
-/// Deprecated alias for DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID.
-pub const DEFAULT_DYNAMIC_SKINS_CHUNK_ID: u16 = DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
 
 /// Maximum number of dynamic chunks supported (0xFFF0..=0xFFFF, 16 chunks = 4,096 unique 64x64 skins).
 pub const MAX_DYNAMIC_CHUNKS: usize = 16;
@@ -144,7 +142,7 @@ pub struct DynamicAtlasChunk {
 
 impl Default for DynamicAtlasChunk {
     fn default() -> Self {
-        Self::new(DEFAULT_DYNAMIC_SKINS_CHUNK_ID)
+        Self::new(DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID)
     }
 }
 
@@ -449,8 +447,10 @@ impl DynamicAtlasChunk {
 
     /// Produces AtlasChunkMeta representation for Blender DCC material binding.
     pub fn to_chunk_meta(&self) -> AtlasChunkMeta {
-        let category_chunk_index =
-            (self.chunk_id.saturating_sub(DEFAULT_DYNAMIC_SKINS_CHUNK_ID) + 1) as usize;
+        let category_chunk_index = (self
+            .chunk_id
+            .saturating_sub(DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID)
+            + 1) as usize;
         let mut meta = AtlasChunkMeta {
             chunk_id: self.chunk_id,
             category: "entities".to_string(),
@@ -486,7 +486,7 @@ pub struct DynamicAtlasManager {
 
 impl Default for DynamicAtlasManager {
     fn default() -> Self {
-        Self::new(DEFAULT_DYNAMIC_SKINS_CHUNK_ID)
+        Self::new(DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID)
     }
 }
 
@@ -798,7 +798,7 @@ mod tests {
 
     #[test]
     fn test_dynamic_atlas_manager_multi_chunk_expansion() {
-        let mut mgr = DynamicAtlasManager::new(DEFAULT_DYNAMIC_SKINS_CHUNK_ID);
+        let mut mgr = DynamicAtlasManager::new(DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID);
         assert_eq!(mgr.chunk_count(), 1);
 
         // Fill up chunk 0 (0xFFF0) with 256 skins
@@ -849,7 +849,7 @@ mod tests {
 
     #[test]
     fn test_dynamic_atlas_manager_dirty_tracking() {
-        let mut mgr = DynamicAtlasManager::new(DEFAULT_DYNAMIC_SKINS_CHUNK_ID);
+        let mut mgr = DynamicAtlasManager::new(DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID);
         assert_eq!(mgr.dirty_chunk_ids().len(), 0);
 
         let dummy_skin = vec![128u8; 64 * 64 * 4];
@@ -865,7 +865,7 @@ mod tests {
 
     #[test]
     fn test_dynamic_atlas_prewarm_vanilla_banners() {
-        let mut mgr = DynamicAtlasManager::new(DEFAULT_DYNAMIC_SKINS_CHUNK_ID);
+        let mut mgr = DynamicAtlasManager::new(DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID);
         mgr.prewarm_vanilla_banners(None)
             .expect("Prewarm must succeed");
 

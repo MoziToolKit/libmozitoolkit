@@ -64,13 +64,13 @@ impl PyLiveSyncSession {
     pub fn get_world_mesh(&self) -> PyMeshData {
         let mesh = self.inner.get_world_mesh();
         let profile = self.inner.last_profile();
-        let dynamic_skin_atlas = self.inner.dynamic_skin_atlas_rgba();
-        let dynamic_skin_atlases = Some(self.inner.dynamic_skin_atlases());
+        let dynamic_entity_atlas = self.inner.dynamic_entity_atlas_rgba();
+        let dynamic_entity_atlases = Some(self.inner.dynamic_entity_atlases());
         PyMeshData {
             inner: mesh,
             profile,
-            dynamic_skin_atlas,
-            dynamic_skin_atlases,
+            dynamic_entity_atlas,
+            dynamic_entity_atlases,
         }
     }
 
@@ -91,19 +91,6 @@ impl PyLiveSyncSession {
             let _ = dict.set_item(chunk_id, PyBytes::new(py, &buf));
         }
         dict
-    }
-
-    /// Returns the dynamic skin atlas texture RGBA bytes (1024x1024x4), or None if no skins.
-    pub fn get_dynamic_skin_atlas<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyBytes>> {
-        self.get_dynamic_entity_atlas(py)
-    }
-
-    /// Returns a dict mapping Chunk ID (e.g. 0xFFF0, 0xFFF1) to dynamic skin atlas RGBA bytes (1024x1024x4).
-    pub fn get_dynamic_skin_atlases<'py>(
-        &self,
-        py: Python<'py>,
-    ) -> Bound<'py, pyo3::types::PyDict> {
-        self.get_dynamic_entity_atlases(py)
     }
 
     /// Sets the on-disk cache directory for downloaded player skins.
@@ -300,8 +287,8 @@ impl PyLiveSyncSession {
                     let py_mesh = PyMeshData {
                         inner: mesh,
                         profile,
-                        dynamic_skin_atlas: self.inner.dynamic_skin_atlas_rgba(),
-                        dynamic_skin_atlases: Some(self.inner.dynamic_skin_atlases()),
+                        dynamic_entity_atlas: self.inner.dynamic_entity_atlas_rgba(),
+                        dynamic_entity_atlases: Some(self.inner.dynamic_entity_atlases()),
                     };
                     dict.set_item("mesh", py_mesh)?;
                     dict.set_item("generation", generation)?;

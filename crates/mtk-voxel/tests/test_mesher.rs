@@ -1422,7 +1422,7 @@ fn test_generic_block_entity_meshing_skull_and_pot() {
 fn test_player_skull_dynamic_atlas_meshing_and_uv_remapping() {
     let mut world = mtk_voxel::world::VoxelWorld::new(None, None, None);
 
-    let hash = "3c3fa837d5e9ae5d06150a699495387d068fb9e682572b191e6868959f51bc52";
+    let hash = "5813943ca53225ee0ee814321cba1e420ea21f7c55f2998f9306cfad6655f69e";
     let img = image::RgbaImage::from_pixel(64, 64, image::Rgba([128, 64, 32, 255]));
     let mut png_buf = std::io::Cursor::new(Vec::new());
     img.write_to(&mut png_buf, image::ImageFormat::Png)
@@ -1462,12 +1462,12 @@ fn test_player_skull_dynamic_atlas_meshing_and_uv_remapping() {
     // Verify skull face material slot is 0xFFF0
     assert!(
         mesh.face_materials
-            .contains(&mtk_texture::atlas::DEFAULT_DYNAMIC_SKINS_CHUNK_ID),
-        "Mesh must contain dynamic skin material slot 0xFFF0"
+            .contains(&mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID),
+        "Mesh must contain dynamic entity material slot 0xFFF0"
     );
 
     // Verify skull UVs are remapped into allocated slot bounds (slot 16)
-    let dynamic_slot = mtk_texture::atlas::DEFAULT_DYNAMIC_SKINS_CHUNK_ID;
+    let dynamic_slot = mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
     let (_, slot_idx) = world
         .dynamic_entities
         .get_location(hash)
@@ -1829,7 +1829,7 @@ fn test_banner_dynamic_atlas_meshing_and_baking() {
     assert_eq!(pat_slot, 16);
     let expected_pat = mtk_texture::atlas::DynamicAtlasChunk::slot_info(pat_slot).uv_bounds;
 
-    let dynamic_chunk_id = mtk_texture::atlas::DEFAULT_DYNAMIC_SKINS_CHUNK_ID;
+    let dynamic_chunk_id = mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
     let mut red_cloth_found = false;
     let mut pat_cloth_found = false;
 

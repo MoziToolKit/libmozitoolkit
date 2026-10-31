@@ -112,7 +112,8 @@ pub fn normalize_banner_pattern(code_or_name: &str) -> &'static str {
     let clean = code_or_name
         .strip_prefix("minecraft:")
         .unwrap_or(code_or_name);
-    let stem = clean.strip_prefix("banner/").unwrap_or(clean);
+    let stem = clean.strip_prefix("entity/banner/").unwrap_or(clean);
+    let stem = stem.strip_prefix("banner/").unwrap_or(stem);
     let stem = stem.strip_prefix("pattern_").unwrap_or(stem);
 
     match stem {

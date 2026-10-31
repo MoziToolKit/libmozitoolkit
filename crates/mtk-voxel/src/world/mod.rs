@@ -464,29 +464,14 @@ impl VoxelWorld {
         self.dynamic_entities.primary_rgba_buffer()
     }
 
-    /// Deprecated alias for `dynamic_entity_atlas_rgba`.
-    pub fn dynamic_skin_atlas_rgba(&self) -> Option<&[u8]> {
-        self.dynamic_entity_atlas_rgba()
-    }
-
     /// Returns all active dynamic entity atlas chunk buffers as (chunk_id, &[u8]).
     pub fn dynamic_entity_atlases(&self) -> Vec<(u16, &[u8])> {
         self.dynamic_entities.all_chunk_buffers()
     }
 
-    /// Deprecated alias for `dynamic_entity_atlases`.
-    pub fn dynamic_skin_atlases(&self) -> Vec<(u16, &[u8])> {
-        self.dynamic_entity_atlases()
-    }
-
     /// Returns all active dynamic entity atlas chunk buffers owned as (chunk_id, Vec<u8>).
     pub fn dynamic_entity_atlases_owned(&self) -> HashMap<u16, Vec<u8>> {
         self.dynamic_entities.all_chunk_buffers_owned()
-    }
-
-    /// Deprecated alias for `dynamic_entity_atlases_owned`.
-    pub fn dynamic_skin_atlases_owned(&self) -> HashMap<u16, Vec<u8>> {
-        self.dynamic_entity_atlases_owned()
     }
 
     /// Sets the on-disk cache directory for downloaded player skins.

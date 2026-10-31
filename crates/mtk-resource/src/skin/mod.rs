@@ -31,7 +31,7 @@ mod tests {
     #[test]
     fn test_derive_skin_key() {
         // Mojang hash
-        let hash = "3c3fa837d5e9ae5d06150a699495387d068fb9e682572b191e6868959f51bc52";
+        let hash = "5813943ca53225ee0ee814321cba1e420ea21f7c55f2998f9306cfad6655f69e";
         let url = format!("http://textures.minecraft.net/texture/{}", hash);
         assert_eq!(derive_skin_key(Some(&url), None, None), hash);
 
@@ -186,7 +186,7 @@ mod tests {
     fn test_resolve_real_mojang_skin_texture() {
         require_online!();
         let resolver = SkinResolver::new(None);
-        let real_url = "http://textures.minecraft.net/texture/3c3fa837d5e9ae5d06150a699495387d068fb9e682572b191e6868959f51bc52";
+        let real_url = "http://textures.minecraft.net/texture/5813943ca53225ee0ee814321cba1e420ea21f7c55f2998f9306cfad6655f69e";
         let png = resolver.resolve_skin_png(Some(real_url), None, None);
         if let Some(bytes) = png {
             assert!(is_valid_png_header(&bytes));

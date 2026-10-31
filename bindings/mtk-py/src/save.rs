@@ -225,13 +225,13 @@ pub fn load_and_mesh_minecraft_save(
         }
     }
 
-    let (mesh, world_profile, dynamic_skin_atlas, dynamic_skin_atlases) = py
+    let (mesh, world_profile, dynamic_entity_atlas, dynamic_entity_atlases) = py
         .detach(|| {
             world.ensure_dynamic_entities_resolved_sync_with_progress(progress_ref);
             let m = world.rebuild_all_with_progress(progress_ref)?.clone();
             let p = world.last_profile.clone();
-            let dyn_atlas = world.dynamic_skin_atlas_rgba().map(|b| b.to_vec());
-            let dyn_atlases = Some(world.dynamic_skin_atlases_owned());
+            let dyn_atlas = world.dynamic_entity_atlas_rgba().map(|b| b.to_vec());
+            let dyn_atlases = Some(world.dynamic_entity_atlases_owned());
             Ok::<_, mtk_voxel::VoxelError>((m, p, dyn_atlas, dyn_atlases))
         })
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
@@ -250,8 +250,8 @@ pub fn load_and_mesh_minecraft_save(
         PyMeshData {
             inner: mesh,
             profile: Some(final_profile),
-            dynamic_skin_atlas,
-            dynamic_skin_atlases,
+            dynamic_entity_atlas,
+            dynamic_entity_atlases,
         },
         PyLevelData {
             inner: level_data,
