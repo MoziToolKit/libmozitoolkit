@@ -27,5 +27,8 @@ zip = ["dep:zip"]
 parallel = ["dep:rayon"]
 net = ["dep:ureq"]
 
+[dev-dependencies]
+mtk-testkit = { workspace = true }
+
 [lints]
 workspace = true

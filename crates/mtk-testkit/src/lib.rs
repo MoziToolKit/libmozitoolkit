@@ -24,6 +24,7 @@
 //! | `MTK_TEST_RESOURCE_PACK` | External resource pack `.zip` (e.g. SPBR / PBR packs) |
 //! | `MTK_TEST_SAVE` | Minecraft save directory (contains `level.dat`) |
 //! | `MTK_TEST_MODELS_CACHE` | Pre-built `models.bin` cache for serialization benchmarks |
+//! | `MTK_TEST_ONLINE` / `MTK_ONLINE_TESTS` | Explicitly opt in to live HTTP/network tests |
 
 use std::path::{Path, PathBuf};
 
@@ -200,6 +201,36 @@ macro_rules! require_assets {
                 );
                 return;
             }
+        }
+    };
+}
+
+/// Returns `true` when tests requiring live external network access are explicitly enabled.
+///
+/// Opt-in via `MTK_TEST_ONLINE=1` or `MTK_ONLINE_TESTS=1`.
+pub fn is_online_enabled() -> bool {
+    std::env::var("MTK_TEST_ONLINE")
+        .or_else(|_| std::env::var("MTK_ONLINE_TESTS"))
+        .map(|val| {
+            val == "1" || val.eq_ignore_ascii_case("true") || val.eq_ignore_ascii_case("yes")
+        })
+        .unwrap_or(false)
+}
+
+/// Skips the enclosing test function if live network tests are not enabled via `MTK_TEST_ONLINE=1`.
+///
+/// ```no_run
+/// # use mtk_testkit::require_online;
+/// require_online!();
+/// ```
+#[macro_export]
+macro_rules! require_online {
+    () => {
+        if !$crate::is_online_enabled() {
+            eprintln!(
+                "[mtk-testkit] skipping online test: set MTK_TEST_ONLINE=1 to enable live network tests"
+            );
+            return;
         }
     };
 }

@@ -134,6 +134,15 @@ impl SkinResolver {
         self
     }
 
+    #[cfg(test)]
+    pub(crate) fn backdate_negative_cache_entry_for_test(&self, key: &str, secs: u64) {
+        if let Ok(mut failures) = self.failed_keys.write() {
+            if let Some(fail_time) = failures.get_mut(key) {
+                *fail_time = fail_time.saturating_sub(secs);
+            }
+        }
+    }
+
     fn is_negative_cached(&self, key: &str, hash_opt: Option<&str>) -> bool {
         if let Ok(failures) = self.failed_keys.read() {
             let now = current_unix_timestamp();

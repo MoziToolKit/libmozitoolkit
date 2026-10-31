@@ -44,6 +44,8 @@ let loader = |id: &str| std::fs::read_to_string(model_json_path(&root, id)).ok()
 | `blockstate_json_path(root, id)` | `PathBuf` | 去除属性谓词并定位 blockstate JSON |
 | `read_asset(rel)` / `read_fixture(rel)` | `Option<String>` | 相对于资产根 / fixtures 根读取 UTF-8 |
 | `require_assets!()` | `PathBuf` | 无资产时提前 `return` 的便捷宏 |
+| `is_online_enabled()` | `bool` | 是否显式启用了外网在线测试 |
+| `require_online!()` | `()` | 未显式开启 `MTK_TEST_ONLINE=1` 时提前 `return` |
 
 ### 环境变量
 
@@ -54,6 +56,7 @@ let loader = |id: &str| std::fs::read_to_string(model_json_path(&root, id)).ok()
 | `MTK_TEST_RESOURCE_PACK` | 外部资源包 `.zip` |
 | `MTK_TEST_SAVE` | 存档目录 |
 | `MTK_TEST_MODELS_CACHE` | 预编译模型缓存 `models.bin` |
+| `MTK_TEST_ONLINE` / `MTK_ONLINE_TESTS` | 显式开启真实 HTTP 联网测试（如 Mojang 皮肤拉取） |
 
 ---
 

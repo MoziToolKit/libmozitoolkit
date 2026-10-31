@@ -25,6 +25,7 @@ pub use resolver::{extract_skin_url_from_property_base64, is_valid_png_header, S
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mtk_testkit::require_online;
     use std::fs;
 
     #[test]
@@ -96,8 +97,9 @@ mod tests {
             .try_resolve_cached(Some(invalid_url), None, None)
             .is_none());
 
-        // Sleep to exceed 1s negative cache TTL
-        std::thread::sleep(std::time::Duration::from_millis(1100));
+        // Fast-forward negative cache failure timestamp by 10s to simulate TTL expiration without thread::sleep
+        let key = derive_skin_key(Some(invalid_url), None, None);
+        resolver.backdate_negative_cache_entry_for_test(&key, 10);
 
         // After TTL expired, negative cache allows retry
         assert!(resolver
@@ -182,6 +184,7 @@ mod tests {
     #[test]
     #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     fn test_resolve_real_mojang_skin_texture() {
+        require_online!();
         let resolver = SkinResolver::new(None);
         let real_url = "http://textures.minecraft.net/texture/3c3fa837d5e9ae5d06150a699495387d068fb9e682572b191e6868959f51bc52";
         let png = resolver.resolve_skin_png(Some(real_url), None, None);
@@ -194,6 +197,7 @@ mod tests {
     #[test]
     #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     fn test_resolve_skin_by_player_name_or_uuid_via_mirror() {
+        require_online!();
         let resolver = SkinResolver::new(None);
         // Test Notch skin resolution via mirror/Mojang
         let png = resolver.resolve_skin_png(None, None, Some("Notch"));
@@ -205,6 +209,7 @@ mod tests {
     #[test]
     #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     fn test_offline_uuid_prioritizes_name_and_rejects_alex_fallback() {
+        require_online!();
         let resolver = SkinResolver::new(None);
         // "0b9c337af39a34ec91a0929852e7d393" is an offline/synthetic UUID (version 3)
         // With name "scvb1", it should resolve the authentic skin hash instead of Alex.
@@ -233,6 +238,7 @@ mod tests {
     #[test]
     #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     fn test_offline_uuid_without_name_rejects_mirror_fallback() {
+        require_online!();
         let resolver = SkinResolver::new(None);
         // Without name, offline UUID has no online profile. Mirror returns 200 with Alex fallback,
         // which our strict header & hash validation must reject as None.
