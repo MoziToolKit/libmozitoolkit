@@ -5,8 +5,8 @@ pub mod pot;
 pub mod skull;
 
 pub use banner::{
-    dye_id_to_name, dye_rgb, name_to_dye_id, normalize_banner_pattern, BannerPatternLayer,
-    DYE_NAMES, DYE_RGB,
+    banner_texture_identifier, dye_id_to_name, dye_rgb, name_to_dye_id, normalize_banner_pattern,
+    BannerPatternLayer, DYE_NAMES, DYE_RGB,
 };
 pub use pot::{normalize_sherd_pattern, sherd_texture, sherd_texture_ref};
 pub use skull::{
@@ -109,6 +109,24 @@ impl BlockEntityData {
             kind,
             rotation,
             profile,
+        }
+    }
+
+    /// Computes the canonical dynamic texture identifier for this block entity (if applicable).
+    pub fn texture_identifier(&self) -> Option<String> {
+        match self {
+            Self::Banner {
+                base_color,
+                patterns,
+            } => Some(banner::banner_texture_identifier(base_color, patterns)),
+            Self::Skull { profile, kind, .. } => {
+                if let Some(prof) = profile {
+                    Some(prof.texture_identifier())
+                } else {
+                    Some(kind.default_texture_path().to_string())
+                }
+            }
+            _ => None,
         }
     }
 

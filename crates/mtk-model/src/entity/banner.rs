@@ -149,3 +149,30 @@ pub fn normalize_banner_pattern(code_or_name: &str) -> &'static str {
         _ => "base",
     }
 }
+
+/// Computes the canonical dynamic texture identifier for a banner.
+///
+/// For plain banners (no patterns), resolves to `minecraft:banner/<base_color>`.
+/// For patterned banners, resolves to `minecraft:banner/<base_color>+<pat>#<col>+...`.
+pub fn banner_texture_identifier(base_color: &str, patterns: &[BannerPatternLayer]) -> String {
+    let clean_base = base_color.strip_prefix("minecraft:").unwrap_or(base_color);
+    let stem_base = clean_base.strip_suffix("_dye").unwrap_or(clean_base);
+    let stem_base = stem_base.strip_suffix("_wall_banner").unwrap_or(stem_base);
+    let stem_base = stem_base.strip_suffix("_banner").unwrap_or(stem_base);
+
+    if patterns.is_empty() {
+        return format!("minecraft:banner/{}", stem_base);
+    }
+
+    let mut id = format!("minecraft:banner/{}", stem_base);
+    for p in patterns {
+        let clean_pat = normalize_banner_pattern(&p.pattern);
+        let clean_col = p.color.strip_prefix("minecraft:").unwrap_or(&p.color);
+        let clean_col = clean_col.strip_suffix("_dye").unwrap_or(clean_col);
+        id.push('+');
+        id.push_str(clean_pat);
+        id.push('#');
+        id.push_str(clean_col);
+    }
+    id
+}

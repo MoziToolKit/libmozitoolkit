@@ -1452,7 +1452,8 @@ fn test_player_skull_dynamic_atlas_meshing_and_uv_remapping() {
     assert!(mesh.face_count() > 0);
 
     // Verify dynamic skin atlas allocated slot and blitted pixels
-    assert_eq!(world.dynamic_skins.allocated_count(), 1);
+    // 16 pinned slots for vanilla banners + 1 player skull
+    assert_eq!(world.dynamic_skins.allocated_count(), 17);
     let atlas_rgba = world
         .dynamic_skin_atlas_rgba()
         .expect("Atlas RGBA must exist");
@@ -1465,8 +1466,12 @@ fn test_player_skull_dynamic_atlas_meshing_and_uv_remapping() {
         "Mesh must contain dynamic skin material slot 0xFFF0"
     );
 
-    // Verify skull UVs are remapped into slot 0 bounds [0.0..0.0625, 0.9375..1.0]
+    // Verify skull UVs are remapped into allocated slot bounds (slot 16)
     let dynamic_slot = mtk_texture::atlas::DEFAULT_DYNAMIC_SKINS_CHUNK_ID;
+    let (_, slot_idx) = world.dynamic_skins.get_location(hash).expect("Skull slot");
+    assert_eq!(slot_idx, 16);
+    let expected = mtk_texture::atlas::DynamicAtlasChunk::slot_info(slot_idx).uv_bounds;
+
     let mut dynamic_face_found = false;
     for (f_idx, &mat) in mesh.face_materials.iter().enumerate() {
         if mat == dynamic_slot {
@@ -1477,13 +1482,15 @@ fn test_player_skull_dynamic_atlas_meshing_and_uv_remapping() {
                     let idx = mesh.indices[v_start + i] as usize;
                     let uv = mesh.uvs[idx];
                     assert!(
-                        uv[0] >= -1e-4 && uv[0] <= 0.0625 + 1e-4,
-                        "U must be within slot 0 bounds (got {})",
+                        uv[0] >= expected[0] - 1e-4 && uv[0] <= expected[2] + 1e-4,
+                        "U must be within slot {} bounds (got {})",
+                        slot_idx,
                         uv[0]
                     );
                     assert!(
-                        uv[1] >= 0.9375 - 1e-4 && uv[1] <= 1.0 + 1e-4,
-                        "V must be within slot 0 bounds (got {})",
+                        uv[1] >= expected[1] - 1e-4 && uv[1] <= expected[3] + 1e-4,
+                        "V must be within slot {} bounds (got {})",
+                        slot_idx,
                         uv[1]
                     );
                 }
@@ -1779,4 +1786,87 @@ fn test_mesher_baked_model_atlas_uvs_average_color() {
         }
         assert_eq!(colors[i][3], 1.0);
     }
+}
+
+#[test]
+fn test_banner_dynamic_atlas_meshing_and_baking() {
+    let mut world = mtk_voxel::world::VoxelWorld::new(None, None, None);
+
+    // Place standing red banner (plain, no patterns)
+    world.set_block(2, 2, 2, "minecraft:red_banner[rotation=0]", None);
+
+    // Place wall banner with patterns
+    let banner_entity = mtk_model::BlockEntityData::new_banner(
+        "white",
+        vec![("stripe_top", "blue"), ("flower", "red")],
+    );
+    world.set_block(2, 2, 3, "minecraft:white_wall_banner[facing=north]", None);
+    let sec_coord = IVec3::new(0, 0, 0);
+    let sec = world.storage.sections.get_mut(&sec_coord).unwrap();
+    let local_idx = mtk_voxel::storage::block_index(2, 2, 3) as u16;
+    sec.set_block_entity(local_idx, Some(banner_entity.clone()));
+
+    let mesh = world.rebuild_all().expect("Rebuild should succeed").clone();
+    assert!(mesh.face_count() > 0);
+
+    // 16 pinned slots for vanilla banners + 1 custom patterned banner = 17
+    assert_eq!(world.dynamic_skins.allocated_count(), 17);
+
+    // Red banner slot is 14
+    let red_slot = 14;
+    let expected_red = mtk_texture::atlas::DynamicAtlasChunk::slot_info(red_slot).uv_bounds;
+
+    // Patterned banner slot is 16
+    let pat_key = "minecraft:banner/white+stripe_top#blue+flower#red";
+    let (cid, pat_slot) = world
+        .dynamic_skins
+        .get_location(pat_key)
+        .expect("Patterned banner slot");
+    assert_eq!(cid, 0xFFF0);
+    assert_eq!(pat_slot, 16);
+    let expected_pat = mtk_texture::atlas::DynamicAtlasChunk::slot_info(pat_slot).uv_bounds;
+
+    let dynamic_chunk_id = mtk_texture::atlas::DEFAULT_DYNAMIC_SKINS_CHUNK_ID;
+    let mut red_cloth_found = false;
+    let mut pat_cloth_found = false;
+
+    for f_idx in 0..mesh.face_count() {
+        let mat = mesh.face_materials[f_idx];
+        if mat == dynamic_chunk_id {
+            let mut is_red = true;
+            let mut is_pat = true;
+            for i in 0..4 {
+                let uv = mesh.uvs[f_idx * 4 + i];
+                if uv[0] < expected_red[0] - 1e-4
+                    || uv[0] > expected_red[2] + 1e-4
+                    || uv[1] < expected_red[1] - 1e-4
+                    || uv[1] > expected_red[3] + 1e-4
+                {
+                    is_red = false;
+                }
+                if uv[0] < expected_pat[0] - 1e-4
+                    || uv[0] > expected_pat[2] + 1e-4
+                    || uv[1] < expected_pat[1] - 1e-4
+                    || uv[1] > expected_pat[3] + 1e-4
+                {
+                    is_pat = false;
+                }
+            }
+            if is_red {
+                red_cloth_found = true;
+            }
+            if is_pat {
+                pat_cloth_found = true;
+            }
+        }
+    }
+
+    assert!(
+        red_cloth_found,
+        "Must have found red banner cloth in dynamic slot 14"
+    );
+    assert!(
+        pat_cloth_found,
+        "Must have found patterned banner cloth in dynamic slot 16"
+    );
 }

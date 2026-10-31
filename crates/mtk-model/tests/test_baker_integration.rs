@@ -1192,6 +1192,23 @@ fn test_end_portal_gateway_conduit_and_banner_builtins() {
             uv[1]
         );
     }
+    assert!(wb_tex.contains(&"minecraft:banner/red".to_string()));
+
+    // 5.1 Standing banner with BlockEntityData (patterned)
+    let banner_entity = mtk_model::BlockEntityData::new_banner(
+        "white",
+        vec![("stripe_top", "blue"), ("flower", "red")],
+    );
+    let patterned_banner = baker
+        .bake_blockstate_with_entity(
+            "minecraft:white_banner[rotation=0]",
+            Some(&banner_entity),
+            None,
+            empty_loader,
+        )
+        .expect("Should bake patterned banner");
+    let (_, pat_tex) = patterned_banner.to_mesh_with_textures(false);
+    assert!(pat_tex.contains(&"minecraft:banner/white+stripe_top#blue+flower#red".to_string()));
 
     // 6. Decorated Pot
     let pot_model = baker

@@ -61,8 +61,17 @@ pub struct VoxelWorld {
     pub dynamic_skins: mtk_texture::atlas::DynamicAtlasManager,
     /// Multi-tier skin resolver for player heads.
     pub skin_resolver: mtk_resource::skin::SkinResolver,
+    /// Procedural banner baker for multi-layer composite banners.
+    pub banner_baker: mtk_texture::BannerBaker,
     /// Callback triggered when a background skin download finishes successfully.
     pub on_skin_resolved: Option<SkinResolvedCallback>,
+}
+
+#[inline]
+fn create_default_dynamic_atlas() -> mtk_texture::atlas::DynamicAtlasManager {
+    let mut mgr = mtk_texture::atlas::DynamicAtlasManager::default();
+    let _ = mgr.prewarm_vanilla_banners(None);
+    mgr
 }
 
 impl VoxelWorld {
@@ -82,8 +91,9 @@ impl VoxelWorld {
             world_mesh: None,
             used_chunk_ids: Vec::new(),
             last_profile: None,
-            dynamic_skins: mtk_texture::atlas::DynamicAtlasManager::default(),
+            dynamic_skins: create_default_dynamic_atlas(),
             skin_resolver: mtk_resource::skin::SkinResolver::default(),
+            banner_baker: mtk_texture::BannerBaker::default(),
             on_skin_resolved: None,
         }
     }
@@ -116,8 +126,9 @@ impl VoxelWorld {
             world_mesh: None,
             used_chunk_ids: Vec::new(),
             last_profile: None,
-            dynamic_skins: mtk_texture::atlas::DynamicAtlasManager::default(),
+            dynamic_skins: create_default_dynamic_atlas(),
             skin_resolver: mtk_resource::skin::SkinResolver::default(),
+            banner_baker: mtk_texture::BannerBaker::default(),
             on_skin_resolved: None,
         }
     }
@@ -542,6 +553,35 @@ impl VoxelWorld {
                                 }
                             }
                         }
+                    } else if let mtk_model::BlockEntityData::Banner {
+                        base_color,
+                        patterns,
+                    } = be
+                    {
+                        let key =
+                            mtk_model::entity::banner_texture_identifier(base_color, patterns);
+                        if !self.dynamic_skins.contains_key(&key) {
+                            let pat_tuples: Vec<(&str, &str)> = patterns
+                                .iter()
+                                .map(|p| (p.pattern.as_str(), p.color.as_str()))
+                                .collect();
+                            let baked = self.banner_baker.bake(base_color, &pat_tuples);
+                            let (cid, slot_idx) = self.dynamic_skins.allocate_slot(&key);
+                            if self
+                                .dynamic_skins
+                                .blit_skin_rgba(
+                                    cid,
+                                    slot_idx,
+                                    &baked.pixels,
+                                    baked.width,
+                                    baked.height,
+                                )
+                                .is_ok()
+                            {
+                                newly_added = true;
+                                dirty_coords.push(*sec_coord);
+                            }
+                        }
                     }
                 }
             }
@@ -689,6 +729,35 @@ impl VoxelWorld {
                                         });
                                     entry.sec_coords.push(*sec_coord);
                                 }
+                            }
+                        }
+                    } else if let mtk_model::BlockEntityData::Banner {
+                        base_color,
+                        patterns,
+                    } = be
+                    {
+                        let key =
+                            mtk_model::entity::banner_texture_identifier(base_color, patterns);
+                        if !self.dynamic_skins.contains_key(&key) {
+                            let pat_tuples: Vec<(&str, &str)> = patterns
+                                .iter()
+                                .map(|p| (p.pattern.as_str(), p.color.as_str()))
+                                .collect();
+                            let baked = self.banner_baker.bake(base_color, &pat_tuples);
+                            let (cid, slot_idx) = self.dynamic_skins.allocate_slot(&key);
+                            if self
+                                .dynamic_skins
+                                .blit_skin_rgba(
+                                    cid,
+                                    slot_idx,
+                                    &baked.pixels,
+                                    baked.width,
+                                    baked.height,
+                                )
+                                .is_ok()
+                            {
+                                newly_added = true;
+                                dirty_coords.push(*sec_coord);
                             }
                         }
                     }

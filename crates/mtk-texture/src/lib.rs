@@ -5,6 +5,7 @@
 //! PalettedPermutations baking, edge padding, and PBR-synced Atlas generator.
 
 pub mod atlas;
+pub mod banner;
 pub mod error;
 pub mod image;
 pub mod stitcher;
@@ -16,6 +17,7 @@ pub use atlas::{
     RoughnessSpace, SpriteKind, DEFAULT_DYNAMIC_SKINS_CHUNK_ID, DYNAMIC_CHUNK_END,
     DYNAMIC_CHUNK_START, MAX_DYNAMIC_CHUNKS,
 };
+pub use banner::BannerBaker;
 pub use error::TextureError;
 pub use image::{
     apply_edge_clamping_padding, bake_paletted_permutation, batch_analyze_transparent_faces_f32,

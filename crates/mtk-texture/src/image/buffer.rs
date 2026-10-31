@@ -214,10 +214,45 @@ impl RgbaBuffer {
         }
     }
 
+    /// In-place multiplies RGB channels by a tint color `[R, G, B]` (0..255).
+    ///
+    /// Preserves Alpha channel. Uses fast integer arithmetic with rounding.
+    pub fn tint(&mut self, tint_rgb: [u8; 3]) {
+        if tint_rgb == [255, 255, 255] {
+            return;
+        }
+        let tr = tint_rgb[0] as u32;
+        let tg = tint_rgb[1] as u32;
+        let tb = tint_rgb[2] as u32;
+
+        for chunk in self.pixels.as_chunks_mut::<4>().0 {
+            chunk[0] = ((chunk[0] as u32 * tr + 127) / 255) as u8;
+            chunk[1] = ((chunk[1] as u32 * tg + 127) / 255) as u8;
+            chunk[2] = ((chunk[2] as u32 * tb + 127) / 255) as u8;
+        }
+    }
+
+    /// Returns a copy of the buffer with RGB channels multiplied by `tint_rgb`.
+    pub fn to_tinted(&self, tint_rgb: [u8; 3]) -> Self {
+        let mut cloned = self.clone();
+        cloned.tint(tint_rgb);
+        cloned
+    }
+
     /// Standard Porter-Duff source-over alpha blend of `overlay` onto `self`.
     pub fn blend_over(&mut self, overlay: &RgbaBuffer) {
+        self.blend_over_tinted(overlay, [255, 255, 255]);
+    }
+
+    /// Standard Porter-Duff source-over alpha blend of `overlay` onto `self`,
+    /// modulating overlay RGB by `tint_rgb` prior to blending.
+    pub fn blend_over_tinted(&mut self, overlay: &RgbaBuffer, tint_rgb: [u8; 3]) {
         let w = self.width.min(overlay.width);
         let h = self.height.min(overlay.height);
+        let tr = tint_rgb[0] as u32;
+        let tg = tint_rgb[1] as u32;
+        let tb = tint_rgb[2] as u32;
+
         for y in 0..h {
             for x in 0..w {
                 let src = overlay.get_pixel(x, y);
@@ -225,17 +260,42 @@ impl RgbaBuffer {
                 if src_a == 0 {
                     continue;
                 }
-                if src_a == 255 {
-                    self.set_pixel(x, y, src);
+
+                // Modulate overlay RGB by tint
+                let tinted_r = ((src[0] as u32 * tr + 127) / 255) as u8;
+                let tinted_g = ((src[1] as u32 * tg + 127) / 255) as u8;
+                let tinted_b = ((src[2] as u32 * tb + 127) / 255) as u8;
+
+                let dst = self.get_pixel(x, y);
+                let dst_a = dst[3];
+
+                if dst_a == 0 {
+                    self.set_pixel(x, y, [tinted_r, tinted_g, tinted_b, src_a]);
                     continue;
                 }
-                let dst = self.get_pixel(x, y);
+
+                if src_a == 255 && dst_a == 255 {
+                    self.set_pixel(x, y, [tinted_r, tinted_g, tinted_b, 255]);
+                    continue;
+                }
+
+                // Mathematically exact non-premultiplied Porter-Duff Over
                 let a = src_a as f32 / 255.0;
                 let inv_a = 1.0 - a;
-                let r = (src[0] as f32 * a + dst[0] as f32 * inv_a).round() as u8;
-                let g = (src[1] as f32 * a + dst[1] as f32 * inv_a).round() as u8;
-                let b = (src[2] as f32 * a + dst[2] as f32 * inv_a).round() as u8;
-                let out_a = (dst[3] as f32 * inv_a + src_a as f32).round().min(255.0) as u8;
+                let dst_norm_a = dst_a as f32 / 255.0;
+                let out_a_f = a + dst_norm_a * inv_a;
+                if out_a_f <= 0.0 {
+                    self.set_pixel(x, y, [0, 0, 0, 0]);
+                    continue;
+                }
+
+                let r = ((tinted_r as f32 * a + dst[0] as f32 * dst_norm_a * inv_a) / out_a_f)
+                    .round() as u8;
+                let g = ((tinted_g as f32 * a + dst[1] as f32 * dst_norm_a * inv_a) / out_a_f)
+                    .round() as u8;
+                let b = ((tinted_b as f32 * a + dst[2] as f32 * dst_norm_a * inv_a) / out_a_f)
+                    .round() as u8;
+                let out_a = (out_a_f * 255.0).round().min(255.0) as u8;
                 self.set_pixel(x, y, [r, g, b, out_a]);
             }
         }
@@ -406,5 +466,49 @@ mod tests {
         mixed_buf.set_pixel(0, 0, [200, 0, 0, 255]);
         mixed_buf.set_pixel(1, 0, [0, 0, 100, 255]);
         assert_eq!(mixed_buf.average_rgb_hex(), "#640032");
+    }
+
+    #[test]
+    fn test_rgba_buffer_tint() {
+        let mut buf = RgbaBuffer::new(1, 1);
+        buf.set_pixel(0, 0, [200, 100, 50, 255]);
+
+        // Tint with cyan [0, 255, 255]
+        buf.tint([0, 255, 255]);
+        assert_eq!(buf.get_pixel(0, 0), [0, 100, 50, 255]);
+
+        // Tint with 50% gray [128, 128, 128]
+        let mut gray_buf = RgbaBuffer::new(1, 1);
+        gray_buf.set_pixel(0, 0, [255, 255, 255, 200]);
+        gray_buf.tint([128, 128, 128]);
+        assert_eq!(gray_buf.get_pixel(0, 0), [128, 128, 128, 200]); // Alpha preserved
+    }
+
+    #[test]
+    fn test_rgba_buffer_blend_over_tinted() {
+        // Base: solid red [255, 0, 0, 255]
+        let mut base = RgbaBuffer::solid(2, 2, 255, 0, 0, 255);
+
+        // Overlay: white grayscale mask with 50% alpha [255, 255, 255, 128]
+        let mut mask = RgbaBuffer::new(2, 2);
+        mask.set_pixel(0, 0, [255, 255, 255, 255]); // Fully opaque
+        mask.set_pixel(1, 0, [255, 255, 255, 128]); // 50% semi-transparent
+        mask.set_pixel(0, 1, [0, 0, 0, 0]); // Fully transparent
+
+        // Tint with blue [0, 0, 255]
+        base.blend_over_tinted(&mask, [0, 0, 255]);
+
+        // (0, 0) should be 100% blue [0, 0, 255, 255]
+        assert_eq!(base.get_pixel(0, 0), [0, 0, 255, 255]);
+
+        // (1, 0) should be 50% red + 50% blue -> approx [127, 0, 128, 255]
+        let p_half = base.get_pixel(1, 0);
+        assert!((p_half[0] as i32 - 127).abs() <= 2);
+        assert_eq!(p_half[1], 0);
+        assert!((p_half[2] as i32 - 128).abs() <= 2);
+        assert_eq!(p_half[3], 255);
+
+        // (0, 1) should remain pure red [255, 0, 0, 255]
+        assert_eq!(base.get_pixel(0, 1), [255, 0, 0, 255]);
     }
 }

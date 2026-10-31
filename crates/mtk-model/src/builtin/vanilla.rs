@@ -247,7 +247,10 @@ pub fn get_builtin_model_by_id(model_id: &str) -> Option<BlockModelJson> {
 }
 
 /// Procedurally synthesizes a banner model (standing or wall) with pole, crossbar, and cloth.
-fn create_builtin_banner_model(blockstate: &BlockState) -> Option<BlockModelJson> {
+fn create_builtin_banner_model(
+    blockstate: &BlockState,
+    entity: Option<&crate::entity::BlockEntityData>,
+) -> Option<BlockModelJson> {
     let name = blockstate.name.as_str();
     let clean = name.strip_prefix("minecraft:").unwrap_or(name);
     let is_wall = clean.ends_with("_wall_banner");
@@ -274,6 +277,18 @@ fn create_builtin_banner_model(blockstate: &BlockState) -> Option<BlockModelJson
         (rotation / 16.0) * 360.0
     };
 
+    let cloth_texture = if let Some(crate::entity::BlockEntityData::Banner {
+        base_color,
+        patterns,
+    }) = entity
+    {
+        crate::entity::banner_texture_identifier(base_color, patterns)
+    } else {
+        let stem = clean.strip_suffix("_wall_banner").unwrap_or(clean);
+        let color = stem.strip_suffix("_banner").unwrap_or(stem);
+        format!("minecraft:banner/{}", color)
+    };
+
     let mut textures = HashMap::new();
     textures.insert(
         "particle".to_string(),
@@ -283,10 +298,7 @@ fn create_builtin_banner_model(blockstate: &BlockState) -> Option<BlockModelJson
         "base".to_string(),
         TextureValue::Path("minecraft:entity/banner/banner_base".to_string()),
     );
-    textures.insert(
-        "cloth".to_string(),
-        TextureValue::Path("minecraft:entity/banner/base".to_string()),
-    );
+    textures.insert("cloth".to_string(), TextureValue::Path(cloth_texture));
 
     let scale = 2.0 / 3.0;
     let offset_x = 8.0;
@@ -576,7 +588,7 @@ pub fn get_builtin_model_for_state_and_entity(
         return get_builtin_model_by_id(model_id);
     }
     if clean.ends_with("_banner") {
-        return create_builtin_banner_model(blockstate);
+        return create_builtin_banner_model(blockstate, entity);
     }
     None
 }

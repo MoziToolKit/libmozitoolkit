@@ -33,6 +33,101 @@ pub struct DynamicSlotInfo {
     pub uv_bounds: [f32; 4],
 }
 
+/// 16 Canonical Vanilla Dye colors for banner rendering ([name, [R, G, B]]).
+pub const VANILLA_BANNER_DYES: [(&str, [u8; 3]); 16] = [
+    ("white", [249, 255, 254]),
+    ("orange", [249, 128, 29]),
+    ("magenta", [199, 78, 189]),
+    ("light_blue", [58, 179, 218]),
+    ("yellow", [254, 216, 61]),
+    ("lime", [128, 199, 31]),
+    ("pink", [243, 139, 170]),
+    ("gray", [71, 79, 82]),
+    ("light_gray", [157, 157, 151]),
+    ("cyan", [22, 156, 156]),
+    ("purple", [137, 50, 184]),
+    ("blue", [60, 68, 170]),
+    ("brown", [131, 84, 50]),
+    ("green", [94, 124, 22]),
+    ("red", [176, 46, 38]),
+    ("black", [29, 29, 33]),
+];
+
+/// Resolves a dye name or integer index string to canonical sRGB [R, G, B].
+pub fn dye_color_to_rgb(dye_name_or_id: &str) -> [u8; 3] {
+    if let Ok(id) = dye_name_or_id.parse::<usize>() {
+        if id < VANILLA_BANNER_DYES.len() {
+            return VANILLA_BANNER_DYES[id].1;
+        }
+    }
+    let clean = dye_name_or_id
+        .strip_prefix("minecraft:")
+        .unwrap_or(dye_name_or_id);
+    let stem = clean.strip_suffix("_dye").unwrap_or(clean);
+    VANILLA_BANNER_DYES
+        .iter()
+        .find(|(n, _)| *n == stem)
+        .map(|(_, rgb)| *rgb)
+        .unwrap_or(VANILLA_BANNER_DYES[0].1)
+}
+
+/// Normalizes 2-letter codes or asset stems to canonical banner pattern names.
+pub fn normalize_pattern_stem(code_or_name: &str) -> &'static str {
+    let clean = code_or_name
+        .strip_prefix("minecraft:")
+        .unwrap_or(code_or_name);
+    let stem = clean.strip_prefix("entity/banner/").unwrap_or(clean);
+    let stem = stem.strip_prefix("banner/").unwrap_or(stem);
+    let stem = stem.strip_prefix("pattern_").unwrap_or(stem);
+
+    match stem {
+        "b" | "base" | "banner_base" => "base",
+        "bs" | "stripe_bottom" => "stripe_bottom",
+        "ts" | "stripe_top" => "stripe_top",
+        "ls" | "stripe_left" => "stripe_left",
+        "rs" | "stripe_right" => "stripe_right",
+        "cs" | "stripe_center" => "stripe_center",
+        "ms" | "stripe_middle" => "stripe_middle",
+        "drs" | "stripe_downright" => "stripe_downright",
+        "dls" | "stripe_downleft" => "stripe_downleft",
+        "ss" | "small_stripes" => "small_stripes",
+        "cr" | "cross" => "cross",
+        "sc" | "straight_cross" => "straight_cross",
+        "ld" | "diagonal_left" => "diagonal_left",
+        "rud" | "diagonal_right" => "diagonal_right",
+        "lud" | "diagonal_up_left" => "diagonal_up_left",
+        "rd" | "diagonal_up_right" => "diagonal_up_right",
+        "vh" | "half_vertical" => "half_vertical",
+        "vhr" | "half_vertical_right" => "half_vertical_right",
+        "hh" | "half_horizontal" => "half_horizontal",
+        "hhb" | "half_horizontal_bottom" => "half_horizontal_bottom",
+        "bl" | "square_bottom_left" => "square_bottom_left",
+        "br" | "square_bottom_right" => "square_bottom_right",
+        "tl" | "square_top_left" => "square_top_left",
+        "tr" | "square_top_right" => "square_top_right",
+        "bt" | "triangle_bottom" => "triangle_bottom",
+        "tt" | "triangle_top" => "triangle_top",
+        "bts" | "triangles_bottom" => "triangles_bottom",
+        "tts" | "triangles_top" => "triangles_top",
+        "mc" | "circle" => "circle",
+        "mr" | "rhombus" => "rhombus",
+        "bo" | "border" => "border",
+        "cbo" | "curly_border" => "curly_border",
+        "bri" | "bricks" => "bricks",
+        "gra" | "gradient" => "gradient",
+        "gru" | "gradient_up" => "gradient_up",
+        "cre" | "creeper" => "creeper",
+        "sku" | "skull" => "skull",
+        "flo" | "flower" => "flower",
+        "moj" | "mojang" => "mojang",
+        "glb" | "globe" => "globe",
+        "pig" | "piglin" => "piglin",
+        "flw" | "flow" => "flow",
+        "gus" | "guster" => "guster",
+        _ => "base",
+    }
+}
+
 /// A fixed-size runtime dynamic atlas chunk that allocates 64x64 grid slots on demand.
 #[derive(Debug, Clone)]
 pub struct DynamicAtlasChunk {
@@ -40,6 +135,7 @@ pub struct DynamicAtlasChunk {
     pub width: u32,
     pub height: u32,
     pub rgba_buffer: Vec<u8>,
+    pub pinned_slots: u16,
     slot_map: HashMap<String, u16>,
     next_slot: u16,
 }
@@ -59,9 +155,61 @@ impl DynamicAtlasChunk {
             width: DYNAMIC_ATLAS_WIDTH,
             height: DYNAMIC_ATLAS_HEIGHT,
             rgba_buffer: vec![0u8; size],
+            pinned_slots: 0,
             slot_map: HashMap::new(),
             next_slot: 0,
         }
+    }
+
+    /// Creates a synthetic 64x64 banner cloth fallback buffer (neutral light-gray cloth).
+    pub fn create_fallback_banner_base() -> crate::image::buffer::RgbaBuffer {
+        let mut buf = crate::image::buffer::RgbaBuffer::new(64, 64);
+        // Cloth front/back/sides in standard banner UV layout occupies (0, 0, 42, 41)
+        for y in 0..41 {
+            for x in 0..42 {
+                let is_border = x == 0 || x == 41 || y == 0 || y == 40;
+                let val = if is_border { 220u8 } else { 244u8 };
+                buf.set_pixel(x, y, [val, val, val, 255]);
+            }
+        }
+        buf
+    }
+
+    /// Prewarms slots 0..15 with the 16 vanilla dye colors of banner cloth, pinning them permanently.
+    pub fn prewarm_vanilla_banners(
+        &mut self,
+        base_cloth: Option<&crate::image::buffer::RgbaBuffer>,
+    ) -> Result<(), TextureError> {
+        let fallback;
+        let cloth = match base_cloth {
+            Some(c) => c,
+            None => {
+                fallback = Self::create_fallback_banner_base();
+                &fallback
+            }
+        };
+
+        for (idx, (name, rgb)) in VANILLA_BANNER_DYES.iter().enumerate() {
+            let slot = idx as u16;
+            let tinted = cloth.to_tinted(*rgb);
+            self.blit_skin_rgba(slot, &tinted.pixels, tinted.width, tinted.height)?;
+
+            let aliases = [
+                format!("banner:{}", name),
+                format!("minecraft:banner/{}", name),
+                format!("banner/{}", name),
+                format!("minecraft:{}_banner", name),
+                format!("{}_banner", name),
+                name.to_string(),
+            ];
+            for alias in aliases {
+                self.slot_map.insert(alias, slot);
+            }
+        }
+
+        self.pinned_slots = 16;
+        self.next_slot = self.next_slot.max(16);
+        Ok(())
     }
 
     /// Returns the number of currently allocated unique skin slots.
@@ -81,6 +229,7 @@ impl DynamicAtlasChunk {
 
     /// Allocates or retrieves an existing slot for a skin key (natural deduplication).
     ///
+    /// Respects `pinned_slots`: slots 0..pinned_slots are never evicted during wrap-around.
     /// Returns the slot index (0..255).
     pub fn allocate_slot(&mut self, skin_key: &str) -> u16 {
         if let Some(&slot_idx) = self.slot_map.get(skin_key) {
@@ -92,11 +241,16 @@ impl DynamicAtlasChunk {
             self.next_slot += 1;
             s
         } else {
-            // Reached maximum capacity (256 slots); wrap around in round-robin sequence
-            let s = (self.next_slot as usize % DYNAMIC_TOTAL_SLOTS) as u16;
+            // Reached maximum capacity (256 slots); wrap around in round-robin sequence within dynamic range
+            let dynamic_capacity = DYNAMIC_TOTAL_SLOTS
+                .saturating_sub(self.pinned_slots as usize)
+                .max(1);
+            let offset = (self.next_slot as usize - self.pinned_slots as usize) % dynamic_capacity;
+            let s = (self.pinned_slots as usize + offset) as u16;
             self.next_slot = self.next_slot.wrapping_add(1);
-            // Purge stale reverse entries previously mapping to this slot
-            self.slot_map.retain(|_, &mut v| v != s);
+            // Purge stale reverse entries previously mapping to this slot (pinned slots never purged)
+            self.slot_map
+                .retain(|_, &mut v| v != s || v < self.pinned_slots);
             s
         };
 
@@ -255,14 +409,33 @@ impl DynamicAtlasChunk {
                 average_color: None,
             };
 
-            let variants = [
+            let mut variants = vec![
                 format!("minecraft:skin/{}", skin_key),
                 format!("skin/{}", skin_key),
                 format!("minecraft:player/{}", skin_key),
                 format!("player/{}", skin_key),
                 format!("entity/player/{}", skin_key),
+                format!("minecraft:banner/{}", skin_key),
+                format!("banner/{}", skin_key),
+                format!("minecraft:entity/banner/{}", skin_key),
+                format!("entity/banner/{}", skin_key),
                 skin_key.clone(),
             ];
+
+            if let Some(stripped) = skin_key.strip_prefix("banner:") {
+                variants.push(format!("minecraft:banner/{}", stripped));
+                variants.push(format!("banner/{}", stripped));
+                variants.push(format!("minecraft:entity/banner/{}", stripped));
+                variants.push(format!("entity/banner/{}", stripped));
+                variants.push(format!("minecraft:{}_banner", stripped));
+                variants.push(format!("{}_banner", stripped));
+            }
+            if let Some(stripped) = skin_key.strip_prefix("minecraft:banner/") {
+                variants.push(format!("banner:{}", stripped));
+                variants.push(format!("banner/{}", stripped));
+                variants.push(format!("minecraft:{}_banner", stripped));
+                variants.push(format!("{}_banner", stripped));
+            }
 
             for v in variants {
                 if let Ok(loc_key) = mtk_resource::ResourceLocation::parse(&v) {
@@ -329,6 +502,25 @@ impl DynamicAtlasManager {
     /// Total number of unique skin slots allocated across all chunks.
     pub fn allocated_count(&self) -> usize {
         self.chunks.iter().map(|c| c.allocated_count()).sum()
+    }
+
+    /// Prewarms the primary chunk with the 16 canonical vanilla dye banner textures,
+    /// pinning slots 0..15 so they are permanently cached and immune to eviction.
+    pub fn prewarm_vanilla_banners(
+        &mut self,
+        base_cloth: Option<&crate::image::buffer::RgbaBuffer>,
+    ) -> Result<(), TextureError> {
+        if self.chunks.is_empty() {
+            self.chunks.push(DynamicAtlasChunk::new(self.base_chunk_id));
+        }
+        let chunk = &mut self.chunks[0];
+        chunk.prewarm_vanilla_banners(base_cloth)?;
+        let chunk_id = chunk.chunk_id;
+        for (key, &slot) in &chunk.slot_map {
+            self.key_to_location.insert(key.clone(), (chunk_id, slot));
+        }
+        self.dirty_chunks.insert(chunk_id);
+        Ok(())
     }
 
     /// Number of chunks currently instantiated.
@@ -667,5 +859,69 @@ mod tests {
 
         mgr.clear_dirty();
         assert_eq!(mgr.dirty_chunk_ids().len(), 0);
+    }
+
+    #[test]
+    fn test_dynamic_atlas_prewarm_vanilla_banners() {
+        let mut mgr = DynamicAtlasManager::new(DEFAULT_DYNAMIC_SKINS_CHUNK_ID);
+        mgr.prewarm_vanilla_banners(None)
+            .expect("Prewarm must succeed");
+
+        assert_eq!(mgr.allocated_count(), 16);
+        assert!(mgr.contains_key("banner:white"));
+        assert!(mgr.contains_key("banner:red"));
+        assert!(mgr.contains_key("banner:black"));
+        assert!(mgr.contains_key("minecraft:red_banner"));
+
+        // Red is index 14
+        let red_loc = mgr
+            .get_location("banner:red")
+            .expect("red banner must exist");
+        assert_eq!(red_loc, (0xFFF0, 14));
+
+        // Primary rgba buffer is populated and has red pixels in slot 14
+        let buf = mgr.primary_rgba_buffer().expect("Must have primary buffer");
+        assert_eq!(buf.len(), 1024 * 1024 * 4);
+
+        // Next allocated slot should be 16
+        let (cid, slot) = mgr.allocate_slot("custom_player");
+        assert_eq!(cid, 0xFFF0);
+        assert_eq!(slot, 16);
+
+        // Address map registration resolves banner keys
+        let mut addr_map = AtlasAddressMap::new();
+        mgr.register_to_address_map(&mut addr_map);
+
+        let loc = addr_map
+            .lookup_str("minecraft:banner/red")
+            .expect("banner/red in map");
+        assert_eq!(loc.chunk_id, 0xFFF0);
+        assert_eq!(loc.pixel_rect, DynamicAtlasChunk::slot_info(14).pixel_rect);
+    }
+
+    #[test]
+    fn test_dynamic_atlas_pinned_slots_overflow_protection() {
+        let mut chunk = DynamicAtlasChunk::new(0xFFF0);
+        chunk.prewarm_vanilla_banners(None).unwrap();
+        assert_eq!(chunk.pinned_slots, 16);
+        assert_eq!(chunk.allocated_count(), 16);
+
+        // Fill slots from 16 to 255 (240 dynamic slots)
+        for i in 16..256 {
+            let slot = chunk.allocate_slot(&format!("entity_{}", i));
+            assert_eq!(slot, i as u16);
+        }
+
+        // Slot 256 should wrap around to 16, NEVER to 0..15!
+        let wrap_slot = chunk.allocate_slot("overflow_1");
+        assert_eq!(wrap_slot, 16);
+
+        // Pinned banner:red (slot 14) and banner:white (slot 0) must remain intact!
+        assert_eq!(chunk.get_slot("banner:red"), Some(14));
+        assert_eq!(chunk.get_slot("banner:white"), Some(0));
+
+        // Slot 16 old occupant was evicted, overflow_1 owns it
+        assert_eq!(chunk.get_slot("entity_16"), None);
+        assert_eq!(chunk.get_slot("overflow_1"), Some(16));
     }
 }
