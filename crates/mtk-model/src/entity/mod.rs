@@ -15,6 +15,11 @@ pub use skull::{
 
 use serde::{Deserialize, Serialize};
 
+#[inline]
+fn default_banner_base_color() -> String {
+    "white".to_string()
+}
+
 /// High-level typed BlockEntity representation decoupled from BlockState strings.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "id")]
@@ -29,7 +34,9 @@ pub enum BlockEntityData {
     /// Banner with base color and pattern layers.
     #[serde(rename = "minecraft:banner", alias = "banner")]
     Banner {
+        #[serde(default = "default_banner_base_color")]
         base_color: String,
+        #[serde(default)]
         patterns: Vec<BannerPatternLayer>,
     },
     /// Skull or Player Head with species, rotation, and optional profile.
@@ -192,5 +199,15 @@ mod tests {
         assert!(s_json.contains("\"Steve\""));
         let s_parsed = BlockEntityData::from_visual_json(&s_json).unwrap();
         assert_eq!(skull, s_parsed);
+    }
+
+    #[test]
+    fn test_plain_banner_json() {
+        let json = r#"{"id":"minecraft:banner","base_color":"red"}"#;
+        let parsed = BlockEntityData::from_visual_json(json);
+        assert!(
+            parsed.is_some(),
+            "Must parse plain banner without patterns field"
+        );
     }
 }

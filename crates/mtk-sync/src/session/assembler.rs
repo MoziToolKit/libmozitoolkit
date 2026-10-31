@@ -499,7 +499,19 @@ impl BaselineAssembler {
             let bly = (wy & 15) as usize;
             let blz = (wz & 15) as usize;
             let local_idx = mtk_voxel::storage::block_index(blx, bly, blz) as u16;
-            sec.set_block_entity(local_idx, Some(entity.clone()));
+            let mut ent = entity.clone();
+            if let mtk_model::BlockEntityData::Banner {
+                ref mut base_color, ..
+            } = ent
+            {
+                let state_str = sec.get_local_state(blx, bly, blz);
+                if let Some(resolved_color) =
+                    mtk_model::entity::banner::extract_banner_color_from_state(state_str)
+                {
+                    *base_color = resolved_color.to_string();
+                }
+            }
+            sec.set_block_entity(local_idx, Some(ent));
         }
 
         // Validate state_hash SSOT

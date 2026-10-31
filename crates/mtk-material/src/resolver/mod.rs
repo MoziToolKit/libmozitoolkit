@@ -453,7 +453,7 @@ impl MaterialResolver {
             }
         }
 
-        if cleaned == "banner" || cleaned == "banner_base" || raw_material_name.contains("banner") {
+        if cleaned == "banner" || cleaned == "banner_base" || cleaned == "base" {
             for &cand in &["entity/banner/banner_base", "entity/banner/base"] {
                 if let Some(sprite_loc) = address_map.lookup_str(cand) {
                     let res_loc = ResourceLocation::parse(cand)

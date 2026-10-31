@@ -13,6 +13,16 @@ use mtk_texture::atlas::AtlasAddressMap;
 
 use crate::MtkError;
 
+#[inline]
+fn is_dynamic_entity_texture(tex: &str) -> bool {
+    tex.starts_with("minecraft:banner/")
+        || tex.starts_with("banner/")
+        || tex.starts_with("minecraft:skin/")
+        || tex.starts_with("skin/")
+        || tex.starts_with("minecraft:player/")
+        || tex.starts_with("player/")
+}
+
 /// Prebakes all blockstates discovered across all active resource packs in the stack with physical progress reporting.
 pub fn prebake_all_models_with_progress(
     stack: &ResourcePackStack,
@@ -133,6 +143,9 @@ pub fn prebake_all_models_with_progress(
                 {
                     if let Some(atlas) = atlas_map {
                         group.remap_to_atlas_with(|tex| {
+                            if is_dynamic_entity_texture(tex) {
+                                return None;
+                            }
                             if let Some(hit) = remap_cache.get(tex) {
                                 *hit
                             } else {
@@ -169,6 +182,9 @@ pub fn prebake_all_models_with_progress(
                 {
                     if let Some(atlas) = atlas_map {
                         group.remap_to_atlas_with(|tex| {
+                            if is_dynamic_entity_texture(tex) {
+                                return None;
+                            }
                             if let Some(hit) = remap_cache.get(tex) {
                                 *hit
                             } else {
