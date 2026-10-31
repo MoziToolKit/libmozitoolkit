@@ -91,12 +91,6 @@ impl PyVoxelWorld {
         self.inner.num_threads()
     }
 
-    /// Sets the number of worker threads configured for meshing.
-    #[setter]
-    pub fn set_num_threads(&mut self, val: Option<usize>) {
-        self.inner.set_num_threads(val);
-    }
-
     /// Re-meshes all non-empty sections in parallel and returns the unified `MeshData`.
     #[pyo3(signature = (callback=None))]
     pub fn rebuild_all(
@@ -315,13 +309,6 @@ impl PyVoxelWorld {
     pub fn set_skin_cache_dir(&mut self, cache_dir: Option<String>) {
         self.inner
             .set_skin_cache_dir(cache_dir.map(std::path::PathBuf::from));
-    }
-
-    /// Registers a custom skin PNG into the dynamic atlas and updates the active address map.
-    pub fn register_skin(&mut self, key: &str, png_bytes: &[u8]) -> PyResult<()> {
-        self.inner.register_skin(key, png_bytes).map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("Failed to register skin: {}", e))
-        })
     }
 
     /// Resolves dynamic entities synchronously (primarily for unit tests and offline workflows).

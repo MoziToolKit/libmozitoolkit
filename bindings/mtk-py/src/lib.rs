@@ -36,20 +36,17 @@ pub use material::{
     reapply_uniform_biome_tint, PyBiomeResolver, PyGridAtlasSpec, PyMaterialResolver,
 };
 pub use mesh::{PyAttributeDomain, PyMeshData};
-pub use model::{PyBakedModelDatabase, PyModelBaker};
+pub use model::PyBakedModelDatabase;
 pub use point_cloud::PyVoxelPointCloud;
 pub use profile::{PyExecutionProfile, PyStageSpan};
-pub use protocol::{
-    compute_canonical_state_hash, decode_packet, encode_baseline_begin, encode_baseline_chunk,
-    encode_baseline_end, encode_delta_op, encode_palette_update, encode_welcome,
-};
+pub use protocol::{compute_canonical_state_hash, decode_packet};
 pub use resource::{
     get_cache_manifest, is_valid_cache_package, precompile_all_assets,
     resolve_active_cache_package, PyAssetCache, PyPrecompileResult, PyResourcePackStack,
 };
 pub use save::PyLevelData;
 pub use sync::PyLiveSyncSession;
-pub use texture::{PyAtlasBuilder, PyBakedAtlas};
+pub use texture::PyBakedAtlas;
 pub use voxel::{PyMesherConfig, PyVoxelStorage, PyVoxelWorld};
 
 /// Returns libmtk version string.
@@ -252,9 +249,9 @@ mod tests {
             assert_eq!(solver.rule_count(), 0);
 
             let mut config = PyMesherConfig::default();
-            assert!(!config.has_ctm_solver());
+            assert!(config.inner.ctm_solver.is_none());
             config.set_ctm_solver(Some(&solver));
-            assert!(config.has_ctm_solver());
+            assert!(config.inner.ctm_solver.is_some());
         });
     }
 

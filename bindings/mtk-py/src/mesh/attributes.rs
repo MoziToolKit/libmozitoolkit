@@ -2,7 +2,7 @@
 
 use pyo3::buffer::PyBuffer;
 use pyo3::prelude::*;
-use pyo3::types::{PyList, PyMemoryView};
+use pyo3::types::PyMemoryView;
 
 use super::PyMeshData;
 
@@ -28,6 +28,14 @@ pub fn attribute_memoryview<'py>(
     Ok(None)
 }
 
+struct RawPyBuffer(pyo3::ffi::Py_buffer);
+
+impl Drop for RawPyBuffer {
+    fn drop(&mut self) {
+        unsafe { pyo3::ffi::PyBuffer_Release(&mut self.0) };
+    }
+}
+
 /// Add a numeric custom attribute from any Python object supporting the Buffer Protocol.
 pub fn add_attribute_from_buffer(
     mesh: &mut PyMeshData,
@@ -38,14 +46,20 @@ pub fn add_attribute_from_buffer(
 ) -> PyResult<()> {
     let domain_enum = crate::attributes::parse_domain_str(domain)?;
 
-    let py_buf: PyBuffer<u8> = PyBuffer::get(buffer)?;
-    if !py_buf.is_c_contiguous() {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "Attribute buffer must be C-contiguous",
-        ));
+    let mut raw_buf = std::mem::MaybeUninit::<pyo3::ffi::Py_buffer>::uninit();
+    let ret = unsafe {
+        pyo3::ffi::PyObject_GetBuffer(
+            buffer.as_ptr(),
+            raw_buf.as_mut_ptr(),
+            pyo3::ffi::PyBUF_SIMPLE,
+        )
+    };
+    if ret != 0 {
+        return Err(PyErr::fetch(buffer.py()));
     }
+    let managed = RawPyBuffer(unsafe { raw_buf.assume_init() });
     let raw_bytes: &[u8] =
-        unsafe { std::slice::from_raw_parts(py_buf.buf_ptr() as *const u8, py_buf.len_bytes()) };
+        unsafe { std::slice::from_raw_parts(managed.0.buf as *const u8, managed.0.len as usize) };
 
     let attr_data = crate::attributes::parse_attribute_buffer(dtype, raw_bytes)?;
 
@@ -150,25 +164,4 @@ pub fn attribute_info(mesh: &PyMeshData, name: &str) -> Option<(String, String, 
             attr.len(),
         )
     })
-}
-
-/// Retrieve attribute data as a native Python list.
-pub fn get_attribute_data<'py>(
-    mesh: &PyMeshData,
-    py: Python<'py>,
-    name: &str,
-) -> PyResult<Option<Bound<'py, PyAny>>> {
-    if let Some(attr) = mesh.inner.get_custom_attribute(name) {
-        crate::attributes::attribute_data_to_py_list(py, &attr.data).map(Some)
-    } else {
-        Ok(None)
-    }
-}
-
-/// Tint index per face.
-pub fn get_face_tint_indices<'py>(
-    mesh: &PyMeshData,
-    py: Python<'py>,
-) -> PyResult<Bound<'py, PyList>> {
-    PyList::new(py, &mesh.inner.face_tint_indices)
 }

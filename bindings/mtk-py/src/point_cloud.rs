@@ -79,14 +79,6 @@ impl PyVoxelPointCloud {
         }
     }
 
-    /// Creates an empty `VoxelPointCloud` with pre-allocated capacity for N points.
-    #[staticmethod]
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            inner: VoxelPointCloud::with_capacity(capacity),
-        }
-    }
-
     /// Returns the total number of voxel points stored in this cloud.
     pub fn len(&self) -> usize {
         self.inner.len()
@@ -342,6 +334,30 @@ impl PyVoxelPointCloud {
         let ptr = inner.biome_indices.as_ptr() as *const u8;
         let len = inner.biome_indices.len() * std::mem::size_of::<i32>();
         crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
+    }
+
+    /// Exports all point cloud arrays and palettes as a host-agnostic dictionary
+    /// of memoryviews and lists, ideal for headless processing.
+    pub fn to_buffers<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+        let py = slf.py();
+        let this = slf.borrow();
+        let dict = pyo3::types::PyDict::new(py);
+        dict.set_item("count", this.len())?;
+        dict.set_item("positions", Self::positions_memoryview(slf)?)?;
+        dict.set_item("block_x", Self::block_x_memoryview(slf)?)?;
+        dict.set_item("block_y", Self::block_y_memoryview(slf)?)?;
+        dict.set_item("block_z", Self::block_z_memoryview(slf)?)?;
+        dict.set_item("state_indices", Self::state_indices_memoryview(slf)?)?;
+        dict.set_item("state_palette", this.get_state_palette())?;
+        dict.set_item("biome_indices", Self::biome_indices_memoryview(slf)?)?;
+        dict.set_item("biome_palette", this.get_biome_palette())?;
+        if this.has_entities() {
+            if let Ok(ent_mv) = Self::entity_indices_memoryview(slf) {
+                dict.set_item("entity_indices", ent_mv)?;
+                dict.set_item("entity_palette", this.get_entity_palette())?;
+            }
+        }
+        Ok(dict)
     }
 
     fn __repr__(&self) -> String {

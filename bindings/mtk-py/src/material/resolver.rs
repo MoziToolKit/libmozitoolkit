@@ -6,8 +6,8 @@ use crate::buffer::{
     create_owned_f32_memoryview, create_owned_i32_memoryview, create_owned_u32_memoryview,
 };
 use mtk_material::{
-    clean_identifier, remap_grid_atlas_uv_to_local, remap_mesh_multi_uvs_paletted_with_options,
-    reroute_mesh_animation, resolve_mesh_material_routes, BiomeResolver,
+    clean_identifier, remap_mesh_multi_uvs_paletted_with_options, reroute_mesh_animation,
+    resolve_mesh_material_routes, BiomeResolver,
 };
 use pyo3::buffer::PyBuffer;
 use pyo3::prelude::*;
@@ -136,13 +136,6 @@ impl PyMaterialResolver {
     #[staticmethod]
     pub fn clean_name(name: &str) -> String {
         clean_identifier(name)
-    }
-
-    /// Convert a grid atlas UV coordinate (u, v) to its local [0, 1] swatch coordinate.
-    #[staticmethod]
-    pub fn remap_grid_atlas_uv_to_local(u: f32, v: f32, spec: &PyGridAtlasSpec) -> (f32, f32) {
-        let uv = remap_grid_atlas_uv_to_local(u, v, &spec.inner);
-        (uv[0], uv[1])
     }
 
     /// Resolve atlas routing (chunk/texture/animation metadata) for face texture keys.

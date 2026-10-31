@@ -52,11 +52,6 @@ impl PyFaceCuller {
         self.inner.clear_cache();
     }
 
-    /// Number of cached blockstate occlusion metadata entries.
-    pub fn cache_len(&self) -> usize {
-        self.inner.cache_len()
-    }
-
     fn __repr__(&self) -> String {
         format!("<FaceCuller cached_entries={}>", self.inner.cache_len())
     }

@@ -100,31 +100,6 @@ impl PyBakedAtlas {
         Ok(list)
     }
 
-    /// Returns chunk metadata tuple: `(width, height, is_animated, category, file_stem)`.
-    pub fn get_chunk_meta(&self, index: usize) -> PyResult<(u32, u32, bool, String, String)> {
-        if let Some(chunk) = self.inner.chunks.get(index) {
-            Ok((
-                chunk.width,
-                chunk.height,
-                chunk.is_animated,
-                chunk.category.clone(),
-                chunk.file_stem(),
-            ))
-        } else if let Some(chunk) = self.inner.address_map.chunks.get(index) {
-            Ok((
-                chunk.width,
-                chunk.height,
-                chunk.is_animated,
-                chunk.category.clone(),
-                chunk.file_stem(),
-            ))
-        } else {
-            Err(pyo3::exceptions::PyIndexError::new_err(
-                "Chunk index out of bounds",
-            ))
-        }
-    }
-
     /// Read-only memoryview of Albedo normalized float32 pixels (`width * height * 4`).
     /// `flip_v`: If True (default True for Blender convention), flips rows vertically.
     #[pyo3(signature = (index, flip_v=true))]

@@ -74,11 +74,6 @@ impl PyMesherConfig {
         self.inner.ctm_solver = solver.map(|s| s.inner.clone());
     }
 
-    /// Checks if a CTM solver is configured.
-    pub fn has_ctm_solver(&self) -> bool {
-        self.inner.ctm_solver.is_some()
-    }
-
     #[getter]
     pub fn enable_ao(&self) -> bool {
         self.inner.enable_ao
@@ -100,23 +95,8 @@ impl PyMesherConfig {
     }
 
     #[getter]
-    pub fn enable_alternate_blocks(&self) -> bool {
-        self.inner.enable_alternate_blocks
-    }
-
-    #[getter]
-    pub fn enable_random_offsets(&self) -> bool {
-        self.inner.enable_random_offsets
-    }
-
-    #[getter]
     pub fn enable_animated_textures(&self) -> bool {
         self.inner.enable_animated_textures
-    }
-
-    #[setter]
-    pub fn set_enable_animated_textures(&mut self, val: bool) {
-        self.inner.enable_animated_textures = val;
     }
 
     /// Sets explicit bounding box `(min_x, min_y, min_z, size_x, size_y, size_z)` for origin centering.
@@ -132,11 +112,6 @@ impl PyMesherConfig {
         self.inner.selection_bounds = Some(([min_x, min_y, min_z], [size_x, size_y, size_z]));
     }
 
-    /// Clears any explicit bounding box, falling back to auto-detected bounds.
-    pub fn clear_bounds(&mut self) {
-        self.inner.selection_bounds = None;
-    }
-
     #[getter]
     pub fn z_up_coordinates(&self) -> bool {
         matches!(
@@ -148,11 +123,6 @@ impl PyMesherConfig {
     #[getter]
     pub fn num_threads(&self) -> Option<usize> {
         self.num_threads
-    }
-
-    #[setter]
-    pub fn set_num_threads(&mut self, val: Option<usize>) {
-        self.num_threads = val;
     }
 
     fn __repr__(&self) -> String {

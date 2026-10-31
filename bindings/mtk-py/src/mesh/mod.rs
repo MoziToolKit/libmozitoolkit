@@ -11,7 +11,7 @@ pub mod topology;
 pub use topology::analyze_mesh_hard_edges;
 
 use pyo3::prelude::*;
-use pyo3::types::{PyList, PyMemoryView};
+use pyo3::types::PyMemoryView;
 
 use mtk_core::mesh::MeshData;
 use mtk_core::polygon::FlatPolygonMesh;
@@ -95,17 +95,6 @@ impl PyMeshData {
         }
     }
 
-    /// Creates a new `MeshData` with pre-allocated capacity.
-    #[staticmethod]
-    pub fn with_capacity(num_vertices: usize, num_indices: usize, num_faces: usize) -> Self {
-        Self {
-            inner: MeshData::with_capacity(num_vertices, num_indices, num_faces),
-            profile: None,
-            dynamic_skin_atlas: None,
-            dynamic_skin_atlases: None,
-        }
-    }
-
     /// Execution profile of the operation that generated this mesh, if recorded.
     #[getter]
     pub fn profile(&self) -> Option<crate::profile::PyExecutionProfile> {
@@ -128,12 +117,6 @@ impl PyMeshData {
         }
     }
 
-    /// Sets or clears the dynamic skin atlas texture RGBA bytes.
-    #[setter]
-    pub fn set_dynamic_skin_atlas(&mut self, atlas: Option<Vec<u8>>) {
-        self.dynamic_skin_atlas = atlas;
-    }
-
     /// Returns a dict mapping Chunk ID (e.g. 0xFFF0, 0xFFF1) to dynamic skin atlas RGBA bytes if present.
     #[getter]
     pub fn dynamic_skin_atlases<'py>(
@@ -153,15 +136,6 @@ impl PyMeshData {
         } else {
             None
         }
-    }
-
-    /// Sets or clears the multi-chunk dynamic skin atlases dictionary.
-    #[setter]
-    pub fn set_dynamic_skin_atlases(
-        &mut self,
-        atlases: Option<std::collections::HashMap<u16, Vec<u8>>>,
-    ) {
-        self.dynamic_skin_atlases = atlases;
     }
 
     /// Number of vertices in the mesh buffer.
@@ -264,14 +238,6 @@ impl PyMeshData {
     /// Read-only memoryview of vertex UV coordinates as raw bytes (`float32 * 2` per vertex).
     pub fn uvs_memoryview<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyMemoryView>> {
         memoryview::uvs_memoryview(slf)
-    }
-
-    /// Flattened secondary vertex UVs `[u0, v0, u1, v1, ...]`.
-    pub fn get_flat_secondary_uvs<'py>(
-        &self,
-        py: Python<'py>,
-    ) -> PyResult<Option<Bound<'py, PyList>>> {
-        memoryview::get_flat_secondary_uvs(self, py)
     }
 
     /// Read-only memoryview of triangle indices as raw bytes (`uint32` per index).
@@ -453,13 +419,52 @@ impl PyMeshData {
         attributes::attribute_info(self, name)
     }
 
-    /// Retrieve attribute data as a native Python list.
-    pub fn get_attribute_data<'py>(
-        &self,
-        py: Python<'py>,
-        name: &str,
-    ) -> PyResult<Option<Bound<'py, PyAny>>> {
-        attributes::get_attribute_data(self, py, name)
+    /// Exports all contiguous geometric buffers and custom attributes as a host-agnostic
+    /// dictionary of memoryviews and metadata, ideal for headless Python batch
+    /// processing or standard non-DNA batch ingestion.
+    pub fn to_buffers<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+        let py = slf.py();
+        let this = slf.borrow();
+        let dict = pyo3::types::PyDict::new(py);
+        dict.set_item("vertex_count", this.vertex_count())?;
+        dict.set_item("triangle_count", this.triangle_count())?;
+        dict.set_item("face_count", this.face_count())?;
+        dict.set_item("quad_count", this.quad_count())?;
+        dict.set_item("positions", Self::positions_memoryview(slf)?)?;
+        dict.set_item("indices", Self::indices_memoryview(slf)?)?;
+        if !this.inner.normals.is_empty() {
+            dict.set_item("normals", Self::normals_memoryview(slf)?)?;
+        }
+        if !this.inner.uvs.is_empty() {
+            dict.set_item("uvs", Self::uvs_memoryview(slf)?)?;
+        }
+        if let Some(quad_mv) = Self::quad_indices_memoryview(slf)? {
+            dict.set_item("quad_indices", quad_mv)?;
+        }
+        dict.set_item("loop_uvs", Self::loop_uvs_memoryview(slf)?)?;
+        dict.set_item("loop_starts", Self::loop_starts_memoryview(slf)?)?;
+        dict.set_item("loop_totals", Self::loop_totals_memoryview(slf)?)?;
+        dict.set_item("face_materials", Self::face_materials_memoryview(slf)?)?;
+        if let Some(col_mv) = Self::colors_memoryview(slf)? {
+            dict.set_item("colors", col_mv)?;
+        }
+
+        let attrs_dict = pyo3::types::PyDict::new(py);
+        for name in this.attribute_names() {
+            if let Some(attr_mv) = Self::attribute_memoryview(slf, &name)? {
+                let item = pyo3::types::PyDict::new(py);
+                if let Some((domain, dtype, count)) = this.attribute_info(&name) {
+                    item.set_item("domain", domain)?;
+                    item.set_item("dtype", dtype)?;
+                    item.set_item("element_count", count)?;
+                }
+                item.set_item("data", attr_mv)?;
+                attrs_dict.set_item(&name, item)?;
+            }
+        }
+        dict.set_item("attributes", attrs_dict)?;
+
+        Ok(dict)
     }
 
     fn __repr__(&self) -> String {

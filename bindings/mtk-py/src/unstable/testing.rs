@@ -6,8 +6,10 @@
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 
+use crate::model::PyModelBaker;
+use crate::texture::atlas::PyAtlasBuilder;
 use crate::voxel::PyVoxelStorage;
-use crate::{protocol, subdivide, texture, uv, PyAtlasBuilder, PyModelBaker};
+use crate::{protocol, subdivide, texture, uv};
 
 /// Helper function for unit testing: creates a minimal valid `.mtkcache` package file.
 #[pyfunction]

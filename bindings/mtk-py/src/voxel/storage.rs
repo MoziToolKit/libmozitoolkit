@@ -171,11 +171,6 @@ impl PyVoxelStorage {
         self.inner.size_z
     }
 
-    /// Marks all existing sections dirty for a full rebuild.
-    pub fn mark_all_sections_dirty(&mut self) {
-        self.inner.mark_all_sections_dirty();
-    }
-
     /// Clears all sections, biomes, and bounds.
     pub fn clear(&mut self) {
         self.inner.clear();
@@ -219,11 +214,6 @@ impl PyVoxelStorage {
         Self {
             inner: VoxelStorage::from_point_cloud(&point_cloud.inner),
         }
-    }
-
-    /// Replaces current storage state by reconstructing from a point cloud.
-    pub fn load_from_point_cloud(&mut self, point_cloud: &crate::point_cloud::PyVoxelPointCloud) {
-        self.inner.load_from_point_cloud(&point_cloud.inner);
     }
 
     fn __repr__(&self) -> String {

@@ -1,7 +1,7 @@
 //! Zero-copy memoryview and buffer protocol exports for `MeshData`.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyList, PyMemoryView};
+use pyo3::types::{PyBytes, PyMemoryView};
 
 use mtk_core::mesh::UvLayout;
 
@@ -72,23 +72,6 @@ pub fn secondary_uvs_memoryview<'py>(
             len,
             mesh.as_any(),
         )?))
-    } else {
-        Ok(None)
-    }
-}
-
-/// Flattened secondary vertex UVs `[u0, v0, u1, v1, ...]`.
-pub fn get_flat_secondary_uvs<'py>(
-    mesh: &PyMeshData,
-    py: Python<'py>,
-) -> PyResult<Option<Bound<'py, PyList>>> {
-    if let Some(ref sec_uvs) = mesh.inner.secondary_uvs {
-        let mut flat = Vec::with_capacity(sec_uvs.len() * 2);
-        for uv in sec_uvs {
-            flat.push(uv[0]);
-            flat.push(uv[1]);
-        }
-        Ok(Some(PyList::new(py, &flat)?))
     } else {
         Ok(None)
     }

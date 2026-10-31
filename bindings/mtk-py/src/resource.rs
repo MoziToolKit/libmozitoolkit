@@ -280,19 +280,6 @@ impl PyAssetCache {
         let memview = crate::buffer::create_owned_f32_memoryview(py, f32_pixels)?;
         Ok((width, height, memview))
     }
-
-    /// Reads raw decompressed chunk bytes directly from package.
-    pub fn read_chunk_bytes<'py>(
-        &self,
-        py: Python<'py>,
-        chunk_id: &str,
-    ) -> PyResult<Bound<'py, pyo3::types::PyBytes>> {
-        let bytes = self
-            .inner
-            .read_chunk_bytes(chunk_id)
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-        Ok(pyo3::types::PyBytes::new(py, &bytes))
-    }
 }
 
 /// Checks if a `.mtkcache` file at `path` is valid for `fingerprint` using 64-byte header.
