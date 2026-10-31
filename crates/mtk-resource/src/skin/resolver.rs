@@ -705,7 +705,7 @@ pub fn extract_skin_url_from_property_base64(base64_str: &str) -> Option<String>
         .map(|s| s.to_string())
 }
 
-fn decode_base64(bytes: &[u8]) -> Option<Vec<u8>> {
+pub fn decode_base64(bytes: &[u8]) -> Option<Vec<u8>> {
     let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
     let mut buf = 0u32;
     let mut bits = 0;

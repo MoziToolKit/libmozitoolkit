@@ -369,6 +369,23 @@ impl PyMeshData {
         &self,
         py: Python<'py>,
     ) -> PyResult<(Vec<String>, Bound<'py, PyMemoryView>)> {
+        if let (Some(idx_attr), Some(pal_attr)) = (
+            self.inner
+                .get_custom_attribute(mtk_core::attributes::constants::ATTR_SOURCE_TEXTURE_IDX),
+            self.inner
+                .get_custom_attribute(mtk_core::attributes::constants::ATTR_SOURCE_TEXTURE_PALETTE),
+        ) {
+            if let (
+                mtk_core::attributes::AttributeData::Int32(ref idx_vals),
+                mtk_core::attributes::AttributeData::String(ref pal_vals),
+            ) = (&idx_attr.data, &pal_attr.data)
+            {
+                let u32_indices: Vec<u32> = idx_vals.iter().map(|&i| i as u32).collect();
+                let mv = crate::buffer::create_owned_u32_memoryview(py, u32_indices)?;
+                return Ok((pal_vals.clone(), mv));
+            }
+        }
+
         let mut palette: Vec<String> = Vec::new();
         let mut lookup =
             rustc_hash::FxHashMap::<&str, u32>::with_capacity_and_hasher(128, Default::default());

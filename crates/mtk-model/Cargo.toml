@@ -11,6 +11,7 @@ description = "Headless Minecraft BlockState parser and Model JSON data structur
 [dependencies]
 mtk-core = { workspace = true }
 mtk-cull = { workspace = true }
+mtk-resource = { workspace = true }
 glam = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -22,7 +23,7 @@ rayon = { workspace = true, optional = true }
 
 [features]
 default = ["parallel"]
-parallel = ["dep:rayon"]
+parallel = ["dep:rayon", "mtk-resource/parallel"]
 
 [dev-dependencies]
 mtk-testkit = { workspace = true }

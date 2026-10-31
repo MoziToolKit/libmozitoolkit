@@ -309,24 +309,10 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
         }
 
         for (name, attr) in &mesh.custom_attributes {
-            let empty_data = match &attr.data {
-                AttributeData::Float(_) => AttributeData::Float(Vec::new()),
-                AttributeData::Float2(_) => AttributeData::Float2(Vec::new()),
-                AttributeData::Float3(_) => AttributeData::Float3(Vec::new()),
-                AttributeData::Float4(_) => AttributeData::Float4(Vec::new()),
-                AttributeData::Int8(_) => AttributeData::Int8(Vec::new()),
-                AttributeData::Int16(_) => AttributeData::Int16(Vec::new()),
-                AttributeData::Int32(_) => AttributeData::Int32(Vec::new()),
-                AttributeData::UInt8(_) => AttributeData::UInt8(Vec::new()),
-                AttributeData::UInt16(_) => AttributeData::UInt16(Vec::new()),
-                AttributeData::UInt32(_) => AttributeData::UInt32(Vec::new()),
-                AttributeData::String(_) => AttributeData::String(Vec::new()),
-                AttributeData::Bool(_) => AttributeData::Bool(Vec::new()),
-            };
             out.add_custom_attribute(MeshAttribute {
                 name: name.clone(),
                 domain: attr.domain,
-                data: empty_data,
+                data: attr.data.empty_with_capacity(0),
             });
         }
 

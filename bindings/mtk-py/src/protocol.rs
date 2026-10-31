@@ -258,26 +258,6 @@ pub fn decode_packet<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, P
             dict.set_item("error_code", error_code as u16)?;
             dict.set_item("message", message)?;
         }
-        Packet::StateVerifyReq {
-            epoch,
-            sequence,
-            state_hash,
-        } => {
-            dict.set_item("type", "STATE_VERIFY_REQ")?;
-            dict.set_item("epoch", epoch)?;
-            dict.set_item("sequence", sequence)?;
-            dict.set_item("state_hash", format!("0x{:016x}", state_hash))?;
-        }
-        Packet::StateVerifyResp {
-            epoch,
-            sequence,
-            is_match,
-        } => {
-            dict.set_item("type", "STATE_VERIFY_RESP")?;
-            dict.set_item("epoch", epoch)?;
-            dict.set_item("sequence", sequence)?;
-            dict.set_item("is_match", is_match)?;
-        }
         Packet::BaselineEntities {
             epoch,
             snapshot_uuid,

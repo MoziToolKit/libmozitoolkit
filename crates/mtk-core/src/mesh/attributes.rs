@@ -24,7 +24,8 @@ impl MeshData {
             return;
         }
 
-        let mut textures = Vec::with_capacity(face_count);
+        let mut palette = Vec::new();
+        let mut tex_indices = Vec::with_capacity(face_count);
         let mut uv_transforms = Vec::with_capacity(face_count);
         let mut uv_rotations = Vec::with_capacity(face_count);
         let mut anim_timings = Vec::with_capacity(face_count);
@@ -39,7 +40,16 @@ impl MeshData {
         let mut has_animation = false;
 
         for attr in face_attrs {
-            textures.push(attr.texture_key.clone());
+            let key = &attr.texture_key;
+            let idx = match palette.iter().position(|k| k == key) {
+                Some(i) => i as i32,
+                None => {
+                    let i = palette.len() as i32;
+                    palette.push(key.clone());
+                    i
+                }
+            };
+            tex_indices.push(idx);
             uv_transforms.push(attr.uv_transform);
             uv_rotations.push(attr.uv_rotation);
             anim_timings.push(attr.anim_timing);
@@ -62,9 +72,14 @@ impl MeshData {
         }
 
         self.add_custom_attribute(MeshAttribute::new(
-            ATTR_SOURCE_TEXTURE_KEY,
+            ATTR_SOURCE_TEXTURE_IDX,
             AttributeDomain::Face,
-            AttributeData::String(textures),
+            AttributeData::Int32(tex_indices),
+        ));
+        self.add_custom_attribute(MeshAttribute::new(
+            ATTR_SOURCE_TEXTURE_PALETTE,
+            AttributeDomain::Mesh,
+            AttributeData::String(palette),
         ));
         self.add_custom_attribute(MeshAttribute::new(
             ATTR_UV_TRANSFORM,

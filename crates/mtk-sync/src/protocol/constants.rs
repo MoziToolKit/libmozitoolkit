@@ -42,10 +42,6 @@ pub enum Opcode {
     DeltaOp = 0x07,
     /// 0x08: Dynamic Palette Append (S -> C)
     PaletteUpdate = 0x08,
-    /// 0x09: State Verification Request (Bidirectional)
-    StateVerifyReq = 0x09,
-    /// 0x0A: State Verification Response (Bidirectional)
-    StateVerifyResp = 0x0A,
     /// 0x0B: Task / Session Cancellation (Bidirectional)
     Cancel = 0x0B,
     /// 0x0D: Resync and Gap Recovery Request (C -> S)
@@ -73,8 +69,6 @@ impl Opcode {
             0x06 => Some(Opcode::BaselineAck),
             0x07 => Some(Opcode::DeltaOp),
             0x08 => Some(Opcode::PaletteUpdate),
-            0x09 => Some(Opcode::StateVerifyReq),
-            0x0A => Some(Opcode::StateVerifyResp),
             0x0B => Some(Opcode::Cancel),
             0x0D => Some(Opcode::ResyncRequest),
             0x0E => Some(Opcode::Ping),

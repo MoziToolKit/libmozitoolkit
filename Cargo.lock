@@ -836,6 +836,7 @@ dependencies = [
  "glam",
  "mtk-core",
  "mtk-cull",
+ "mtk-resource",
  "mtk-testkit",
  "postcard",
  "rayon",

@@ -27,10 +27,25 @@ class TestLibMtkPy(unittest.TestCase):
         self.assertEqual(mesh.face_count, 1)
         self.assertEqual(mesh.quad_count, 1)
 
-        self.assertEqual(len(mesh.positions_memoryview()), 4 * 3 * 4)
-        self.assertEqual(len(mesh.uvs_memoryview()), 4 * 2 * 4)
-        self.assertEqual(len(mesh.indices_memoryview()), 6 * 4)
-        self.assertEqual(len(mesh.quad_indices_memoryview()), 4 * 4)
+        pos_mv = mesh.positions_memoryview()
+        self.assertEqual(len(pos_mv), 4 * 3)
+        self.assertEqual(pos_mv.format, "f")
+        self.assertEqual(pos_mv.nbytes, 4 * 3 * 4)
+
+        uv_mv = mesh.uvs_memoryview()
+        self.assertEqual(len(uv_mv), 4 * 2)
+        self.assertEqual(uv_mv.format, "f")
+        self.assertEqual(uv_mv.nbytes, 4 * 2 * 4)
+
+        idx_mv = mesh.indices_memoryview()
+        self.assertEqual(len(idx_mv), 6)
+        self.assertEqual(idx_mv.format, "I")
+        self.assertEqual(idx_mv.nbytes, 6 * 4)
+
+        quad_mv = mesh.quad_indices_memoryview()
+        self.assertEqual(len(quad_mv), 4)
+        self.assertEqual(quad_mv.format, "I")
+        self.assertEqual(quad_mv.nbytes, 4 * 4)
 
     def test_custom_attributes_memoryview_and_list(self):
         mesh = quad_mesh()

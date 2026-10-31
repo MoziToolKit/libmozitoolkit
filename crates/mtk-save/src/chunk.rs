@@ -26,10 +26,10 @@ pub fn format_canonical_blockstate(block_comp: &NbtCompound) -> String {
         .map(|s| s.to_string_lossy())
         .unwrap_or_else(|| "minecraft:air".into());
 
-    let norm_name = match name.as_ref() {
-        "cave_air" | "minecraft:cave_air" | "void_air" | "minecraft:void_air" => "minecraft:air",
-        other => other,
-    };
+    let norm_name = mtk_model::normalize_canonical_blockstate(name.as_ref());
+    if norm_name == "minecraft:air" {
+        return "minecraft:air".to_string();
+    }
 
     if let Some(props) = block_comp.compound("Properties") {
         let mut prop_list: Vec<(String, String)> = Vec::new();

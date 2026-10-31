@@ -16,8 +16,9 @@ pub use baker::{
 pub use entity::BlockEntityData;
 pub use error::ModelError;
 pub use parser::{
-    mesh_to_obj_string, BakedObjFace, BlockModelJson, BlockState, BlockStateDefinition,
-    BlockStateResolver, BuiltinTransform, ElementJson, FaceJson, ModObjLoader, MultipartCondition,
-    MultipartRule, ObjRawFace, ResolvedBlockModel, ResolvedElement, ResolvedFace, RotationJson,
-    TextureValue, VariantEntry, VariantMatch, VariantModel, WavefrontObjParser,
+    is_air_like, mesh_to_obj_string, normalize_canonical_blockstate, BakedObjFace, BlockModelJson,
+    BlockState, BlockStateDefinition, BlockStateResolver, BuiltinTransform, ElementJson, FaceJson,
+    ModObjLoader, MultipartCondition, MultipartRule, ObjRawFace, ResolvedBlockModel,
+    ResolvedElement, ResolvedFace, RotationJson, TextureValue, VariantEntry, VariantMatch,
+    VariantModel, WavefrontObjParser,
 };

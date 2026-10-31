@@ -197,11 +197,14 @@ impl MeshAttribute {
 /// [`RETIRED_MESH_ATTRIBUTES`] instead of maintaining their own name lists.
 pub mod constants {
     /// Canonical source texture key (Domain: Face, Type: String).
+    /// DEPRECATED: Retired in favor of [`ATTR_SOURCE_TEXTURE_IDX`] and [`ATTR_SOURCE_TEXTURE_PALETTE`].
     pub const ATTR_SOURCE_TEXTURE_KEY: &str = "mtk_source_texture_key";
-    /// Palette index for [`ATTR_SOURCE_TEXTURE_KEY`] (Domain: Face, Type: Int32).
-    /// Produced by the host from the native source-texture palette; kept in the
+    /// Palette index for source textures (Domain: Face, Type: Int32).
+    /// Produced by the native mesher or host from the native source-texture palette; kept in the
     /// canonical schema so every consumer agrees on its type and role.
     pub const ATTR_SOURCE_TEXTURE_IDX: &str = "mtk_source_texture_idx";
+    /// Source texture string palette (Domain: Mesh, Type: String).
+    pub const ATTR_SOURCE_TEXTURE_PALETTE: &str = "mtk_source_textures";
 
     /// Target Atlas chunk/sheet slot index (Domain: Face, Type: Int32).
     pub const ATTR_ATLAS_CHUNK_ID: &str = "mtk_atlas_chunk_id";
@@ -308,15 +311,15 @@ impl MeshAttributeSpec {
 /// a host. The order is stable so generated host bindings stay deterministic.
 pub const MESH_ATTRIBUTE_SPECS: &[MeshAttributeSpec] = &[
     MeshAttributeSpec::new(
-        constants::ATTR_SOURCE_TEXTURE_KEY,
-        AttributeDomain::Face,
-        "string",
-        AttributeRole::Metadata,
-    ),
-    MeshAttributeSpec::new(
         constants::ATTR_SOURCE_TEXTURE_IDX,
         AttributeDomain::Face,
         "int32",
+        AttributeRole::Metadata,
+    ),
+    MeshAttributeSpec::new(
+        constants::ATTR_SOURCE_TEXTURE_PALETTE,
+        AttributeDomain::Mesh,
+        "string",
         AttributeRole::Metadata,
     ),
     MeshAttributeSpec::new(
@@ -440,6 +443,8 @@ pub const MESH_ATTRIBUTE_SPECS: &[MeshAttributeSpec] = &[
 /// Hosts use this list to purge stale attributes from legacy `.blend` files.
 /// Nothing in this list may appear in [`MESH_ATTRIBUTE_SPECS`].
 pub const RETIRED_MESH_ATTRIBUTES: &[&str] = &[
+    // Legacy per-face string attribute (retired in favor of compact Palette + ATTR_SOURCE_TEXTURE_IDX).
+    constants::ATTR_SOURCE_TEXTURE_KEY,
     // Obsolete atlas routing / material metadata.
     "mtk_material_slot",
     "mtk_material_id",

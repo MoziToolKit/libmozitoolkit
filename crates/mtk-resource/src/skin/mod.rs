@@ -20,7 +20,9 @@ pub use index::{
 pub use mod_api::{
     default_player_skin_texture, derive_skin_key, VANILLA_ALEX_TEXTURE, VANILLA_STEVE_TEXTURE,
 };
-pub use resolver::{extract_skin_url_from_property_base64, is_valid_png_header, SkinResolver};
+pub use resolver::{
+    decode_base64, extract_skin_url_from_property_base64, is_valid_png_header, SkinResolver,
+};
 
 #[cfg(test)]
 mod tests {

@@ -77,14 +77,24 @@ mod tests {
 
         // Verify standard attributes
         use mtk_core::attributes::constants::*;
-        assert!(mesh.has_custom_attribute(ATTR_SOURCE_TEXTURE_KEY));
+        assert!(mesh.has_custom_attribute(ATTR_SOURCE_TEXTURE_IDX));
+        assert!(mesh.has_custom_attribute(ATTR_SOURCE_TEXTURE_PALETTE));
         assert!(mesh.has_custom_attribute(ATTR_UV_TRANSFORM));
 
-        let tex_attr = mesh.get_custom_attribute(ATTR_SOURCE_TEXTURE_KEY).unwrap();
-        if let mtk_core::attributes::AttributeData::String(ref vals) = tex_attr.data {
+        let pal_attr = mesh
+            .get_custom_attribute(ATTR_SOURCE_TEXTURE_PALETTE)
+            .unwrap();
+        if let mtk_core::attributes::AttributeData::String(ref vals) = pal_attr.data {
             assert_eq!(vals[0], "minecraft:block/stone");
         } else {
             panic!("Expected String attribute data");
+        }
+
+        let idx_attr = mesh.get_custom_attribute(ATTR_SOURCE_TEXTURE_IDX).unwrap();
+        if let mtk_core::attributes::AttributeData::Int32(ref vals) = idx_attr.data {
+            assert_eq!(vals[0], 0);
+        } else {
+            panic!("Expected Int32 attribute data");
         }
     }
 

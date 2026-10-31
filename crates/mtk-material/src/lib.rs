@@ -42,7 +42,7 @@ pub use remap::{
     straighten_diamond_quad_uv,
 };
 pub use resolver::{
-    clean_identifier, decode_grid_atlas_uv, extract_animation_metrics,
+    builtin_biome_suffixes, clean_identifier, decode_grid_atlas_uv, extract_animation_metrics,
     remap_grid_atlas_uv_to_local, resolve_animated_sprite, resolve_routed_sprite, MaterialResolver,
 };
 pub use types::{

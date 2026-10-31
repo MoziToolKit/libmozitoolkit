@@ -6,7 +6,7 @@ pub mod overrides;
 
 use crate::types::GridAtlasSpec;
 
-use self::overrides::{builtin_biome_suffixes, builtin_material_fallbacks, ResolverOverrides};
+pub use self::overrides::{builtin_biome_suffixes, builtin_material_fallbacks, ResolverOverrides};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 

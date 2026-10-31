@@ -4,7 +4,7 @@
 //! zero-copy memoryviews, bidirectional conversions with `MeshData`, and `VoxelStorage`.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyMemoryView};
+use pyo3::types::PyMemoryView;
 
 use mtk_voxel::storage::VoxelPointCloud;
 
@@ -204,56 +204,52 @@ impl PyVoxelPointCloud {
         Ok(Self { inner: cloud })
     }
 
-    /// Read-only memoryview of 3D vertex positions as raw bytes (`float32 * 3` per point).
+    /// Read-only memoryview of 3D vertex positions (`float32 * 3` per point).
     pub fn positions_memoryview<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyMemoryView>> {
         let py = slf.py();
         let inner = &slf.borrow().inner;
-        if inner.positions.is_empty() {
-            let bytes = PyBytes::new(py, &[]);
-            return PyMemoryView::from(&bytes);
-        }
-        let ptr = inner.positions.as_ptr() as *const u8;
-        let len = inner.positions.len() * std::mem::size_of::<f32>();
-        crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
+        crate::buffer::create_zerocopy_f32_memoryview(
+            py,
+            inner.positions.as_ptr(),
+            inner.positions.len(),
+            slf.as_any(),
+        )
     }
 
     /// Read-only memoryview of native integer X block coordinates (`int32` per point).
     pub fn block_x_memoryview<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyMemoryView>> {
         let py = slf.py();
         let inner = &slf.borrow().inner;
-        if inner.block_x.is_empty() {
-            let bytes = PyBytes::new(py, &[]);
-            return PyMemoryView::from(&bytes);
-        }
-        let ptr = inner.block_x.as_ptr() as *const u8;
-        let len = inner.block_x.len() * std::mem::size_of::<i32>();
-        crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
+        crate::buffer::create_zerocopy_i32_memoryview(
+            py,
+            inner.block_x.as_ptr(),
+            inner.block_x.len(),
+            slf.as_any(),
+        )
     }
 
     /// Read-only memoryview of native integer Y block coordinates (`int32` per point).
     pub fn block_y_memoryview<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyMemoryView>> {
         let py = slf.py();
         let inner = &slf.borrow().inner;
-        if inner.block_y.is_empty() {
-            let bytes = PyBytes::new(py, &[]);
-            return PyMemoryView::from(&bytes);
-        }
-        let ptr = inner.block_y.as_ptr() as *const u8;
-        let len = inner.block_y.len() * std::mem::size_of::<i32>();
-        crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
+        crate::buffer::create_zerocopy_i32_memoryview(
+            py,
+            inner.block_y.as_ptr(),
+            inner.block_y.len(),
+            slf.as_any(),
+        )
     }
 
     /// Read-only memoryview of native integer Z block coordinates (`int32` per point).
     pub fn block_z_memoryview<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyMemoryView>> {
         let py = slf.py();
         let inner = &slf.borrow().inner;
-        if inner.block_z.is_empty() {
-            let bytes = PyBytes::new(py, &[]);
-            return PyMemoryView::from(&bytes);
-        }
-        let ptr = inner.block_z.as_ptr() as *const u8;
-        let len = inner.block_z.len() * std::mem::size_of::<i32>();
-        crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
+        crate::buffer::create_zerocopy_i32_memoryview(
+            py,
+            inner.block_z.as_ptr(),
+            inner.block_z.len(),
+            slf.as_any(),
+        )
     }
 
     /// Returns the unique canonical blockstate palette.
@@ -282,13 +278,12 @@ impl PyVoxelPointCloud {
     ) -> PyResult<Bound<'py, PyMemoryView>> {
         let py = slf.py();
         let inner = &slf.borrow().inner;
-        if inner.entity_indices.is_empty() {
-            let bytes = PyBytes::new(py, &[]);
-            return PyMemoryView::from(&bytes);
-        }
-        let ptr = inner.entity_indices.as_ptr() as *const u8;
-        let len = inner.entity_indices.len() * std::mem::size_of::<i32>();
-        crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
+        crate::buffer::create_zerocopy_i32_memoryview(
+            py,
+            inner.entity_indices.as_ptr(),
+            inner.entity_indices.len(),
+            slf.as_any(),
+        )
     }
 
     /// Read-only memoryview of per-point light levels (`uint8`).
@@ -297,13 +292,12 @@ impl PyVoxelPointCloud {
     ) -> PyResult<Bound<'py, PyMemoryView>> {
         let py = slf.py();
         let inner = &slf.borrow().inner;
-        if inner.light_levels.is_empty() {
-            let bytes = PyBytes::new(py, &[]);
-            return PyMemoryView::from(&bytes);
-        }
-        let ptr = inner.light_levels.as_ptr();
-        let len = inner.light_levels.len();
-        crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
+        crate::buffer::create_zerocopy_u8_memoryview(
+            py,
+            inner.light_levels.as_ptr(),
+            inner.light_levels.len(),
+            slf.as_any(),
+        )
     }
 
     /// Read-only memoryview of per-point blockstate palette indices (`int32`).
@@ -312,13 +306,12 @@ impl PyVoxelPointCloud {
     ) -> PyResult<Bound<'py, PyMemoryView>> {
         let py = slf.py();
         let inner = &slf.borrow().inner;
-        if inner.state_indices.is_empty() {
-            let bytes = PyBytes::new(py, &[]);
-            return PyMemoryView::from(&bytes);
-        }
-        let ptr = inner.state_indices.as_ptr() as *const u8;
-        let len = inner.state_indices.len() * std::mem::size_of::<i32>();
-        crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
+        crate::buffer::create_zerocopy_i32_memoryview(
+            py,
+            inner.state_indices.as_ptr(),
+            inner.state_indices.len(),
+            slf.as_any(),
+        )
     }
 
     /// Read-only memoryview of per-point biome palette indices (`int32`).
@@ -327,13 +320,12 @@ impl PyVoxelPointCloud {
     ) -> PyResult<Bound<'py, PyMemoryView>> {
         let py = slf.py();
         let inner = &slf.borrow().inner;
-        if inner.biome_indices.is_empty() {
-            let bytes = PyBytes::new(py, &[]);
-            return PyMemoryView::from(&bytes);
-        }
-        let ptr = inner.biome_indices.as_ptr() as *const u8;
-        let len = inner.biome_indices.len() * std::mem::size_of::<i32>();
-        crate::buffer::create_zerocopy_memoryview(py, ptr, len, slf.as_any())
+        crate::buffer::create_zerocopy_i32_memoryview(
+            py,
+            inner.biome_indices.as_ptr(),
+            inner.biome_indices.len(),
+            slf.as_any(),
+        )
     }
 
     /// Exports all point cloud arrays and palettes as a host-agnostic dictionary

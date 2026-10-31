@@ -264,28 +264,6 @@ pub fn encode_packet(packet: &Packet) -> Vec<u8> {
             }
         }
 
-        Packet::StateVerifyReq {
-            epoch,
-            sequence,
-            state_hash,
-        } => {
-            buf.push(Opcode::StateVerifyReq as u8);
-            buf.extend_from_slice(&epoch.to_le_bytes());
-            buf.extend_from_slice(&sequence.to_le_bytes());
-            buf.extend_from_slice(&state_hash.to_le_bytes());
-        }
-
-        Packet::StateVerifyResp {
-            epoch,
-            sequence,
-            is_match,
-        } => {
-            buf.push(Opcode::StateVerifyResp as u8);
-            buf.extend_from_slice(&epoch.to_le_bytes());
-            buf.extend_from_slice(&sequence.to_le_bytes());
-            buf.push(if *is_match { 1 } else { 0 });
-        }
-
         Packet::Cancel {
             epoch,
             snapshot_uuid,
@@ -790,40 +768,6 @@ pub fn decode_packet(buf: &[u8]) -> Result<Packet, ProtocolError> {
                 base_revision,
                 new_revision,
                 entries,
-            })
-        }
-
-        Opcode::StateVerifyReq => {
-            if offset + 24 > buf.len() {
-                return Err(ProtocolError::TruncatedPayload {
-                    field: "StateVerifyReq",
-                });
-            }
-            let epoch = u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap());
-            let sequence = u64::from_le_bytes(buf[offset + 8..offset + 16].try_into().unwrap());
-            let state_hash = u64::from_le_bytes(buf[offset + 16..offset + 24].try_into().unwrap());
-
-            Ok(Packet::StateVerifyReq {
-                epoch,
-                sequence,
-                state_hash,
-            })
-        }
-
-        Opcode::StateVerifyResp => {
-            if offset + 17 > buf.len() {
-                return Err(ProtocolError::TruncatedPayload {
-                    field: "StateVerifyResp",
-                });
-            }
-            let epoch = u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap());
-            let sequence = u64::from_le_bytes(buf[offset + 8..offset + 16].try_into().unwrap());
-            let is_match = buf[offset + 16] != 0;
-
-            Ok(Packet::StateVerifyResp {
-                epoch,
-                sequence,
-                is_match,
             })
         }
 

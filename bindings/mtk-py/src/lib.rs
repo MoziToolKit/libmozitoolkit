@@ -61,6 +61,24 @@ pub fn api_version() -> u32 {
     API_VERSION
 }
 
+/// Normalizes a legacy banner pattern short-code or identifier to standard pattern stem.
+#[pyfunction]
+pub fn normalize_banner_pattern(code_or_name: &str) -> &'static str {
+    mtk_resource::banner::normalize_banner_pattern(code_or_name)
+}
+
+/// Cleans a raw DCC material or texture name into a normalized identifier stem.
+#[pyfunction]
+pub fn clean_material_identifier(raw: &str) -> String {
+    mtk_material::clean_identifier(raw)
+}
+
+/// Returns the built-in list of exporter biome suffixes (Mineways / jmc2obj and similar).
+#[pyfunction]
+pub fn builtin_biome_suffixes() -> Vec<String> {
+    mtk_material::builtin_biome_suffixes().to_vec()
+}
+
 /// Main entrypoint for Python module `libmtk_py`.
 #[pymodule]
 fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -98,6 +116,9 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyPrecompileResult>()?;
     m.add_class::<PyAssetCache>()?;
     m.add_function(wrap_pyfunction!(precompile_all_assets, m)?)?;
+    m.add_function(wrap_pyfunction!(normalize_banner_pattern, m)?)?;
+    m.add_function(wrap_pyfunction!(clean_material_identifier, m)?)?;
+    m.add_function(wrap_pyfunction!(builtin_biome_suffixes, m)?)?;
     m.add_function(wrap_pyfunction!(is_valid_cache_package, m)?)?;
     m.add_function(wrap_pyfunction!(resolve_active_cache_package, m)?)?;
     m.add_function(wrap_pyfunction!(get_cache_manifest, m)?)?;
@@ -187,10 +208,26 @@ mod tests {
             assert_eq!(mesh.borrow().face_count(), 1);
 
             let memview = PyMeshData::positions_memoryview(&mesh).unwrap();
-            assert_eq!(memview.len().unwrap(), 4 * 3 * 4); // 4 verts * 3 floats * 4 bytes
+            assert_eq!(memview.len().unwrap(), 4 * 3); // 4 verts * 3 floats
+            assert_eq!(
+                memview
+                    .getattr("format")
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "f"
+            );
 
             let indices_mem = PyMeshData::indices_memoryview(&mesh).unwrap();
-            assert_eq!(indices_mem.len().unwrap(), 6 * 4); // 6 indices * 4 bytes
+            assert_eq!(indices_mem.len().unwrap(), 6); // 6 indices
+            assert_eq!(
+                indices_mem
+                    .getattr("format")
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "I"
+            );
 
             mesh.borrow_mut().clear();
             assert_eq!(mesh.borrow().vertex_count(), 0);

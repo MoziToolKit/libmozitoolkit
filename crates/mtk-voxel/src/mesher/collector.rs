@@ -130,6 +130,21 @@ impl FaceAttributesCollector {
             AttributeDomain::Face,
             AttributeData::String(keys),
         ));
+        let indices_i32: Vec<i32> = self
+            .source_texture_indices
+            .iter()
+            .map(|&i| i as i32)
+            .collect();
+        mesh.add_custom_attribute(MeshAttribute::new(
+            ATTR_SOURCE_TEXTURE_IDX,
+            AttributeDomain::Face,
+            AttributeData::Int32(indices_i32),
+        ));
+        mesh.add_custom_attribute(MeshAttribute::new(
+            ATTR_SOURCE_TEXTURE_PALETTE,
+            AttributeDomain::Mesh,
+            AttributeData::String(self.source_texture_palette.clone()),
+        ));
         mesh.add_custom_attribute(MeshAttribute::new(
             ATTR_ATLAS_CHUNK_ID,
             AttributeDomain::Face,

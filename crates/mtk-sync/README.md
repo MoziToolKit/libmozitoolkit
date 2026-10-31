@@ -305,8 +305,7 @@ pub enum SyncEvent {
 
 ### 5.4 CRC32 清单比对与自愈修复机制
 
-> **Legacy notice:** `SectionManifest` / `ReqFullSync` / `ReqSectionSync` 同样属于旧版
-> 协议；RFC v3.1 通过 `StateVerifyReq/Resp` 与 `ResyncRequest` 完成校验与恢复。
+> **Notice:** RFC v3.1 通过 `BaselineEnd` 与 `ResyncRequest` 完成状态校验与恢复。
 
 服务端周期性广播 `SectionManifest` 数据包携带各区块的权威 CRC32 校验码：
 1. 调度器在本地调用 `VoxelStorage::validate_manifest` 进行哈希比对；

@@ -122,20 +122,6 @@ pub enum Packet {
         entries: Vec<(u16, String)>,
     },
 
-    /// 0x09: State Verification Request (Bidirectional)
-    StateVerifyReq {
-        epoch: u64,
-        sequence: u64,
-        state_hash: u64,
-    },
-
-    /// 0x0A: State Verification Response (Bidirectional)
-    StateVerifyResp {
-        epoch: u64,
-        sequence: u64,
-        is_match: bool,
-    },
-
     /// 0x0B: Task / Session Cancellation (Bidirectional)
     Cancel {
         epoch: u64,

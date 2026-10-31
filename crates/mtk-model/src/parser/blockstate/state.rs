@@ -134,3 +134,40 @@ impl fmt::Display for BlockState {
         write!(f, "{}", self.to_canonical_string())
     }
 }
+
+/// Canonicalises a blockstate identifier into the server-authoritative representation:
+/// - Leading/trailing whitespace is trimmed.
+/// - Void air, cave air, structure void, bubble column (with or without properties) -> "minecraft:air"
+/// - Empty string -> "minecraft:air"
+#[inline]
+pub fn normalize_canonical_blockstate(raw: &str) -> &str {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return "minecraft:air";
+    }
+    // The Java SSOT normalizes the *block type* (`state.is(Blocks.BUBBLE_COLUMN)`),
+    // which ignores properties. Strip an optional `[...]` suffix before matching so
+    // `minecraft:bubble_column[drag=true]` canonicalises to air exactly like the server.
+    let base = trimmed
+        .find('[')
+        .map_or(trimmed, |property_start| &trimmed[..property_start]);
+    match base {
+        "minecraft:air"
+        | "air"
+        | "minecraft:cave_air"
+        | "cave_air"
+        | "minecraft:void_air"
+        | "void_air"
+        | "minecraft:structure_void"
+        | "structure_void"
+        | "minecraft:bubble_column"
+        | "bubble_column" => "minecraft:air",
+        _ => trimmed,
+    }
+}
+
+/// Returns true if the given block name or blockstate string is considered air-like.
+#[inline]
+pub fn is_air_like(raw: &str) -> bool {
+    normalize_canonical_blockstate(raw) == "minecraft:air"
+}

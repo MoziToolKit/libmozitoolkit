@@ -6,7 +6,7 @@ use pyo3::types::PyMemoryView;
 
 use super::PyMeshData;
 
-/// Read-only zero-copy memoryview of a numeric custom attribute by name.
+/// Read-only zero-copy typed memoryview of a numeric custom attribute by name.
 pub fn attribute_memoryview<'py>(
     mesh: &Bound<'py, PyMeshData>,
     name: &str,
@@ -14,16 +14,98 @@ pub fn attribute_memoryview<'py>(
     let py = mesh.py();
     let inner = &mesh.borrow().inner;
     if let Some(attr) = inner.get_custom_attribute(name) {
-        if let Some(bytes_slice) = attr.as_bytes() {
-            let ptr = bytes_slice.as_ptr();
-            let len = bytes_slice.len();
-            return Ok(Some(crate::buffer::create_zerocopy_memoryview(
-                py,
-                ptr,
-                len,
-                mesh.as_any(),
-            )?));
-        }
+        let mv = match &attr.data {
+            mtk_core::attributes::AttributeData::Float(v) => {
+                crate::buffer::create_zerocopy_f32_memoryview(
+                    py,
+                    v.as_ptr(),
+                    v.len(),
+                    mesh.as_any(),
+                )?
+            }
+            mtk_core::attributes::AttributeData::Float2(v) => {
+                crate::buffer::create_zerocopy_f32_memoryview(
+                    py,
+                    v.as_ptr() as *const f32,
+                    v.len() * 2,
+                    mesh.as_any(),
+                )?
+            }
+            mtk_core::attributes::AttributeData::Float3(v) => {
+                crate::buffer::create_zerocopy_f32_memoryview(
+                    py,
+                    v.as_ptr() as *const f32,
+                    v.len() * 3,
+                    mesh.as_any(),
+                )?
+            }
+            mtk_core::attributes::AttributeData::Float4(v) => {
+                crate::buffer::create_zerocopy_f32_memoryview(
+                    py,
+                    v.as_ptr() as *const f32,
+                    v.len() * 4,
+                    mesh.as_any(),
+                )?
+            }
+            mtk_core::attributes::AttributeData::Int8(v) => {
+                crate::buffer::create_zerocopy_i8_memoryview(
+                    py,
+                    v.as_ptr(),
+                    v.len(),
+                    mesh.as_any(),
+                )?
+            }
+            mtk_core::attributes::AttributeData::Int16(v) => {
+                crate::buffer::create_zerocopy_i16_memoryview(
+                    py,
+                    v.as_ptr(),
+                    v.len(),
+                    mesh.as_any(),
+                )?
+            }
+            mtk_core::attributes::AttributeData::Int32(v) => {
+                crate::buffer::create_zerocopy_i32_memoryview(
+                    py,
+                    v.as_ptr(),
+                    v.len(),
+                    mesh.as_any(),
+                )?
+            }
+            mtk_core::attributes::AttributeData::UInt8(v) => {
+                crate::buffer::create_zerocopy_u8_memoryview(
+                    py,
+                    v.as_ptr(),
+                    v.len(),
+                    mesh.as_any(),
+                )?
+            }
+            mtk_core::attributes::AttributeData::UInt16(v) => {
+                crate::buffer::create_zerocopy_u16_memoryview(
+                    py,
+                    v.as_ptr(),
+                    v.len(),
+                    mesh.as_any(),
+                )?
+            }
+            mtk_core::attributes::AttributeData::UInt32(v) => {
+                crate::buffer::create_zerocopy_u32_memoryview(
+                    py,
+                    v.as_ptr(),
+                    v.len(),
+                    mesh.as_any(),
+                )?
+            }
+            mtk_core::attributes::AttributeData::Bool(v) => {
+                crate::buffer::create_zerocopy_u8_memoryview(
+                    py,
+                    v.as_ptr() as *const u8,
+                    v.len(),
+                    mesh.as_any(),
+                )?
+            }
+            mtk_core::attributes::AttributeData::String(_) => return Ok(None),
+        };
+        return Ok(Some(mv));
     }
     Ok(None)
 }

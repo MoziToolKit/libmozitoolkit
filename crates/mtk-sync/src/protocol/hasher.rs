@@ -5,35 +5,7 @@
 use glam::IVec3;
 use xxhash_rust::xxh64::Xxh64;
 
-/// Normalizes raw block state string according to RFC Section 3.1:
-/// - Any form of air (cave_air, void_air, structure_void, bubble_column) -> "minecraft:air"
-/// - Empty string -> "minecraft:air"
-#[inline]
-pub fn normalize_canonical_blockstate(raw: &str) -> &str {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return "minecraft:air";
-    }
-    // The Java SSOT normalizes the *block type* (`state.is(Blocks.BUBBLE_COLUMN)`),
-    // which ignores properties. Strip an optional `[...]` suffix before matching so
-    // `minecraft:bubble_column[drag=true]` canonicalises to air exactly like the server.
-    let base = trimmed
-        .find('[')
-        .map_or(trimmed, |property_start| &trimmed[..property_start]);
-    match base {
-        "minecraft:air"
-        | "air"
-        | "minecraft:cave_air"
-        | "cave_air"
-        | "minecraft:void_air"
-        | "void_air"
-        | "minecraft:structure_void"
-        | "structure_void"
-        | "minecraft:bubble_column"
-        | "bubble_column" => "minecraft:air",
-        _ => trimmed,
-    }
-}
+pub use mtk_model::normalize_canonical_blockstate;
 
 /// Computes the authoritative canonical state_hash across the 3D bounding volume.
 ///
