@@ -203,8 +203,24 @@ fn precompile_all_assets_inner(
                 def_list.push((cat.as_str().to_string(), def));
             } else {
                 for loc in stack.list_all_atlas_locations() {
-                    if let Ok(def) = stack.load_atlas_definition(&loc) {
+                    if let Ok(mut def) = stack.load_atlas_definition(&loc) {
                         let cat_name = loc.path.clone();
+                        // Banner patterns are synthesized dynamically into the Dynamic Entity Atlas;
+                        // for the static atlas, we only bake the basic banner stand/pole pattern ("banner_base").
+                        if cat_name == "banner_patterns" {
+                            def = mtk_resource::AtlasDefinition {
+                                sources: vec![mtk_resource::AtlasSource::Single {
+                                    resource: mtk_resource::ResourceLocation::new(
+                                        "minecraft",
+                                        "entity/banner/banner_base",
+                                    ),
+                                    sprite: Some(mtk_resource::ResourceLocation::new(
+                                        "minecraft",
+                                        "entity/banner/banner_base",
+                                    )),
+                                }],
+                            };
+                        }
                         if seen_cats.insert(cat_name.clone()) {
                             def_list.push((cat_name, def));
                         }
@@ -342,7 +358,30 @@ fn precompile_all_assets_inner(
         )?;
     }
 
-    // 3. Save Cache Manifest inside package
+    // 3. Package Banner Patterns and Base Cloth into BANR chunks for runtime Dynamic Entity Atlas synthesis
+    let mut banner_baker = mtk_texture::BannerBaker::default();
+    let _ = banner_baker.load_from_pack_stack(stack);
+    if let Ok(base_bytes) = banner_baker.base_cloth_png_bytes() {
+        writer.add_chunk(
+            *b"BANR",
+            "banner/base",
+            &base_bytes,
+            &ChunkWriteOptions::raw(),
+        )?;
+    }
+    let pattern_map = banner_baker.all_pattern_png_bytes();
+    if !pattern_map.is_empty() {
+        if let Ok(pattern_bytes) = postcard::to_allocvec(&pattern_map) {
+            writer.add_chunk(
+                *b"BANR",
+                "banner/patterns",
+                &pattern_bytes,
+                &ChunkWriteOptions::zstd_fast(),
+            )?;
+        }
+    }
+
+    // 4. Save Cache Manifest inside package
     let epoch_now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())

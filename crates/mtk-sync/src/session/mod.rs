@@ -209,16 +209,26 @@ impl LiveSyncSession {
         w.last_profile.clone()
     }
 
-    /// Returns the RGBA pixel bytes (1024x1024x4) of the primary dynamic skin atlas (0xFFF0), if active.
-    pub fn dynamic_skin_atlas_rgba(&self) -> Option<Vec<u8>> {
+    /// Returns the RGBA pixel bytes (1024x1024x4) of the primary dynamic entity atlas (0xFFF0), if active.
+    pub fn dynamic_entity_atlas_rgba(&self) -> Option<Vec<u8>> {
         let w = self.world.read().unwrap_or_else(|e| e.into_inner());
-        w.dynamic_skin_atlas_rgba().map(|s| s.to_vec())
+        w.dynamic_entity_atlas_rgba().map(|s| s.to_vec())
     }
 
-    /// Returns all active dynamic skin atlas chunk buffers owned as (chunk_id -> Vec<u8>).
-    pub fn dynamic_skin_atlases(&self) -> std::collections::HashMap<u16, Vec<u8>> {
+    /// Deprecated alias for `dynamic_entity_atlas_rgba`.
+    pub fn dynamic_skin_atlas_rgba(&self) -> Option<Vec<u8>> {
+        self.dynamic_entity_atlas_rgba()
+    }
+
+    /// Returns all active dynamic entity atlas chunk buffers owned as (chunk_id -> Vec<u8>).
+    pub fn dynamic_entity_atlases(&self) -> std::collections::HashMap<u16, Vec<u8>> {
         let w = self.world.read().unwrap_or_else(|e| e.into_inner());
-        w.dynamic_skin_atlases_owned()
+        w.dynamic_entity_atlases_owned()
+    }
+
+    /// Deprecated alias for `dynamic_entity_atlases`.
+    pub fn dynamic_skin_atlases(&self) -> std::collections::HashMap<u16, Vec<u8>> {
+        self.dynamic_entity_atlases()
     }
 
     /// Sets the on-disk cache directory for downloaded player skins.

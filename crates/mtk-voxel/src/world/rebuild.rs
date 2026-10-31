@@ -28,6 +28,12 @@ impl VoxelWorld {
                 return crate::mesher::ModelSource::Single(model);
             }
         }
+        if mtk_model::entity::banner::extract_banner_color_from_state(state).is_some() {
+            let mut baker = mtk_model::baker::ModelBaker::new();
+            if let Ok(baked) = baker.bake_blockstate_with_entity(state, None, None, |_| None) {
+                return crate::mesher::ModelSource::OwnedSingle(std::sync::Arc::new(baked));
+            }
+        }
         crate::mesher::ModelSource::None
     }
 

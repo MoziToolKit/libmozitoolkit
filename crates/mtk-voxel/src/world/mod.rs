@@ -57,8 +57,8 @@ pub struct VoxelWorld {
     pub last_profile: Option<mtk_core::ExecutionProfile>,
     /// Unique Atlas Chunk IDs actually present on the active world mesh geometry.
     pub(crate) used_chunk_ids: Vec<u32>,
-    /// Dedicated multi-chunk dynamic skin atlas manager for player skulls and custom heads.
-    pub dynamic_skins: mtk_texture::atlas::DynamicAtlasManager,
+    /// Dedicated multi-chunk dynamic entity atlas manager for player skulls, custom heads, and banners.
+    pub dynamic_entities: mtk_texture::atlas::DynamicAtlasManager,
     /// Multi-tier skin resolver for player heads.
     pub skin_resolver: mtk_resource::skin::SkinResolver,
     /// Procedural banner baker for multi-layer composite banners.
@@ -75,15 +75,34 @@ fn create_default_dynamic_atlas() -> mtk_texture::atlas::DynamicAtlasManager {
 }
 
 impl VoxelWorld {
+    /// Synchronizes all registered dynamic entity slots into `self.config.atlas_address_map`.
+    pub fn sync_dynamic_atlas_to_config(&mut self) {
+        if let Some(ref current_map) = self.config.atlas_address_map {
+            let mut new_map = (**current_map).clone();
+            self.dynamic_entities.register_to_address_map(&mut new_map);
+            self.config.atlas_address_map = Some(Arc::new(new_map));
+        }
+    }
+
     /// Creates a new `VoxelWorld` with empty storage.
     pub fn new(
         config: Option<MesherConfig>,
         culler: Option<FaceCuller>,
         model_db: Option<Arc<BakedModelDatabase>>,
     ) -> Self {
-        Self {
+        let cfg = config.unwrap_or_default();
+        let banner_baker = cfg
+            .banner_baker
+            .as_ref()
+            .map(|b| (**b).clone())
+            .unwrap_or_default();
+        let mut dynamic_entities = create_default_dynamic_atlas();
+        if cfg.banner_baker.is_some() {
+            let _ = dynamic_entities.prewarm_vanilla_banners(Some(banner_baker.base_cloth()));
+        }
+        let mut world = Self {
             storage: VoxelStorage::new(),
-            config: config.unwrap_or_default(),
+            config: cfg,
             culler: culler.unwrap_or_default(),
             model_db,
             num_threads: None,
@@ -91,11 +110,13 @@ impl VoxelWorld {
             world_mesh: None,
             used_chunk_ids: Vec::new(),
             last_profile: None,
-            dynamic_skins: create_default_dynamic_atlas(),
+            dynamic_entities,
             skin_resolver: mtk_resource::skin::SkinResolver::default(),
-            banner_baker: mtk_texture::BannerBaker::default(),
+            banner_baker,
             on_skin_resolved: None,
-        }
+        };
+        world.sync_dynamic_atlas_to_config();
+        world
     }
 
     /// Creates a `VoxelWorld` taking ownership of an existing `VoxelStorage`.
@@ -116,9 +137,19 @@ impl VoxelWorld {
         model_db: Option<Arc<BakedModelDatabase>>,
         num_threads: Option<usize>,
     ) -> Self {
-        Self {
+        let cfg = config.unwrap_or_default();
+        let banner_baker = cfg
+            .banner_baker
+            .as_ref()
+            .map(|b| (**b).clone())
+            .unwrap_or_default();
+        let mut dynamic_entities = create_default_dynamic_atlas();
+        if cfg.banner_baker.is_some() {
+            let _ = dynamic_entities.prewarm_vanilla_banners(Some(banner_baker.base_cloth()));
+        }
+        let mut world = Self {
             storage,
-            config: config.unwrap_or_default(),
+            config: cfg,
             culler: culler.unwrap_or_default(),
             model_db,
             num_threads,
@@ -126,11 +157,13 @@ impl VoxelWorld {
             world_mesh: None,
             used_chunk_ids: Vec::new(),
             last_profile: None,
-            dynamic_skins: create_default_dynamic_atlas(),
+            dynamic_entities,
             skin_resolver: mtk_resource::skin::SkinResolver::default(),
-            banner_baker: mtk_texture::BannerBaker::default(),
+            banner_baker,
             on_skin_resolved: None,
-        }
+        };
+        world.sync_dynamic_atlas_to_config();
+        world
     }
 
     /// Sets the worker thread count for parallel meshing.
@@ -148,9 +181,25 @@ impl VoxelWorld {
         self.model_db = model_db;
     }
 
+    /// Sets or replaces the procedural banner baker for multi-layer composite banners.
+    pub fn set_banner_baker(&mut self, banner_baker: mtk_texture::BannerBaker) {
+        let _ = self
+            .dynamic_entities
+            .prewarm_vanilla_banners(Some(banner_baker.base_cloth()));
+        self.banner_baker = banner_baker;
+        self.sync_dynamic_atlas_to_config();
+    }
+
     /// Updates mesher configuration.
     pub fn set_config(&mut self, config: MesherConfig) {
+        if let Some(ref baker) = config.banner_baker {
+            self.banner_baker = (**baker).clone();
+            let _ = self
+                .dynamic_entities
+                .prewarm_vanilla_banners(Some(self.banner_baker.base_cloth()));
+        }
         self.config = config;
+        self.sync_dynamic_atlas_to_config();
     }
 
     /// Sets the active 3D selection bounding box.
@@ -382,6 +431,7 @@ impl VoxelWorld {
         self.model_db = model_db;
         self.config.atlas_address_map = atlas_map;
         self.config.biome_resolver = biome_resolver;
+        self.sync_dynamic_atlas_to_config();
         self.clear_cache();
     }
 
@@ -409,19 +459,34 @@ impl VoxelWorld {
         self.storage.set_block_entity(x, y, z, data);
     }
 
-    /// Returns the RGBA pixel bytes (1024x1024x4) of the primary dynamic skin atlas (0xFFF0) if any skins are allocated.
+    /// Returns the RGBA pixel bytes (1024x1024x4) of the primary dynamic entity atlas (0xFFF0).
+    pub fn dynamic_entity_atlas_rgba(&self) -> Option<&[u8]> {
+        self.dynamic_entities.primary_rgba_buffer()
+    }
+
+    /// Deprecated alias for `dynamic_entity_atlas_rgba`.
     pub fn dynamic_skin_atlas_rgba(&self) -> Option<&[u8]> {
-        self.dynamic_skins.primary_rgba_buffer()
+        self.dynamic_entity_atlas_rgba()
     }
 
-    /// Returns all active dynamic skin atlas chunk buffers as (chunk_id, &[u8]).
+    /// Returns all active dynamic entity atlas chunk buffers as (chunk_id, &[u8]).
+    pub fn dynamic_entity_atlases(&self) -> Vec<(u16, &[u8])> {
+        self.dynamic_entities.all_chunk_buffers()
+    }
+
+    /// Deprecated alias for `dynamic_entity_atlases`.
     pub fn dynamic_skin_atlases(&self) -> Vec<(u16, &[u8])> {
-        self.dynamic_skins.all_chunk_buffers()
+        self.dynamic_entity_atlases()
     }
 
-    /// Returns all active dynamic skin atlas chunk buffers owned as (chunk_id, Vec<u8>).
+    /// Returns all active dynamic entity atlas chunk buffers owned as (chunk_id, Vec<u8>).
+    pub fn dynamic_entity_atlases_owned(&self) -> HashMap<u16, Vec<u8>> {
+        self.dynamic_entities.all_chunk_buffers_owned()
+    }
+
+    /// Deprecated alias for `dynamic_entity_atlases_owned`.
     pub fn dynamic_skin_atlases_owned(&self) -> HashMap<u16, Vec<u8>> {
-        self.dynamic_skins.all_chunk_buffers_owned()
+        self.dynamic_entity_atlases_owned()
     }
 
     /// Sets the on-disk cache directory for downloaded player skins.
@@ -436,13 +501,13 @@ impl VoxelWorld {
         png: &[u8],
     ) -> Result<(), mtk_texture::error::TextureError> {
         self.skin_resolver.register_memory_skin(key, png.to_vec());
-        self.dynamic_skins.add_skin_png(key, png)?;
+        self.dynamic_entities.add_skin_png(key, png)?;
         let mut new_map = if let Some(ref current_map) = self.config.atlas_address_map {
             (**current_map).clone()
         } else {
             mtk_texture::atlas::AtlasAddressMap::new()
         };
-        self.dynamic_skins.register_to_address_map(&mut new_map);
+        self.dynamic_entities.register_to_address_map(&mut new_map);
         self.config.atlas_address_map = Some(Arc::new(new_map));
         Ok(())
     }
@@ -493,8 +558,8 @@ impl VoxelWorld {
                                 self.skin_resolver.resolve_skin_hash(skin_url, uuid, name);
                             let primary = hash_opt.as_deref().unwrap_or(&key);
 
-                            if !self.dynamic_skins.contains_key(primary)
-                                && !self.dynamic_skins.contains_key(&key)
+                            if !self.dynamic_entities.contains_key(primary)
+                                && !self.dynamic_entities.contains_key(&key)
                             {
                                 if let Some(png) =
                                     self.skin_resolver.try_resolve_cached(skin_url, uuid, name)
@@ -517,7 +582,7 @@ impl VoxelWorld {
                                     let alias_refs: Vec<&str> =
                                         aliases.iter().map(|s| s.as_str()).collect();
                                     if self
-                                        .dynamic_skins
+                                        .dynamic_entities
                                         .add_skin_png_with_aliases(primary, &alias_refs, &png)
                                         .is_ok()
                                     {
@@ -560,15 +625,15 @@ impl VoxelWorld {
                     {
                         let key =
                             mtk_model::entity::banner_texture_identifier(base_color, patterns);
-                        if !self.dynamic_skins.contains_key(&key) {
+                        if !self.dynamic_entities.contains_key(&key) {
                             let pat_tuples: Vec<(&str, &str)> = patterns
                                 .iter()
                                 .map(|p| (p.pattern.as_str(), p.color.as_str()))
                                 .collect();
                             let baked = self.banner_baker.bake(base_color, &pat_tuples);
-                            let (cid, slot_idx) = self.dynamic_skins.allocate_slot(&key);
+                            let (cid, slot_idx) = self.dynamic_entities.allocate_slot(&key);
                             if self
-                                .dynamic_skins
+                                .dynamic_entities
                                 .blit_skin_rgba(
                                     cid,
                                     slot_idx,
@@ -597,7 +662,7 @@ impl VoxelWorld {
             } else {
                 mtk_texture::atlas::AtlasAddressMap::new()
             };
-            self.dynamic_skins.register_to_address_map(&mut new_map);
+            self.dynamic_entities.register_to_address_map(&mut new_map);
             self.config.atlas_address_map = Some(Arc::new(new_map));
         }
 
@@ -668,8 +733,8 @@ impl VoxelWorld {
                                 self.skin_resolver.resolve_skin_hash(skin_url, uuid, name);
                             let primary = hash_opt.unwrap_or_else(|| key.clone());
 
-                            if !self.dynamic_skins.contains_key(&primary)
-                                && !self.dynamic_skins.contains_key(&key)
+                            if !self.dynamic_entities.contains_key(&primary)
+                                && !self.dynamic_entities.contains_key(&key)
                             {
                                 if let Some(png) =
                                     self.skin_resolver.try_resolve_cached(skin_url, uuid, name)
@@ -692,7 +757,7 @@ impl VoxelWorld {
                                     let alias_refs: Vec<&str> =
                                         aliases.iter().map(|s| s.as_str()).collect();
                                     if self
-                                        .dynamic_skins
+                                        .dynamic_entities
                                         .add_skin_png_with_aliases(&primary, &alias_refs, &png)
                                         .is_ok()
                                     {
@@ -738,15 +803,15 @@ impl VoxelWorld {
                     {
                         let key =
                             mtk_model::entity::banner_texture_identifier(base_color, patterns);
-                        if !self.dynamic_skins.contains_key(&key) {
+                        if !self.dynamic_entities.contains_key(&key) {
                             let pat_tuples: Vec<(&str, &str)> = patterns
                                 .iter()
                                 .map(|p| (p.pattern.as_str(), p.color.as_str()))
                                 .collect();
                             let baked = self.banner_baker.bake(base_color, &pat_tuples);
-                            let (cid, slot_idx) = self.dynamic_skins.allocate_slot(&key);
+                            let (cid, slot_idx) = self.dynamic_entities.allocate_slot(&key);
                             if self
-                                .dynamic_skins
+                                .dynamic_entities
                                 .blit_skin_rgba(
                                     cid,
                                     slot_idx,
@@ -809,7 +874,7 @@ impl VoxelWorld {
                 if let Some(png) = maybe_png {
                     let alias_refs: Vec<&str> = item.aliases.iter().map(|s| s.as_str()).collect();
                     if self
-                        .dynamic_skins
+                        .dynamic_entities
                         .add_skin_png_with_aliases(&item.primary, &alias_refs, &png)
                         .is_ok()
                     {
@@ -830,7 +895,7 @@ impl VoxelWorld {
             } else {
                 mtk_texture::atlas::AtlasAddressMap::new()
             };
-            self.dynamic_skins.register_to_address_map(&mut new_map);
+            self.dynamic_entities.register_to_address_map(&mut new_map);
             self.config.atlas_address_map = Some(Arc::new(new_map));
         }
 

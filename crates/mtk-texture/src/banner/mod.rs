@@ -12,7 +12,7 @@ use crate::image::buffer::RgbaBuffer;
 /// Bakes neutral base cloth modulated by base dye color, then sequentially
 /// composites pattern layers using tinted Porter-Duff alpha blending.
 /// Identical banner configurations are deduplicated and cached in-memory.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BannerBaker {
     base_cloth: RgbaBuffer,
     pattern_sprites: HashMap<String, RgbaBuffer>,
@@ -65,7 +65,55 @@ impl BannerBaker {
         Ok(())
     }
 
+    /// Returns reference to current base cloth buffer.
+    pub fn base_cloth(&self) -> &RgbaBuffer {
+        &self.base_cloth
+    }
+
+    /// Encodes base cloth buffer to PNG bytes.
+    pub fn base_cloth_png_bytes(&self) -> Result<Vec<u8>, TextureError> {
+        self.base_cloth.to_png_bytes()
+    }
+
+    /// Returns a map of pattern name to encoded PNG bytes.
+    pub fn all_pattern_png_bytes(&self) -> HashMap<String, Vec<u8>> {
+        let mut map = HashMap::new();
+        for (name, buf) in &self.pattern_sprites {
+            if let Ok(bytes) = buf.to_png_bytes() {
+                map.insert(name.clone(), bytes);
+            }
+        }
+        map
+    }
+
+    /// Loads base cloth and pattern sprites from in-memory byte representations.
+    pub fn load_from_bytes(
+        &mut self,
+        base_png: Option<&[u8]>,
+        patterns: &HashMap<String, Vec<u8>>,
+    ) -> Result<usize, TextureError> {
+        let mut count = 0;
+        if let Some(bytes) = base_png {
+            let img = image::load_from_memory(bytes).map_err(TextureError::Image)?;
+            let rgba = img.to_rgba8();
+            self.base_cloth = RgbaBuffer {
+                width: rgba.width(),
+                height: rgba.height(),
+                pixels: rgba.into_raw(),
+            };
+            count += 1;
+        }
+        for (name, bytes) in patterns {
+            if self.register_pattern_png_bytes(name, bytes).is_ok() {
+                count += 1;
+            }
+        }
+        self.cache.clear();
+        Ok(count)
+    }
+
     /// Scans a resource pack stack for `assets/minecraft/textures/entity/banner/*.png`
+    /// and `assets/minecraft/textures/entity/banner_patterns/*.png`
     /// and populates base cloth and pattern sprites automatically.
     pub fn load_from_pack_stack(
         &mut self,
@@ -95,7 +143,9 @@ impl BannerBaker {
         // List files in packs
         for pack in stack.packs() {
             for file in pack.list_files("assets/") {
-                if file.contains("textures/entity/banner/") && file.ends_with(".png") {
+                let is_banner_path = file.contains("textures/entity/banner/")
+                    || file.contains("textures/entity/banner_patterns/");
+                if is_banner_path && file.ends_with(".png") {
                     let stem = file
                         .split('/')
                         .next_back()

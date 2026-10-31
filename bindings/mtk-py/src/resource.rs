@@ -213,11 +213,17 @@ impl PyAssetCache {
             .inner
             .load_atlas_mapping()
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        let banner_baker = self
+            .inner
+            .load_banner_baker()
+            .ok()
+            .map(std::sync::Arc::new);
         Ok(crate::texture::PyBakedAtlas {
             inner: mtk_texture::BakedAtlas {
                 chunks: Vec::new(),
                 address_map: map,
             },
+            banner_baker,
         })
     }
 

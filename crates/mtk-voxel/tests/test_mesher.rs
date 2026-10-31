@@ -1453,9 +1453,9 @@ fn test_player_skull_dynamic_atlas_meshing_and_uv_remapping() {
 
     // Verify dynamic skin atlas allocated slot and blitted pixels
     // 16 pinned slots for vanilla banners + 1 player skull
-    assert_eq!(world.dynamic_skins.allocated_count(), 17);
+    assert_eq!(world.dynamic_entities.allocated_count(), 17);
     let atlas_rgba = world
-        .dynamic_skin_atlas_rgba()
+        .dynamic_entity_atlas_rgba()
         .expect("Atlas RGBA must exist");
     assert_eq!(atlas_rgba.len(), 1024 * 1024 * 4);
 
@@ -1468,7 +1468,10 @@ fn test_player_skull_dynamic_atlas_meshing_and_uv_remapping() {
 
     // Verify skull UVs are remapped into allocated slot bounds (slot 16)
     let dynamic_slot = mtk_texture::atlas::DEFAULT_DYNAMIC_SKINS_CHUNK_ID;
-    let (_, slot_idx) = world.dynamic_skins.get_location(hash).expect("Skull slot");
+    let (_, slot_idx) = world
+        .dynamic_entities
+        .get_location(hash)
+        .expect("Skull slot");
     assert_eq!(slot_idx, 16);
     let expected = mtk_texture::atlas::DynamicAtlasChunk::slot_info(slot_idx).uv_bounds;
 
@@ -1810,7 +1813,7 @@ fn test_banner_dynamic_atlas_meshing_and_baking() {
     assert!(mesh.face_count() > 0);
 
     // 16 pinned slots for vanilla banners + 1 custom patterned banner = 17
-    assert_eq!(world.dynamic_skins.allocated_count(), 17);
+    assert_eq!(world.dynamic_entities.allocated_count(), 17);
 
     // Red banner slot is 14
     let red_slot = 14;
@@ -1819,7 +1822,7 @@ fn test_banner_dynamic_atlas_meshing_and_baking() {
     // Patterned banner slot is 16
     let pat_key = "minecraft:banner/white+stripe_top#blue+flower#red";
     let (cid, pat_slot) = world
-        .dynamic_skins
+        .dynamic_entities
         .get_location(pat_key)
         .expect("Patterned banner slot");
     assert_eq!(cid, 0xFFF0);
@@ -1868,5 +1871,97 @@ fn test_banner_dynamic_atlas_meshing_and_baking() {
     assert!(
         pat_cloth_found,
         "Must have found patterned banner cloth in dynamic slot 16"
+    );
+}
+
+#[test]
+fn test_plain_banner_without_block_entity_meshing() {
+    let mut addr_map = mtk_texture::atlas::AtlasAddressMap::new();
+    let banner_base_id =
+        mtk_resource::ResourceLocation::parse("minecraft:entity/banner/banner_base").unwrap();
+    let banner_base_loc = mtk_texture::atlas::AtlasSpriteLocation {
+        chunk_id: 0,
+        category: "banner_patterns".to_string(),
+        is_animated: false,
+        sprite_kind: mtk_texture::atlas::SpriteKind::StaticAtlas,
+        texture_id: 0,
+        uv_bounds: [0.0, 0.0, 0.5, 0.5],
+        frame_0_uv_bounds: [0.0, 0.0, 0.5, 0.5],
+        local_uv_bounds: [0.0, 0.0, 1.0, 1.0],
+        frame_uv_step: [0.0, 0.0],
+        pixel_rect: [0, 0, 64, 64],
+        strip_pixel_rect: [0, 0, 64, 64],
+        frame_size: [64, 64],
+        frame_count: 1,
+        animation: None,
+        has_normal: false,
+        has_specular: false,
+        has_overlay: false,
+        average_color: None,
+    };
+    addr_map.sprites.insert(banner_base_id, banner_base_loc);
+
+    let config = mtk_voxel::MesherConfig {
+        atlas_address_map: Some(std::sync::Arc::new(addr_map)),
+        ..Default::default()
+    };
+    let mut world = mtk_voxel::world::VoxelWorld::new(Some(config), None, None);
+
+    // Verify 16 prewarmed banners exist in world.config.atlas_address_map immediately
+    let map = world.config.atlas_address_map.as_ref().unwrap();
+    assert!(map.lookup_str("minecraft:banner/red").is_some());
+    assert!(map.lookup_str("minecraft:banner/blue").is_some());
+
+    // Place a plain red banner and blue wall banner WITHOUT any block entities
+    world.set_block(1, 1, 1, "minecraft:red_banner[rotation=4]", None);
+    world.set_block(3, 1, 3, "minecraft:blue_wall_banner[facing=north]", None);
+
+    let mesh = world.rebuild_all().expect("Rebuild should succeed").clone();
+    assert!(mesh.face_count() > 0);
+
+    let dynamic_chunk_id = mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
+    let mut red_cloth_found = false;
+    let mut blue_cloth_found = false;
+    let expected_red = mtk_texture::atlas::DynamicAtlasChunk::slot_info(14).uv_bounds;
+    let expected_blue = mtk_texture::atlas::DynamicAtlasChunk::slot_info(11).uv_bounds;
+
+    for f_idx in 0..mesh.face_count() {
+        let mat = mesh.face_materials[f_idx];
+        if mat == dynamic_chunk_id {
+            let mut is_red = true;
+            let mut is_blue = true;
+            for i in 0..4 {
+                let uv = mesh.uvs[f_idx * 4 + i];
+                if uv[0] < expected_red[0] - 1e-4
+                    || uv[0] > expected_red[2] + 1e-4
+                    || uv[1] < expected_red[1] - 1e-4
+                    || uv[1] > expected_red[3] + 1e-4
+                {
+                    is_red = false;
+                }
+                if uv[0] < expected_blue[0] - 1e-4
+                    || uv[0] > expected_blue[2] + 1e-4
+                    || uv[1] < expected_blue[1] - 1e-4
+                    || uv[1] > expected_blue[3] + 1e-4
+                {
+                    is_blue = false;
+                }
+            }
+            if is_red {
+                red_cloth_found = true;
+            }
+            if is_blue {
+                blue_cloth_found = true;
+            }
+        }
+    }
+
+    assert!(
+        red_cloth_found,
+        "Plain standing red banner cloth must map to slot 14 on dynamic atlas"
+    );
+    assert!(
+        blue_cloth_found,
+        "Plain wall blue banner cloth must map to slot 11 on dynamic atlas"
     );
 }

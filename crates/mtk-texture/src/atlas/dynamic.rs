@@ -15,8 +15,10 @@ pub const DYNAMIC_SLOT_SIZE: u32 = 64;
 pub const DYNAMIC_SLOTS_PER_ROW: u32 = 16;
 pub const DYNAMIC_TOTAL_SLOTS: usize = 256;
 
-/// Default reserved chunk ID for the dynamic skin atlas (distinct from static block chunk IDs 0..N).
-pub const DEFAULT_DYNAMIC_SKINS_CHUNK_ID: u16 = 0xFFF0;
+/// Default reserved chunk ID for the dynamic entity atlas (skins, banners, etc.)
+pub const DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID: u16 = 0xFFF0;
+/// Deprecated alias for DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID.
+pub const DEFAULT_DYNAMIC_SKINS_CHUNK_ID: u16 = DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
 
 /// Maximum number of dynamic chunks supported (0xFFF0..=0xFFFF, 16 chunks = 4,096 unique 64x64 skins).
 pub const MAX_DYNAMIC_CHUNKS: usize = 16;
@@ -390,7 +392,7 @@ impl DynamicAtlasChunk {
             let info = Self::slot_info(slot_idx);
             let loc = AtlasSpriteLocation {
                 chunk_id: self.chunk_id,
-                category: "skins".to_string(),
+                category: "entities".to_string(),
                 is_animated: false,
                 sprite_kind: SpriteKind::StaticAtlas,
                 texture_id: 0,
@@ -451,7 +453,7 @@ impl DynamicAtlasChunk {
             (self.chunk_id.saturating_sub(DEFAULT_DYNAMIC_SKINS_CHUNK_ID) + 1) as usize;
         let mut meta = AtlasChunkMeta {
             chunk_id: self.chunk_id,
-            category: "skins".to_string(),
+            category: "entities".to_string(),
             is_animated: false,
             category_chunk_index,
             width: self.width,

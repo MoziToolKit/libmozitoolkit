@@ -307,6 +307,19 @@ impl ChunkParser {
                                         *kind = resolved_kind;
                                     }
                                 }
+                            } else if let mtk_model::BlockEntityData::Banner {
+                                ref mut base_color,
+                                ..
+                            } = entity_data
+                            {
+                                let state_str = sec.get_local_state(local_x, local_y, local_z);
+                                if let Some(resolved_color) =
+                                    mtk_model::entity::banner::extract_banner_color_from_state(
+                                        state_str,
+                                    )
+                                {
+                                    *base_color = resolved_color.to_string();
+                                }
                             }
                             sec.block_entities.insert(local_idx, entity_data);
                         }

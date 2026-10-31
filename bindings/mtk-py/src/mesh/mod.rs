@@ -67,6 +67,21 @@ impl PyMeshData {
         self
     }
 
+    /// Constructs a `PyMeshData` with a dynamic entity atlas buffer.
+    pub fn with_dynamic_entity_atlas(mut self, dynamic_entity_atlas: Option<Vec<u8>>) -> Self {
+        self.dynamic_skin_atlas = dynamic_entity_atlas;
+        self
+    }
+
+    /// Constructs a `PyMeshData` with a multi-chunk dynamic entity atlas map.
+    pub fn with_dynamic_entity_atlases(
+        mut self,
+        dynamic_entity_atlases: Option<std::collections::HashMap<u16, Vec<u8>>>,
+    ) -> Self {
+        self.dynamic_skin_atlases = dynamic_entity_atlases;
+        self
+    }
+
     /// Constructs a `PyMeshData` with a dynamic skin atlas buffer.
     pub fn with_dynamic_skin_atlas(mut self, dynamic_skin_atlas: Option<Vec<u8>>) -> Self {
         self.dynamic_skin_atlas = dynamic_skin_atlas;
@@ -99,6 +114,24 @@ impl PyMeshData {
     #[getter]
     pub fn profile(&self) -> Option<crate::profile::PyExecutionProfile> {
         self.profile.clone().map(Into::into)
+    }
+
+    /// Returns the dynamic entity atlas texture RGBA bytes (1024x1024x4) if present.
+    #[getter]
+    pub fn dynamic_entity_atlas<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> Option<Bound<'py, pyo3::types::PyBytes>> {
+        self.dynamic_skin_atlas(py)
+    }
+
+    /// Returns a dict mapping Chunk ID (e.g. 0xFFF0, 0xFFF1) to dynamic entity atlas RGBA bytes if present.
+    #[getter]
+    pub fn dynamic_entity_atlases<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> Option<Bound<'py, pyo3::types::PyDict>> {
+        self.dynamic_skin_atlases(py)
     }
 
     /// Returns the dynamic skin atlas texture RGBA bytes (1024x1024x4) if present.

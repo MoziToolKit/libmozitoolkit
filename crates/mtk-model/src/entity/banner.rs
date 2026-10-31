@@ -40,6 +40,19 @@ pub fn name_to_dye_id(name: &str) -> Option<u8> {
     DYE_NAMES.iter().position(|&d| d == stem).map(|i| i as u8)
 }
 
+/// Extracts the base dye color name from a banner blockstate name
+/// (e.g. `minecraft:red_banner[rotation=4]` -> `"red"`, `minecraft:blue_wall_banner[facing=north]` -> `"blue"`).
+pub fn extract_banner_color_from_state(state_str: &str) -> Option<&'static str> {
+    let clean = state_str.split('[').next().unwrap_or(state_str);
+    let clean = clean.strip_prefix("minecraft:").unwrap_or(clean);
+    let stem = if let Some(s) = clean.strip_suffix("_wall_banner") {
+        s
+    } else {
+        clean.strip_suffix("_banner")?
+    };
+    DYE_NAMES.iter().find(|&&d| d == stem).copied()
+}
+
 /// Canonical sRGB colors for vanilla banner dye rendering ([R, G, B] in 0..255).
 pub const DYE_RGB: [[u8; 3]; 16] = [
     [249, 255, 254], // 0: White
@@ -175,4 +188,30 @@ pub fn banner_texture_identifier(base_color: &str, patterns: &[BannerPatternLaye
         id.push_str(clean_col);
     }
     id
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_banner_color_from_state() {
+        assert_eq!(
+            extract_banner_color_from_state("minecraft:red_banner[rotation=4]"),
+            Some("red")
+        );
+        assert_eq!(
+            extract_banner_color_from_state("minecraft:blue_wall_banner[facing=north]"),
+            Some("blue")
+        );
+        assert_eq!(
+            extract_banner_color_from_state("black_banner"),
+            Some("black")
+        );
+        assert_eq!(
+            extract_banner_color_from_state("light_gray_banner"),
+            Some("light_gray")
+        );
+        assert_eq!(extract_banner_color_from_state("minecraft:stone"), None);
+    }
 }

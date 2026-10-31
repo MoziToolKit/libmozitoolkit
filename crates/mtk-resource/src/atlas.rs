@@ -116,13 +116,12 @@ pub enum AtlasCategory {
 }
 
 impl AtlasCategory {
-    pub const ALL_STANDARD: [AtlasCategory; 14] = [
+    pub const ALL_STANDARD: [AtlasCategory; 13] = [
         AtlasCategory::Blocks,
         AtlasCategory::Items,
         AtlasCategory::Particles,
         AtlasCategory::Chests,
         AtlasCategory::ShulkerBoxes,
-        AtlasCategory::BannerPatterns,
         AtlasCategory::ShieldPatterns,
         AtlasCategory::ArmorTrims,
         AtlasCategory::DecoratedPot,

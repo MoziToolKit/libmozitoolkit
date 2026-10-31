@@ -61,6 +61,9 @@ pub struct MesherConfig {
     pub enable_random_offsets: bool,
     /// Whether to route animated textures (water, lava, fire, etc.) to dedicated animated atlas chunks.
     pub enable_animated_textures: bool,
+    /// Optional procedural banner baker for multi-layer composite banners.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub banner_baker: Option<Arc<mtk_texture::BannerBaker>>,
 }
 
 impl Default for MesherConfig {
@@ -80,6 +83,7 @@ impl Default for MesherConfig {
             enable_alternate_blocks: true,
             enable_random_offsets: true,
             enable_animated_textures: true,
+            banner_baker: None,
         }
     }
 }

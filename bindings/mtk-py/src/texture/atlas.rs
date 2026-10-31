@@ -17,6 +17,7 @@ use crate::resource::PyResourcePackStack;
 #[derive(Debug, Clone)]
 pub struct PyBakedAtlas {
     pub(crate) inner: BakedAtlas,
+    pub(crate) banner_baker: Option<std::sync::Arc<mtk_texture::BannerBaker>>,
 }
 
 fn chunk_meta_to_dict<'py>(
@@ -71,6 +72,7 @@ impl PyBakedAtlas {
                 chunks: Vec::new(),
                 address_map,
             },
+            banner_baker: None,
         })
     }
 
@@ -286,6 +288,9 @@ impl PyAtlasBuilder {
         mtk_material::pbr::decode_baked_atlas(&mut baked)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
-        Ok(PyBakedAtlas { inner: baked })
+        Ok(PyBakedAtlas {
+            inner: baked,
+            banner_baker: None,
+        })
     }
 }

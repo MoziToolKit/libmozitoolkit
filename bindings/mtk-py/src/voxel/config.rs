@@ -51,6 +51,7 @@ impl PyMesherConfig {
             enable_random_offsets,
             ctm_solver: ctm_solver.map(|s| s.inner.clone()),
             enable_animated_textures,
+            banner_baker: atlas.and_then(|a| a.banner_baker.clone()),
             ..Default::default()
         };
         Self {

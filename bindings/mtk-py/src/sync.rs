@@ -28,9 +28,8 @@ impl PyLiveSyncSession {
         let cfg = config.map(|c| c.inner.clone());
         let cul = culler.map(|c| c.inner.clone());
         let mdb = model_db.map(|db| db.inner.clone());
-        Self {
-            inner: LiveSyncSession::new(cfg, cul, mdb),
-        }
+        let session = LiveSyncSession::new(cfg, cul, mdb);
+        Self { inner: session }
     }
 
     /// Sets or updates the active baked model database.
@@ -75,11 +74,28 @@ impl PyLiveSyncSession {
         }
     }
 
+    /// Returns the dynamic entity atlas texture RGBA bytes (1024x1024x4), or None if no dynamic entities.
+    pub fn get_dynamic_entity_atlas<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyBytes>> {
+        self.inner
+            .dynamic_entity_atlas_rgba()
+            .map(|bytes| PyBytes::new(py, &bytes))
+    }
+
+    /// Returns a dict mapping Chunk ID (e.g. 0xFFF0, 0xFFF1) to dynamic entity atlas RGBA bytes (1024x1024x4).
+    pub fn get_dynamic_entity_atlases<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> Bound<'py, pyo3::types::PyDict> {
+        let dict = pyo3::types::PyDict::new(py);
+        for (chunk_id, buf) in self.inner.dynamic_entity_atlases() {
+            let _ = dict.set_item(chunk_id, PyBytes::new(py, &buf));
+        }
+        dict
+    }
+
     /// Returns the dynamic skin atlas texture RGBA bytes (1024x1024x4), or None if no skins.
     pub fn get_dynamic_skin_atlas<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyBytes>> {
-        self.inner
-            .dynamic_skin_atlas_rgba()
-            .map(|bytes| PyBytes::new(py, &bytes))
+        self.get_dynamic_entity_atlas(py)
     }
 
     /// Returns a dict mapping Chunk ID (e.g. 0xFFF0, 0xFFF1) to dynamic skin atlas RGBA bytes (1024x1024x4).
@@ -87,11 +103,7 @@ impl PyLiveSyncSession {
         &self,
         py: Python<'py>,
     ) -> Bound<'py, pyo3::types::PyDict> {
-        let dict = pyo3::types::PyDict::new(py);
-        for (chunk_id, buf) in self.inner.dynamic_skin_atlases() {
-            let _ = dict.set_item(chunk_id, PyBytes::new(py, &buf));
-        }
-        dict
+        self.get_dynamic_entity_atlases(py)
     }
 
     /// Sets the on-disk cache directory for downloaded player skins.

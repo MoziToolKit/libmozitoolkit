@@ -121,7 +121,19 @@ pub fn inspect_minecraft_save(world_dir: &str) -> PyResult<PyLevelData> {
 /// End-to-end pipeline: Loads bounded 3D world selection from save, feeds into `VoxelWorld`,
 /// and meshes into `PyMeshData` with Atlas UVs and Ambient Occlusion.
 #[pyfunction]
-#[pyo3(signature = (world_dir, dimension="overworld", min_block=(-64, -64, -64), max_block=(64, 320, 64), config=None, culler=None, model_db=None, num_threads=None, callback=None, skin_cache_dir=None))]
+#[pyo3(signature = (
+    world_dir,
+    dimension="overworld",
+    min_block=(-64, -64, -64),
+    max_block=(64, 320, 64),
+    config=None,
+    culler=None,
+    model_db=None,
+    num_threads=None,
+    callback=None,
+    skin_cache_dir=None,
+    cache_package_path=None
+))]
 pub fn load_and_mesh_minecraft_save(
     py: Python<'_>,
     world_dir: &str,
@@ -134,6 +146,7 @@ pub fn load_and_mesh_minecraft_save(
     num_threads: Option<usize>,
     callback: Option<Py<PyAny>>,
     skin_cache_dir: Option<String>,
+    cache_package_path: Option<String>,
 ) -> PyResult<(PyMeshData, PyLevelData, PyVoxelStorage)> {
     let mut profiler = mtk_core::ExecutionProfiler::start();
 
@@ -203,6 +216,13 @@ pub fn load_and_mesh_minecraft_save(
     let mut world = VoxelWorld::from_storage_with_threads(storage.clone(), cfg, cul, mdb, threads);
     if let Some(ref dir) = skin_cache_dir {
         world.set_skin_cache_dir(Some(std::path::PathBuf::from(dir)));
+    }
+    if let Some(ref pkg_path) = cache_package_path {
+        if let Ok(reader) = libmtk::AssetCacheReader::open(pkg_path) {
+            if let Ok(baker) = reader.load_banner_baker() {
+                world.set_banner_baker(baker);
+            }
+        }
     }
 
     let (mesh, world_profile, dynamic_skin_atlas, dynamic_skin_atlases) = py

@@ -1,5 +1,6 @@
 //! Asset cache reader and manifest verification for `.mtkcache` packages.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -186,6 +187,22 @@ impl AssetCacheReader {
         let json_str = self.reader.read_chunk_str("biome/mapping")?;
         let resolver = BiomeResolver::from_json(&json_str)?;
         Ok(resolver)
+    }
+
+    /// Loads a pre-populated `BannerBaker` containing cached base cloth and pattern sprites.
+    pub fn load_banner_baker(&self) -> Result<mtk_texture::BannerBaker, MtkError> {
+        let mut baker = mtk_texture::BannerBaker::default();
+        let base_png = self.reader.read_chunk_decompressed("banner/base").ok();
+        let patterns_raw = self.reader.read_chunk_decompressed("banner/patterns").ok();
+        let patterns: HashMap<String, Vec<u8>> = if let Some(ref bytes) = patterns_raw {
+            postcard::from_bytes(bytes).unwrap_or_default()
+        } else {
+            HashMap::new()
+        };
+        baker
+            .load_from_bytes(base_png.as_deref(), &patterns)
+            .map_err(MtkError::Texture)?;
+        Ok(baker)
     }
 
     /// Extracts a specific atlas texture chunk to disk.
