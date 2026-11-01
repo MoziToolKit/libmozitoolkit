@@ -217,11 +217,12 @@ pub struct LiveSyncSession {
 - `poll_events() -> Vec<SyncEvent>`：非阻塞提取当前已就绪的所有高阶事件。
 - `poll_events_coalesced() -> Vec<SyncEvent>`：只保留最新 `WorldMeshReady` generation，
   避免主线程被中间网格淹没。
-- `export_persisted_state_json(user_modified) -> String`：导出宿主可持久化的不透明状态 JSON
-  （UUID / epoch / sequence / bounds / dimension / state_hash）。
-- `start_with_persisted_state_json(url, auto, max, state_json, auth_token)`：从持久化 JSON
-  构造缓存 HELLO；`user_modified = true` 或状态无效时自动回退全量基线（回退的默认 HELLO
-  同样携带 `auth_token`）。
+- `start_with_hello(url, auto_reconnect, max_reconnect_attempts, initial_hello)`：高级入口，
+  允许具备持久化存储的宿主自建缓存 HELLO；传入 `None` 时等价于 `start(...)` 的默认 HELLO。
+  会话令牌始终由 `set_auth_token` 注入并覆盖宿主携带的过期令牌（RFC v3.1 §4.1）。
+  > 注：`export_persisted_state_json` / `start_with_persisted_state_json` 从未落地并被移除；
+  > 需要零重建重连的宿主应自行维护 UUID/epoch/sequence/bounds/state_hash 并调用
+  > `start_with_hello`。
 - `normalize_stream_progress(stage, current, total) -> f32`：把 download/meshing 两阶段
   统一归一化为单调 0..100 百分比。
 - `get_world_mesh() -> MeshData`：主动并行网格化当前 `VoxelWorld` 内的所有区块并合并为焊接后的全局网格。

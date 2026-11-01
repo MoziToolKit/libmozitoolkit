@@ -23,12 +23,6 @@ impl PyStageSpan {
         &self.inner.name
     }
 
-    /// Elapsed duration in microseconds.
-    #[getter]
-    pub fn duration_us(&self) -> u64 {
-        self.inner.duration_us
-    }
-
     /// Elapsed duration in milliseconds.
     #[getter]
     pub fn duration_ms(&self) -> f64 {
@@ -39,16 +33,6 @@ impl PyStageSpan {
     #[getter]
     pub fn items_count(&self) -> Option<usize> {
         self.inner.items_count
-    }
-
-    /// Converts this stage span into a Python dictionary.
-    pub fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let dict = PyDict::new(py);
-        dict.set_item("name", self.inner.name.as_ref())?;
-        dict.set_item("duration_us", self.inner.duration_us)?;
-        dict.set_item("duration_ms", self.inner.duration_ms())?;
-        dict.set_item("items_count", self.inner.items_count)?;
-        Ok(dict)
     }
 
     fn __repr__(&self) -> String {
@@ -83,22 +67,10 @@ impl From<ExecutionProfile> for PyExecutionProfile {
 
 #[pymethods]
 impl PyExecutionProfile {
-    /// Total duration of the operation in microseconds.
-    #[getter]
-    pub fn total_duration_us(&self) -> u64 {
-        self.inner.total_duration_us
-    }
-
     /// Total duration of the operation in milliseconds.
     #[getter]
     pub fn total_duration_ms(&self) -> f64 {
         self.inner.total_duration_ms()
-    }
-
-    /// Number of recorded stages.
-    #[getter]
-    pub fn stage_count(&self) -> usize {
-        self.inner.stages.len()
     }
 
     /// Sequential list of stage spans.
@@ -110,16 +82,6 @@ impl PyExecutionProfile {
             .cloned()
             .map(|inner| PyStageSpan { inner })
             .collect()
-    }
-
-    /// Returns the duration of a stage by name in milliseconds, or None if not found.
-    pub fn stage_ms(&self, name: &str) -> Option<f64> {
-        self.inner.stage_ms(name)
-    }
-
-    /// Returns a human-readable multi-line summary table.
-    pub fn summary(&self) -> String {
-        self.inner.summary_string()
     }
 
     /// Converts the full profile report into a Python dictionary.
@@ -148,9 +110,5 @@ impl PyExecutionProfile {
             self.inner.total_duration_ms(),
             self.inner.stages.len()
         )
-    }
-
-    fn __str__(&self) -> String {
-        self.inner.summary_string()
     }
 }

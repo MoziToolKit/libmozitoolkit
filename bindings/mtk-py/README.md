@@ -99,11 +99,14 @@ Python 模块名：`libmtk_py`
   - `rebuild_all() -> MeshData`, `rebuild_dirty() -> Dict`, `clear_cache()`, `hot_reload(config=None, model_db=None)`, `num_threads` (getter/setter)
 - **`MesherConfig` (`PyMesherConfig`)**：网格化配置（AO 开关、流体曲面、坐标系转换、线程数、顶点焊接）。
 - **`LiveSyncSession` (`PyLiveSyncSession`)**：原生 WebSocket 实时协同客户端。
-  - `start(..., auth_token=None)`, `start_with_persisted_state(..., state_json=None, auth_token=None)`, `stop()`
-  - `auth_token` 会随默认 HELLO 与缓存 HELLO 发送（RFC v3.1 §4.1；Python 侧先 `strip()`；
+  - `start(url, auto_reconnect=True, max_reconnect_attempts=5, auth_token=None)`, `stop()`
+  - `auth_token` 会随默认 HELLO 发送（RFC v3.1 §4.1；Python 侧先 `strip()`；
     两端令牌会各自 trim 后比较），启用 Yefira `authToken` 时必须传入。
   - `poll_events(coalesce_meshes=False)`：`True` 时只保留最新 `WORLD_MESH_READY` generation
-  - `export_persisted_state_json(user_modified=false)`：导出 UUID/epoch/sequence/bounds/hash 的不透明 JSON
+  - `get_dynamic_entity_atlases()`：`{chunk_id: RGBA bytes}` 动态实体图集映射（无单数访问器）
+  - 持久化握手入口（`start_with_persisted_state` / `export_persisted_state_json` /
+    `start()` 的 `cached_*` 参数）已物理删除：Blender 侧 `VoxelStorage` 无法持久化，
+    该路径始终不可达。
   - `client_generation`, `current_sequence`, `current_epoch`, `state_hash`, `server_uuid`
   - `clear_cache()`, `set_config(config)`, `hot_reload(config=None, model_db=None)`, `request_resync()`
   - `STREAM_PROGRESS.percent` 已由 Rust 归一化为 0..100；`HANDSHAKE.decision_code` 为 RFC v3.1 原始值

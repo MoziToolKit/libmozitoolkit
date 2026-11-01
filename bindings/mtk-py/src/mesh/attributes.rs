@@ -188,11 +188,6 @@ pub fn has_attribute(mesh: &PyMeshData, name: &str) -> bool {
     mesh.inner.has_custom_attribute(name)
 }
 
-/// Remove a custom attribute by name. Returns True if existed and removed.
-pub fn remove_attribute(mesh: &mut PyMeshData, name: &str) -> bool {
-    mesh.inner.remove_custom_attribute(name).is_some()
-}
-
 /// List all custom attribute names.
 pub fn attribute_names(mesh: &PyMeshData) -> Vec<String> {
     mesh.inner.custom_attribute_names()

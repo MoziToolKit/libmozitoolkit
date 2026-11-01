@@ -105,8 +105,9 @@ pub struct FlatPolygonMesh {
 - **宿主只消费、不复制**：Python / WASM 绑定通过 `mesh_attribute_schema()` 与 `retired_mesh_attributes()` 读取该契约；Blender 前端由 `tools/sync_attribute_schema.py` 生成镜像并在测试中做逐项校验。
 - **当前活跃属性**：
   - 材质节点消费：`mtk_uv_transform`、`mtk_uv_rotation`、`mtk_anim_timing`、`mtk_anim_frame_size`、`mtk_biome_tint_data`、`mtk_biome_tint_color`；
-  - 宿主元信息：`mtk_source_texture_key`、`mtk_source_texture_idx`、`mtk_atlas_chunk_id`、`mtk_block_x/y/z`。
-- **已退役属性**（`mtk_material_slot`、`mtk_atlas_texture_id`、`mtk_uv_mode`、`mtk_colormap_uv`、`mtk_face_dir`、`mtk_emission`、标量动画拆分、旧 tint 权重等）不再由核心生成；宿主只负责从旧 `.blend` 中清理。
+  - 宿主元信息：`mtk_source_textures`、`mtk_source_texture_idx`、`mtk_atlas_chunk_id`、`mtk_block_x/y/z`。
+- **已退役属性**（`mtk_source_texture_key`、`mtk_material_slot`、`mtk_atlas_texture_id`、`mtk_uv_mode`、`mtk_colormap_uv`、`mtk_face_dir`、`mtk_emission`、标量动画拆分、旧 tint 权重等）不再由核心生成；宿主只负责从旧 `.blend` 中清理。
+- **`RETIRED_MESH_ATTRIBUTES` 是硬门禁**：`mtk-voxel` 的回归测试断言 mesher 输出不包含该清单中的任何成员。
 
 ---
 

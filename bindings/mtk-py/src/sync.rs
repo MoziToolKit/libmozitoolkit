@@ -30,11 +30,6 @@ impl PyLiveSyncSession {
         Self { inner: session }
     }
 
-    /// Sets or updates the active baked model database.
-    pub fn set_model_db(&mut self, model_db: Option<&PyBakedModelDatabase>) {
-        self.inner.set_model_db(model_db.map(|db| db.inner.clone()));
-    }
-
     /// Clears the cached section meshes and unified world mesh on the underlying VoxelWorld.
     pub fn clear_cache(&self) {
         self.inner.clear_cache();

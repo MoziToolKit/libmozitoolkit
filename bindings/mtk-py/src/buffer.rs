@@ -16,8 +16,6 @@ enum BufferStorage {
     I32(Vec<i32>),
     U32(Vec<u32>),
     U16(Vec<u16>),
-    I16(Vec<i16>),
-    I8(Vec<i8>),
 }
 
 /// 16-byte aligned static dummy memory for zero-length buffers to prevent null pointer dereferences.
@@ -256,53 +254,6 @@ pub fn create_zerocopy_u8_memoryview<'py>(
     create_zerocopy_typed_memoryview(py, ptr, count, std::mem::size_of::<u8>(), b"B\0", parent)
 }
 
-/// Fallback alias for untyped byte buffers.
-#[inline]
-pub fn create_zerocopy_memoryview<'py>(
-    py: Python<'py>,
-    ptr: *const u8,
-    len: usize,
-    parent: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyMemoryView>> {
-    create_zerocopy_u8_memoryview(py, ptr, len, parent)
-}
-
-/// Creates a memoryview directly over an owned `Vec<u8>` without secondary `PyBytes` duplication.
-pub fn create_owned_bytes_memoryview<'py>(
-    py: Python<'py>,
-    bytes: Vec<u8>,
-) -> PyResult<Bound<'py, PyMemoryView>> {
-    let item_count = bytes.len();
-    let total_bytes = item_count;
-    let ptr = if item_count == 0 {
-        DUMMY_ALIGNED.as_ptr() as usize
-    } else {
-        bytes.as_ptr() as usize
-    };
-    let owner = Bound::new(
-        py,
-        PyBufferOwner {
-            ptr,
-            total_bytes,
-            itemsize: 1,
-            format: b"B\0",
-            shape: [item_count as ffi::Py_ssize_t],
-            strides: [1],
-            byte_shape: [total_bytes as ffi::Py_ssize_t],
-            byte_strides: [1],
-            readonly: true,
-            _storage: BufferStorage::Bytes(bytes),
-        },
-    )?;
-    unsafe {
-        let py_mv_ptr = ffi::PyMemoryView_FromObject(owner.as_ptr());
-        if py_mv_ptr.is_null() {
-            return Err(PyErr::fetch(py));
-        }
-        Ok(Bound::from_owned_ptr(py, py_mv_ptr).cast_into::<PyMemoryView>()?)
-    }
-}
-
 /// Creates a memoryview directly over an owned `Vec<f32>` without reallocating or unsafe alignment casting.
 pub fn create_owned_f32_memoryview<'py>(
     py: Python<'py>,
@@ -403,43 +354,6 @@ pub fn create_owned_i32_memoryview<'py>(
             byte_strides: [1],
             readonly: true,
             _storage: BufferStorage::I32(vec),
-        },
-    )?;
-    unsafe {
-        let py_mv_ptr = ffi::PyMemoryView_FromObject(owner.as_ptr());
-        if py_mv_ptr.is_null() {
-            return Err(PyErr::fetch(py));
-        }
-        Ok(Bound::from_owned_ptr(py, py_mv_ptr).cast_into::<PyMemoryView>()?)
-    }
-}
-
-/// Creates a memoryview directly over an owned `Vec<u16>` without reallocating or unsafe alignment casting.
-pub fn create_owned_u16_memoryview<'py>(
-    py: Python<'py>,
-    vec: Vec<u16>,
-) -> PyResult<Bound<'py, PyMemoryView>> {
-    let item_count = vec.len();
-    let itemsize = std::mem::size_of::<u16>();
-    let total_bytes = item_count * itemsize;
-    let ptr = if item_count == 0 {
-        DUMMY_ALIGNED.as_ptr() as usize
-    } else {
-        vec.as_ptr() as usize
-    };
-    let owner = Bound::new(
-        py,
-        PyBufferOwner {
-            ptr,
-            total_bytes,
-            itemsize,
-            format: b"H\0",
-            shape: [item_count as ffi::Py_ssize_t],
-            strides: [itemsize as ffi::Py_ssize_t],
-            byte_shape: [total_bytes as ffi::Py_ssize_t],
-            byte_strides: [1],
-            readonly: true,
-            _storage: BufferStorage::U16(vec),
         },
     )?;
     unsafe {

@@ -5,8 +5,6 @@
 //! breakdowns across language boundaries.
 
 use alloc::borrow::Cow;
-use alloc::format;
-use alloc::string::String;
 use alloc::vec::Vec;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -68,14 +66,6 @@ impl ExecutionProfile {
         self.total_duration_us as f64 / 1000.0
     }
 
-    /// Returns the duration of a specific stage by name in milliseconds, if present.
-    pub fn stage_ms(&self, name: &str) -> Option<f64> {
-        self.stages
-            .iter()
-            .find(|s| s.name == name)
-            .map(|s| s.duration_ms())
-    }
-
     /// Adds a completed stage to the profile.
     pub fn add_stage(
         &mut self,
@@ -85,32 +75,6 @@ impl ExecutionProfile {
     ) {
         self.stages
             .push(StageSpan::new(name, duration_us, items_count));
-    }
-
-    /// Formats the profile into a human-readable multi-line summary table.
-    pub fn summary_string(&self) -> String {
-        let mut out = format!(
-            "Execution Profile (Total: {:.2} ms, {} stages):\n",
-            self.total_duration_ms(),
-            self.stages.len()
-        );
-        let total_us = self.total_duration_us.max(1) as f64;
-        for (idx, stage) in self.stages.iter().enumerate() {
-            let pct = (stage.duration_us as f64 / total_us) * 100.0;
-            let items_str = match stage.items_count {
-                Some(c) => format!(" [{} items]", c),
-                None => String::new(),
-            };
-            out.push_str(&format!(
-                "  [{:02}] {:<30} : {:>8.2} ms ({:>5.1}%){}\n",
-                idx + 1,
-                stage.name,
-                stage.duration_ms(),
-                pct,
-                items_str
-            ));
-        }
-        out
     }
 }
 
@@ -223,10 +187,5 @@ mod tests {
         assert_eq!(profile.stages[1].name, "stage_two");
         assert_eq!(profile.stages[1].items_count, Some(42));
         assert!(profile.total_duration_us >= profile.stages[0].duration_us);
-
-        let summary = profile.summary_string();
-        assert!(summary.contains("stage_one"));
-        assert!(summary.contains("stage_two"));
-        assert!(summary.contains("[42 items]"));
     }
 }

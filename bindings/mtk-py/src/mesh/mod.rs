@@ -64,15 +64,6 @@ impl PyMeshData {
         self.profile = Some(profile);
         self
     }
-
-    /// Constructs a `PyMeshData` with a multi-chunk dynamic entity atlas map.
-    pub fn with_dynamic_entity_atlases(
-        mut self,
-        dynamic_entity_atlases: Option<std::collections::HashMap<u16, Vec<u8>>>,
-    ) -> Self {
-        self.dynamic_entity_atlases = dynamic_entity_atlases;
-        self
-    }
 }
 
 #[pymethods]
@@ -321,35 +312,38 @@ impl PyMeshData {
         attributes::get_string_attribute(self, name)
     }
 
-    /// Build a compact `(palette, u32 indices)` view of the canonical provenance.
+    /// Build a compact `(palette, indices)` zero-copy view of the canonical provenance.
     ///
     /// Reads the canonical `mtk_source_textures` (Mesh string palette) +
-    /// `mtk_source_texture_idx` (Face Int32) pair; the returned memoryview is a view
-    /// over an owned Rust buffer (`np.frombuffer(indices, dtype=np.uint32)` in Python).
-    /// The retired per-face `mtk_source_texture_key` string layer is intentionally not
-    /// consulted: it is dead since the mesher stopped emitting it.
+    /// `mtk_source_texture_idx` (Face Int32) pair. The returned memoryview is a
+    /// zero-copy, strongly typed view straight into the native index buffer
+    /// (`np.frombuffer(indices, dtype=np.int32)` in Python).
     pub fn source_texture_palette_indices<'py>(
-        &self,
+        slf: &Bound<'py, Self>,
         py: Python<'py>,
     ) -> PyResult<(Vec<String>, Bound<'py, PyMemoryView>)> {
+        let inner = &slf.borrow().inner;
         if let (Some(idx_attr), Some(pal_attr)) = (
-            self.inner
-                .get_custom_attribute(mtk_core::attributes::constants::ATTR_SOURCE_TEXTURE_IDX),
-            self.inner
+            inner.get_custom_attribute(mtk_core::attributes::constants::ATTR_SOURCE_TEXTURE_IDX),
+            inner
                 .get_custom_attribute(mtk_core::attributes::constants::ATTR_SOURCE_TEXTURE_PALETTE),
         ) {
             if let (
-                mtk_core::attributes::AttributeData::Int32(ref idx_vals),
-                mtk_core::attributes::AttributeData::String(ref pal_vals),
+                mtk_core::attributes::AttributeData::Int32(idx_vals),
+                mtk_core::attributes::AttributeData::String(pal_vals),
             ) = (&idx_attr.data, &pal_attr.data)
             {
-                let u32_indices: Vec<u32> = idx_vals.iter().map(|&i| i as u32).collect();
-                let mv = crate::buffer::create_owned_u32_memoryview(py, u32_indices)?;
+                let mv = crate::buffer::create_zerocopy_i32_memoryview(
+                    py,
+                    idx_vals.as_ptr(),
+                    idx_vals.len(),
+                    slf.as_any(),
+                )?;
                 return Ok((pal_vals.clone(), mv));
             }
         }
 
-        let memoryview = crate::buffer::create_owned_u32_memoryview(py, Vec::new())?;
+        let memoryview = crate::buffer::create_owned_i32_memoryview(py, Vec::new())?;
         Ok((Vec::new(), memoryview))
     }
 

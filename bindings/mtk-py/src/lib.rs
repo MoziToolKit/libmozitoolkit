@@ -254,13 +254,19 @@ mod tests {
             // Verify execution profile attached to mesh and world
             assert!(mesh.profile().is_some());
             let profile = mesh.profile().unwrap();
-            assert!(profile.stage_count() > 0);
+            let stage_names: Vec<String> = profile
+                .stages()
+                .iter()
+                .map(|stage| stage.name().to_string())
+                .collect();
+            assert!(!stage_names.is_empty());
+            assert!(stage_names
+                .iter()
+                .any(|name| name == "padded_array_extraction"));
+            assert!(stage_names
+                .iter()
+                .any(|name| name == "parallel_section_meshing"));
             assert!(world.last_profile().is_some());
-            let summary = profile.summary();
-            println!("\n=== Rebuild all execution profile ===\n{}", summary);
-            assert!(summary.contains("Execution Profile"));
-            assert!(summary.contains("padded_array_extraction"));
-            assert!(summary.contains("parallel_section_meshing"));
 
             let mut unwelded_config = PyMesherConfig::default();
             unwelded_config.inner.weld_vertices = false;
