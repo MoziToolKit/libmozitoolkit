@@ -52,10 +52,14 @@ impl ResolverOverrides {
 }
 
 /// Historical DCC exporter suffixes (Mineways / jmc2obj and similar).
+///
+/// Ordered longest-first so a naive `ends_with` consumer can never truncate
+/// `_dark_forest` down to `_forest`. Consumers that accept user-provided lists
+/// must still prefer the longest match.
 pub fn builtin_biome_suffixes() -> &'static [String] {
     static SUFFIXES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
     SUFFIXES.get_or_init(|| {
-        [
+        let mut suffixes: Vec<String> = [
             "-desert",
             "-forest",
             "-swamp",
@@ -94,7 +98,9 @@ pub fn builtin_biome_suffixes() -> &'static [String] {
         ]
         .iter()
         .map(|s| s.to_string())
-        .collect()
+        .collect();
+        suffixes.sort_by_key(|suffix| std::cmp::Reverse(suffix.len()));
+        suffixes
     })
 }
 
@@ -193,5 +199,24 @@ mod tests {
             .effective_material_fallbacks()
             .iter()
             .any(|rule| rule.keyword == "leaves"));
+    }
+
+    #[test]
+    fn builtin_biome_suffixes_are_longest_first() {
+        let suffixes = builtin_biome_suffixes();
+        assert!(
+            suffixes.windows(2).all(|w| w[0].len() >= w[1].len()),
+            "suffix list must be ordered longest-first"
+        );
+        for required in ["_dark_forest", "-dark_forest", "_cherry_grove", "_y"] {
+            assert!(
+                suffixes.iter().any(|suffix| suffix == required),
+                "missing built-in suffix {required}"
+            );
+        }
+        let mut unique = suffixes.to_vec();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(unique.len(), suffixes.len(), "duplicate built-in suffix");
     }
 }

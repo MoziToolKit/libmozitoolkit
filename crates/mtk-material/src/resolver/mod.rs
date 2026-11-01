@@ -98,18 +98,24 @@ pub fn clean_identifier(raw: &str) -> String {
         }
     }
 
-    // 4. Strip exporter biome suffixes (external config overrides the built-ins)
+    // 4. Strip exporter biome suffixes (external config overrides the built-ins).
+    //
+    // Longest match wins: a naive `ends_with` loop would truncate
+    // `stone_dark_forest` to `stone_dark` because `_forest` is checked first.
     if s.contains('-') || s.contains('_') {
         let active = active_material_overrides();
         let biome_suffixes: &[String] = match active.as_ref() {
             Some(overrides) => overrides.effective_biome_suffixes(),
             None => builtin_biome_suffixes(),
         };
+        let mut matched_len = 0usize;
         for suffix in biome_suffixes {
-            if s.ends_with(suffix) {
-                s = s[..s.len() - suffix.len()].to_string();
-                break;
+            if suffix.len() > matched_len && s.ends_with(suffix.as_str()) {
+                matched_len = suffix.len();
             }
+        }
+        if matched_len > 0 {
+            s.truncate(s.len() - matched_len);
         }
     }
 
