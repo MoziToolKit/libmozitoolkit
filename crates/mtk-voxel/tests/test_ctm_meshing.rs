@@ -9,6 +9,8 @@ use std::sync::Arc;
 
 use mtk_voxel::mesher::shading::ModelSource;
 
+mod common;
+
 #[test]
 fn test_ctm_horizontal_meshing_with_atlas() {
     let mut world = VoxelStorage::new();
@@ -159,23 +161,13 @@ tiles=0-3
     let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
     assert!(!mesh.positions.is_empty());
 
-    // Verify mtk_source_texture_key attribute contains resolved optifine/ctm textures
-    let tex_attr = mesh.get_custom_attribute("mtk_source_texture_key");
+    // Verify the canonical palette + indices pair resolves to optifine/ctm sub-tiles
+    let keys = common::face_texture_keys(&mesh);
+    assert!(!keys.is_empty());
+    let has_ctm = keys.iter().any(|k| k.contains("optifine/ctm/"));
     assert!(
-        tex_attr.is_some(),
-        "mtk_source_texture_key attribute must be present"
+        has_ctm,
+        "At least some faces must resolve to CTM sub-tiles, found: {:?}",
+        keys
     );
-    if let Some(attr) = tex_attr {
-        if let mtk_core::AttributeData::String(ref keys) = attr.data {
-            assert!(!keys.is_empty());
-            let has_ctm = keys.iter().any(|k| k.contains("optifine/ctm/"));
-            assert!(
-                has_ctm,
-                "At least some faces must resolve to CTM sub-tiles, found: {:?}",
-                keys
-            );
-        } else {
-            panic!("AttributeData must be String");
-        }
-    }
 }

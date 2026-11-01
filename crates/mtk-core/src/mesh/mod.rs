@@ -693,7 +693,7 @@ mod tests {
             AttributeData::Int32(vec![0, 1, 2]),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
-            "mtk_source_texture_key",
+            "mtk_custom_note",
             AttributeDomain::Face,
             AttributeData::String(vec!["minecraft:block/stone".to_string()]),
         ));
@@ -714,7 +714,7 @@ mod tests {
             12
         );
         assert_eq!(
-            mesh.get_custom_attribute("mtk_source_texture_key")
+            mesh.get_custom_attribute("mtk_custom_note")
                 .unwrap()
                 .as_bytes(),
             None

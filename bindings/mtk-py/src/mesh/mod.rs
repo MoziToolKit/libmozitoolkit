@@ -345,26 +345,18 @@ impl PyMeshData {
     }
 
     /// Add a string custom attribute from a compact palette + u32 index buffer.
-    pub fn add_string_attribute_from_palette(
-        &mut self,
-        name: &str,
-        domain: &str,
-        palette: Vec<String>,
-        indices: &Bound<'_, PyAny>,
-    ) -> PyResult<()> {
-        attributes::add_string_attribute_from_palette(self, name, domain, palette, indices)
-    }
-
     /// Retrieve a string custom attribute's values.
     pub fn get_string_attribute(&self, name: &str) -> Option<Vec<String>> {
         attributes::get_string_attribute(self, name)
     }
 
-    /// Build a compact `(palette, u32 indices)` view of `mtk_source_texture_key`.
+    /// Build a compact `(palette, u32 indices)` view of the canonical provenance.
     ///
-    /// Hosts can inject palette-based provenance without materializing one Python
-    /// string per face; the returned memoryview is a zero-copy view over an owned
-    /// Rust buffer (`np.frombuffer(indices, dtype=np.uint32)` on the Python side).
+    /// Reads the canonical `mtk_source_textures` (Mesh string palette) +
+    /// `mtk_source_texture_idx` (Face Int32) pair; the returned memoryview is a view
+    /// over an owned Rust buffer (`np.frombuffer(indices, dtype=np.uint32)` in Python).
+    /// The retired per-face `mtk_source_texture_key` string layer is intentionally not
+    /// consulted: it is dead since the mesher stopped emitting it.
     pub fn source_texture_palette_indices<'py>(
         &self,
         py: Python<'py>,
@@ -386,39 +378,8 @@ impl PyMeshData {
             }
         }
 
-        let mut palette: Vec<String> = Vec::new();
-        let mut lookup =
-            rustc_hash::FxHashMap::<&str, u32>::with_capacity_and_hasher(128, Default::default());
-        let mut indices: Vec<u32> = Vec::new();
-
-        if let Some(attr) = self.inner.get_custom_attribute("mtk_source_texture_key") {
-            if let mtk_core::attributes::AttributeData::String(ref values) = attr.data {
-                indices.reserve(values.len());
-                let mut last_key: &str = "";
-                let mut last_idx: u32 = 0;
-                let mut has_last = false;
-
-                for value in values {
-                    let key = value.as_str();
-                    if has_last && (std::ptr::eq(key, last_key) || key == last_key) {
-                        indices.push(last_idx);
-                        continue;
-                    }
-                    let next = palette.len() as u32;
-                    let idx = *lookup.entry(key).or_insert_with(|| {
-                        palette.push(value.clone());
-                        next
-                    });
-                    indices.push(idx);
-                    last_key = key;
-                    last_idx = idx;
-                    has_last = true;
-                }
-            }
-        }
-
-        let memoryview = crate::buffer::create_owned_u32_memoryview(py, indices)?;
-        Ok((palette, memoryview))
+        let memoryview = crate::buffer::create_owned_u32_memoryview(py, Vec::new())?;
+        Ok((Vec::new(), memoryview))
     }
 
     /// Check if a custom attribute exists.

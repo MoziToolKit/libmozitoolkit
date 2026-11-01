@@ -1,6 +1,5 @@
 //! Attribute access and management for `MeshData`.
 
-use pyo3::buffer::PyBuffer;
 use pyo3::prelude::*;
 use pyo3::types::PyMemoryView;
 
@@ -172,44 +171,6 @@ pub fn add_string_attribute(
         });
 
     Ok(())
-}
-
-/// Add a string custom attribute from a compact palette + u32 index buffer.
-///
-/// Avoids materializing one Python string object per face on the host side;
-/// the paletted values are expanded inside the native core.
-pub fn add_string_attribute_from_palette(
-    mesh: &mut PyMeshData,
-    name: &str,
-    domain: &str,
-    palette: Vec<String>,
-    indices: &Bound<'_, PyAny>,
-) -> PyResult<()> {
-    let palette_len = palette.len();
-    let values: Vec<String> = read_u32_indices(indices)?
-        .into_iter()
-        .map(|idx| {
-            palette.get(idx as usize).cloned().unwrap_or_else(|| {
-                debug_assert!(
-                    (idx as usize) < palette_len,
-                    "source texture palette index {idx} out of range"
-                );
-                String::new()
-            })
-        })
-        .collect();
-    add_string_attribute(mesh, name, domain, values)
-}
-
-fn read_u32_indices(obj: &Bound<'_, PyAny>) -> PyResult<Vec<u32>> {
-    if let Ok(buf) = PyBuffer::<u32>::get(obj) {
-        if buf.is_c_contiguous() {
-            let count = buf.item_count();
-            let slice = unsafe { std::slice::from_raw_parts(buf.buf_ptr() as *const u32, count) };
-            return Ok(slice.to_vec());
-        }
-    }
-    obj.extract::<Vec<u32>>()
 }
 
 /// Retrieve a string custom attribute's values.

@@ -1,3 +1,5 @@
+mod common;
+
 use glam::IVec3;
 use mtk_cull::FaceCuller;
 use mtk_voxel::mesher::shading::ModelSource;
@@ -99,7 +101,8 @@ fn test_mesher_custom_attributes() {
     assert_eq!(mesh.face_count(), 6);
 
     let expected_attrs = [
-        "mtk_source_texture_key",
+        "mtk_source_textures",
+        "mtk_source_texture_idx",
         "mtk_atlas_chunk_id",
         "mtk_uv_transform",
         "mtk_uv_rotation",
@@ -130,6 +133,16 @@ fn test_mesher_custom_attributes() {
             !mesh.has_custom_attribute(attr_name),
             "Mesh should NOT contain obsolete attribute: {}",
             attr_name
+        );
+    }
+
+    // Regression gate: the mesher must never re-emit any attribute that the native
+    // core declares retired (`mtk-core::attributes::RETIRED_MESH_ATTRIBUTES`).
+    for retired in mtk_core::attributes::RETIRED_MESH_ATTRIBUTES {
+        assert!(
+            !mesh.has_custom_attribute(retired),
+            "Mesher must never emit retired attribute: {}",
+            retired
         );
     }
 }
@@ -596,13 +609,8 @@ fn test_alternate_blocks_variant_sampling() {
     let mesh =
         SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::Variant(&group), &config);
 
-    let tex_attr = mesh
-        .get_custom_attribute("mtk_source_texture_key")
-        .expect("Must have mtk_source_texture_key");
-    let sampled_textures: std::collections::HashSet<String> = match &tex_attr.data {
-        mtk_core::attributes::AttributeData::String(v) => v.iter().cloned().collect(),
-        _ => panic!("Expected String attribute"),
-    };
+    let sampled_textures: std::collections::HashSet<String> =
+        common::face_texture_keys(&mesh).into_iter().collect();
 
     // Out of 16 blocks, multiple variants must have been sampled (not just 1 static variant!)
     assert!(
@@ -624,13 +632,10 @@ fn test_alternate_blocks_variant_sampling() {
         |_| ModelSource::Variant(&group),
         &disabled_config,
     );
-    let disabled_attr = mesh_disabled
-        .get_custom_attribute("mtk_source_texture_key")
-        .expect("Must have mtk_source_texture_key");
-    let disabled_textures: std::collections::HashSet<String> = match &disabled_attr.data {
-        mtk_core::attributes::AttributeData::String(v) => v.iter().cloned().collect(),
-        _ => panic!("Expected String attribute"),
-    };
+    let disabled_textures: std::collections::HashSet<String> =
+        common::face_texture_keys(&mesh_disabled)
+            .into_iter()
+            .collect();
     assert_eq!(disabled_textures.len(), 1);
     assert!(disabled_textures.contains("minecraft:block/dirt_var_0"));
 }
@@ -1036,14 +1041,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
         _ => panic!("Expected Int32 attribute data"),
     };
 
-    let tex_attr = mesh_anim
-        .custom_attributes
-        .get("mtk_source_texture_key")
-        .expect("tex attr must exist");
-    let tex_keys = match &tex_attr.data {
-        mtk_core::attributes::AttributeData::String(keys) => keys,
-        _ => panic!("Expected String attribute data"),
-    };
+    let tex_keys = common::face_texture_keys(&mesh_anim);
 
     assert_eq!(chunk_ids.len(), tex_keys.len());
     assert!(!chunk_ids.is_empty(), "Faces should be emitted");

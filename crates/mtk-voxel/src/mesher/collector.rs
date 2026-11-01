@@ -116,20 +116,11 @@ impl FaceAttributesCollector {
             return;
         }
 
-        let mut keys = Vec::with_capacity(self.source_texture_indices.len());
-        if self.source_texture_palette.len() == 1 {
-            let single = self.source_texture_palette[0].clone();
-            keys.resize(self.source_texture_indices.len(), single);
-        } else {
-            for &idx in &self.source_texture_indices {
-                keys.push(self.source_texture_palette[idx as usize].clone());
-            }
-        }
-        mesh.add_custom_attribute(MeshAttribute::new(
-            ATTR_SOURCE_TEXTURE_KEY,
-            AttributeDomain::Face,
-            AttributeData::String(keys),
-        ));
+        // Provenance is emitted strictly as `palette + indices` (Golden Rule 8).
+        // The legacy per-face `ATTR_SOURCE_TEXTURE_KEY` string layer is listed in
+        // `mtk_core::attributes::RETIRED_MESH_ATTRIBUTES` and must never be written
+        // again: it cost one heap-allocated String per face and every host had to
+        // purge it right after ingestion.
         let indices_i32: Vec<i32> = self
             .source_texture_indices
             .iter()

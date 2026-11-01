@@ -5,6 +5,8 @@ use mtk_voxel::fluid::{
 
 use mtk_voxel::mesher::shading::ModelSource;
 
+mod common;
+
 #[test]
 fn test_fluid_base_heights() {
     assert_eq!(get_fluid_base_height("minecraft:water"), MAX_FLUID_HEIGHT);
@@ -108,13 +110,7 @@ fn test_fluid_side_and_top_texture_keys_with_atlas() {
 
     assert_eq!(still_mesh.face_count(), 6);
 
-    let keys_attr = still_mesh
-        .get_custom_attribute("mtk_source_texture_key")
-        .expect("Must have texture keys");
-    let keys = match &keys_attr.data {
-        mtk_core::attributes::AttributeData::String(s) => s,
-        _ => panic!("Expected String attribute"),
-    };
+    let keys = common::face_texture_keys(&still_mesh);
     // Emission order is stable: Up, Down, North, South, West, East.
     for (i, key) in keys.iter().enumerate() {
         if i <= 1 {
@@ -142,13 +138,7 @@ fn test_fluid_side_and_top_texture_keys_with_atlas() {
 
     assert_eq!(flow_mesh.face_count(), 6);
 
-    let flow_keys_attr = flow_mesh
-        .get_custom_attribute("mtk_source_texture_key")
-        .expect("Must have texture keys");
-    let flow_keys = match &flow_keys_attr.data {
-        mtk_core::attributes::AttributeData::String(s) => s,
-        _ => panic!("Expected String attribute"),
-    };
+    let flow_keys = common::face_texture_keys(&flow_mesh);
     for (i, key) in flow_keys.iter().enumerate() {
         if i == 1 {
             assert_eq!(
