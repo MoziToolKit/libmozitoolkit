@@ -25,7 +25,7 @@ pub use crate::attributes::PyAttributeDomain;
 pub struct PyMeshData {
     pub inner: MeshData,
     pub profile: Option<mtk_core::profile::ExecutionProfile>,
-    pub dynamic_entity_atlas: Option<Vec<u8>>,
+    /// Dynamic entity atlas chunks keyed by chunk id (`{0xFFF0: RGBA bytes, ...}`).
     pub dynamic_entity_atlases: Option<std::collections::HashMap<u16, Vec<u8>>>,
 }
 
@@ -34,7 +34,6 @@ impl From<MeshData> for PyMeshData {
         Self {
             inner,
             profile: None,
-            dynamic_entity_atlas: None,
             dynamic_entity_atlases: None,
         }
     }
@@ -46,7 +45,6 @@ impl PyMeshData {
         Self {
             inner,
             profile: None,
-            dynamic_entity_atlas: None,
             dynamic_entity_atlases: None,
         }
     }
@@ -67,12 +65,6 @@ impl PyMeshData {
         self
     }
 
-    /// Constructs a `PyMeshData` with a dynamic entity atlas buffer.
-    pub fn with_dynamic_entity_atlas(mut self, dynamic_entity_atlas: Option<Vec<u8>>) -> Self {
-        self.dynamic_entity_atlas = dynamic_entity_atlas;
-        self
-    }
-
     /// Constructs a `PyMeshData` with a multi-chunk dynamic entity atlas map.
     pub fn with_dynamic_entity_atlases(
         mut self,
@@ -90,7 +82,6 @@ impl PyMeshData {
         Self {
             inner: MeshData::new(),
             profile: None,
-            dynamic_entity_atlas: None,
             dynamic_entity_atlases: None,
         }
     }
@@ -99,22 +90,6 @@ impl PyMeshData {
     #[getter]
     pub fn profile(&self) -> Option<crate::profile::PyExecutionProfile> {
         self.profile.clone().map(Into::into)
-    }
-
-    /// Returns the dynamic entity atlas texture RGBA bytes (1024x1024x4) if present.
-    #[getter]
-    pub fn dynamic_entity_atlas<'py>(
-        &self,
-        py: Python<'py>,
-    ) -> Option<Bound<'py, pyo3::types::PyBytes>> {
-        if let Some(ref bytes) = self.dynamic_entity_atlas {
-            Some(pyo3::types::PyBytes::new(py, bytes))
-        } else if let Some(ref map) = self.dynamic_entity_atlases {
-            map.get(&0xFFF0)
-                .map(|bytes| pyo3::types::PyBytes::new(py, bytes))
-        } else {
-            None
-        }
     }
 
     /// Returns a dict mapping Chunk ID (e.g. 0xFFF0, 0xFFF1) to dynamic entity atlas RGBA bytes if present.
@@ -128,10 +103,6 @@ impl PyMeshData {
             for (&chunk_id, bytes) in map {
                 let _ = dict.set_item(chunk_id, pyo3::types::PyBytes::new(py, bytes));
             }
-            Some(dict)
-        } else if let Some(ref single) = self.dynamic_entity_atlas {
-            let dict = pyo3::types::PyDict::new(py);
-            let _ = dict.set_item(0xFFF0u16, pyo3::types::PyBytes::new(py, single));
             Some(dict)
         } else {
             None

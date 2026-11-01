@@ -1,8 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
 
-use glam::IVec3;
-use mtk_sync::protocol::*;
 use mtk_sync::{normalize_stream_progress, LiveSyncSession, SyncEvent};
 
 use crate::cull::PyFaceCuller;
@@ -64,21 +62,12 @@ impl PyLiveSyncSession {
     pub fn get_world_mesh(&self) -> PyMeshData {
         let mesh = self.inner.get_world_mesh();
         let profile = self.inner.last_profile();
-        let dynamic_entity_atlas = self.inner.dynamic_entity_atlas_rgba();
         let dynamic_entity_atlases = Some(self.inner.dynamic_entity_atlases());
         PyMeshData {
             inner: mesh,
             profile,
-            dynamic_entity_atlas,
             dynamic_entity_atlases,
         }
-    }
-
-    /// Returns the dynamic entity atlas texture RGBA bytes (1024x1024x4), or None if no dynamic entities.
-    pub fn get_dynamic_entity_atlas<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyBytes>> {
-        self.inner
-            .dynamic_entity_atlas_rgba()
-            .map(|bytes| PyBytes::new(py, &bytes))
     }
 
     /// Returns a dict mapping Chunk ID (e.g. 0xFFF0, 0xFFF1) to dynamic entity atlas RGBA bytes (1024x1024x4).
@@ -100,75 +89,25 @@ impl PyLiveSyncSession {
     }
 
     /// Starts the background sync client thread connecting to Minecraft at `url`,
-    /// optionally passing cached session parameters for zero-rebuild fast path verification.
+    /// authenticating the HELLO with the shared session token (RFC v3.1 §4.1).
     #[pyo3(signature = (
         url="ws://localhost:8765",
         auto_reconnect=true,
         max_reconnect_attempts=5,
-        cached_uuid=None,
-        cached_epoch=0,
-        cached_seq=0,
-        cached_min=None,
-        cached_size=None,
-        cached_state_hash=0,
-        auth_token=None,
-        cached_dimension=None
+        auth_token=None
     ))]
     pub fn start(
         &mut self,
         url: &str,
         auto_reconnect: bool,
         max_reconnect_attempts: usize,
-        cached_uuid: Option<&[u8]>,
-        cached_epoch: u64,
-        cached_seq: u64,
-        cached_min: Option<(i32, i32, i32)>,
-        cached_size: Option<(i32, i32, i32)>,
-        cached_state_hash: u64,
         auth_token: Option<&str>,
-        cached_dimension: Option<&str>,
     ) -> PyResult<()> {
         // The token must ride on the HELLO even when there is no cached state:
-        // `start_with_hello` builds the default HELLO from this value.
+        // `LiveSyncSession::start` builds the default HELLO from this value.
         self.inner.set_auth_token(auth_token.unwrap_or(""));
-
-        let initial_hello = if cached_uuid.is_some() || cached_state_hash != 0 {
-            let mut uuid_arr = [0u8; 16];
-            if let Some(b) = cached_uuid {
-                if b.len() == 16 {
-                    uuid_arr.copy_from_slice(b);
-                }
-            }
-            let c_min = cached_min
-                .map(|(x, y, z)| IVec3::new(x, y, z))
-                .unwrap_or(IVec3::ZERO);
-            let c_sz = cached_size
-                .map(|(x, y, z)| IVec3::new(x, y, z))
-                .unwrap_or(IVec3::ZERO);
-            Some(Packet::Hello {
-                min_version: PROTOCOL_VERSION as u16,
-                max_version: PROTOCOL_VERSION as u16,
-                capabilities: 0x03, // Zstd + DNA Direct Memory
-                flags: 0,
-                cached_world_uuid: uuid_arr,
-                cached_epoch,
-                cached_seq,
-                cached_min: c_min,
-                cached_size: c_sz,
-                cached_state_hash,
-                // Filled in by `LiveSyncSession::start_with_hello` from the trimmed
-                // session token so both HELLO paths normalize identically.
-                auth_token: String::new(),
-                cached_dimension: cached_dimension
-                    .unwrap_or("minecraft:overworld")
-                    .to_string(),
-            })
-        } else {
-            None
-        };
-
         self.inner
-            .start_with_hello(url, auto_reconnect, max_reconnect_attempts, initial_hello)
+            .start(url, auto_reconnect, max_reconnect_attempts)
             .map_err(pyo3::exceptions::PyRuntimeError::new_err)
     }
 
@@ -287,7 +226,6 @@ impl PyLiveSyncSession {
                     let py_mesh = PyMeshData {
                         inner: mesh,
                         profile,
-                        dynamic_entity_atlas: self.inner.dynamic_entity_atlas_rgba(),
                         dynamic_entity_atlases: Some(self.inner.dynamic_entity_atlases()),
                     };
                     dict.set_item("mesh", py_mesh)?;

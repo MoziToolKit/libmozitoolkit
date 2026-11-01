@@ -120,12 +120,10 @@ impl PyVoxelWorld {
         }
         .map_err(map_voxel_err)?;
         let profile = self.inner.last_profile.clone();
-        let dynamic_entity_atlas = self.inner.dynamic_entity_atlas_rgba().map(|b| b.to_vec());
         let dynamic_entity_atlases = Some(self.inner.dynamic_entity_atlases_owned());
         Ok(crate::mesh::PyMeshData {
             inner: mesh,
             profile,
-            dynamic_entity_atlas,
             dynamic_entity_atlases,
         })
     }
@@ -145,11 +143,9 @@ impl PyVoxelWorld {
             .detach(|| self.inner.rebuild_dirty())
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         let dict = pyo3::types::PyDict::new(py);
-        let dyn_atlas = self.inner.dynamic_entity_atlas_rgba().map(|b| b.to_vec());
         let dyn_atlases = Some(self.inner.dynamic_entity_atlases_owned());
         for (coord, mesh) in rebuilt {
             let mut py_mesh = crate::mesh::PyMeshData::from_mesh(mesh);
-            py_mesh.dynamic_entity_atlas = dyn_atlas.clone();
             py_mesh.dynamic_entity_atlases = dyn_atlases.clone();
             dict.set_item((coord.x, coord.y, coord.z), py_mesh)?;
         }
@@ -160,12 +156,10 @@ impl PyVoxelWorld {
     pub fn get_world_mesh(&self) -> crate::mesh::PyMeshData {
         let mesh = self.inner.get_world_mesh().cloned().unwrap_or_default();
         let profile = self.inner.last_profile.clone();
-        let dynamic_entity_atlas = self.inner.dynamic_entity_atlas_rgba().map(|b| b.to_vec());
         let dynamic_entity_atlases = Some(self.inner.dynamic_entity_atlases_owned());
         crate::mesh::PyMeshData {
             inner: mesh,
             profile,
-            dynamic_entity_atlas,
             dynamic_entity_atlases,
         }
     }
@@ -284,13 +278,6 @@ impl PyVoxelWorld {
             self.inner.set_model_db(Some(mdb.inner.clone()));
         }
         self.inner.clear_cache();
-    }
-
-    /// Returns the dynamic entity atlas texture RGBA bytes (1024x1024x4), or None if no dynamic entities.
-    pub fn get_dynamic_entity_atlas<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyBytes>> {
-        self.inner
-            .dynamic_entity_atlas_rgba()
-            .map(|bytes| PyBytes::new(py, bytes))
     }
 
     /// Returns a dict mapping Chunk ID (e.g. 0xFFF0, 0xFFF1) to dynamic entity atlas RGBA bytes (1024x1024x4).

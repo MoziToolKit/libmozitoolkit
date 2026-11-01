@@ -26,7 +26,7 @@ pub mod unstable;
 use pyo3::prelude::*;
 
 /// Integer API version understood by this native extension.
-pub const API_VERSION: u32 = 1;
+pub const API_VERSION: u32 = 2;
 
 pub use ctm::PyCtmSolver;
 pub use cull::PyFaceCuller;
