@@ -18,7 +18,7 @@ use mtk_core::attributes::AttributeData;
 use mtk_cull::FaceCuller;
 use mtk_material::BiomeResolver;
 use mtk_sync::protocol::constants::SyncDecision;
-use mtk_sync::protocol::hasher::compute_canonical_state_hash;
+use mtk_sync::protocol::hasher::compute_sparse_state_hash_for_storage;
 use mtk_sync::protocol::packet::*;
 use mtk_sync::{LiveSyncSession, SyncLifecycle};
 use mtk_voxel::mesher::shading::ModelSource;
@@ -48,17 +48,7 @@ fn build_baseline_stream(
     snapshot_seq: u64,
     snapshot_uuid: [u8; 16],
 ) -> BaselineStream {
-    let state_hash = compute_canonical_state_hash(
-        min,
-        size,
-        DIMENSION,
-        |x, y, z| storage.get_block(x, y, z).to_string(),
-        |qx, qy, qz| {
-            storage
-                .get_biome(min.x + qx * 4, min.y + qy * 4, min.z + qz * 4)
-                .to_string()
-        },
-    );
+    let state_hash = compute_sparse_state_hash_for_storage(storage, min, size, DIMENSION);
 
     // --- block stream: X fastest, Z next, Y slowest; air is always palette slot 0 ---
     let total_voxels = (size.x as usize) * (size.y as usize) * (size.z as usize);

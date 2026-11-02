@@ -10,7 +10,7 @@ use glam::IVec3;
 use mtk_voxel::storage::{SectionBiomes, SectionStorage, VoxelStorage};
 
 use crate::protocol::constants::{CancelReason, ResyncReason, MAX_SELECTION_VOLUME};
-use crate::protocol::hasher::compute_canonical_state_hash;
+use crate::protocol::hasher::compute_sparse_state_hash_for_storage;
 use crate::protocol::packet::Packet;
 
 /// Helper to unpack LSB-first bit-packed indices into u16 vector.
@@ -515,19 +515,12 @@ impl BaselineAssembler {
         }
 
         // Validate state_hash SSOT
-        let computed_hash = compute_canonical_state_hash(
+        let computed_hash = compute_sparse_state_hash_for_storage(
+            &storage,
             self.min_pos,
             self.size,
             &self.dimension,
-            |x, y, z| storage.get_block(x, y, z).to_string(),
-            |qx, qy, qz| {
-                let wx = self.min_pos.x + qx * 4;
-                let wy = self.min_pos.y + qy * 4;
-                let wz = self.min_pos.z + qz * 4;
-                storage.get_biome(wx, wy, wz).to_string()
-            },
         );
-
         if computed_hash != final_state_hash {
             return Err(ResyncReason::StateHashMismatch);
         }

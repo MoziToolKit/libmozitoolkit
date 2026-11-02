@@ -352,6 +352,38 @@ impl PyVoxelPointCloud {
         Ok(dict)
     }
 
+    /// Computes the authoritative sparse state hash (xxHash64) for this point cloud.
+    #[pyo3(signature = (min_pos=(0, 0, 0), size=(0, 0, 0), dimension="minecraft:overworld"))]
+    pub fn compute_sparse_state_hash(
+        &self,
+        min_pos: (i32, i32, i32),
+        size: (i32, i32, i32),
+        dimension: &str,
+    ) -> u64 {
+        let (min_pos_v, size_v) = if size == (0, 0, 0) {
+            if let Some([bx, by, bz, sx, sy, sz]) = self.inner.bounds {
+                (glam::IVec3::new(bx, by, bz), glam::IVec3::new(sx, sy, sz))
+            } else {
+                (
+                    glam::IVec3::new(min_pos.0, min_pos.1, min_pos.2),
+                    glam::IVec3::new(size.0, size.1, size.2),
+                )
+            }
+        } else {
+            (
+                glam::IVec3::new(min_pos.0, min_pos.1, min_pos.2),
+                glam::IVec3::new(size.0, size.1, size.2),
+            )
+        };
+
+        mtk_sync::protocol::hasher::compute_sparse_state_hash_for_point_cloud(
+            &self.inner,
+            min_pos_v,
+            size_v,
+            dimension,
+        )
+    }
+
     fn __repr__(&self) -> String {
         format!("<VoxelPointCloud len={}>", self.inner.len())
     }

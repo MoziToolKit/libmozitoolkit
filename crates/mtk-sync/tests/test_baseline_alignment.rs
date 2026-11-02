@@ -3,7 +3,7 @@
 
 use glam::IVec3;
 use mtk_sync::protocol::constants::*;
-use mtk_sync::protocol::hasher::compute_canonical_state_hash;
+use mtk_sync::protocol::hasher::{compute_sparse_state_hash, SparseBlockEntry};
 use mtk_sync::protocol::packet::*;
 use mtk_sync::{BaselineAssembler, LiveSyncSession, SyncLifecycle};
 
@@ -98,23 +98,23 @@ fn test_unaligned_selection_with_multi_biomes_validates_state_hash() {
     // Deliberately NOT 16-aligned on X (4 % 16 != 0).
     let min_pos = IVec3::new(4, 0, 0);
     let size = IVec3::new(8, 1, 1);
-    let voxels = [0u8; 8];
-    // Two quart columns: qx=0 -> plains (wx=4), qx=1 -> desert (wx=8)
+    let voxels = [1u8; 8];
+    // Two quart columns: qx=0 -> plains (wx=4..7), qx=1 -> desert (wx=8..11)
     let biomes = [0u8, 1u8];
 
-    let expected_hash = compute_canonical_state_hash(
-        min_pos,
-        size,
-        "minecraft:overworld",
-        |_, _, _| "minecraft:air".to_string(),
-        |qx, _, _| {
-            if qx == 0 {
-                "minecraft:plains".to_string()
-            } else {
-                "minecraft:desert".to_string()
-            }
+    let entries = (0..8).map(|i| SparseBlockEntry {
+        rel_x: i,
+        rel_y: 0,
+        rel_z: 0,
+        state: "minecraft:stone",
+        biome: if i < 4 {
+            "minecraft:plains"
+        } else {
+            "minecraft:desert"
         },
-    );
+        entity_json: None,
+    });
+    let expected_hash = compute_sparse_state_hash(min_pos, size, "minecraft:overworld", entries);
 
     send_baseline(&session, min_pos, size, &voxels, &biomes, 8, expected_hash);
 
@@ -132,12 +132,11 @@ fn test_superseded_baseline_frames_are_ignored() {
     let min_pos = IVec3::new(0, 0, 0);
     let size = IVec3::new(8, 1, 1);
     let voxels = [0u8; 8];
-    let expected_hash = compute_canonical_state_hash(
+    let expected_hash = compute_sparse_state_hash(
         min_pos,
         size,
         "minecraft:overworld",
-        |_, _, _| "minecraft:air".to_string(),
-        |_, _, _| "minecraft:plains".to_string(),
+        std::iter::empty::<SparseBlockEntry>(),
     );
     let (payload, chunk_hash) = build_chunk(&voxels, &[]);
     let block_palette = vec!["minecraft:air".to_string(), "minecraft:stone".to_string()];
@@ -245,18 +244,11 @@ fn test_partial_section_biomes_are_filled_from_nearest_sample() {
     let voxels = [0u8; 8];
     let biomes = [0u8, 1u8];
 
-    let expected_hash = compute_canonical_state_hash(
+    let expected_hash = compute_sparse_state_hash(
         min_pos,
         size,
         "minecraft:overworld",
-        |_, _, _| "minecraft:air".to_string(),
-        |qx, _, _| {
-            if qx == 0 {
-                "minecraft:plains".to_string()
-            } else {
-                "minecraft:desert".to_string()
-            }
-        },
+        std::iter::empty::<SparseBlockEntry>(),
     );
 
     send_baseline(&session, min_pos, size, &voxels, &biomes, 8, expected_hash);

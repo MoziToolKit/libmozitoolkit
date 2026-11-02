@@ -289,4 +289,88 @@ impl PyLiveSyncSession {
             inner: w.storage.clone(),
         })
     }
+
+    /// Restores voxel storage from an existing point cloud without re-meshing.
+    pub fn load_from_point_cloud(&self, point_cloud: &crate::point_cloud::PyVoxelPointCloud) {
+        self.inner.load_from_point_cloud(&point_cloud.inner);
+    }
+
+    /// Starts live sync using cached handshake parameters for 0ms zero-rebuild reconnect.
+    #[pyo3(signature = (
+        url="ws://127.0.0.1:8765",
+        auto_reconnect=true,
+        max_reconnect_attempts=5,
+        server_uuid="",
+        epoch=0,
+        sequence=0,
+        min_pos=(0, 0, 0),
+        size=(0, 0, 0),
+        state_hash=0,
+        dimension="minecraft:overworld",
+        auth_token=None
+    ))]
+    pub fn start_with_cache(
+        &mut self,
+        url: &str,
+        auto_reconnect: bool,
+        max_reconnect_attempts: usize,
+        server_uuid: &str,
+        epoch: u64,
+        sequence: u64,
+        min_pos: (i32, i32, i32),
+        size: (i32, i32, i32),
+        state_hash: u64,
+        dimension: &str,
+        auth_token: Option<&str>,
+    ) -> PyResult<()> {
+        let uuid_bytes = parse_uuid_hex(server_uuid);
+        self.inner.set_auth_token(auth_token.unwrap_or(""));
+        self.inner
+            .start_with_cache(
+                url,
+                auto_reconnect,
+                max_reconnect_attempts,
+                uuid_bytes,
+                epoch,
+                sequence,
+                glam::IVec3::new(min_pos.0, min_pos.1, min_pos.2),
+                glam::IVec3::new(size.0, size.1, size.2),
+                state_hash,
+                dimension.to_string(),
+            )
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)
+    }
+}
+
+fn parse_uuid_hex(raw: &str) -> [u8; 16] {
+    let mut out = [0u8; 16];
+    let trimmed = raw.trim();
+    let without_prefix = if trimmed.starts_with("0x") || trimmed.starts_with("0X") {
+        &trimmed[2..]
+    } else {
+        trimmed
+    };
+    let clean: Vec<u8> = without_prefix.bytes().filter(|b| *b != b'-').collect();
+    if clean.len() != 32 {
+        return out;
+    }
+    for (i, slot) in out.iter_mut().enumerate() {
+        let hi = hex_nibble(clean[i * 2]);
+        let lo = hex_nibble(clean[i * 2 + 1]);
+        match (hi, lo) {
+            (Some(h), Some(l)) => *slot = (h << 4) | l,
+            _ => return [0u8; 16],
+        }
+    }
+    out
+}
+
+#[inline]
+fn hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
 }

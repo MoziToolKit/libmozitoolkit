@@ -36,7 +36,7 @@ pub enum BlockEntityData {
     Banner {
         #[serde(default = "default_banner_base_color")]
         base_color: String,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
         patterns: Vec<BannerPatternLayer>,
     },
     /// Skull or Player Head with species, rotation, and optional profile.

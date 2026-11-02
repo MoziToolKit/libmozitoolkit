@@ -254,6 +254,43 @@ impl LiveSyncSession {
             .clone()
     }
 
+    /// Restores voxel storage from an unculled point cloud without re-meshing.
+    pub fn load_from_point_cloud(&self, point_cloud: &mtk_voxel::VoxelPointCloud) {
+        let mut w = self.world.write().unwrap_or_else(|e| e.into_inner());
+        w.load_from_point_cloud(point_cloud);
+    }
+
+    /// Starts live sync using cached handshake parameters for 0ms zero-rebuild reconnect.
+    pub fn start_with_cache(
+        &mut self,
+        url: &str,
+        auto_reconnect: bool,
+        max_reconnect_attempts: usize,
+        server_uuid: [u8; 16],
+        epoch: u64,
+        sequence: u64,
+        min: glam::IVec3,
+        size: glam::IVec3,
+        state_hash: u64,
+        dimension: String,
+    ) -> Result<(), String> {
+        let hello = Packet::Hello {
+            min_version: PROTOCOL_VERSION as u16,
+            max_version: PROTOCOL_VERSION as u16,
+            capabilities: 0x03,
+            flags: 0,
+            cached_world_uuid: server_uuid,
+            cached_epoch: epoch,
+            cached_seq: sequence,
+            cached_min: min,
+            cached_size: size,
+            cached_state_hash: state_hash,
+            auth_token: self.auth_token.clone(),
+            cached_dimension: dimension,
+        };
+        self.start_with_hello(url, auto_reconnect, max_reconnect_attempts, Some(hello))
+    }
+
     /// Manually processes a packet directly into the state machine (useful for tests and mocks).
     pub fn process_packet_direct(&self, packet: Packet) {
         let dummy_cmd_sender = self

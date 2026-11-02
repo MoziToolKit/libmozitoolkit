@@ -1,7 +1,9 @@
 use glam::IVec3;
 use mtk_sync::protocol::codec::compute_delta_batch_hash;
 use mtk_sync::protocol::constants::*;
-use mtk_sync::protocol::hasher::compute_canonical_state_hash;
+use mtk_sync::protocol::hasher::{
+    compute_sparse_state_hash, compute_sparse_state_hash_for_storage, SparseBlockEntry,
+};
 use mtk_sync::protocol::packet::*;
 use mtk_sync::{LiveSyncSession, SyncEvent, SyncLifecycle};
 use mtk_voxel::types::MesherConfig;
@@ -74,18 +76,18 @@ fn test_baseline_assembly_and_meshing() {
     chunk_hasher.update(&compressed);
     let chunk_hash = chunk_hasher.digest();
 
-    let expected_state_hash = compute_canonical_state_hash(
+    let expected_state_hash = compute_sparse_state_hash(
         min_pos,
         size,
         "minecraft:overworld",
-        |x, y, z| {
-            if x == 0 && y == 0 && z == 0 {
-                "minecraft:stone".to_string()
-            } else {
-                "minecraft:air".to_string()
-            }
-        },
-        |_, _, _| "minecraft:plains".to_string(),
+        [SparseBlockEntry {
+            rel_x: 0,
+            rel_y: 0,
+            rel_z: 0,
+            state: "minecraft:stone",
+            biome: "minecraft:plains",
+            entity_json: None,
+        }],
     );
 
     // 1. Send Welcome -> FullBaselineRequired
@@ -174,12 +176,11 @@ fn test_delta_staging_and_replay_after_baseline() {
     chunk_hasher.update(&compressed);
     let chunk_hash = chunk_hasher.digest();
 
-    let expected_state_hash = compute_canonical_state_hash(
+    let expected_state_hash = compute_sparse_state_hash(
         min_pos,
         size,
         "minecraft:overworld",
-        |_, _, _| "minecraft:air".to_string(),
-        |_, _, _| "minecraft:plains".to_string(),
+        std::iter::empty::<SparseBlockEntry>(),
     );
 
     // Welcome
@@ -280,12 +281,32 @@ fn test_baseline_and_delta_entity_integration() {
     let chunk_hash = chunk_hasher.digest();
 
     let pot_state = "minecraft:decorated_pot[facing=north]";
-    let expected_state_hash = compute_canonical_state_hash(
+    let pot_data = mtk_model::BlockEntityData::DecoratedPot {
+        sherds: [
+            Some("minecraft:archer_pottery_sherd".to_string()),
+            Some("minecraft:prize_pottery_sherd".to_string()),
+            None,
+            None,
+        ],
+    };
+    let mut expected_storage = mtk_voxel::storage::VoxelStorage::new();
+    for y in 0..2 {
+        for z in 0..2 {
+            for x in 0..2 {
+                expected_storage.set_block(x, y, z, pot_state, Some("minecraft:plains"));
+            }
+        }
+    }
+    let sec = expected_storage
+        .sections
+        .get_mut(&IVec3::new(0, 0, 0))
+        .unwrap();
+    sec.set_block_entity(0, Some(pot_data.clone()));
+    let expected_state_hash = compute_sparse_state_hash_for_storage(
+        &expected_storage,
         min_pos,
         size,
         "minecraft:overworld",
-        |_, _, _| pot_state.to_string(),
-        |_, _, _| "minecraft:plains".to_string(),
     );
 
     // 1. Welcome
@@ -322,14 +343,6 @@ fn test_baseline_and_delta_entity_integration() {
     });
 
     // 3. BaselineEntities
-    let pot_data = mtk_model::BlockEntityData::DecoratedPot {
-        sherds: [
-            Some("minecraft:archer_pottery_sherd".to_string()),
-            Some("minecraft:prize_pottery_sherd".to_string()),
-            None,
-            None,
-        ],
-    };
     session.process_packet_direct(Packet::BaselineEntities {
         epoch: 1,
         snapshot_uuid: [7u8; 16],
