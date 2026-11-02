@@ -126,6 +126,49 @@ fn test_unaligned_selection_with_multi_biomes_validates_state_hash() {
 }
 
 #[test]
+fn test_arbitrary_unaligned_multi_biome_selection_quart_grid() {
+    let session = LiveSyncSession::new(None, None, None);
+
+    // Deliberately choose min_pos and size where min % 4 != 0 and the bounding box
+    // straddles intra-quart boundaries:
+    // x in [3, 5): block 3 is in quart 0 (0..3), block 4 is in quart 1 (4..7).
+    // Total quarts on X: (4 >> 2) - (3 >> 2) + 1 = 2 quarts! (Old formula gave (2+3)/4 = 1).
+    let min_pos = IVec3::new(3, 0, 0);
+    let size = IVec3::new(2, 1, 1);
+    let voxels = [1u8; 2];
+    // 2 quart columns: qx=0 -> plains, qx=1 -> desert
+    let biomes = [0u8, 1u8];
+
+    let entries = [
+        SparseBlockEntry {
+            rel_x: 0, // x = 3, in quart 0
+            rel_y: 0,
+            rel_z: 0,
+            state: "minecraft:stone",
+            biome: "minecraft:plains",
+            entity_json: None,
+        },
+        SparseBlockEntry {
+            rel_x: 1, // x = 4, in quart 1
+            rel_y: 0,
+            rel_z: 0,
+            state: "minecraft:stone",
+            biome: "minecraft:desert",
+            entity_json: None,
+        },
+    ];
+    let expected_hash = compute_sparse_state_hash(min_pos, size, "minecraft:overworld", entries);
+
+    send_baseline(&session, min_pos, size, &voxels, &biomes, 8, expected_hash);
+
+    assert_eq!(
+        session.lifecycle(),
+        SyncLifecycle::Live,
+        "Non-4-aligned selection with multiple biomes must validate state hash"
+    );
+}
+
+#[test]
 fn test_superseded_baseline_frames_are_ignored() {
     let session = LiveSyncSession::new(None, None, None);
 

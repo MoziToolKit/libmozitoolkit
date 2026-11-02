@@ -380,10 +380,18 @@ impl BaselineAssembler {
         let sz = self.size.z as usize;
         let slice_area = sx * sz; // X-fastest, Z-next, Y-slowest
 
-        let qw = (self.size.x + 3) / 4;
-        let _qh = (self.size.y + 3) / 4;
-        let qd = (self.size.z + 3) / 4;
-        let quart_slice_area = (qw * qd) as usize;
+        let min_qx = self.min_pos.x.div_euclid(4);
+        let max_qx = (self.min_pos.x + self.size.x - 1).div_euclid(4);
+        let qw = (max_qx - min_qx + 1).max(0) as usize;
+
+        let min_qy = self.min_pos.y.div_euclid(4);
+        let max_qy = (self.min_pos.y + self.size.y - 1).div_euclid(4);
+        let _qh = (max_qy - min_qy + 1).max(0) as usize;
+
+        let min_qz = self.min_pos.z.div_euclid(4);
+        let max_qz = (self.min_pos.z + self.size.z - 1).div_euclid(4);
+        let qd = (max_qz - min_qz + 1).max(0) as usize;
+        let quart_slice_area = qw * qd;
 
         let mut section_biomes_map: HashMap<IVec3, SectionBiomes> = HashMap::new();
 
@@ -443,14 +451,18 @@ impl BaselineAssembler {
 
                 let qy = (q_idx / quart_slice_area) as i32;
                 let q_rem = q_idx % quart_slice_area;
-                let qz = (q_rem / qw as usize) as i32;
-                let qx = (q_rem % qw as usize) as i32;
+                let qz = (q_rem / qw) as i32;
+                let qx = (q_rem % qw) as i32;
 
-                let wx = self.min_pos.x + qx * 4;
-                let wy = self.min_pos.y + qy * 4;
-                let wz = self.min_pos.z + qz * 4;
+                let world_qx = min_qx + qx;
+                let world_qy = min_qy + qy;
+                let world_qz = min_qz + qz;
 
-                let sec_coord = IVec3::new(wx >> 4, wy >> 4, wz >> 4);
+                let sec_coord = IVec3::new(
+                    world_qx.div_euclid(4),
+                    world_qy.div_euclid(4),
+                    world_qz.div_euclid(4),
+                );
                 // Placeholder cells stay unassigned and are filled with the nearest
                 // sampled biome after the stream is consumed. Marking them as
                 // authoritative palette[0] (the selection's min corner, usually
@@ -460,13 +472,9 @@ impl BaselineAssembler {
                     .entry(sec_coord)
                     .or_insert_with(|| SectionBiomes::blank(self.biome_palette.clone()));
 
-                // Quart indices must be derived from the SECTION-LOCAL block coordinate.
-                // The selection quart grid is anchored at `min_pos`, which is not
-                // necessarily 16-aligned, so `qx & 3` would write into the wrong
-                // section-local quart cell and make the canonical state hash mismatch.
-                let sec_qx = ((wx >> 2) & 3) as usize;
-                let sec_qy = ((wy >> 2) & 3) as usize;
-                let sec_qz = ((wz >> 2) & 3) as usize;
+                let sec_qx = world_qx.rem_euclid(4) as usize;
+                let sec_qy = world_qy.rem_euclid(4) as usize;
+                let sec_qz = world_qz.rem_euclid(4) as usize;
                 sb.set_sampled_quart_biome(sec_qx, sec_qy, sec_qz, biome_str);
             }
 
