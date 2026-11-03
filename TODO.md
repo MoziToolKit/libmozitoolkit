@@ -125,11 +125,18 @@
 - [ ] **旗帜多层花纹合成 (Banner Patterns)**：依照原版公式按顺序进行 16 种颜色的多层 Alpha 混合合成；
 - [ ] **双箱 (Double Chest) 几何缝合与铰链预留**：依据 BlockState 自动缝合为宽箱子网格并预留铰链轴心。
 
-### 5. 自包含轻量场景交换包 (`libmtk::scene` / `mtk-package` - P2 - ✅ 已完成端到端闭环)
-- [x] **稀疏体素列存格式 (`SparseVoxelPayload`)**：正交离散调色板 (`state_palette`, `biome_palette`, `entity_palette`) 与紧凑 SoA 列存布局，支持附着方块实体（Visual NBT JSON），与 DCC 伴生点云 1:1 零拷贝映射；
-- [x] **Tree-Shaken 模型树剪枝与 Mini-Atlas 导出 (`export_scene_package`)**：按需提取场景引用模型，从激活缓存中裁剪贴图装箱为微型多通道 PBR 图集，多线程并行重映射模型 UV 并压缩打包；
-- [x] **场景包极速读取与现场重构 (`ScenePackageReader`)**：基于 `mmap` 零内存开销快速读取元数据、体素点云、模型库与自包含图集，直接提供给 `SectionMesher` 极速重构世界几何；
-- [x] **跨语言 Python 绑定 (`bindings/mtk-py/src/scene.rs`)**：暴露 `ScenePackageReader`, `SceneMetadata`, `export_scene_package`，无缝对接 MoziToolKit。
+### 5. 自包含轻量场景交换包与 Mini-Atlas 彻底重构 (`libmtk::scene` / `mtk-package` - ✅ 全部完成 🌟)
+- [x] **Mini-Atlas 动静双卷装箱与数学公式修复 (`crates/libmtk/src/scene/exporter.rs`)**：
+  - [x] 修复 UV 坐标系垂直颠倒数学公式：`v_min = 1.0 - (y+h)/H`, `v_max = 1.0 - y/H`；
+  - [x] 实现静态卷 (Frame 0 + 100% 覆盖) 与动态长条卷 (Strip + 动图元数据) 正交装箱；
+  - [x] 扩展 `SceneAtlasSource` 与 `SpriteCrop` 支持 Overlay 覆盖层（`_overlay.png`）；
+  - [x] 接入动态实体图集内存缓冲（`dynamic_entity_atlases`），提取 64x64 玩家皮肤与合成旗帜直接缝合进 Mini-Atlas；
+  - [x] 增加水/熔岩等流体方块贴图自动防御收集；
+- [x] **场景包多卷 ATLS 与极速读取 (`ScenePackageReader`)**：
+  - [x] 确保支持读取和解压静态与动态多卷 Mini-Atlas，元数据暴露 `has_animated_atlas`；
+- [x] **跨语言 Python 绑定扩充 (`bindings/mtk-py/src/scene.rs`)**：
+  - [x] `export_scene_package` 增加接收可选 `dynamic_entity_atlases` 缓冲字典；
+  - [x] `SceneMetadata` 暴露 `has_animated_atlas`。
 
 ---
 

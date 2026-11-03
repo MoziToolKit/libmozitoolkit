@@ -28,6 +28,9 @@ pub struct SceneMetadata {
     pub unique_entities_count: usize,
     /// Resolution of the accompanying scene mini-atlas [width, height] (or [0, 0] if none).
     pub atlas_resolution: [u32; 2],
+    /// Whether the package contains dedicated animated atlas chunks for fluid/fire playback.
+    #[serde(default)]
+    pub has_animated_atlas: bool,
     /// Custom key-value properties (scene title, author, description, tags, etc.).
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub extra_props: HashMap<String, String>,
@@ -51,6 +54,7 @@ impl SceneMetadata {
             unique_biomes_count: 0,
             unique_entities_count: 0,
             atlas_resolution: [0, 0],
+            has_animated_atlas: false,
             extra_props: HashMap::new(),
         }
     }

@@ -62,6 +62,11 @@ impl PySceneMetadata {
     }
 
     #[getter]
+    pub fn has_animated_atlas(&self) -> bool {
+        self.inner.has_animated_atlas
+    }
+
+    #[getter]
     pub fn generator(&self) -> &str {
         &self.inner.generator
     }
@@ -81,6 +86,7 @@ impl PySceneMetadata {
         dict.set_item("unique_biomes_count", self.inner.unique_biomes_count)?;
         dict.set_item("unique_entities_count", self.inner.unique_entities_count)?;
         dict.set_item("atlas_resolution", self.inner.atlas_resolution)?;
+        dict.set_item("has_animated_atlas", self.inner.has_animated_atlas)?;
         dict.set_item("generator", &self.inner.generator)?;
         dict.set_item("created_at_epoch_secs", self.inner.created_at_epoch_secs)?;
         Ok(dict)
@@ -247,13 +253,14 @@ impl PyScenePackageReader {
 
 /// End-to-end exporter: builds Scene Mini-Atlas, remaps UVs, tree-shakes models, and writes `.mtkscene`.
 #[pyfunction]
-#[pyo3(signature = (output_path, point_cloud, asset_cache, max_atlas_size=2048, mip_level=0))]
+#[pyo3(signature = (output_path, point_cloud, asset_cache, max_atlas_size=2048, mip_level=0, dynamic_entity_atlases=None))]
 pub fn export_scene_package(
     output_path: &str,
     point_cloud: &PyVoxelPointCloud,
     asset_cache: &mut PyAssetCache,
     max_atlas_size: Option<u32>,
     mip_level: Option<u32>,
+    dynamic_entity_atlases: Option<std::collections::HashMap<u16, Bound<'_, PyBytes>>>,
 ) -> PyResult<PySceneMetadata> {
     let sparse_voxels = SparseVoxelPayload::from_point_cloud(&point_cloud.inner);
     let models = asset_cache
@@ -270,6 +277,13 @@ pub fn export_scene_package(
         mip_level: mip_level.unwrap_or(0),
     };
 
+    let converted_dyn_atlases: Option<std::collections::HashMap<u16, Vec<u8>>> =
+        dynamic_entity_atlases.map(|map| {
+            map.into_iter()
+                .map(|(k, v)| (k, v.as_bytes().to_vec()))
+                .collect()
+        });
+
     let result = libmtk_export_scene(
         output_path,
         &sparse_voxels,
@@ -277,6 +291,7 @@ pub fn export_scene_package(
         &atlas_map,
         &mut asset_cache.inner,
         &config,
+        converted_dyn_atlases.as_ref(),
         None,
     )
     .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
