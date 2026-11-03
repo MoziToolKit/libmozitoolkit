@@ -474,6 +474,16 @@ impl PyMeshData {
                 }
                 item.set_item("data", attr_mv)?;
                 attrs_dict.set_item(&name, item)?;
+            } else if let Some(str_vals) = this.get_string_attribute(&name) {
+                let item = pyo3::types::PyDict::new(py);
+                if let Some((domain, dtype, count)) = this.attribute_info(&name) {
+                    item.set_item("domain", domain)?;
+                    item.set_item("dtype", dtype)?;
+                    item.set_item("element_count", count)?;
+                }
+                item.set_item("data", str_vals.clone())?;
+                item.set_item("palette", str_vals)?;
+                attrs_dict.set_item(&name, item)?;
             }
         }
         dict.set_item("attributes", attrs_dict)?;

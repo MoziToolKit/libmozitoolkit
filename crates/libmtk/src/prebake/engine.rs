@@ -97,12 +97,6 @@ fn precompile_all_assets_inner(
 
     let fingerprint = stack.compute_stack_fingerprint();
 
-    // Apply external compatibility rules for atlas/model baking in this run.
-    match config.resolver_overrides.as_ref() {
-        Some(overrides) => mtk_material::resolver::set_material_overrides(overrides.clone()),
-        None => mtk_material::resolver::clear_material_overrides(),
-    }
-
     // Determine target .mtkcache file path
     let package_path = if base_path.extension().is_some_and(|ext| ext == "mtkcache") {
         if let Some(parent) = base_path.parent() {

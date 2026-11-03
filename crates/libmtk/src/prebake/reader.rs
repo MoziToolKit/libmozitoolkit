@@ -88,7 +88,6 @@ impl AssetCacheReader {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, MtkError> {
         let reader = MtkPackageReader::open_file(path)?;
         install_cached_colormaps(&reader);
-        install_cached_resolver_overrides(&reader);
         Ok(Self { reader })
     }
 
@@ -271,20 +270,5 @@ fn install_cached_colormaps(reader: &MtkPackageReader) {
     ) {
         eprintln!("Warning: failed to install cached colormaps: {error}");
         mtk_material::biome::clear_cached_colormaps();
-    }
-}
-
-/// Installs external material/biome compatibility rules carried by a cache package.
-fn install_cached_resolver_overrides(reader: &MtkPackageReader) {
-    let Ok(json) = reader.read_chunk_str("resolver/overrides") else {
-        mtk_material::resolver::clear_material_overrides();
-        return;
-    };
-    match mtk_material::resolver::overrides::parse_overrides(&json) {
-        Ok(overrides) => mtk_material::resolver::set_material_overrides(overrides),
-        Err(error) => {
-            eprintln!("Warning: failed to parse cached resolver overrides: {error}");
-            mtk_material::resolver::clear_material_overrides();
-        }
     }
 }

@@ -14,30 +14,10 @@ use std::collections::HashMap;
 // Embedded BlockStates
 pub const DEF_DECORATED_POT: &str =
     include_str!("../../assets/builtins/blockstates/decorated_pot.json");
-pub const DEF_END_PORTAL: &str = include_str!("../../assets/builtins/blockstates/end_portal.json");
 pub const DEF_END_GATEWAY: &str =
     include_str!("../../assets/builtins/blockstates/end_gateway.json");
 pub const DEF_CONDUIT: &str = include_str!("../../assets/builtins/blockstates/conduit.json");
-pub const DEF_BELL: &str = r#"{
-    "variants": {
-        "attachment=ceiling,facing=east": { "model": "minecraft:block/bell_ceiling", "y": 90 },
-        "attachment=ceiling,facing=north": { "model": "minecraft:block/bell_ceiling" },
-        "attachment=ceiling,facing=south": { "model": "minecraft:block/bell_ceiling", "y": 180 },
-        "attachment=ceiling,facing=west": { "model": "minecraft:block/bell_ceiling", "y": 270 },
-        "attachment=double_wall,facing=east": { "model": "minecraft:block/bell_between_walls" },
-        "attachment=double_wall,facing=north": { "model": "minecraft:block/bell_between_walls", "y": 270 },
-        "attachment=double_wall,facing=south": { "model": "minecraft:block/bell_between_walls", "y": 90 },
-        "attachment=double_wall,facing=west": { "model": "minecraft:block/bell_between_walls", "y": 180 },
-        "attachment=floor,facing=east": { "model": "minecraft:block/bell_floor", "y": 90 },
-        "attachment=floor,facing=north": { "model": "minecraft:block/bell_floor" },
-        "attachment=floor,facing=south": { "model": "minecraft:block/bell_floor", "y": 180 },
-        "attachment=floor,facing=west": { "model": "minecraft:block/bell_floor", "y": 270 },
-        "attachment=single_wall,facing=east": { "model": "minecraft:block/bell_wall" },
-        "attachment=single_wall,facing=north": { "model": "minecraft:block/bell_wall", "y": 270 },
-        "attachment=single_wall,facing=south": { "model": "minecraft:block/bell_wall", "y": 90 },
-        "attachment=single_wall,facing=west": { "model": "minecraft:block/bell_wall", "y": 180 }
-    }
-}"#;
+pub const DEF_BELL: &str = include_str!("../../assets/builtins/blockstates/bell.json");
 
 // Embedded Models
 pub const MODEL_DECORATED_POT: &str =
@@ -53,7 +33,6 @@ pub fn get_builtin_blockstate_def(name: &str) -> Option<BlockStateDefinition> {
     let raw_json = match clean {
         "bell" => DEF_BELL,
         "decorated_pot" => DEF_DECORATED_POT,
-        "end_portal" => DEF_END_PORTAL,
         "end_gateway" => DEF_END_GATEWAY,
         "conduit" => DEF_CONDUIT,
         _ => return None,
@@ -563,9 +542,6 @@ pub fn get_builtin_model_for_state_and_entity(
         .unwrap_or(&blockstate.name);
     if clean == "decorated_pot" {
         return create_builtin_decorated_pot_model(entity);
-    }
-    if clean == "end_portal" {
-        return get_builtin_model_by_id("end_portal");
     }
     if clean == "end_gateway" {
         return get_builtin_model_by_id("end_gateway");

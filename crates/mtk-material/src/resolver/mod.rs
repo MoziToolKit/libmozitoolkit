@@ -7,38 +7,6 @@ pub mod overrides;
 use crate::types::GridAtlasSpec;
 
 pub use self::overrides::{builtin_biome_suffixes, builtin_material_fallbacks, ResolverOverrides};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
-
-/// Active external material rules, installed when a compatibility profile/cache is opened.
-static MATERIAL_OVERRIDES: RwLock<Option<Arc<ResolverOverrides>>> = RwLock::new(None);
-static HAS_OVERRIDES: AtomicBool = AtomicBool::new(false);
-
-/// Installs external material compatibility rules.
-pub fn set_material_overrides(overrides: ResolverOverrides) {
-    if let Ok(mut guard) = MATERIAL_OVERRIDES.write() {
-        *guard = Some(Arc::new(overrides));
-        HAS_OVERRIDES.store(true, Ordering::Release);
-    }
-}
-
-/// Clears external material compatibility rules, restoring built-in defaults.
-pub fn clear_material_overrides() {
-    if let Ok(mut guard) = MATERIAL_OVERRIDES.write() {
-        *guard = None;
-        HAS_OVERRIDES.store(false, Ordering::Release);
-    }
-}
-
-fn active_material_overrides() -> Option<Arc<ResolverOverrides>> {
-    if !HAS_OVERRIDES.load(Ordering::Acquire) {
-        return None;
-    }
-    MATERIAL_OVERRIDES
-        .read()
-        .ok()
-        .and_then(|guard| guard.as_ref().map(Arc::clone))
-}
 
 /// Generic helper to clean a raw material or texture name into a normalized identifier stem.
 pub fn clean_identifier(raw: &str) -> String {
@@ -98,16 +66,12 @@ pub fn clean_identifier(raw: &str) -> String {
         }
     }
 
-    // 4. Strip exporter biome suffixes (external config overrides the built-ins).
+    // 4. Strip exporter biome suffixes.
     //
     // Longest match wins: a naive `ends_with` loop would truncate
     // `stone_dark_forest` to `stone_dark` because `_forest` is checked first.
     if s.contains('-') || s.contains('_') {
-        let active = active_material_overrides();
-        let biome_suffixes: &[String] = match active.as_ref() {
-            Some(overrides) => overrides.effective_biome_suffixes(),
-            None => builtin_biome_suffixes(),
-        };
+        let biome_suffixes = builtin_biome_suffixes();
         let mut matched_len = 0usize;
         for suffix in biome_suffixes {
             if suffix.len() > matched_len && s.ends_with(suffix.as_str()) {
@@ -537,12 +501,8 @@ impl MaterialResolver {
             }
         }
 
-        // 3.7 Configurable legacy/modded material fallbacks.
-        let active = active_material_overrides();
-        let fallback_rules: &[overrides::MaterialFallbackRule] = match active.as_ref() {
-            Some(overrides) => overrides.effective_material_fallbacks(),
-            None => builtin_material_fallbacks(),
-        };
+        // 3.7 Built-in legacy/modded material fallbacks.
+        let fallback_rules = builtin_material_fallbacks();
         for rule in fallback_rules {
             let keyword = rule.keyword.to_lowercase();
             if raw_material_name.to_lowercase().contains(&keyword) || cleaned.contains(&keyword) {

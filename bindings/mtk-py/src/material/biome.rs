@@ -86,32 +86,6 @@ impl BorrowedU32Buffer {
 #[pyfunction]
 #[pyo3(signature = (biome_name))]
 pub fn get_biome_meta(py: Python<'_>, biome_name: &str) -> PyResult<Py<PyAny>> {
-    if biome_name.eq_ignore_ascii_case("custom") {
-        let dict = PyDict::new(py);
-        dict.set_item("id", "custom")?;
-        dict.set_item("name", "Custom")?;
-        dict.set_item("temperature", 0.8f32)?;
-        dict.set_item("humidity", 0.4f32)?;
-        dict.set_item("grass_hex", "#91BD59")?;
-        dict.set_item("foliage_hex", "#77AB2F")?;
-        dict.set_item("dry_foliage_hex", "#A37546")?;
-        dict.set_item("water_hex", "#3F76E4")?;
-        dict.set_item("grass_linear", mtk_material::hex_to_linear_rgba("#91BD59"))?;
-        dict.set_item(
-            "foliage_linear",
-            mtk_material::hex_to_linear_rgba("#77AB2F"),
-        )?;
-        dict.set_item(
-            "dry_foliage_linear",
-            mtk_material::hex_to_linear_rgba("#A37546"),
-        )?;
-        dict.set_item("water_linear", mtk_material::hex_to_linear_rgba("#3F76E4"))?;
-        dict.set_item("has_custom_grass", false)?;
-        dict.set_item("has_custom_foliage", false)?;
-        dict.set_item("has_custom_dry_foliage", false)?;
-        return Ok(dict.into());
-    }
-
     let pal = mtk_material::get_biome_palette(biome_name);
     let dict = PyDict::new(py);
     dict.set_item("id", pal.id)?;
