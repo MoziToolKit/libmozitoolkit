@@ -813,4 +813,67 @@ mod tests {
         // m2's seam vertex remaps to m1's index 1; its interior vertex stays unique at index 2.
         assert_eq!(merged.indices, vec![0, 1, 0, 2, 1, 2]);
     }
+
+    #[test]
+    fn test_mesh_merge_palette_attribute_remap() {
+        use crate::attributes::{constants::*, AttributeData, AttributeDomain, MeshAttribute};
+
+        let mut m1 = MeshData::new();
+        m1.positions = vec![[0.0, 0.0, 0.0]; 3];
+        m1.indices = vec![0, 1, 2];
+        m1.face_materials = vec![0];
+        m1.face_tint_indices = vec![-1];
+        m1.add_custom_attribute(MeshAttribute::new(
+            ATTR_SOURCE_TEXTURE_PALETTE,
+            AttributeDomain::Mesh,
+            AttributeData::String(vec!["bedrock".to_string(), "grass_block_top".to_string()]),
+        ));
+        m1.add_custom_attribute(MeshAttribute::new(
+            ATTR_SOURCE_TEXTURE_IDX,
+            AttributeDomain::Face,
+            AttributeData::Int32(vec![1]), // points to grass_block_top
+        ));
+
+        let mut m2 = MeshData::new();
+        m2.positions = vec![[1.0, 0.0, 0.0]; 3];
+        m2.indices = vec![0, 1, 2];
+        m2.face_materials = vec![0];
+        m2.face_tint_indices = vec![-1];
+        m2.add_custom_attribute(MeshAttribute::new(
+            ATTR_SOURCE_TEXTURE_PALETTE,
+            AttributeDomain::Mesh,
+            AttributeData::String(vec![
+                "bedrock".to_string(),
+                "dirt".to_string(),
+                "grass_block_top".to_string(),
+            ]),
+        ));
+        m2.add_custom_attribute(MeshAttribute::new(
+            ATTR_SOURCE_TEXTURE_IDX,
+            AttributeDomain::Face,
+            AttributeData::Int32(vec![2, 1]), // face 0 -> grass_block_top (idx 2), face 1 -> dirt (idx 1)
+        ));
+
+        let merged = MeshData::merge_all_refs(&[&m1, &m2]);
+        let pal_attr = merged
+            .get_custom_attribute(ATTR_SOURCE_TEXTURE_PALETTE)
+            .unwrap();
+        let idx_attr = merged
+            .get_custom_attribute(ATTR_SOURCE_TEXTURE_IDX)
+            .unwrap();
+
+        let AttributeData::String(ref pal) = pal_attr.data else {
+            panic!()
+        };
+        let AttributeData::Int32(ref indices) = idx_attr.data else {
+            panic!()
+        };
+
+        // Palette must be deduplicated
+        assert_eq!(pal, &["bedrock", "grass_block_top", "dirt"]);
+        // m1 face 0 was grass_block_top -> remapped to 1
+        // m2 face 0 was grass_block_top (idx 2 in m2) -> remapped to 1 in merged
+        // m2 face 1 was dirt (idx 1 in m2) -> remapped to 2 in merged
+        assert_eq!(indices, &[1, 1, 2]);
+    }
 }
