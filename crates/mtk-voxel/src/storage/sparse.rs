@@ -235,7 +235,30 @@ impl SparseVoxelPayload {
 
         // Compute 3D positions with center offsets and mesher config transformations
         let mut positions = Vec::with_capacity(count * 3);
-        let eff_config = config.cloned().unwrap_or_default();
+        let mut eff_config = config.cloned().unwrap_or_default();
+        let (bx, by, bz, sx, sy, sz) = (
+            self.bounds[0],
+            self.bounds[1],
+            self.bounds[2],
+            self.bounds[3],
+            self.bounds[4],
+            self.bounds[5],
+        );
+        let has_bounds = sx > 0 && sy > 0 && sz > 0;
+        if eff_config.origin_centered && eff_config.selection_bounds.is_none() {
+            if has_bounds {
+                eff_config.selection_bounds = Some(([bx, by, bz], [sx, sy, sz]));
+            } else if !self.columns.x.is_empty() {
+                let computed = compute_bounds(&self.columns.x, &self.columns.y, &self.columns.z);
+                if computed[3] > 0 && computed[4] > 0 && computed[5] > 0 {
+                    eff_config.selection_bounds = Some((
+                        [computed[0], computed[1], computed[2]],
+                        [computed[3], computed[4], computed[5]],
+                    ));
+                }
+            }
+        }
+
         for i in 0..count {
             let bx = self.columns.x[i];
             let by = self.columns.y[i];
@@ -246,6 +269,14 @@ impl SparseVoxelPayload {
             positions.push(transformed.y);
             positions.push(transformed.z);
         }
+
+        let effective_bounds = if has_bounds {
+            self.bounds
+        } else if !self.columns.x.is_empty() {
+            compute_bounds(&self.columns.x, &self.columns.y, &self.columns.z)
+        } else {
+            self.bounds
+        };
 
         VoxelPointCloud {
             positions,
@@ -259,7 +290,7 @@ impl SparseVoxelPayload {
             entity_palette: self.entity_palette.clone(),
             entity_indices,
             light_levels,
-            bounds: Some(self.bounds),
+            bounds: Some(effective_bounds),
         }
     }
 
@@ -425,5 +456,35 @@ mod tests {
 
         let deserialized = SparseVoxelPayload::from_json(&json).expect("Deserialize json");
         assert_eq!(payload, deserialized);
+    }
+
+    #[test]
+    fn test_to_point_cloud_origin_centered_auto_bounds() {
+        let mut payload = SparseVoxelPayload::new();
+        payload.bounds = [10, 20, 30, 10, 10, 10]; // center_x = 10 + 5 = 15, base_y = 20, center_z = 30 + 5 = 35
+        payload.push(
+            10,
+            20,
+            30,
+            "minecraft:stone",
+            "minecraft:plains",
+            None,
+            None,
+        );
+
+        let config = MesherConfig {
+            origin_centered: true,
+            selection_bounds: None,
+            coordinate_system: crate::types::CoordinateSystem::Minecraft,
+            ..Default::default()
+        };
+
+        let cloud = payload.to_point_cloud(Some(&config));
+        // pos.x = 10.5 - 15.0 = -4.5
+        // pos.y = 20.5 - 20.0 = 0.5
+        // pos.z = 30.5 - 35.0 = -4.5
+        assert!((cloud.positions[0] - (-4.5)).abs() < 1e-4);
+        assert!((cloud.positions[1] - 0.5).abs() < 1e-4);
+        assert!((cloud.positions[2] - (-4.5)).abs() < 1e-4);
     }
 }

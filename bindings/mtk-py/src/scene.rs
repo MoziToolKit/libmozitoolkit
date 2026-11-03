@@ -10,7 +10,7 @@ use libmtk::scene::{
     export_scene_package as libmtk_export_scene, SceneExporterConfig, SceneMetadata,
     ScenePackageReader,
 };
-use mtk_voxel::SparseVoxelPayload;
+use mtk_voxel::{CoordinateSystem, MesherConfig, SparseVoxelPayload};
 
 use crate::model::PyBakedModelDatabase;
 use crate::point_cloud::PyVoxelPointCloud;
@@ -139,12 +139,26 @@ impl PyScenePackageReader {
     }
 
     /// Reads and deserializes the sparse voxels as a `VoxelPointCloud`.
-    pub fn read_point_cloud(&self) -> PyResult<PyVoxelPointCloud> {
+    #[pyo3(signature = (origin_centered=true, z_up=true))]
+    pub fn read_point_cloud(
+        &self,
+        origin_centered: bool,
+        z_up: bool,
+    ) -> PyResult<PyVoxelPointCloud> {
         let sparse = self
             .inner
             .read_sparse_voxels()
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-        let cloud = sparse.to_point_cloud(None);
+        let config = MesherConfig {
+            origin_centered,
+            coordinate_system: if z_up {
+                CoordinateSystem::ZUpRightHanded
+            } else {
+                CoordinateSystem::Minecraft
+            },
+            ..Default::default()
+        };
+        let cloud = sparse.to_point_cloud(Some(&config));
         Ok(PyVoxelPointCloud { inner: cloud })
     }
 
