@@ -47,7 +47,7 @@
 | **[`mtk-wasm`](bindings/mtk-wasm)** | **P2 (远期预备)** | 基于 wasm-bindgen 的 WebAssembly 绑定，支持浏览器/Node.js/WebGPU 零拷贝 TypedArray 视图 | [📖 `bindings/mtk-wasm/README.md`](bindings/mtk-wasm/README.md) |
 | **[`mtk-host-memory`](adapters/mtk-host-memory)** | **P0 (宿主内存)** | 宿主无关 raw slice → pointer 复制原语，无线程/核心/宿主 SDK 依赖 | [📖 `adapters/mtk-host-memory/README.md`](adapters/mtk-host-memory/README.md) |
 | **[`mtk-blender-dna`](adapters/blender/mtk-blender-dna)** | **P0 (DNA 适配)** | Blender 语义 raw slice → pointer 包装；不依赖核心 crate | [📖 `adapters/blender/mtk-blender-dna/README.md`](adapters/blender/mtk-blender-dna/README.md) |
-| **[`libmtk_blender_dna`](adapters/blender/mtk-blender-dna-py)** | **P0 (独立适配 wheel)** | 独立 ABI3 wheel，通过 Python Buffer Protocol 接收核心 `memoryview` 并直写 Blender DNA 指针 | [📖 `adapters/blender/mtk-blender-dna-py/README.md`](adapters/blender/mtk-blender-dna-py/README.md) |
+| **[`libmtk_blender_dna`](adapters/blender/mtk-blender-dna-py)** | **P0 (独立适配 wheel)** | 独立 ABI3 wheel，通过 Python Buffer Protocol 接收核心 `memoryview` 直写 Blender DNA 指针，并支持零拷贝直读与 memoryview 映射 | [📖 `adapters/blender/mtk-blender-dna-py/README.md`](adapters/blender/mtk-blender-dna-py/README.md) |
 
 ---
 

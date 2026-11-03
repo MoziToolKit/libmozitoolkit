@@ -192,14 +192,29 @@ mod tests {
     fn test_python_mesh_data_inner() {
         Python::initialize();
         Python::attach(|py| {
+            let pos = pyo3::types::PyList::new(
+                py,
+                [
+                    0.0f32, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0,
+                ],
+            )
+            .unwrap();
+            let loops = pyo3::types::PyList::new(py, [0u32, 1, 2, 3]).unwrap();
+            let uvs =
+                pyo3::types::PyList::new(py, [0.0f32, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
+            let starts = pyo3::types::PyList::new(py, [0u32]).unwrap();
+            let totals = pyo3::types::PyList::new(py, [4u32]).unwrap();
+            let mats = pyo3::types::PyList::new(py, [7u32]).unwrap();
+
             let mesh_data = PyMeshData::from_flat_polygons(
-                vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0],
-                vec![0, 1, 2, 3],
-                vec![0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0],
-                vec![0],
-                vec![4],
+                pos.as_any(),
+                loops.as_any(),
+                uvs.as_any(),
+                Some(starts.as_any()),
+                Some(totals.as_any()),
                 None,
-                Some(vec![7]),
+                Some(mats.as_any()),
+                None,
             )
             .unwrap();
             let mesh = Bound::new(py, mesh_data).unwrap();

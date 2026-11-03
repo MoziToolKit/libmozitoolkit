@@ -5,8 +5,10 @@
 //! for producing the correct contiguous buffer view.
 
 pub use mtk_host_memory::{
-    copy_f32_to_ptr, copy_i32_to_ptr, copy_u32_to_ptr, copy_u8_to_ptr, validate_destination,
-    MemoryError as DnaError, MemoryResult as DnaResult,
+    copy_f32_to_ptr, copy_i32_to_ptr, copy_slice_to_ptr, copy_u32_to_ptr, copy_u8_to_ptr,
+    read_f32_from_ptr, read_i32_from_ptr, read_ptr_to_slice, read_u32_from_ptr, read_u8_from_ptr,
+    validate_destination, validate_pointer, validate_source, MemoryError as DnaError,
+    MemoryResult as DnaResult,
 };
 
 /// Copies contiguous `[f32; 3]` positions into Blender's position layer.

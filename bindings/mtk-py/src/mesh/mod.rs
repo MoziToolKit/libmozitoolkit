@@ -134,43 +134,91 @@ impl PyMeshData {
     }
 
     /// Constructs a shared-vertex polygon `MeshData` with per-loop UVs.
+    ///
+    /// Accepts NumPy arrays, typed memoryviews, or Python lists. Can be constructed
+    /// either from `(face_loop_starts, face_loop_totals)` or directly from
+    /// CSR-style `face_offsets` (length `face_count + 1`).
     #[staticmethod]
-    #[pyo3(signature = (positions, loop_vertices, loop_uvs, face_loop_starts, face_loop_totals, normals=None, face_materials=None))]
-    pub fn from_flat_polygons(
-        positions: Vec<f32>,
-        loop_vertices: Vec<u32>,
-        loop_uvs: Vec<f32>,
-        face_loop_starts: Vec<u32>,
-        face_loop_totals: Vec<u32>,
-        normals: Option<Vec<f32>>,
-        face_materials: Option<Vec<u32>>,
+    #[pyo3(signature = (positions, loop_vertices, loop_uvs, face_loop_starts=None, face_loop_totals=None, normals=None, face_materials=None, face_offsets=None))]
+    pub fn from_flat_polygons<'py>(
+        positions: &Bound<'py, PyAny>,
+        loop_vertices: &Bound<'py, PyAny>,
+        loop_uvs: &Bound<'py, PyAny>,
+        face_loop_starts: Option<&Bound<'py, PyAny>>,
+        face_loop_totals: Option<&Bound<'py, PyAny>>,
+        normals: Option<&Bound<'py, PyAny>>,
+        face_materials: Option<&Bound<'py, PyAny>>,
+        face_offsets: Option<&Bound<'py, PyAny>>,
     ) -> PyResult<Self> {
-        if positions.len() % 3 != 0 {
+        let pos_slice = topology::get_cow_slice_f32(positions)?;
+        if pos_slice.len() % 3 != 0 {
             return Err(pyo3::exceptions::PyValueError::new_err(
                 "positions buffer length must be a multiple of 3",
             ));
         }
-        if loop_uvs.len() % 2 != 0 {
+
+        let loop_verts_slice = topology::get_cow_slice_u32(loop_vertices)?;
+
+        let loop_uvs_slice = topology::get_cow_slice_f32(loop_uvs)?;
+        if loop_uvs_slice.len() % 2 != 0 {
             return Err(pyo3::exceptions::PyValueError::new_err(
                 "loop_uvs buffer length must be a multiple of 2",
             ));
         }
-        if let Some(ref values) = normals {
-            if values.len() % 3 != 0 {
+
+        let normals_cow = if let Some(n) = normals {
+            let s = topology::get_cow_slice_f32(n)?;
+            if s.len() % 3 != 0 {
                 return Err(pyo3::exceptions::PyValueError::new_err(
                     "normals buffer length must be a multiple of 3",
                 ));
             }
-        }
-        let flat = FlatPolygonMesh::from_flat_buffers(
-            &positions,
-            loop_vertices,
-            &loop_uvs,
-            face_loop_starts,
-            face_loop_totals,
-            face_materials.unwrap_or_default(),
-        );
-        let normal_vec = normals.map(|values| {
+            Some(s)
+        } else {
+            None
+        };
+
+        let mats_cow = if let Some(m) = face_materials {
+            Some(topology::get_cow_slice_u32(m)?)
+        } else {
+            None
+        };
+        let mats_vec = mats_cow.map(|m| m.to_vec()).unwrap_or_default();
+
+        let flat = if let Some(offsets_obj) = face_offsets {
+            let offsets_slice = topology::get_cow_slice_i32(offsets_obj)?;
+            FlatPolygonMesh::from_face_offsets(
+                &pos_slice,
+                loop_verts_slice.to_vec(),
+                &loop_uvs_slice,
+                &offsets_slice,
+                mats_vec,
+            )
+            .map_err(pyo3::exceptions::PyValueError::new_err)?
+        } else {
+            let starts_obj = face_loop_starts.ok_or_else(|| {
+                pyo3::exceptions::PyValueError::new_err(
+                    "either face_offsets or (face_loop_starts, face_loop_totals) must be provided",
+                )
+            })?;
+            let totals_obj = face_loop_totals.ok_or_else(|| {
+                pyo3::exceptions::PyValueError::new_err(
+                    "either face_offsets or (face_loop_starts, face_loop_totals) must be provided",
+                )
+            })?;
+            let starts_slice = topology::get_cow_slice_u32(starts_obj)?;
+            let totals_slice = topology::get_cow_slice_u32(totals_obj)?;
+            FlatPolygonMesh::from_flat_buffers(
+                &pos_slice,
+                loop_verts_slice.to_vec(),
+                &loop_uvs_slice,
+                starts_slice.to_vec(),
+                totals_slice.to_vec(),
+                mats_vec,
+            )
+        };
+
+        let normal_vec = normals_cow.map(|values| {
             values
                 .as_chunks::<3>()
                 .0
@@ -181,6 +229,29 @@ impl PyMeshData {
         let mesh = MeshData::from_flat_polygons(&flat, normal_vec.as_deref())
             .map_err(pyo3::exceptions::PyValueError::new_err)?;
         Ok(Self::from_mesh(mesh))
+    }
+
+    /// Constructs a shared-vertex polygon `MeshData` directly from CSR-style `face_offsets` (length `face_count + 1`).
+    #[staticmethod]
+    #[pyo3(signature = (positions, loop_vertices, loop_uvs, face_offsets, normals=None, face_materials=None))]
+    pub fn from_polygon_offsets<'py>(
+        positions: &Bound<'py, PyAny>,
+        loop_vertices: &Bound<'py, PyAny>,
+        loop_uvs: &Bound<'py, PyAny>,
+        face_offsets: &Bound<'py, PyAny>,
+        normals: Option<&Bound<'py, PyAny>>,
+        face_materials: Option<&Bound<'py, PyAny>>,
+    ) -> PyResult<Self> {
+        Self::from_flat_polygons(
+            positions,
+            loop_vertices,
+            loop_uvs,
+            None,
+            None,
+            normals,
+            face_materials,
+            Some(face_offsets),
+        )
     }
 
     // -------------------------------------------------------------------------

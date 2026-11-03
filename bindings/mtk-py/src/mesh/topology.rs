@@ -67,6 +67,27 @@ pub fn get_cow_slice_u32<'py>(obj: &Bound<'py, PyAny>) -> PyResult<CowSlice<'py,
     Ok(CowSlice::Owned(vec))
 }
 
+pub fn get_cow_slice_i32<'py>(obj: &Bound<'py, PyAny>) -> PyResult<CowSlice<'py, i32>> {
+    if let Ok(buf) = PyBuffer::<i32>::get(obj) {
+        if buf.is_c_contiguous() {
+            let slice = unsafe {
+                std::slice::from_raw_parts(buf.buf_ptr() as *const i32, buf.item_count())
+            };
+            return Ok(CowSlice::Borrowed(slice));
+        }
+    }
+    if let Ok(buf) = PyBuffer::<u32>::get(obj) {
+        if buf.is_c_contiguous() {
+            let slice = unsafe {
+                std::slice::from_raw_parts(buf.buf_ptr() as *const i32, buf.item_count())
+            };
+            return Ok(CowSlice::Borrowed(slice));
+        }
+    }
+    let vec: Vec<i32> = obj.extract()?;
+    Ok(CowSlice::Owned(vec))
+}
+
 pub fn get_cow_slice_u8<'py>(obj: &Bound<'py, PyAny>) -> PyResult<CowSlice<'py, u8>> {
     if let Ok(buf) = PyBuffer::<u8>::get(obj) {
         if buf.is_c_contiguous() {

@@ -18,7 +18,7 @@ def quad_mesh():
 class TestLibMtkPy(unittest.TestCase):
     def test_version(self):
         self.assertTrue(libmtk_py.version())
-        self.assertEqual(libmtk_py.api_version(), 1)
+        self.assertEqual(libmtk_py.api_version(), 2)
 
     def test_mesh_data_buffers(self):
         mesh = quad_mesh()
@@ -48,6 +48,8 @@ class TestLibMtkPy(unittest.TestCase):
         self.assertEqual(quad_mv.nbytes, 4 * 4)
 
     def test_custom_attributes_memoryview_and_list(self):
+        import numpy as np
+
         mesh = quad_mesh()
         mesh.add_string_attribute("mtk_source_texture", "face", ["minecraft:block/dirt"])
         mesh.add_attribute_from_buffer(
@@ -60,21 +62,9 @@ class TestLibMtkPy(unittest.TestCase):
             mesh.get_string_attribute("mtk_source_texture"),
             ["minecraft:block/dirt"],
         )
-        self.assertAlmostEqual(mesh.get_attribute_data("mtk_emission")[0], 1.0)
-
-    def test_add_string_attribute_from_palette(self):
-        import numpy as np
-
-        mesh = quad_mesh()
-        palette = ["minecraft:block/stone", "minecraft:block/dirt"]
-        indices = np.array([1], dtype=np.uint32)
-        mesh.add_string_attribute_from_palette(
-            "mtk_source_texture_key", "face", palette, indices
-        )
-        self.assertEqual(
-            mesh.get_string_attribute("mtk_source_texture_key"),
-            ["minecraft:block/dirt"],
-        )
+        emission_mv = mesh.attribute_memoryview("mtk_emission")
+        self.assertIsNotNone(emission_mv)
+        self.assertAlmostEqual(np.frombuffer(emission_mv, dtype=np.float32)[0], 1.0)
 
     def test_mesh_data_memoryviews(self):
         import numpy as np
@@ -93,8 +83,8 @@ class TestLibMtkPy(unittest.TestCase):
         np.testing.assert_array_equal(
             loop_uv, [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
         )
-        self.assertEqual(len(mesh.loop_starts_memoryview()), 4)
-        self.assertEqual(len(mesh.loop_totals_memoryview()), 4)
+        self.assertEqual(len(mesh.loop_starts_memoryview()), 1)
+        self.assertEqual(len(mesh.loop_totals_memoryview()), 1)
 
     def test_build_material_palette(self):
         import numpy as np
@@ -179,6 +169,34 @@ class TestLibMtkPy(unittest.TestCase):
             np.frombuffer(restored.entity_indices_memoryview(), dtype=np.int32),
             [-1, 0],
         )
+
+    def test_mesh_data_from_polygon_offsets(self):
+        positions = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0]
+        loop_verts = [0, 1, 2, 3]
+        loop_uvs = [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
+        face_offsets = [0, 4]
+
+        # 1. via from_polygon_offsets
+        mesh1 = libmtk_py.MeshData.from_polygon_offsets(
+            positions,
+            loop_verts,
+            loop_uvs,
+            face_offsets,
+        )
+        self.assertEqual(mesh1.vertex_count, 4)
+        self.assertEqual(mesh1.face_count, 1)
+        self.assertEqual(mesh1.quad_count, 1)
+
+        # 2. via from_flat_polygons with face_offsets keyword
+        mesh2 = libmtk_py.MeshData.from_flat_polygons(
+            positions=positions,
+            loop_vertices=loop_verts,
+            loop_uvs=loop_uvs,
+            face_offsets=face_offsets,
+        )
+        self.assertEqual(mesh2.vertex_count, 4)
+        self.assertEqual(mesh2.face_count, 1)
+        self.assertEqual(mesh2.quad_count, 1)
 
 
 if __name__ == "__main__":

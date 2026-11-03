@@ -4,6 +4,8 @@
 //! Eliminates thousands of nested heap allocations (`Vec<Vec<T>>`) and enables
 //! zero-copy memoryview ingestion directly from flat GPU/DCC vertex and loop buffers.
 
+use alloc::format;
+use alloc::string::String;
 use alloc::vec::Vec;
 
 #[cfg(feature = "serde")]
@@ -149,5 +151,68 @@ impl FlatPolygonMesh {
             face_loop_totals,
             face_materials,
         }
+    }
+
+    /// Constructs a `FlatPolygonMesh` from CSR-style face offset indices (length `face_count + 1`).
+    pub fn from_face_offsets(
+        positions_flat: &[f32],
+        loop_vertices: Vec<u32>,
+        loop_uvs_flat: &[f32],
+        face_offsets: &[i32],
+        face_materials: Vec<u32>,
+    ) -> Result<Self, String> {
+        let face_count = if face_offsets.len() > 1 {
+            face_offsets.len() - 1
+        } else {
+            0
+        };
+        let mut face_loop_starts = Vec::with_capacity(face_count);
+        let mut face_loop_totals = Vec::with_capacity(face_count);
+        for i in 0..face_count {
+            let start = face_offsets[i];
+            let end = face_offsets[i + 1];
+            if start < 0 || end < start {
+                return Err(format!(
+                    "invalid face offset range at index {}: {}..{}",
+                    i, start, end
+                ));
+            }
+            face_loop_starts.push(start as u32);
+            face_loop_totals.push((end - start) as u32);
+        }
+        let positions = positions_flat.as_chunks::<3>().0.to_vec();
+        let loop_uvs = loop_uvs_flat.as_chunks::<2>().0.to_vec();
+        Ok(Self {
+            positions,
+            loop_vertices,
+            loop_uvs,
+            face_loop_starts,
+            face_loop_totals,
+            face_materials,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_from_face_offsets() {
+        let positions = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0];
+        let loop_verts = vec![0, 1, 2, 3];
+        let loop_uvs = [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0];
+        let face_offsets = [0, 4];
+        let mesh = FlatPolygonMesh::from_face_offsets(
+            &positions,
+            loop_verts,
+            &loop_uvs,
+            &face_offsets,
+            vec![0],
+        )
+        .unwrap();
+        assert_eq!(mesh.face_count(), 1);
+        assert_eq!(mesh.face_loop_starts, vec![0]);
+        assert_eq!(mesh.face_loop_totals, vec![4]);
     }
 }

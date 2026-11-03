@@ -45,7 +45,7 @@ Python 模块名：`libmtk_py`
 ### 2.1 几何网格与自定义属性 (`mesh` & `attributes`)
 - **`MeshData` (`PyMeshData`)**：连续内存紧凑几何网格缓冲容器。
   - 属性：`vertex_count`, `triangle_count`, `face_count`, `is_empty`
-  - 构造与修改：`MeshData()`, `MeshData.with_capacity(verts, indices, faces)`, `MeshData.from_flat_polygons(positions, loop_vertices, loop_uvs, face_loop_starts, face_loop_totals, normals=None, face_materials=None)`（共享顶点 + 逐 loop UV）, `append_mesh(other)`, `clear()`
+  - 构造与修改：`MeshData()`, `MeshData.with_capacity(verts, indices, faces)`, `MeshData.from_flat_polygons(...)`, `MeshData.from_polygon_offsets(positions, loop_vertices, loop_uvs, face_offsets, normals=None, face_materials=None)`（CSR 面偏移直接构造）, `append_mesh(other)`, `clear()`
   - UV 布局：`uv_layout` 显式区分 `PerVertex` / `PerLoop`，不再用 `uvs.len()` 猜测；`loop_uvs_memoryview()` 自动展开为逐 loop。
   - 内存视图（标准零拷贝通道，推荐）：`positions_memoryview()`, `normals_memoryview()`, `uvs_memoryview()`, `indices_memoryview()`, `quad_indices_memoryview()`, `loop_uvs_memoryview()`, `loop_starts_memoryview()`, `loop_totals_memoryview()`, `face_materials_memoryview()`
   - 核心 wheel 不再包含 Blender 指针写入代码。零拷贝宿主写入由独立 `libmtk_blender_dna` wheel 提供，通过 `memoryview` 接收核心 buffer，再写入 Blender 指针；核心不需要知道适配器的存在。
