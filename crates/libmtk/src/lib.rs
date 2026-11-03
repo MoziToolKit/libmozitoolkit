@@ -66,6 +66,12 @@ pub enum MtkError {
     #[error("Postcard error: {0}")]
     Postcard(#[from] postcard::Error),
 
+    #[error("Invalid package profile for scene: expected SceneInterchange, found {0:?}")]
+    InvalidSceneProfile(mtk_package::PackageProfile),
+
+    #[error("Unsupported scene package format version: expected 1, found {0}")]
+    UnsupportedSceneFormatVersion(u32),
+
     #[error("Thread pool error: {0}")]
     ThreadPool(String),
 }

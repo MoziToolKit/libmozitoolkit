@@ -6,7 +6,7 @@ pub mod skull;
 
 pub use banner::{
     banner_texture_identifier, dye_id_to_name, dye_rgb, name_to_dye_id, normalize_banner_pattern,
-    BannerPatternLayer, DYE_NAMES, DYE_RGB,
+    parse_banner_texture_identifier, BannerPatternLayer, DYE_NAMES, DYE_RGB,
 };
 pub use pot::{normalize_sherd_pattern, sherd_texture, sherd_texture_ref};
 pub use skull::{

@@ -21,14 +21,28 @@ impl ScenePackageReader {
     /// Opens an `.mtkscene` package from a file path.
     pub fn open_file(path: impl AsRef<Path>) -> Result<Self, MtkError> {
         let reader = MtkPackageReader::open_file(path)?;
-        let metadata: SceneMetadata = reader.read_chunk_json("manifest")?;
-        Ok(Self { reader, metadata })
+        Self::validate_and_build(reader)
     }
 
     /// Creates a reader from in-memory package bytes.
     pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, MtkError> {
         let reader = MtkPackageReader::from_bytes(bytes)?;
+        Self::validate_and_build(reader)
+    }
+
+    fn validate_and_build(reader: MtkPackageReader) -> Result<Self, MtkError> {
+        let profile = reader.header().profile;
+        if profile != PackageProfile::SceneInterchange {
+            return Err(MtkError::InvalidSceneProfile(profile));
+        }
+
         let metadata: SceneMetadata = reader.read_chunk_json("manifest")?;
+        if metadata.format_version != super::metadata::SCENE_PACKAGE_FORMAT_VERSION {
+            return Err(MtkError::UnsupportedSceneFormatVersion(
+                metadata.format_version,
+            ));
+        }
+
         Ok(Self { reader, metadata })
     }
 
@@ -56,8 +70,8 @@ impl ScenePackageReader {
         if !self.reader.has_chunk("models/database") {
             return Ok(None);
         }
-        let bytes = self.reader.get_chunk_raw("models/database")?;
-        let db = BakedModelDatabase::from_binary(bytes)?;
+        let bytes = self.reader.read_chunk_decompressed("models/database")?;
+        let db = BakedModelDatabase::from_binary(&bytes)?;
         Ok(Some(db))
     }
 
@@ -185,7 +199,7 @@ pub fn write_scene_package(
             *b"MODL",
             "models/database",
             &db_bytes,
-            &ChunkWriteOptions::raw(),
+            &ChunkWriteOptions::zstd_fast(),
         )?;
     }
 
@@ -265,12 +279,38 @@ mod tests {
         let dummy_png = vec![137, 80, 78, 71, 13, 10, 26, 10]; // PNG header stub
         let textures = vec![("atlas_0.png".to_string(), dummy_png.clone())];
 
-        write_scene_package(&temp_path, &metadata, &voxels, None, None, &textures, None)
-            .expect("Write scene package");
+        let mut model_db = BakedModelDatabase::new();
+        model_db.insert(
+            "minecraft:stone".to_string(),
+            mtk_model::baker::baked_model::BakedModel {
+                block_state: "minecraft:stone".to_string(),
+                is_cube: true,
+                is_opaque: true,
+                ..Default::default()
+            },
+        );
+
+        write_scene_package(
+            &temp_path,
+            &metadata,
+            &voxels,
+            Some(&model_db),
+            None,
+            &textures,
+            None,
+        )
+        .expect("Write scene package");
 
         let reader = ScenePackageReader::open_file(&temp_path).expect("Open scene package");
         assert_eq!(reader.metadata().voxel_count, 2);
         assert_eq!(reader.metadata().bounds, [0, 0, 0, 16, 16, 16]);
+
+        let read_models = reader
+            .read_models()
+            .expect("Read models")
+            .expect("Models present");
+        assert_eq!(read_models.len(), 1);
+        assert!(read_models.get("minecraft:stone").is_some());
 
         let read_voxels = reader.read_sparse_voxels().expect("Read sparse voxels");
         assert_eq!(read_voxels.len(), 2);
@@ -284,6 +324,68 @@ mod tests {
             read_textures.get("atlas/textures/atlas_0.png").unwrap(),
             &dummy_png
         );
+
+        let _ = std::fs::remove_file(&temp_path);
+    }
+
+    #[test]
+    fn test_scene_package_gates_profile_and_version() {
+        let temp_path = std::env::temp_dir().join(format!(
+            "test_gate_{}_{}.mtkscene",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+
+        // 1. Write an AssetCache profile package
+        let mut writer = mtk_package::MtkPackageFileWriter::create(
+            &temp_path,
+            PackageProfile::AssetCache,
+            [0u8; 16],
+        )
+        .expect("Create writer");
+        let mut metadata = SceneMetadata::new([0, 0, 0, 1, 1, 1], 1);
+        writer
+            .add_json_chunk(*b"META", "manifest", &metadata, &ChunkWriteOptions::raw())
+            .unwrap();
+        writer.finish().unwrap();
+
+        // Must fail with InvalidSceneProfile
+        let err = match ScenePackageReader::open_file(&temp_path) {
+            Ok(_) => panic!("Expected error, got Ok"),
+            Err(e) => e,
+        };
+        match err {
+            MtkError::InvalidSceneProfile(PackageProfile::AssetCache) => {}
+            other => panic!("Expected InvalidSceneProfile, got {:?}", other),
+        }
+
+        // 2. Write with wrong format_version (e.g. 99)
+        metadata.format_version = 99;
+        let mut writer = mtk_package::MtkPackageFileWriter::create(
+            &temp_path,
+            PackageProfile::SceneInterchange,
+            [0u8; 16],
+        )
+        .expect("Create writer");
+        writer
+            .add_json_chunk(*b"META", "manifest", &metadata, &ChunkWriteOptions::raw())
+            .unwrap();
+        writer.finish().unwrap();
+
+        let err = match ScenePackageReader::open_file(&temp_path) {
+            Ok(_) => panic!("Expected error, got Ok"),
+            Err(e) => e,
+        };
+        match err {
+            MtkError::UnsupportedSceneFormatVersion(99) => {}
+            other => panic!(
+                "Expected UnsupportedSceneFormatVersion(99), got {:?}",
+                other
+            ),
+        }
 
         let _ = std::fs::remove_file(&temp_path);
     }

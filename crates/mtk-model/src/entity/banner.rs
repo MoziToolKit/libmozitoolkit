@@ -62,6 +62,44 @@ pub fn banner_texture_identifier(base_color: &str, patterns: &[BannerPatternLaye
     id
 }
 
+/// Parses a banner texture identifier, pattern spec, or banner state name into
+/// a base color string and list of pattern layers.
+///
+/// Handles:
+/// - `"minecraft:banner/white+stripe_top#blue+flower#red"`
+/// - `"banner:red"`
+/// - `"minecraft:red_banner[rotation=4]"`
+/// - `"black_banner"`
+pub fn parse_banner_texture_identifier(key: &str) -> Option<(String, Vec<BannerPatternLayer>)> {
+    let clean = key
+        .strip_prefix("minecraft:banner/")
+        .or_else(|| key.strip_prefix("banner:"));
+
+    if let Some(content) = clean {
+        let (base, pat_str) = content.split_once('+').unwrap_or((content, ""));
+        let clean_base = base
+            .strip_prefix("minecraft:")
+            .unwrap_or(base)
+            .strip_suffix("_dye")
+            .unwrap_or(base);
+        let mut patterns = Vec::new();
+        if !pat_str.is_empty() {
+            for part in pat_str.split('+') {
+                if let Some((p, c)) = part.split_once('#') {
+                    patterns.push(BannerPatternLayer::new(p, c));
+                }
+            }
+        }
+        return Some((clean_base.to_string(), patterns));
+    }
+
+    if let Some(color) = extract_banner_color_from_state(key) {
+        return Some((color.to_string(), Vec::new()));
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -85,5 +123,30 @@ mod tests {
             Some("light_gray")
         );
         assert_eq!(extract_banner_color_from_state("minecraft:stone"), None);
+    }
+
+    #[test]
+    fn test_parse_banner_texture_identifier() {
+        let (base, pats) =
+            parse_banner_texture_identifier("minecraft:banner/white+stripe_top#blue+flower#red")
+                .unwrap();
+        assert_eq!(base, "white");
+        assert_eq!(pats.len(), 2);
+        assert_eq!(pats[0].pattern, "stripe_top");
+        assert_eq!(pats[0].color, "blue");
+        assert_eq!(pats[1].pattern, "flower");
+        assert_eq!(pats[1].color, "red");
+
+        let (base_plain, pats_plain) =
+            parse_banner_texture_identifier("minecraft:banner/red").unwrap();
+        assert_eq!(base_plain, "red");
+        assert!(pats_plain.is_empty());
+
+        let (base_state, pats_state) =
+            parse_banner_texture_identifier("minecraft:blue_wall_banner[facing=north]").unwrap();
+        assert_eq!(base_state, "blue");
+        assert!(pats_state.is_empty());
+
+        assert!(parse_banner_texture_identifier("minecraft:stone").is_none());
     }
 }
