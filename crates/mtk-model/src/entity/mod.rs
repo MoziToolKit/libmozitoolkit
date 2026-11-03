@@ -20,6 +20,26 @@ fn default_banner_base_color() -> String {
     "white".to_string()
 }
 
+#[inline]
+fn default_true() -> bool {
+    true
+}
+
+#[inline]
+fn default_item_count() -> u8 {
+    1
+}
+
+#[inline]
+fn default_painting_dimension() -> u8 {
+    1
+}
+
+#[inline]
+fn default_sign_color() -> String {
+    "black".to_string()
+}
+
 /// High-level typed BlockEntity representation decoupled from BlockState strings.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "id")]
@@ -48,7 +68,62 @@ pub enum BlockEntityData {
         #[serde(skip_serializing_if = "Option::is_none")]
         profile: Option<PlayerProfileData>,
     },
-    /// Raw generic NBT payload for unsupported or custom block entities.
+    /// Sign or Hanging Sign text and styling.
+    #[serde(rename = "minecraft:sign", alias = "sign")]
+    Sign {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        front_text: Vec<String>,
+        #[serde(default = "default_sign_color")]
+        front_color: String,
+        #[serde(default)]
+        front_glowing: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        back_text: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        back_color: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        back_glowing: Option<bool>,
+        #[serde(default)]
+        is_waxed: bool,
+    },
+    /// Item Frame or Glow Item Frame (treated as block-attached entity).
+    #[serde(rename = "minecraft:item_frame", alias = "item_frame")]
+    ItemFrame {
+        item_id: String,
+        #[serde(default = "default_item_count")]
+        count: u8,
+        #[serde(default)]
+        rotation: u8,
+        #[serde(default)]
+        is_glowing: bool,
+        #[serde(default)]
+        is_invisible: bool,
+    },
+    /// Hanging Painting (treated as block-attached entity).
+    #[serde(rename = "minecraft:painting", alias = "painting")]
+    Painting {
+        variant: String,
+        #[serde(default = "default_painting_dimension")]
+        width: u8,
+        #[serde(default = "default_painting_dimension")]
+        height: u8,
+    },
+    /// End Crystal (treated as block-attached entity).
+    #[serde(rename = "minecraft:end_crystal", alias = "end_crystal")]
+    EndCrystal {
+        #[serde(default = "default_true")]
+        show_bottom: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        beam_target: Option<[i32; 3]>,
+    },
+    /// Generic or custom block entity with an explicit type ID and raw NBT payload.
+    #[serde(rename = "generic")]
+    Generic {
+        custom_id: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        nbt_bytes: Vec<u8>,
+    },
+    /// Raw generic NBT payload for unsupported or custom block entities without parsed ID.
     #[serde(rename = "raw")]
     Raw { data: Vec<u8> },
 }
@@ -119,6 +194,67 @@ impl BlockEntityData {
         }
     }
 
+    /// Constructs a canonical `Sign` data struct.
+    pub fn new_sign(
+        front_text: Vec<String>,
+        front_color: Option<impl Into<String>>,
+        front_glowing: bool,
+    ) -> Self {
+        Self::Sign {
+            front_text,
+            front_color: front_color
+                .map(Into::into)
+                .unwrap_or_else(default_sign_color),
+            front_glowing,
+            back_text: None,
+            back_color: None,
+            back_glowing: None,
+            is_waxed: false,
+        }
+    }
+
+    /// Constructs a canonical `ItemFrame` data struct.
+    pub fn new_item_frame(
+        item_id: impl Into<String>,
+        count: u8,
+        rotation: u8,
+        is_glowing: bool,
+        is_invisible: bool,
+    ) -> Self {
+        Self::ItemFrame {
+            item_id: item_id.into(),
+            count: count.max(1),
+            rotation: rotation & 7,
+            is_glowing,
+            is_invisible,
+        }
+    }
+
+    /// Constructs a canonical `Painting` data struct.
+    pub fn new_painting(variant: impl Into<String>, width: u8, height: u8) -> Self {
+        Self::Painting {
+            variant: variant.into(),
+            width: width.max(1),
+            height: height.max(1),
+        }
+    }
+
+    /// Constructs a canonical `EndCrystal` data struct.
+    pub fn new_end_crystal(show_bottom: bool, beam_target: Option<[i32; 3]>) -> Self {
+        Self::EndCrystal {
+            show_bottom,
+            beam_target,
+        }
+    }
+
+    /// Constructs a generic custom block entity with an explicit identifier.
+    pub fn new_generic(custom_id: impl Into<String>, nbt_bytes: Vec<u8>) -> Self {
+        Self::Generic {
+            custom_id: custom_id.into(),
+            nbt_bytes,
+        }
+    }
+
     /// Computes the canonical dynamic texture identifier for this block entity (if applicable).
     pub fn texture_identifier(&self) -> Option<String> {
         match self {
@@ -132,6 +268,10 @@ impl BlockEntityData {
                 } else {
                     Some(kind.default_texture_path().to_string())
                 }
+            }
+            Self::Painting { variant, .. } => {
+                let v = variant.strip_prefix("minecraft:").unwrap_or(variant);
+                Some(format!("minecraft:painting/{}", v))
             }
             _ => None,
         }
@@ -209,5 +349,59 @@ mod tests {
             parsed.is_some(),
             "Must parse plain banner without patterns field"
         );
+    }
+
+    #[test]
+    fn test_block_attached_entities_roundtrip() {
+        // 1. Item Frame
+        let item_frame =
+            BlockEntityData::new_item_frame("minecraft:diamond_sword", 1, 3, true, false);
+        let if_json = item_frame.to_visual_json();
+        assert!(if_json.contains("\"minecraft:item_frame\""));
+        assert!(if_json.contains("\"minecraft:diamond_sword\""));
+        assert!(if_json.contains("\"is_glowing\":true"));
+        let if_parsed = BlockEntityData::from_visual_json(&if_json).expect("Parse item frame");
+        assert_eq!(item_frame, if_parsed);
+
+        // 2. Painting
+        let painting = BlockEntityData::new_painting("minecraft:kebab", 2, 2);
+        let p_json = painting.to_visual_json();
+        assert!(p_json.contains("\"minecraft:painting\""));
+        assert!(p_json.contains("\"minecraft:kebab\""));
+        assert_eq!(
+            painting.texture_identifier(),
+            Some("minecraft:painting/kebab".to_string())
+        );
+        let p_parsed = BlockEntityData::from_visual_json(&p_json).expect("Parse painting");
+        assert_eq!(painting, p_parsed);
+
+        // 3. End Crystal
+        let crystal = BlockEntityData::new_end_crystal(true, Some([100, 64, -200]));
+        let ec_json = crystal.to_visual_json();
+        assert!(ec_json.contains("\"minecraft:end_crystal\""));
+        assert!(ec_json.contains("100"));
+        let ec_parsed = BlockEntityData::from_visual_json(&ec_json).expect("Parse end crystal");
+        assert_eq!(crystal, ec_parsed);
+
+        // 4. Sign
+        let sign = BlockEntityData::new_sign(
+            vec!["Welcome to".to_string(), "MoziToolKit".to_string()],
+            Some("yellow"),
+            true,
+        );
+        let sign_json = sign.to_visual_json();
+        assert!(sign_json.contains("\"minecraft:sign\""));
+        assert!(sign_json.contains("\"yellow\""));
+        assert!(sign_json.contains("\"front_glowing\":true"));
+        let sign_parsed = BlockEntityData::from_visual_json(&sign_json).expect("Parse sign");
+        assert_eq!(sign, sign_parsed);
+
+        // 5. Generic Custom
+        let generic = BlockEntityData::new_generic("custom:copper_statue", vec![1, 2, 3, 4]);
+        let g_json = generic.to_visual_json();
+        assert!(g_json.contains("\"generic\""));
+        assert!(g_json.contains("\"custom:copper_statue\""));
+        let g_parsed = BlockEntityData::from_visual_json(&g_json).expect("Parse generic");
+        assert_eq!(generic, g_parsed);
     }
 }

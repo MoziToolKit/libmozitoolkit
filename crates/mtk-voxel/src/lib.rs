@@ -33,8 +33,8 @@ pub use source::{ingest_from_source, VoxelReader, VoxelSource, VoxelWriter};
 pub use storage::{
     block_index, crc32, crc32_update, extract_canonical_state_str, get_empty_section_crc,
     padded_index, BlockEntityData, PaddedVoxelArray, PointCloudVoxelSource, SectionStorage,
-    VoxelPointCloud, VoxelStorage, EMPTY_SECTION_CRC, PADDED_SIZE, PADDED_VOLUME, SECTION_SIZE,
-    SECTION_VOLUME,
+    SparseVoxelColumns, SparseVoxelPayload, VoxelPointCloud, VoxelStorage, EMPTY_SECTION_CRC,
+    PADDED_SIZE, PADDED_VOLUME, SECTION_SIZE, SECTION_VOLUME,
 };
 pub use types::{CoordinateSystem, MesherConfig, VoxelError, WorldMeshBuildResult};
 pub use world::VoxelWorld;

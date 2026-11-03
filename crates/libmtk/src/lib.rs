@@ -15,12 +15,17 @@
 use thiserror::Error;
 
 pub mod prebake;
+pub mod scene;
 
 pub use prebake::{
     fingerprint_str_to_bytes16, prebake_all_models, prebake_all_models_with_progress,
     precompile_all_assets, precompile_all_assets_with_progress, resolve_active_cache_package,
     AssetCacheReader, CacheManifest, PrecompileConfig, PrecompileResult,
     ASSET_CACHE_FORMAT_VERSION,
+};
+pub use scene::{
+    write_scene_package, SceneMetadata, ScenePackageReader, ScenePackageWriteOptions,
+    SCENE_PACKAGE_FORMAT_VERSION,
 };
 
 /// Unified error type for all `libmtk` application-layer operations.
