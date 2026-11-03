@@ -102,13 +102,13 @@ impl ExecutionProfiler {
     }
 
     /// Measures the execution duration of a closure and records it as a named stage.
-    pub fn measure<R>(&mut self, name: impl Into<Cow<'static, str>>, f: impl FnOnce() -> R) -> R {
+    pub fn measure<R>(&mut self, _name: impl Into<Cow<'static, str>>, f: impl FnOnce() -> R) -> R {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let t0 = Instant::now();
             let result = f();
             let dur = t0.elapsed();
-            self.profile.add_stage(name, dur.as_micros() as u64, None);
+            self.profile.add_stage(_name, dur.as_micros() as u64, None);
             result
         }
         #[cfg(target_arch = "wasm32")]
@@ -120,8 +120,8 @@ impl ExecutionProfiler {
     /// Measures the execution duration of a closure and records it with an item count.
     pub fn measure_with_count<R>(
         &mut self,
-        name: impl Into<Cow<'static, str>>,
-        items_count: usize,
+        _name: impl Into<Cow<'static, str>>,
+        _items_count: usize,
         f: impl FnOnce() -> R,
     ) -> R {
         #[cfg(not(target_arch = "wasm32"))]
@@ -130,7 +130,7 @@ impl ExecutionProfiler {
             let result = f();
             let dur = t0.elapsed();
             self.profile
-                .add_stage(name, dur.as_micros() as u64, Some(items_count));
+                .add_stage(_name, dur.as_micros() as u64, Some(_items_count));
             result
         }
         #[cfg(target_arch = "wasm32")]
@@ -150,7 +150,7 @@ impl ExecutionProfiler {
     }
 
     /// Finalizes profiling, stops the overall timer, and returns the snapshot.
-    pub fn finish(mut self) -> ExecutionProfile {
+    pub fn finish(#[allow(unused_mut)] mut self) -> ExecutionProfile {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let total = self.start_time.elapsed();

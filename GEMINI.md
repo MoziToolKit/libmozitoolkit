@@ -7,9 +7,9 @@
 ## 1. 项目定位与协同拓扑
 
 - **本工作区职责**：纯 Rust 实现的通用 3D/体素几何处理核心引擎，纯数据输入输出 (Data-in, Data-out)、宿主无关 (Host-Agnostic)、高性能无头计算。
-- **产出组件**：
-  1. `libmtk_py` (`bindings/mtk-py`)：宿主无关 Python 扩展。
-  2. `libmtk_blender_dna` (`adapters/blender/mtk-blender-dna-py`)：专供 Blender C++ 内存直写的原生适配器。
+- **协同边界**：
+  - 为相对路径 `../MoziToolKit` (Blender Addon) 提供 `libmtk_py` (`bindings/mtk-py`) 与 `libmtk_blender_dna` (`adapters/blender/mtk-blender-dna-py`)；
+  - 与相对路径 `../yefira` (Minecraft 服务端模组) 共享 RFC v3.1 协议二进制体素编解码标准。
 
 ---
 
@@ -27,12 +27,15 @@
 ### 规则 3：生物群系与调色板单一事实源 (Biome Palette SSOT)
 - 所有 Biome Tint 与颜色映射必须以 `mtk-material::biome` 为唯一权威事实源（内置 66 种原版调色板与线性色彩数学），严禁在其他 Crate 或前端分散、硬编码重复调色板。
 
-### 规则 4：资产缓存与预编译标准 PBR 规范
-- 资产预烘焙（Atlas 拼接、Standalone PBR 对齐、Model Baking）由 `libmtk::prebake` 统一无头处理（格式版本 `ASSET_CACHE_FORMAT_VERSION = 5`）。
-- 预编译期将 PBR (LabPBR 等) 解码为规范通道，彻底废弃运行时 LabPBR 解码与 `mtk_material_props` 属性表。
+### 规则 4：资产缓存 (.mtkcache) 与场景交换包 (.mtkscene) 规范
+- **全量资产预烘焙**：Atlas 拼接、PBR 对齐与 Model Baking 由 `libmtk::prebake` 统一无头处理（`ASSET_CACHE_FORMAT_VERSION = 5`）。
+- **场景交换中间格式**：`.mtkscene` 由 `libmtk::scene` 统一编解码（`SCENE_PACKAGE_FORMAT_VERSION = 1`），包含：
+  1. 稀疏体素紧凑流 (`crates/mtk-voxel/src/storage/sparse.rs`)；
+  2. 动态裁剪重装箱的自包含 Mini-Atlas（多通道 PBR 裁剪与 UV 并行重映射）；
+  3. Tree-Shaken 方块模型库，实现脱离原版权威资产的便携场景独立分发与网格重构。
 
 ### 规则 5：双轮子体系与构建特性门禁
-- **日常开发态直连**：使用 Cargo 标准别名 `cargo build-all-py`（已内联附带 `--features extension-module`），构建产物软链接至 `MoziToolKit/dev/lib/`。
+- **日常开发态直连**：使用 Cargo 标准别名 `cargo build-all-py`（已内联附带 `--features extension-module`），构建产物软链接至相对路径 `../MoziToolKit/dev/lib/`。
 - **构建门禁红线**：**严禁在 `Cargo.toml` 的 `default` 中开启 `extension-module`**（避免破坏独立测试二进制导致 `cargo test` 缺失 `libpython` 符号失败）。
 - **发布态构建**：使用 `maturin build --release` 产出跨平台 wheels；严禁在全局 Python 环境中执行 `pip install`。
 
@@ -41,13 +44,31 @@
 - **最小可见性**：严格限制结构体字段与内部辅助函数的 `pub` 可见性。
 - **模块防膨胀与文档同步**：源码单文件常规控制在 500 行以内，杜绝无界追加巨石文件；新增/调整 Crate 必须同步更新根目录 `README.md` 与该 Crate 的 `README.md`。
 
-### 规则 7：CI 三道门禁与测试资产规范
-- 提交前必须保证三道门禁全绿（且零 Warning）：
-  ```bash
-  cargo fmt --all -- --check
-  cargo clippy --workspace --all-targets -- -D warnings
-  cargo test --workspace
-  ```
+### 规则 7：CI 完整门禁与本地验证命令
+提交前必须保证以下本地门禁全绿（与 GitHub Actions CI 完全对齐，零 Warning）：
+
+```bash
+# 1. 格式化规范检查
+cargo fmt --all -- --check
+
+# 2. 静态分析 (-D warnings 严格拦截)
+cargo clippy --workspace --all-targets -- -D warnings
+
+# 3. WebAssembly 交叉编译检查 (条件编译验证)
+cargo check -p mtk-wasm --target wasm32-unknown-unknown
+
+# 4. DNA 独立性门禁 (mtk-blender-dna 严禁反向引入核心 crate)
+cargo tree -p mtk-blender-dna | grep -Eq 'mtk-(core|voxel|material|model|texture|resource)' && exit 1 || true
+
+# 5. 全工作区单元与集成测试
+cargo test --workspace
+
+# 6. Python 绑定测试 (复用 MoziToolKit 的 uv 虚拟环境与 dev/lib)
+cargo build-all-py
+PYTHONPATH=../MoziToolKit/dev/lib uv run --directory ../MoziToolKit pytest ../libmozitoolkit/bindings/mtk-py/tests/ -q
+PYTHONPATH=../MoziToolKit/dev/lib uv run --directory ../MoziToolKit pytest ../libmozitoolkit/adapters/blender/mtk-blender-dna-py/tests/ -q
+```
+
 - 测试资产统一走 `mtk-testkit` 动态解析，缺失时必须优雅跳过并退出，严禁 panic，严禁硬编码绝对路径。
 
 ### 规则 8：三层数据交换与宿主无关批量规范 (Tiered Ingestion & Host-Agnostic Model)
@@ -70,20 +91,21 @@
 ```
 libmozitoolkit/
 ├── crates/
-│   ├── mtk-core/       -> 基础几何基元、Quad、MeshData、像素切分与挤出算子
+│   ├── mtk-core/       -> 基础几何基元、Quad、MeshData、像素切分与挤出算子、跨平台 Profile
 │   ├── mtk-cull/       -> 6 向邻域遮挡状态机、2D 矩形差集切分
 │   ├── mtk-model/      -> BlockState 状态解析、1.21+ Block Model JSON 烘焙
-│   ├── mtk-voxel/      -> 16x16x16 体素存储、流体曲面、平滑 AO
+│   ├── mtk-voxel/      -> 16x16x16 体素存储、稀疏体素 (SparseVoxelStorage)、流体曲面、平滑 AO
 │   ├── mtk-sync/       -> RFC v3.1 原生 WebSocket 同步客户端与状态机
 │   ├── mtk-resource/   -> VFS、.mcmeta 动图元数据、原版 atlases/*.json 解析
 │   ├── mtk-texture/    -> 矩形装箱 Stitcher、多类别 PBR 图集与 Overlay 烘焙
 │   ├── mtk-material/   -> 66 生物群系调色板引擎、规范 PBR 预解码、并行 UV
 │   ├── mtk-package/    -> .mtkcache 资产包与 .mtkscene 场景包编解码
 │   ├── mtk-profile/    -> 全链路微秒级性能探针
-│   ├── libmtk/         -> 极简应用编排层 (Prebake & Mesh Pipeline)
+│   ├── libmtk/         -> 极简应用编排层 (Prebake, Scene Interchange, Mesh Pipeline)
 │   └── mtk-testkit/    -> 测试用资产解析器与内置 fixtures
 ├── bindings/
-│   └── mtk-py/         -> 宿主无关 PyO3 Python 绑定 (libmtk_py)
+│   ├── mtk-py/         -> 宿主无关 PyO3 Python 绑定 (libmtk_py)
+│   └── mtk-wasm/       -> 宿主无关 WebAssembly 绑定
 └── adapters/
     ├── mtk-host-memory/-> 宿主连续内存切片安全检查底座
     └── blender/        -> Blender C++ 连续内存直写适配器 (libmtk_blender_dna)

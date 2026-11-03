@@ -82,6 +82,62 @@ impl ScenePackageReader {
         }
         Ok(textures)
     }
+
+    /// Reads and decodes a texture chunk (PNG) directly into an `RgbaBuffer` in memory with optional vertical flip.
+    pub fn read_texture_rgba_with_orientation(
+        &self,
+        chunk_id: &str,
+        flip_v: bool,
+    ) -> Result<mtk_texture::RgbaBuffer, MtkError> {
+        let normalized_id = if chunk_id.starts_with("atlas/textures/") {
+            chunk_id.to_string()
+        } else {
+            format!("atlas/textures/{}", chunk_id)
+        };
+        let png_bytes = self.reader.read_chunk_decompressed(&normalized_id)?;
+        let mut buf = mtk_texture::RgbaBuffer::from_png_bytes(&png_bytes)?;
+        if flip_v {
+            buf.flip_v();
+        }
+        Ok(buf)
+    }
+
+    /// Reads and decodes a texture chunk (PNG) directly into normalized [0.0, 1.0] float32 pixels.
+    pub fn read_texture_f32_with_orientation(
+        &self,
+        chunk_id: &str,
+        flip_v: bool,
+    ) -> Result<(u32, u32, Vec<f32>), MtkError> {
+        let normalized_id = if chunk_id.starts_with("atlas/textures/") {
+            chunk_id.to_string()
+        } else {
+            format!("atlas/textures/{}", chunk_id)
+        };
+        let png_bytes = self.reader.read_chunk_decompressed(&normalized_id)?;
+        let buf = mtk_texture::RgbaBuffer::from_png_bytes(&png_bytes)?;
+        let (w, h) = (buf.width, buf.height);
+        let f32_pixels = buf.to_f32_buffer(flip_v);
+        Ok((w, h, f32_pixels))
+    }
+
+    /// Extracts a single texture chunk to disk.
+    pub fn extract_atlas_texture(
+        &self,
+        chunk_id: &str,
+        output_path: impl AsRef<Path>,
+    ) -> Result<(), MtkError> {
+        let normalized_id = if chunk_id.starts_with("atlas/textures/") {
+            chunk_id.to_string()
+        } else {
+            format!("atlas/textures/{}", chunk_id)
+        };
+        let bytes = self.reader.get_chunk_raw(&normalized_id)?;
+        if let Some(parent) = output_path.as_ref().parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(output_path, bytes)?;
+        Ok(())
+    }
 }
 
 /// Helper options for authoring `.mtkscene` packages.

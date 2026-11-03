@@ -137,7 +137,23 @@ Python 模块名：`libmtk_py`
 - **`BakedModelDatabase` (`PyBakedModelDatabase`)**：预编译方块几何模型库。
   - `get_mesh(state_str, clip_hidden=true)`, `remap_to_atlas(atlas)`, `get_states()`
 
-### 2.10 测试 / 开发专用 API (`unstable.testing`)
+### 2.10 场景交换包与 Mini-Atlas (`scene`)
+- **`ScenePackageReader`**：`.mtkscene` 单文件中间交换容器读取器。
+  - `open(path)`：快速打开并读取场景元数据；
+  - `metadata -> SceneMetadata`：获取场景 AABB 范围、体素总量与图集分辨率等；
+  - `read_point_cloud() -> VoxelPointCloud`：提取稀疏体素列存并构造点云；
+  - `read_models() -> BakedModelDatabase`：读取已重映射至 Mini-Atlas 的 Tree-Shaken 方块模型库；
+  - `read_atlas() -> BakedAtlas`：读取内嵌的自包含微型多通道 PBR 图集；
+  - `read_atlas_mapping_json() -> str`：获取图集 UV 映射 JSON 字符串。
+- **`SceneMetadata`**：场景包元数据对象。
+  - 属性：`format_version`, `bounds`, `voxel_count`, `unique_states_count`, `unique_biomes_count`, `unique_entities_count`, `atlas_resolution`, `generator`, `created_at_epoch_secs`；
+  - `to_dict() -> dict`：快速转化为 Python 字典。
+- **`export_scene_package(path, point_cloud, cache, max_atlas_size=2048, mip_level=0) -> SceneMetadata`**：
+  端到端场景交换导出算子：自动扫描伴生体素点云、执行模型树剪枝、从激活缓存裁剪贴图、拼接微型多通道图集、并行重映射模型 UV 并压缩打包为 `.mtkscene`。
+- **稀疏体素数据结构 (`mtk_voxel`)**：
+  - `SparseVoxelPayload` / `SparseVoxelColumns`：正交离散调色板（`state_palette`, `biome_palette`, `entity_palette`）与紧凑 SoA 列存布局，实现与伴生体素点云的 1:1 零拷贝互转。
+
+### 2.11 测试 / 开发专用 API (`unstable.testing`)
 以下低阶入口不属于稳定 API，仅在测试、Mock 服务端和开发工具中使用：
 `AtlasBuilder`, `ModelBaker`, `calculate_face_target_grid`, `calculate_pixel_grid_cut_factors`,
 `slice_face_by_pixel_grid`, `is_uv_collapsed`, `is_orthogonal_angle`, `detect_uv_rotation`,

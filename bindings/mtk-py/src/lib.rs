@@ -13,6 +13,7 @@ pub mod point_cloud;
 pub mod protocol;
 pub mod resource;
 pub mod save;
+pub mod scene;
 pub mod subdivide;
 pub mod sync;
 pub mod texture;
@@ -45,6 +46,7 @@ pub use resource::{
     resolve_active_cache_package, PyAssetCache, PyPrecompileResult, PyResourcePackStack,
 };
 pub use save::PyLevelData;
+pub use scene::{export_scene_package, PySceneMetadata, PyScenePackageReader};
 pub use sync::PyLiveSyncSession;
 pub use texture::PyBakedAtlas;
 pub use voxel::{PyMesherConfig, PyVoxelStorage, PyVoxelWorld};
@@ -171,11 +173,16 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(save::inspect_minecraft_save, m)?)?;
     m.add_function(wrap_pyfunction!(save::load_and_mesh_minecraft_save, m)?)?;
 
-    // 11. Metadata
+    // 11. Scene Interchange (.mtkscene)
+    m.add_class::<scene::PySceneMetadata>()?;
+    m.add_class::<scene::PyScenePackageReader>()?;
+    m.add_function(wrap_pyfunction!(scene::export_scene_package, m)?)?;
+
+    // 12. Metadata
     m.add_function(wrap_pyfunction!(version, m)?)?;
     m.add_function(wrap_pyfunction!(api_version, m)?)?;
 
-    // 12. Unstable and experimental APIs
+    // 13. Unstable and experimental APIs
     {
         let py = m.py();
         unstable::register_submodule(py, m)?;

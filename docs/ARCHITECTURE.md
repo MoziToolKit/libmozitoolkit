@@ -92,20 +92,20 @@ graph TD
 | **`crates/mtk-cull`** | 面剔除状态机、2D 矩形差集切分 (Subtract Rect)、共面关系分析、外部导入模型面剔除 (`cull_mesh_faces`) | `mtk-core` | `BlockCullMeta`, `FaceCuller`, `CoplanarRelation`, 裁剪后微矩形列表, `MeshCullResult` |
 | **`crates/mtk-model`** | BlockState 状态解析、1.21+ Block Model JSON 烘焙、Wavefront OBJ 解析与导出 | `mtk-core`, `mtk-cull` | `BlockState`, `BlockModelJson`, `BakedModel`, `BakedModelDatabase` |
 | **`crates/mtk-texture`**| 空间装箱图集拼接器 (Stitcher)、多类别图集烘焙 (`build_categories`)、Companion Overlay 贴图合成 | `mtk-core`, `mtk-resource` | `AtlasBuilder`, `BakedAtlas`, `BakedAtlasChunk`, `RgbaBuffer`, UV 坐标映射表 |
-| **`crates/mtk-voxel`**  | 纯体素核心：16x16x16 Chunk Section 体素存储、全量无剔除体素点云 (`VoxelPointCloud`)、平滑 AO 计算、网格化器 (Mesher)、物理流体曲面、统一体素源抽象 (`VoxelSource` / `VoxelReader` / `VoxelWriter`) | `mtk-core`, `mtk-cull`, `mtk-model`, `mtk-texture`, `mtk-resource`, `mtk-material` | `SectionStorage`, `VoxelStorage`, `VoxelPointCloud`, `SectionMesher`, `DeltaMesher`, `VoxelSource`, `WorldMeshBuildResult` |
-| **`crates/mtk-sync`**   | 实时网络协同：原生多线程 WebSocket 客户端、小端序二进制协议编解码、增量修复包生成、复合模型库注入与单一世界大网格 (`WorldMeshReady`) 会话管理 | `mtk-voxel`, `mtk-cull`, `mtk-model`, `mtk-core` | `LiveSyncSession`, `SyncClient`, `SyncEvent`, `decode_packet`, `encode_full_sync_request` |
+| **`crates/mtk-voxel`**  | 纯体素核心：16x16x16 Chunk Section 体素存储、全量无剔除体素点云 (`VoxelPointCloud`)、稀疏列存体素流 (`SparseVoxelPayload` / `SparseVoxelColumns`)、平滑 AO 计算、网格化器 (Mesher)、物理流体曲面、统一体素源抽象 (`VoxelSource` / `VoxelReader` / `VoxelWriter`) | `mtk-core`, `mtk-cull`, `mtk-model`, `mtk-texture`, `mtk-resource`, `mtk-material` | `SectionStorage`, `VoxelStorage`, `VoxelPointCloud`, `SparseVoxelPayload`, `SectionMesher`, `DeltaMesher`, `VoxelSource`, `WorldMeshBuildResult` |
+| **`crates/mtk-sync`**   | 实时网络协同：原生多线程 WebSocket 客户端、小端序二进制协议编解码、增量修复包生成、复合模型库注入与单一世界大网格 (`WorldMeshReady`) 会话管理、0ms 缓存状态快速恢复 | `mtk-voxel`, `mtk-cull`, `mtk-model`, `mtk-core` | `LiveSyncSession`, `SyncClient`, `SyncEvent`, `decode_packet`, `encode_full_sync_request` |
 | **`crates/mtk-material`** | 66 种原版生物群系调色板与线性色彩数学引擎 (SSOT)、`BiomeResolver` 模型扫描与预编译映射、多线程 Rayon 并行 UV 重映射与外部别名解算 | `mtk-core`, `mtk-texture`, `mtk-resource` | `BiomePalette`, `BiomeResolver`, `compute_mesh_biome_attributes`, `MaterialResolver`, `MeshMultiUvRemapResult` |
 | **`crates/mtk-save`** | 现代 Minecraft 存档加载核心：基于内置零拷贝 NBT、Anvil `.mca` 区域文件寻址、384 高度世界 3D 生物群系与方块状态解包、按 3D 边界盒空间切片加载 | `mtk-core`, `mtk-voxel` | `LevelData`, `RegionFile`, `ChunkParser`, `SaveLoader` |
-| **`crates/mtk-package`** | 统一二进制包与场景交换容器编解码器：64 字节头部校验与 CRC、分块 Zstd 压缩 TOC、`memmap2` 零拷贝解析与逐块惰性解压 | `mtk-core` | `MtkPackageWriter`, `MtkPackageReader`, `TableOfContents`, `PackageHeader`, `PackageProfile` |
-| **`crates/libmtk`** | **应用编排层**：只提供端到端资产预编译管线 (`precompile_all_assets`)，不重导出领域类型 | 全部 Layer 1 Crates | `prebake`, `pipeline`, `MtkError`, `CacheManifest` |
+| **`crates/mtk-package`** | 统一二进制包与场景交换容器编解码器：64 字节头部校验与 CRC、分块 Zstd 压缩 TOC、`memmap2` 零拷贝解析与逐块惰性解压（支持 `AssetCache` 与 `SceneInterchange` 双 Profile） | `mtk-core` | `MtkPackageWriter`, `MtkPackageReader`, `TableOfContents`, `PackageHeader`, `PackageProfile` |
+| **`crates/libmtk`** | **应用编排层**：提供端到端资产预编译管线 (`precompile_all_assets`) 与场景交换编解码及 Mini-Atlas 导出管线 (`libmtk::scene`)，不重导出领域类型 | 全部 Layer 1 Crates | `prebake`, `scene`, `pipeline`, `MtkError`, `CacheManifest`, `ScenePackageReader`, `SceneMetadata` |
 | **`crates/mtk-bench`** | 性能基准测试套件，覆盖 4000 区块大规模网格化与复杂面剔除场景 | 全部核心 Crates | 基准测试报告与性能指标 |
 | **`crates/mtk-cli`** | 独立命令行终端工具，为无头环境与 CI/CD 提供资产预编译与检查能力 | Layer 0/1 Crates | 命令行二进制 `mtk` |
 | **`crates/mtk-testkit`** | **仅测试用**（`publish = false`）资产解析器与内置 JSON fixtures：统一真包位置发现、缺省跳过策略与路径拼接 | 仅 `std` | `assets_root`, `real_assets_root`, `fabric_jar`, `model_json_path`, fixtures |
-| **`bindings/mtk-py`** | Python 动态扩展模块 (PyO3 + maturin)，提供 `MeshData`、零拷贝内存视图与极速批处理算子 | 各领域 Crate + `libmtk` | `libmtk_py` CPython 轮子 (.whl) |
+| **`bindings/mtk-py`** | Python 动态扩展模块 (PyO3 + maturin)，提供 `MeshData`、零拷贝内存视图、极速批处理算子与 `.mtkscene` 场景包编解码支持 | 各领域 Crate + `libmtk` | `libmtk_py` CPython 轮子 (.whl) |
 | **`bindings/mtk-wasm`** | WebAssembly 绑定 (wasm-bindgen)，暴露 TypedArray 视图 | `mtk-core`, `mtk-voxel`, `mtk-resource`, `mtk-cull`, `mtk-model`, `mtk-material` | `mtk_wasm.wasm` + `mtk_wasm.js` npm 包 |
 | **`adapters/mtk-host-memory`** | 宿主无关 raw slice → pointer 复制原语；无核心/宿主 SDK 依赖，负责空指针、对齐与容量守卫 | 仅 `thiserror` | `copy_f32_to_ptr`, `copy_i32_to_ptr`, `copy_u32_to_ptr`, `copy_u8_to_ptr` |
 | **`adapters/blender/mtk-blender-dna`** | Blender 语义 raw slice → pointer 适配层；不依赖核心 crate | `mtk-host-memory` | `copy_positions_to_ptr`, `copy_indices_to_ptr`, `copy_point_cloud_positions_to_ptr` |
-| **`adapters/blender/mtk-blender-dna-py`** | 独立 `libmtk_blender_dna` ABI3 wheel；通过 Python Buffer Protocol 接收核心 view，写入 Blender 指针 | `mtk-blender-dna`, `pyo3` | `libmtk_blender_dna` wheel |
+| **`adapters/blender/mtk-blender-dna-py`** | 独立 `libmtk_blender_dna` ABI3 wheel；通过 Python Buffer Protocol 接收核心 view，并提供对网格拓扑、面材质与点云属性的双向直写与直读适配 | `mtk-blender-dna`, `pyo3` | `libmtk_blender_dna` wheel |
 
 ---
 
@@ -132,9 +132,11 @@ Rust 处理内核 (libmtk)
 
 ### 4.2 二进制中间包与场景交换规范 (MTK Package Specification)
 
-系统定义了统一的 **MTK 二进制资产缓存容器标准 (`.mtkcache`)**：
+系统定义了统一的 **MTK 二进制容器标准 (`.mtkcache` / `.mtkscene`)**：
 - **统一底层物理布局**：固定 64 字节 Header + 64 字节对齐 Chunk Payloads + 块级 Zstd 压缩 TOC；
-- **唯一 Profile**：`AssetCache` 承载全量预烘焙图集与全局模型数据库。
+- **两大标准业务 Profile**：
+  - `AssetCache Profile` (`.mtkcache`)：承载全量预烘焙图集、全局模型数据库与生物群系映射；
+  - `SceneInterchange Profile` (`.mtkscene`)：承载稀疏列存体素 (`SparseVoxelPayload`)、Tree-Shaken 模型库与动态裁剪生成的微型多通道 PBR 图集 (Scene Mini-Atlas)，支持脱机便携共享。
 
 详细物理字段、Chunk 协议与重构管线参见专属技术规范：[**`docs/PACKAGE_SPEC.md`**](./PACKAGE_SPEC.md)。
 

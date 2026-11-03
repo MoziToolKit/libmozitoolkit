@@ -53,6 +53,11 @@
 ### 6. 跨平台 6 平台 Wheels 构建与验证 (✅ 全部完成)
 - [x] Windows x64、macOS (arm64/x64)、Linux (glibc/musl) CI 矩阵验证通过，提供 rolling release 自动化流水线。
 
+### 7. DNA 双向零拷贝适配与状态自愈跃迁 (2026-11-01 ~ 2026-11-03 ✅ 全部完成)
+- [x] **DNA 直写与直读双向适配 (`mtk-blender-dna-py`)**：通过 Python Buffer Protocol 扩展 `read_mesh_geometry` 与 `read_point_cloud_attributes`，实现 Blender 网格拓扑、面材质、循环 UV 与点云属性的零拷贝直接读取，彻底消除 Python 包装对象中转开销。
+- [x] **RFC v3.1 稀疏状态哈希与 0ms 重连 (`mtk-sync`)**：打通 `compute_canonical_state_hash` 与客户端握手状态自愈，实现基于体素哈希指纹的 0ms 零几何重建秒级恢复。
+- [x] **自包含场景交换容器 (`.mtkscene` / `libmtk::scene`)**：实现 `SparseVoxelPayload` 列存体素格式、Tree-shaken 模型闭包裁剪、内存微型图集 (Mini-Atlas) 烘焙与 UV 自动重映射。
+
 ---
 
 ## 🎯 v2.0 正式版：核心计算与材质渲染基石 (✅ 已交付并淬炼)
@@ -120,9 +125,11 @@
 - [ ] **旗帜多层花纹合成 (Banner Patterns)**：依照原版公式按顺序进行 16 种颜色的多层 Alpha 混合合成；
 - [ ] **双箱 (Double Chest) 几何缝合与铰链预留**：依据 BlockState 自动缝合为宽箱子网格并预留铰链轴心。
 
-### 5. 自包含轻量场景交换包 (`mtk-package::scene` - P2)
-- [ ] **导出端按需剪枝 (`export_scene_package`)**：扫描选区体素世界，提取最小依赖模型与独立贴图闭包（Tree-shaking），稀疏体素写入 `VOXL` Chunk，贴图写入 `TXTR` Chunk；
-- [ ] **导入端现场重构 (`import_scene_package`)**：读取 `VOXL` 与 `TXTR`，现场构建微型图集并重构世界几何。
+### 5. 自包含轻量场景交换包 (`libmtk::scene` / `mtk-package` - P2 - ✅ 已完成端到端闭环)
+- [x] **稀疏体素列存格式 (`SparseVoxelPayload`)**：正交离散调色板 (`state_palette`, `biome_palette`, `entity_palette`) 与紧凑 SoA 列存布局，支持附着方块实体（Visual NBT JSON），与 DCC 伴生点云 1:1 零拷贝映射；
+- [x] **Tree-Shaken 模型树剪枝与 Mini-Atlas 导出 (`export_scene_package`)**：按需提取场景引用模型，从激活缓存中裁剪贴图装箱为微型多通道 PBR 图集，多线程并行重映射模型 UV 并压缩打包；
+- [x] **场景包极速读取与现场重构 (`ScenePackageReader`)**：基于 `mmap` 零内存开销快速读取元数据、体素点云、模型库与自包含图集，直接提供给 `SectionMesher` 极速重构世界几何；
+- [x] **跨语言 Python 绑定 (`bindings/mtk-py/src/scene.rs`)**：暴露 `ScenePackageReader`, `SceneMetadata`, `export_scene_package`，无缝对接 MoziToolKit。
 
 ---
 

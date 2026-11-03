@@ -139,7 +139,7 @@ impl PyPrecompileResult {
 /// Reader and inspector for precompiled `.mtkcache` packages.
 #[pyclass(name = "AssetCache")]
 pub struct PyAssetCache {
-    inner: libmtk::AssetCacheReader,
+    pub(crate) inner: libmtk::AssetCacheReader,
     package_path: String,
 }
 

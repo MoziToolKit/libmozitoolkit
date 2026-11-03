@@ -107,28 +107,31 @@ pub struct ChunkEntry {
   * 依赖资源包列表与哈希指纹。
   * 场景统计信息（方块总数、不重复方块种类、依赖纹理数）。
 
-### 5.2 `VOXL` - 稀疏体素网格块 (`SceneInterchange` 专属)
+### 5.2 `VOXL` - 稀疏体素列存块 (`SceneInterchange` 专属)
 * **存储原则**：
-  * 专为 `.mtkscene` 设计，存放选区内有效 16×16×16 Section 数据。
-  * 采用空间希尔伯特曲线或 Morton 码排序的 Section 索引表。
-  * 每个 Section 存储方块状态运行时 Palette 及紧凑 Bit-packed 方块数据。
-  * 包含 Quart 级 Biome 调色板数组。
+  * 专为 `.mtkscene` 设计，存放选区内有效表面体素与伴生点云数据（`SparseVoxelPayload`）。
+  * 采用列存（Struct-of-Arrays, SoA）布局（`SparseVoxelColumns`）：扁平一维连续坐标数组 `(x, y, z)` 与紧凑调色板索引流（`state_indices`, `biome_indices`, `entity_indices`）。
+  * **正交离散调色板 (Orthogonal Palettes)**：
+    * `state_palette: Vec<String>`：不重复方块状态标识符（如 `minecraft:stone`）。
+    * `biome_palette: Vec<String>`：不重复生物群系标识符（如 `minecraft:plains`）。
+    * `entity_palette: Vec<BlockEntityData>`：附着方块实体（箱子、告示牌、画、展示框等），内含 `entity_type` 与保留原生 Visual NBT JSON 字符串，实现前瞻兼容。
+  * 与 DCC 宿主的伴生体素点云（`VoxelPointCloud`）支持 1:1 零拷贝直接映射与极速互转。
 
 ### 5.3 `MODL` - 模型定义与几何块
 * **存储内容**：
   * `AssetCache`：使用全局 **`BakedModelDatabase`**（已烘焙的完整方块模型库）。
-  * `SceneInterchange`：**Tree-shaken 按需剪枝模型库**，只保留场景体素中实际引用的方块模型定义。
+  * `SceneInterchange`：**Tree-shaken 按需剪枝模型库**，只保留场景体素中实际引用的方块模型定义，且所有网格面 UV 已预先重映射至伴生的 Scene Mini-Atlas。
 
 ### 5.4 `TXTR` - 独立贴图与纹理块
 * **存储原则**：
   * 存储 Standalone PBR 独立纹理条目与原始 PNG 字节流。
   * 相同纹理严格去重。
   * 可选携带伴生 PBR 贴图（`_n.png` OpenGL 法线 + 高度、`_orm.png` AO/粗糙度/金属度/发光、`_aux.png` IOR/SSS/孔隙度/透射）。
-  * `SceneInterchange` 中按需仅打包场景方块实际引用的纹理，避免将整个原版/材质包塞入。
 
-### 5.5 `ATLS` - 图集与映射块 (`AssetCache` 专属)
-* 存储全量预烘焙出的图集切片（`atlas_0.png`, `atlas_0_n.png`, `atlas_0_orm.png`, `atlas_0_aux.png`）；LabPBR 在写入前已解码为标准通道。
-* 存储 `AtlasAddressMap` 映射表，使宿主无需重新执行装箱计算，直接根据 UV 坐标寻址。
+### 5.5 `ATLS` - 图集与映射块
+* **存储原则**：
+  * `AssetCache`：存储全量预烘焙出的全局多通道图集切片与 `atlas_mapping.json`。
+  * `SceneInterchange`：存储在内存中动态拼接的 **Scene Mini-Atlas**（自包含微型多通道 PBR 图集与局部 `mapping.json`），仅按需裁切并装箱当前场景方块实际引用的纹理，模型 UV 已对其对齐。
 
 ### 5.6 `BIOM` - 生物群系调色板映射块
 * 存储原版及自定义生物群系色阶映射表与 Colormap 贴图（`grass.png`, `foliage.png`）。
@@ -141,12 +144,12 @@ pub struct ChunkEntry {
 | 特性维度 | Profile A: `AssetCache` (`.mtkcache`) | Profile B: `SceneInterchange` (`.mtkscene`) |
 | :--- | :--- | :--- |
 | **应用场景** | 全量材质包预编译缓存、本地资产库 | 用户工程分享、跨机器/跨 DCC 场景交换 |
-| **体素数据 (`VOXL`)** | ❌ 无 | ✅ 仅包含选区内的稀疏体素网格 |
-| **贴图策略 (`TXTR` / `ATLS`)** | ✅ 包含完整多通道 Atlas 与 Standalone PBR | ✅ **仅包含场景引用的独立贴图 (按需)**，不存固化图集 |
-| **模型策略 (`MODL`)** | ✅ 包含全局所有方块的完整模型数据库 | ✅ **仅包含场景中实际使用的模型闭包 (剪枝)** |
-| **网格模型数据** | ❌ 不存烘焙的世界大网格 | ❌ **不存全量网格**，现场根据体素+模型实时重构 |
+| **体素数据 (`VOXL`)** | ❌ 无 | ✅ 稀疏列存体素与方块实体 (`SparseVoxelPayload`) |
+| **贴图策略 (`ATLS`)** | ✅ 包含完整多通道全量 Atlas 与全局映射 | ✅ **自包含 Scene Mini-Atlas**（仅包含场景引用的裁剪图集） |
+| **模型策略 (`MODL`)** | ✅ 包含全局所有方块的完整模型数据库 | ✅ **Tree-Shaken 模型闭包**（模型 UV 已预映射至 Mini-Atlas） |
+| **网格模型数据** | ❌ 不存烘焙的世界大网格 | ❌ **不存全量网格**，现场根据体素+剪枝模型极速重构 |
 | **典型文件体积** | 50 MB ~ 500 MB (取决于材质包分辨率) | **500 KB ~ 15 MB** (体积小 1~2 个数量级) |
-| **重建灵活性** | 高速直通读取 | 极高（导入端可自选 Greedy Meshing、AO、图集/独立材质） |
+| **独立脱机能力** | 依赖本地全量资源环境 | **100% 自包含**（无需原版客户端或材质包即可直接渲染） |
 
 ---
 
@@ -161,21 +164,21 @@ pub struct ChunkEntry {
                                  │
            ┌─────────────────────┴─────────────────────┐
            ▼                                           ▼
-┌───────────────────────┐                   ┌─────────────────────────┐
-│ Extract Voxel Storage │                   │ Extract Needed Textures │
-│  (Sparse Sections)    │                   │   & Model Definitions   │
-└──────────┬────────────┘                   └────────────┬────────────┘
+┌─────────────────────────┐                 ┌─────────────────────────┐
+│ Sparse Voxel Ingestion  │                 │  Tree-Shaken Models &   │
+│  (SparseVoxelPayload)   │                 │   Self-Contained Atlas  │
+└──────────┬──────────────┘                 └────────────┬────────────┘
            │                                             │
-           │                                             ▼
-           │                                ┌─────────────────────────┐
-           │                                │ Build On-The-Fly Atlas  │
-           │                                │ or Standalone Shaders   │
-           │                                └────────────┬────────────┘
+           ▼                                             │
+┌─────────────────────────┐                              │
+│ Reconstruct Storage &   │                              │
+│ Companion Point Cloud   │                              │
+└──────────┬──────────────┘                              │
            │                                             │
            └─────────────────────┬───────────────────────┘
                                  ▼
                     ┌─────────────────────────┐
-                    │  Run SectionMesher      │
+                    │     SectionMesher       │
                     │  (Greedy / AO / Tint)   │
                     └────────────┬────────────┘
                                  ▼
@@ -185,14 +188,15 @@ pub struct ChunkEntry {
                     └─────────────────────────┘
 ```
 
-1. **零拷贝秒级解析**：通过 `mmap` 读取文件头与 TOC，解析元数据与依赖清单。
-2. **材质管线决策**：
-   - 若用户选择“图集模式”：在内存中现场调用 `AtlasBuilder` 将提取出的独立贴图快速拼成一张紧凑场景专属小图集，并重新计算 UV 偏移；
-   - 若用户选择“独立材质模式”：直接为各贴图构建独立的 Principled BSDF 节点树。
+1. **零拷贝秒级解析**：通过 `ScenePackageReader` 快速读取文件头与 TOC，解析 `META` 元数据。
+2. **提取自包含模型与微图集**：直接从 `MODL` 与 `ATLS` 读取 Tree-Shaken 几何与规范 PBR 图集，无需耗时的在线装箱。
 3. **体素世界网格化**：
-   - 将 `VOXL` 数据喂入 `VoxelStorage`；
-   - 根据用户导入面板配置（如是否启用平滑 AO、是否开启面剔除、是否合并共面），调用 `SectionMesher` 动态生成几何网格流；
-4. **批量灌入场景**：通过 Buffer Protocol 将顶点与索引极速写入 DCC 宿主物体。
+   - 将 `SparseVoxelPayload` 转换为 `VoxelPointCloud` 与 `VoxelStorage`；
+   - 根据用户导入参数（AO 开关、流体曲面、坐标原点对齐）执行 `SectionMesher` 极速并行网格化。
+4. **批量灌入场景与伴生挂载**：
+   - 通过 DNA 直写或 Buffer Protocol 快速灌入网格；
+   - 挂载 `VoxelPointCloud` 伴生点云（标识属性 `mtk:is_voxel_cloud = True`）；
+   - 自动生成并赋予规范 Principled BSDF 材质。
 
 ---
 

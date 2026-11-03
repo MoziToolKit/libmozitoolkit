@@ -1,0 +1,782 @@
+//! # Scene Interchange Exporter
+//!
+//! Provides the end-to-end export pipeline that tree-shakes block models, crops only
+//! the referenced sprite textures from the active global atlas, stitches them into a
+//! compact, single-material Scene Mini-Atlas, remaps model UV coordinates, and bundles
+//! everything into a self-contained `.mtkscene` package.
+
+use std::collections::{BTreeSet, HashMap};
+use std::path::Path;
+
+use mtk_model::{BakedModelDatabase, BlockEntityData};
+use mtk_resource::ResourceLocation;
+use mtk_texture::atlas::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation};
+use mtk_texture::{RgbaBuffer, Stitcher};
+use mtk_voxel::SparseVoxelPayload;
+
+use super::metadata::SceneMetadata;
+use super::package::{write_scene_package, ScenePackageWriteOptions};
+use crate::MtkError;
+
+/// Abstract source for reading raw or prebaked atlas chunk images.
+pub trait SceneAtlasSource {
+    /// Loads the Albedo RGBA image for the specified atlas chunk stem (e.g. `"blocks_chunk_001"`).
+    fn get_albedo(
+        &mut self,
+        chunk_id: u16,
+        chunk_stem: &str,
+    ) -> Result<Option<RgbaBuffer>, MtkError>;
+    /// Loads the Normal RGBA image for the specified atlas chunk stem (if present).
+    fn get_normal(
+        &mut self,
+        chunk_id: u16,
+        chunk_stem: &str,
+    ) -> Result<Option<RgbaBuffer>, MtkError>;
+    /// Loads the ORM RGBA image for the specified atlas chunk stem (if present).
+    fn get_orm(&mut self, chunk_id: u16, chunk_stem: &str) -> Result<Option<RgbaBuffer>, MtkError>;
+    /// Loads the AUX RGBA image for the specified atlas chunk stem (if present).
+    fn get_aux(&mut self, chunk_id: u16, chunk_stem: &str) -> Result<Option<RgbaBuffer>, MtkError>;
+}
+
+impl SceneAtlasSource for crate::prebake::AssetCacheReader {
+    fn get_albedo(
+        &mut self,
+        _chunk_id: u16,
+        chunk_stem: &str,
+    ) -> Result<Option<RgbaBuffer>, MtkError> {
+        let chunk_path = format!("atlas/textures/{}.png", chunk_stem);
+        if self.package_reader().has_chunk(&chunk_path) {
+            let buf = self.read_texture_rgba(&chunk_path)?;
+            Ok(Some(buf))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn get_normal(
+        &mut self,
+        _chunk_id: u16,
+        chunk_stem: &str,
+    ) -> Result<Option<RgbaBuffer>, MtkError> {
+        let chunk_path = format!("atlas/textures/{}_n.png", chunk_stem);
+        if self.package_reader().has_chunk(&chunk_path) {
+            let buf = self.read_texture_rgba(&chunk_path)?;
+            Ok(Some(buf))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn get_orm(
+        &mut self,
+        _chunk_id: u16,
+        chunk_stem: &str,
+    ) -> Result<Option<RgbaBuffer>, MtkError> {
+        let chunk_path = format!("atlas/textures/{}_orm.png", chunk_stem);
+        if self.package_reader().has_chunk(&chunk_path) {
+            let buf = self.read_texture_rgba(&chunk_path)?;
+            Ok(Some(buf))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn get_aux(
+        &mut self,
+        _chunk_id: u16,
+        chunk_stem: &str,
+    ) -> Result<Option<RgbaBuffer>, MtkError> {
+        let chunk_path = format!("atlas/textures/{}_aux.png", chunk_stem);
+        if self.package_reader().has_chunk(&chunk_path) {
+            let buf = self.read_texture_rgba(&chunk_path)?;
+            Ok(Some(buf))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+impl SceneAtlasSource for HashMap<String, RgbaBuffer> {
+    fn get_albedo(
+        &mut self,
+        _chunk_id: u16,
+        chunk_stem: &str,
+    ) -> Result<Option<RgbaBuffer>, MtkError> {
+        let key = format!("{}.png", chunk_stem);
+        Ok(self.get(&key).cloned())
+    }
+
+    fn get_normal(
+        &mut self,
+        _chunk_id: u16,
+        chunk_stem: &str,
+    ) -> Result<Option<RgbaBuffer>, MtkError> {
+        let key = format!("{}_n.png", chunk_stem);
+        Ok(self.get(&key).cloned())
+    }
+
+    fn get_orm(
+        &mut self,
+        _chunk_id: u16,
+        chunk_stem: &str,
+    ) -> Result<Option<RgbaBuffer>, MtkError> {
+        let key = format!("{}_orm.png", chunk_stem);
+        Ok(self.get(&key).cloned())
+    }
+
+    fn get_aux(
+        &mut self,
+        _chunk_id: u16,
+        chunk_stem: &str,
+    ) -> Result<Option<RgbaBuffer>, MtkError> {
+        let key = format!("{}_aux.png", chunk_stem);
+        Ok(self.get(&key).cloned())
+    }
+}
+
+/// Configuration options for building the scene interchange package.
+#[derive(Debug, Clone)]
+pub struct SceneExporterConfig {
+    /// Maximum dimension of the generated scene mini-atlas (default 2048).
+    pub max_atlas_size: u32,
+    /// Mipmap level alignment (default 0).
+    pub mip_level: u32,
+}
+
+impl Default for SceneExporterConfig {
+    fn default() -> Self {
+        Self {
+            max_atlas_size: 2048,
+            mip_level: 0,
+        }
+    }
+}
+
+/// In-memory artifacts generated by the scene interchange export pipeline.
+#[derive(Debug, Clone)]
+pub struct SceneExportResult {
+    pub metadata: SceneMetadata,
+    pub mini_atlas_map: AtlasAddressMap,
+    pub mini_atlas_textures: Vec<(String, Vec<u8>)>,
+    pub tree_shaken_models: BakedModelDatabase,
+    pub sprite_count: usize,
+}
+
+struct SpriteCrop {
+    key: String,
+    width: u32,
+    height: u32,
+    albedo: RgbaBuffer,
+    normal: Option<RgbaBuffer>,
+    orm: Option<RgbaBuffer>,
+    aux: Option<RgbaBuffer>,
+    source_loc: AtlasSpriteLocation,
+}
+
+/// Builds all components of a Scene Interchange bundle in memory.
+pub fn build_scene_interchange(
+    voxels: &SparseVoxelPayload,
+    source_models: &BakedModelDatabase,
+    source_atlas_map: &AtlasAddressMap,
+    atlas_source: &mut impl SceneAtlasSource,
+    config: &SceneExporterConfig,
+) -> Result<SceneExportResult, MtkError> {
+    // 1. Collect all unique texture identifiers needed by the scene
+    let mut needed_textures = BTreeSet::new();
+    let mut needed_blockstates = BTreeSet::new();
+
+    for state in &voxels.state_palette {
+        needed_blockstates.insert(state.clone());
+        if let Some(model) = source_models.get(state) {
+            for elem in &model.elements {
+                for face in elem.faces.values() {
+                    if !face.texture.is_empty() {
+                        needed_textures.insert(face.texture.clone());
+                    }
+                }
+            }
+            for face in &model.faces {
+                if !face.texture.is_empty() {
+                    needed_textures.insert(face.texture.clone());
+                }
+            }
+            for obj_face in &model.obj_faces {
+                if !obj_face.texture.is_empty() {
+                    needed_textures.insert(obj_face.texture.clone());
+                }
+            }
+        }
+
+        if let Some(group) = source_models.get_variant_group(state) {
+            for model in &group.models {
+                for elem in &model.elements {
+                    for face in elem.faces.values() {
+                        if !face.texture.is_empty() {
+                            needed_textures.insert(face.texture.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Inspect block entity visual NBTs for custom texture identifiers
+    for entity_json in &voxels.entity_palette {
+        if let Some(be) = BlockEntityData::from_visual_json(entity_json) {
+            if let Some(tex) = be.texture_identifier() {
+                needed_textures.insert(tex);
+            }
+            match be {
+                BlockEntityData::DecoratedPot { sherds } => {
+                    for sherd in sherds.into_iter().flatten() {
+                        needed_textures.insert(BlockEntityData::sherd_texture(Some(&sherd)));
+                    }
+                }
+                BlockEntityData::ItemFrame { item_id, .. } => {
+                    needed_textures.insert(item_id);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // 2. Crop individual sprites from the source atlas sheets
+    let mut loaded_albedo: HashMap<u16, Option<RgbaBuffer>> = HashMap::new();
+    let mut loaded_normal: HashMap<u16, Option<RgbaBuffer>> = HashMap::new();
+    let mut loaded_orm: HashMap<u16, Option<RgbaBuffer>> = HashMap::new();
+    let mut loaded_aux: HashMap<u16, Option<RgbaBuffer>> = HashMap::new();
+
+    let mut crops = Vec::new();
+
+    for tex_key in needed_textures {
+        let sprite_loc = match source_atlas_map.lookup_str(&tex_key) {
+            Some(loc) => loc,
+            None => continue,
+        };
+
+        let chunk_id = sprite_loc.chunk_id;
+        let chunk_meta = source_atlas_map.get_chunk_meta(chunk_id);
+        let stem = chunk_meta
+            .map(|m| m.file_stem())
+            .unwrap_or_else(|| format!("blocks_chunk_{:03}", chunk_id + 1));
+
+        // Load source chunk albedo if not cached
+        if let std::collections::hash_map::Entry::Vacant(e) = loaded_albedo.entry(chunk_id) {
+            let alb = atlas_source.get_albedo(chunk_id, &stem)?;
+            let norm = atlas_source.get_normal(chunk_id, &stem)?;
+            let orm = atlas_source.get_orm(chunk_id, &stem)?;
+            let aux = atlas_source.get_aux(chunk_id, &stem)?;
+
+            e.insert(alb);
+            loaded_normal.insert(chunk_id, norm);
+            loaded_orm.insert(chunk_id, orm);
+            loaded_aux.insert(chunk_id, aux);
+        }
+
+        let albedo_buf = match loaded_albedo.get(&chunk_id).and_then(|opt| opt.as_ref()) {
+            Some(b) => b,
+            None => continue,
+        };
+
+        let [x, y, w, h] = sprite_loc.pixel_rect;
+        if w == 0 || h == 0 {
+            continue;
+        }
+
+        let albedo_crop = albedo_buf.crop(x, y, w, h);
+        let normal_crop = loaded_normal
+            .get(&chunk_id)
+            .and_then(|opt| opt.as_ref())
+            .map(|b| b.crop(x, y, w, h));
+        let orm_crop = loaded_orm
+            .get(&chunk_id)
+            .and_then(|opt| opt.as_ref())
+            .map(|b| b.crop(x, y, w, h));
+        let aux_crop = loaded_aux
+            .get(&chunk_id)
+            .and_then(|opt| opt.as_ref())
+            .map(|b| b.crop(x, y, w, h));
+
+        crops.push(SpriteCrop {
+            key: tex_key,
+            width: w,
+            height: h,
+            albedo: albedo_crop,
+            normal: normal_crop,
+            orm: orm_crop,
+            aux: aux_crop,
+            source_loc: sprite_loc.clone(),
+        });
+    }
+
+    let sprite_count = crops.len();
+
+    // 3. Stitch cropped sprites into a compact mini-atlas
+    let mut mini_atlas_map = AtlasAddressMap::new();
+    let mut mini_atlas_textures = Vec::new();
+
+    let mut first_chunk_dims = [0u32, 0u32];
+
+    if !crops.is_empty() {
+        let mut stitcher = Stitcher::new(
+            config.max_atlas_size,
+            config.max_atlas_size,
+            config.mip_level,
+        );
+        for (idx, crop) in crops.iter().enumerate() {
+            stitcher.register_sprite(idx, crop.width, crop.height, &crop.key);
+        }
+
+        let stitched_atlas = stitcher.stitch().map_err(MtkError::Texture)?;
+
+        let has_any_normal = crops.iter().any(|c| c.normal.is_some());
+        let has_any_orm = crops.iter().any(|c| c.orm.is_some());
+        let has_any_aux = crops.iter().any(|c| c.aux.is_some());
+
+        for (page_idx, chunk) in stitched_atlas.chunks.iter().enumerate() {
+            let chunk_id = chunk.chunk_id;
+            let stem = format!("scene_atlas_{:03}", page_idx + 1);
+
+            if page_idx == 0 {
+                first_chunk_dims = [chunk.width, chunk.height];
+            }
+
+            let mut chunk_albedo = RgbaBuffer::new(chunk.width, chunk.height);
+            let mut chunk_normal = if has_any_normal {
+                Some(RgbaBuffer::solid(
+                    chunk.width,
+                    chunk.height,
+                    128,
+                    128,
+                    255,
+                    255,
+                ))
+            } else {
+                None
+            };
+            let mut chunk_orm = if has_any_orm {
+                Some(RgbaBuffer::solid(
+                    chunk.width,
+                    chunk.height,
+                    255,
+                    255,
+                    0,
+                    255,
+                ))
+            } else {
+                None
+            };
+            let mut chunk_aux = if has_any_aux {
+                Some(RgbaBuffer::new(chunk.width, chunk.height))
+            } else {
+                None
+            };
+
+            for slot in &chunk.slots {
+                let crop = &crops[slot.entry];
+
+                chunk_albedo.blit(&crop.albedo, 0, 0, slot.x, slot.y, slot.width, slot.height);
+                if let (Some(cn), Some(sn)) = (chunk_normal.as_mut(), crop.normal.as_ref()) {
+                    cn.blit(sn, 0, 0, slot.x, slot.y, slot.width, slot.height);
+                }
+                if let (Some(co), Some(so)) = (chunk_orm.as_mut(), crop.orm.as_ref()) {
+                    co.blit(so, 0, 0, slot.x, slot.y, slot.width, slot.height);
+                }
+                if let (Some(ca), Some(sa)) = (chunk_aux.as_mut(), crop.aux.as_ref()) {
+                    ca.blit(sa, 0, 0, slot.x, slot.y, slot.width, slot.height);
+                }
+
+                let u_min = slot.x as f32 / chunk.width as f32;
+                let v_min = slot.y as f32 / chunk.height as f32;
+                let u_max = (slot.x + slot.width) as f32 / chunk.width as f32;
+                let v_max = (slot.y + slot.height) as f32 / chunk.height as f32;
+
+                let mut new_loc = crop.source_loc.clone();
+                new_loc.chunk_id = chunk_id;
+                new_loc.texture_id = slot.entry as u32;
+                new_loc.frame_0_uv_bounds = [u_min, v_min, u_max, v_max];
+                new_loc.uv_bounds = [u_min, v_min, u_max, v_max];
+                new_loc.pixel_rect = [slot.x, slot.y, slot.width, slot.height];
+                new_loc.strip_pixel_rect = [slot.x, slot.y, slot.width, slot.height];
+                new_loc.has_normal = has_any_normal && crop.normal.is_some();
+                new_loc.has_specular = false;
+
+                if let Ok(res_loc) = ResourceLocation::parse_texture_path(&crop.key) {
+                    mini_atlas_map.sprites.insert(res_loc, new_loc.clone());
+                }
+                if let Ok(res_loc) = ResourceLocation::parse(&crop.key) {
+                    mini_atlas_map.sprites.insert(res_loc, new_loc);
+                }
+            }
+
+            let chunk_meta = AtlasChunkMeta {
+                chunk_id,
+                category: "scene".to_string(),
+                is_animated: false,
+                category_chunk_index: page_idx + 1,
+                width: chunk.width,
+                height: chunk.height,
+                has_normal: has_any_normal,
+                has_specular: false,
+                has_overlay: false,
+                has_orm: has_any_orm,
+                has_aux: has_any_aux,
+                has_tint: true,
+                pbr: None,
+                textures: Vec::new(),
+            };
+            mini_atlas_map.chunks.push(chunk_meta);
+
+            let png_bytes = chunk_albedo.to_png_bytes().map_err(MtkError::Texture)?;
+            mini_atlas_textures.push((format!("{}.png", stem), png_bytes));
+
+            if let Some(norm) = chunk_normal {
+                let png = norm.to_png_bytes().map_err(MtkError::Texture)?;
+                mini_atlas_textures.push((format!("{}_n.png", stem), png));
+            }
+            if let Some(orm) = chunk_orm {
+                let png = orm.to_png_bytes().map_err(MtkError::Texture)?;
+                mini_atlas_textures.push((format!("{}_orm.png", stem), png));
+            }
+            if let Some(aux) = chunk_aux {
+                let png = aux.to_png_bytes().map_err(MtkError::Texture)?;
+                mini_atlas_textures.push((format!("{}_aux.png", stem), png));
+            }
+        }
+    }
+
+    // 4. Tree-shake models & remap UV coordinates to mini-atlas
+    let mut tree_shaken_models = BakedModelDatabase::new();
+
+    for state in needed_blockstates {
+        if let Some(model) = source_models.get(&state) {
+            let mut m = model.clone();
+            m.remap_to_atlas_with(|tex_key| {
+                mini_atlas_map
+                    .lookup_str(tex_key)
+                    .map(|loc| (loc.frame_0_uv_bounds, loc.chunk_id, loc.texture_id))
+            });
+            tree_shaken_models.insert(state.clone(), m);
+        }
+
+        if let Some(group) = source_models.get_variant_group(&state) {
+            let mut g = group.clone();
+            g.remap_to_atlas_with(|tex_key| {
+                mini_atlas_map
+                    .lookup_str(tex_key)
+                    .map(|loc| (loc.frame_0_uv_bounds, loc.chunk_id, loc.texture_id))
+            });
+            tree_shaken_models.insert_variant_group(state, g);
+        }
+    }
+
+    // 5. Assemble SceneMetadata
+    let mut metadata = SceneMetadata::new(voxels.bounds, voxels.len());
+    metadata.unique_states_count = voxels.state_palette.len();
+    metadata.unique_biomes_count = voxels.biome_palette.len();
+    metadata.unique_entities_count = voxels.entity_palette.len();
+    metadata.atlas_resolution = first_chunk_dims;
+
+    Ok(SceneExportResult {
+        metadata,
+        mini_atlas_map,
+        mini_atlas_textures,
+        tree_shaken_models,
+        sprite_count,
+    })
+}
+
+/// End-to-end export function: builds the scene interchange and writes `.mtkscene` to disk.
+pub fn export_scene_package(
+    path: impl AsRef<Path>,
+    voxels: &SparseVoxelPayload,
+    source_models: &BakedModelDatabase,
+    source_atlas_map: &AtlasAddressMap,
+    atlas_source: &mut impl SceneAtlasSource,
+    config: &SceneExporterConfig,
+    write_options: Option<&ScenePackageWriteOptions>,
+) -> Result<SceneExportResult, MtkError> {
+    let result = build_scene_interchange(
+        voxels,
+        source_models,
+        source_atlas_map,
+        atlas_source,
+        config,
+    )?;
+
+    write_scene_package(
+        path,
+        &result.metadata,
+        voxels,
+        Some(&result.tree_shaken_models),
+        Some(&result.mini_atlas_map),
+        &result.mini_atlas_textures,
+        write_options,
+    )?;
+
+    Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mtk_core::direction::Direction;
+    use mtk_core::Vec2;
+    use mtk_model::baker::baked_model::{BakedElement, BakedFace, BakedModel};
+    use mtk_texture::atlas::AtlasChunkMeta;
+
+    fn create_sample_cube(state: &str, tex: &str) -> BakedModel {
+        let mut model = BakedModel {
+            block_state: state.to_string(),
+            is_cube: true,
+            is_opaque: true,
+            ..Default::default()
+        };
+        let mut faces = HashMap::new();
+        for dir in Direction::ALL {
+            let face = BakedFace {
+                direction: dir,
+                texture: tex.to_string(),
+                cullface: Some(dir),
+                uvs: [
+                    Vec2::new(0.0, 0.0),
+                    Vec2::new(1.0, 0.0),
+                    Vec2::new(1.0, 1.0),
+                    Vec2::new(0.0, 1.0),
+                ],
+                ..Default::default()
+            };
+            faces.insert(dir, face);
+        }
+        model.elements.push(BakedElement {
+            from_pos: [0.0, 0.0, 0.0],
+            to_pos: [16.0, 16.0, 16.0],
+            faces,
+        });
+        model.rebuild_face_buckets();
+        model
+    }
+
+    #[test]
+    fn test_build_scene_interchange_pipeline() {
+        // 1. Prepare fake source atlas texture and mapping
+        let mut source_map = AtlasAddressMap::new();
+        let chunk_meta = AtlasChunkMeta {
+            chunk_id: 0,
+            category: "blocks".to_string(),
+            is_animated: false,
+            category_chunk_index: 1,
+            width: 64,
+            height: 64,
+            has_normal: false,
+            has_specular: false,
+            has_overlay: false,
+            has_orm: false,
+            has_aux: false,
+            has_tint: false,
+            pbr: None,
+            textures: Vec::new(),
+        };
+        source_map.chunks.push(chunk_meta);
+
+        // Register two sprites in 64x64 source sheet
+        let loc_stone = AtlasSpriteLocation {
+            chunk_id: 0,
+            pixel_rect: [0, 0, 16, 16],
+            frame_0_uv_bounds: [0.0, 0.0, 0.25, 0.25],
+            ..Default::default()
+        };
+        let res_stone = ResourceLocation::new("minecraft", "block/stone");
+        source_map.sprites.insert(res_stone, loc_stone);
+
+        let loc_dirt = AtlasSpriteLocation {
+            chunk_id: 0,
+            pixel_rect: [16, 0, 16, 16],
+            frame_0_uv_bounds: [0.25, 0.0, 0.5, 0.25],
+            ..Default::default()
+        };
+        let res_dirt = ResourceLocation::new("minecraft", "block/dirt");
+        source_map.sprites.insert(res_dirt, loc_dirt);
+
+        // Fake image source with stone (red) and dirt (brown)
+        let mut source_images = HashMap::new();
+        let mut fake_source_sheet = RgbaBuffer::new(64, 64);
+        fake_source_sheet.blit(
+            &RgbaBuffer::solid(16, 16, 255, 0, 0, 255),
+            0,
+            0,
+            0,
+            0,
+            16,
+            16,
+        );
+        fake_source_sheet.blit(
+            &RgbaBuffer::solid(16, 16, 139, 69, 19, 255),
+            0,
+            0,
+            16,
+            0,
+            16,
+            16,
+        );
+        source_images.insert("blocks_chunk_001.png".to_string(), fake_source_sheet);
+
+        // 2. Prepare fake models
+        let stone_model = create_sample_cube("minecraft:stone", "minecraft:block/stone");
+        let dirt_model = create_sample_cube("minecraft:dirt", "minecraft:block/dirt");
+        let bedrock_model = create_sample_cube("minecraft:bedrock", "minecraft:block/bedrock");
+
+        let mut source_models = BakedModelDatabase::new();
+        source_models.insert("minecraft:stone".to_string(), stone_model);
+        source_models.insert("minecraft:dirt".to_string(), dirt_model);
+        // Also insert an unused model (e.g. bedrock) to verify tree-shaking
+        source_models.insert("minecraft:bedrock".to_string(), bedrock_model);
+
+        // 3. Build a scene with only stone
+        let mut voxels = SparseVoxelPayload::new();
+        voxels.bounds = [0, 0, 0, 16, 16, 16];
+        voxels.push(0, 0, 0, "minecraft:stone", "minecraft:plains", None, None);
+
+        let config = SceneExporterConfig::default();
+        let result = build_scene_interchange(
+            &voxels,
+            &source_models,
+            &source_map,
+            &mut source_images,
+            &config,
+        )
+        .expect("Build scene interchange");
+
+        // Verify tree-shaking: only stone model is retained!
+        assert_eq!(result.tree_shaken_models.len(), 1);
+        assert!(result.tree_shaken_models.get("minecraft:stone").is_some());
+        assert!(result.tree_shaken_models.get("minecraft:bedrock").is_none());
+
+        // Verify mini-atlas: contains 1 sprite (stone)
+        assert_eq!(result.sprite_count, 1);
+        assert_eq!(result.mini_atlas_textures.len(), 1);
+
+        // Verify model UV remapping to mini-atlas bounds:
+        let remapped_stone = result.tree_shaken_models.get("minecraft:stone").unwrap();
+        let up_face = remapped_stone.culled_faces[0][0].clone();
+        assert!(up_face.atlas_uvs.is_some());
+        let atlas_uvs = up_face.atlas_uvs.unwrap();
+        // Since stone is the only sprite packed in a 16x16 canvas, bounds must be [0.0..1.0]!
+        assert!(atlas_uvs[0].x >= 0.0 && atlas_uvs[0].x <= 1.0);
+        assert!(atlas_uvs[0].y >= 0.0 && atlas_uvs[0].y <= 1.0);
+    }
+
+    #[test]
+    fn test_export_scene_package_file_roundtrip() {
+        let temp_path = std::env::temp_dir().join(format!(
+            "test_export_scene_{}_{}.mtkscene",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+
+        let mut source_map = AtlasAddressMap::new();
+        let chunk_meta = AtlasChunkMeta {
+            chunk_id: 0,
+            category: "blocks".to_string(),
+            is_animated: false,
+            category_chunk_index: 1,
+            width: 32,
+            height: 32,
+            has_normal: false,
+            has_specular: false,
+            has_overlay: false,
+            has_orm: false,
+            has_aux: false,
+            has_tint: false,
+            pbr: None,
+            textures: Vec::new(),
+        };
+        source_map.chunks.push(chunk_meta);
+
+        let loc_stone = AtlasSpriteLocation {
+            chunk_id: 0,
+            pixel_rect: [0, 0, 16, 16],
+            frame_0_uv_bounds: [0.0, 0.0, 0.5, 0.5],
+            ..Default::default()
+        };
+        source_map
+            .sprites
+            .insert(ResourceLocation::new("minecraft", "block/stone"), loc_stone);
+
+        let mut source_images = HashMap::new();
+        let mut fake_source_sheet = RgbaBuffer::new(32, 32);
+        fake_source_sheet.blit(
+            &RgbaBuffer::solid(16, 16, 100, 100, 100, 255),
+            0,
+            0,
+            0,
+            0,
+            16,
+            16,
+        );
+        source_images.insert("blocks_chunk_001.png".to_string(), fake_source_sheet);
+
+        let mut source_models = BakedModelDatabase::new();
+        source_models.insert(
+            "minecraft:stone".to_string(),
+            create_sample_cube("minecraft:stone", "minecraft:block/stone"),
+        );
+
+        let mut voxels = SparseVoxelPayload::new();
+        voxels.bounds = [10, 60, 10, 5, 5, 5];
+        voxels.push(
+            10,
+            60,
+            10,
+            "minecraft:stone",
+            "minecraft:plains",
+            None,
+            Some(15),
+        );
+
+        let config = SceneExporterConfig::default();
+        let export_res = export_scene_package(
+            &temp_path,
+            &voxels,
+            &source_models,
+            &source_map,
+            &mut source_images,
+            &config,
+            None,
+        )
+        .expect("Export scene package file");
+
+        assert_eq!(export_res.sprite_count, 1);
+
+        // Read package back from disk
+        let reader = crate::scene::ScenePackageReader::open_file(&temp_path)
+            .expect("Open exported scene package");
+        assert_eq!(reader.metadata().voxel_count, 1);
+        assert_eq!(reader.metadata().bounds, [10, 60, 10, 5, 5, 5]);
+
+        let read_voxels = reader.read_sparse_voxels().expect("Read voxels");
+        assert_eq!(read_voxels.len(), 1);
+        assert_eq!(read_voxels.state_palette, vec!["minecraft:stone"]);
+
+        let read_models = reader
+            .read_models()
+            .expect("Read models")
+            .expect("Models must exist");
+        assert_eq!(read_models.len(), 1);
+        assert!(read_models.get("minecraft:stone").is_some());
+
+        let read_mapping = reader
+            .read_atlas_mapping()
+            .expect("Read atlas mapping")
+            .expect("Mapping must exist");
+        assert!(read_mapping.lookup_str("minecraft:block/stone").is_some());
+
+        let read_textures = reader.read_atlas_textures().expect("Read atlas textures");
+        assert_eq!(read_textures.len(), 1);
+
+        let _ = std::fs::remove_file(&temp_path);
+    }
+}

@@ -28,10 +28,7 @@ pub struct SparseVoxelPayload {
     /// Global biome palette.
     pub biome_palette: Vec<String>,
     /// Canonical visual NBT block entity / hanging entity JSON strings palette.
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Vec::is_empty")
-    )]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub entity_palette: Vec<String>,
     /// Columnar sparse voxels.
     pub columns: SparseVoxelColumns,
@@ -56,10 +53,7 @@ pub struct SparseVoxelColumns {
     /// Entity palette index (-1 if none; >=0 into `entity_palette`).
     pub entity_indices: Vec<i32>,
     /// Optional combined light levels (sky nibble << 4 | block nibble).
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub light_levels: Option<Vec<u8>>,
 }
 
