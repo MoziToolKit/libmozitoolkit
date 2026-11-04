@@ -178,7 +178,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // 11. Scene Interchange (.mtkscene)
     m.add_class::<scene::PySceneMetadata>()?;
-    m.add_class::<scene::PySceneCapabilities>()?;
     m.add_class::<scene::PyScenePackageReader>()?;
     m.add_class::<scene::PyValidationReport>()?;
     m.add_function(wrap_pyfunction!(scene::export_scene_package, m)?)?;

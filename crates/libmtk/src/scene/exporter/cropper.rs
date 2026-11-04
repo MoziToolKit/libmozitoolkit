@@ -66,7 +66,7 @@ fn crop_optional_overlay_layer(
 pub fn crop_needed_sprites(
     needed_textures: &BTreeSet<String>,
     source_atlas_map: &AtlasAddressMap,
-    atlas_source: &mut impl SceneAtlasSource,
+    atlas_source: &mut (impl AtlasLayerSource + EntityAssetSource),
     dynamic_entity_atlases: Option<&HashMap<u16, Vec<u8>>>,
     dynamic_entity_slots: Option<&HashMap<String, (u16, u16)>>,
 ) -> Result<Vec<CroppedSprite>, MtkError> {

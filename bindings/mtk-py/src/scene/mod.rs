@@ -8,5 +8,5 @@ pub mod metadata;
 pub mod reader;
 
 pub use exporter::export_scene_package;
-pub use metadata::{PySceneCapabilities, PySceneMetadata, PyValidationReport};
+pub use metadata::{PySceneMetadata, PyValidationReport};
 pub use reader::PyScenePackageReader;

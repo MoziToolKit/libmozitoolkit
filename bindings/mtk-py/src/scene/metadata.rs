@@ -5,99 +5,17 @@ use pyo3::types::PyDict;
 
 use libmtk::scene::SceneMetadata;
 
-/// Capabilities declared by a scene package.
-#[pyclass(name = "SceneCapabilities")]
-#[derive(Debug, Clone)]
-pub struct PySceneCapabilities {
-    pub(crate) inner: libmtk::SceneCapabilities,
-}
-
-#[pymethods]
-impl PySceneCapabilities {
-    #[getter]
-    pub fn has_colormaps(&self) -> bool {
-        self.inner.has_colormaps
-    }
-
-    #[getter]
-    pub fn has_ctm(&self) -> bool {
-        self.inner.has_ctm
-    }
-
-    #[getter]
-    pub fn has_pbr(&self) -> bool {
-        self.inner.has_pbr
-    }
-
-    #[getter]
-    pub fn has_dynamic_entities(&self) -> bool {
-        self.inner.has_dynamic_entities
-    }
-
-    pub fn __getitem__(&self, key: &str) -> PyResult<bool> {
-        match key {
-            "has_colormaps" => Ok(self.inner.has_colormaps),
-            "has_ctm" => Ok(self.inner.has_ctm),
-            "has_pbr" => Ok(self.inner.has_pbr),
-            "has_dynamic_entities" => Ok(self.inner.has_dynamic_entities),
-            _ => Err(pyo3::exceptions::PyKeyError::new_err(key.to_string())),
-        }
-    }
-
-    pub fn __contains__(&self, key: &str) -> bool {
-        matches!(
-            key,
-            "has_colormaps" | "has_ctm" | "has_pbr" | "has_dynamic_entities"
-        )
-    }
-
-    #[pyo3(signature = (key, default=None))]
-    pub fn get(&self, key: &str, default: Option<bool>) -> Option<bool> {
-        match key {
-            "has_colormaps" => Some(self.inner.has_colormaps),
-            "has_ctm" => Some(self.inner.has_ctm),
-            "has_pbr" => Some(self.inner.has_pbr),
-            "has_dynamic_entities" => Some(self.inner.has_dynamic_entities),
-            _ => default,
-        }
-    }
-
-    pub fn keys(&self) -> Vec<&'static str> {
-        vec![
-            "has_colormaps",
-            "has_ctm",
-            "has_pbr",
-            "has_dynamic_entities",
-        ]
-    }
-
-    pub fn items(&self) -> Vec<(&'static str, bool)> {
-        vec![
-            ("has_colormaps", self.inner.has_colormaps),
-            ("has_ctm", self.inner.has_ctm),
-            ("has_pbr", self.inner.has_pbr),
-            ("has_dynamic_entities", self.inner.has_dynamic_entities),
-        ]
-    }
-
-    pub fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let dict = PyDict::new(py);
-        dict.set_item("has_colormaps", self.inner.has_colormaps)?;
-        dict.set_item("has_ctm", self.inner.has_ctm)?;
-        dict.set_item("has_pbr", self.inner.has_pbr)?;
-        dict.set_item("has_dynamic_entities", self.inner.has_dynamic_entities)?;
-        Ok(dict)
-    }
-
-    fn __repr__(&self) -> String {
-        format!(
-            "SceneCapabilities(has_colormaps={}, has_ctm={}, has_pbr={}, has_dynamic_entities={})",
-            self.inner.has_colormaps,
-            self.inner.has_ctm,
-            self.inner.has_pbr,
-            self.inner.has_dynamic_entities
-        )
-    }
+/// Helper converting internal SceneCapabilities into a standard Python dictionary.
+pub(crate) fn capabilities_to_dict<'py>(
+    py: Python<'py>,
+    caps: &libmtk::SceneCapabilities,
+) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new(py);
+    dict.set_item("has_colormaps", caps.has_colormaps)?;
+    dict.set_item("has_ctm", caps.has_ctm)?;
+    dict.set_item("has_pbr", caps.has_pbr)?;
+    dict.set_item("has_dynamic_entities", caps.has_dynamic_entities)?;
+    Ok(dict)
 }
 
 /// Python wrapper for Scene Interchange metadata (`META` chunk).
@@ -160,10 +78,8 @@ impl PySceneMetadata {
     }
 
     #[getter]
-    pub fn capabilities(&self) -> PySceneCapabilities {
-        PySceneCapabilities {
-            inner: self.inner.capabilities,
-        }
+    pub fn capabilities<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        capabilities_to_dict(py, &self.inner.capabilities)
     }
 
     /// Converts metadata into a Python dictionary.

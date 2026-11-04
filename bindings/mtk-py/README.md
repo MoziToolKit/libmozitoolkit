@@ -162,11 +162,8 @@ Python 模块名：`libmtk_py`
 - **`ValidationReport` (`PyValidationReport`)**：场景包校验报告对象。
   - 属性：`is_valid: bool`, `errors: list[str]`, `warnings: list[str]`；
   - `to_dict() -> dict`：转化为 Python 字典。
-- **`SceneCapabilities`**：场景包能力清单对象。
-  - 属性：`has_colormaps: bool`, `has_ctm: bool`, `has_pbr: bool`, `has_dynamic_entities: bool`（支持属性访问及标准 Mapping 协议如 `caps["has_pbr"]`, `caps.get(...)`, `caps.keys()`, `caps.items()`, `"has_pbr" in caps`）；
-  - `to_dict() -> dict`：转化为 Python 字典。
 - **`SceneMetadata`**：场景包元数据对象。
-  - 属性：`format_version`, `bounds`, `voxel_count`, `unique_states_count`, `unique_biomes_count`, `unique_entities_count`, `atlas_resolution`, `generator`, `created_at_epoch_secs`, `capabilities` (`SceneCapabilities`，包含 `has_colormaps`, `has_ctm`, `has_pbr`, `has_dynamic_entities`，旧包默认全 false，建议消费端调用 reader 的 `effective_capabilities()` 获取权威探测值)；
+  - 属性：`format_version`, `bounds`, `voxel_count`, `unique_states_count`, `unique_biomes_count`, `unique_entities_count`, `atlas_resolution`, `generator`, `created_at_epoch_secs`, `capabilities` (标准 Python dict，包含 `has_colormaps`, `has_ctm`, `has_pbr`, `has_dynamic_entities`)；
   - `to_dict() -> dict`：快速转化为 Python 字典。
 - **`export_scene_package(path, point_cloud, cache, options=None, **kwargs) -> SceneMetadata`**：
   端到端场景交换导出算子：支持传入结构化 `options` 字典或关键字参数（`max_atlas_size`, `mip_level`, `dynamic_entity_atlases`, `ctm_solver`, `enable_ctm`, `dynamic_entity_slots`）。自动扫描伴生体素点云、执行模型树剪枝、从激活缓存裁剪贴图、自适应缝合动态实体皮肤与旗帜纹理、剪枝并嵌入 CTM 规则与子贴图、自包含打包 Biome 色盘与 Resolver、拼接微型多通道图集、并行重映射模型 UV 并压缩打包为 `.mtkscene`。

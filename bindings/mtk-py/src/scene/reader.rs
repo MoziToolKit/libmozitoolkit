@@ -6,7 +6,7 @@ use pyo3::types::{PyBytes, PyDict, PyMemoryView};
 use libmtk::scene::ScenePackageReader;
 use mtk_voxel::{CoordinateSystem, MesherConfig};
 
-use super::metadata::{PySceneCapabilities, PySceneMetadata, PyValidationReport};
+use super::metadata::{capabilities_to_dict, PySceneMetadata, PyValidationReport};
 use crate::model::PyBakedModelDatabase;
 use crate::point_cloud::PyVoxelPointCloud;
 use crate::texture::PyBakedAtlas;
@@ -227,10 +227,8 @@ impl PyScenePackageReader {
     }
 
     /// Returns the effective capabilities of this package with chunk probing fallback for legacy packages.
-    pub fn effective_capabilities(&self) -> PySceneCapabilities {
-        PySceneCapabilities {
-            inner: self.inner.effective_capabilities(),
-        }
+    pub fn effective_capabilities<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        capabilities_to_dict(py, &self.inner.effective_capabilities())
     }
 
     /// Checks whether dynamic entity slots mapping is carried in this package.
