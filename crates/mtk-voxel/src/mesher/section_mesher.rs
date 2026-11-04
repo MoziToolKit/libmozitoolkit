@@ -382,6 +382,7 @@ impl SectionMesher {
                                 lz,
                                 shading.tint_data,
                                 shading.tint_color,
+                                config.colormaps.as_deref(),
                             );
 
                             emit_baked_face(
@@ -509,6 +510,7 @@ impl SectionMesher {
                                 lz,
                                 shading.tint_data,
                                 shading.tint_color,
+                                config.colormaps.as_deref(),
                             );
 
                             let grid_ctx = grid_pool

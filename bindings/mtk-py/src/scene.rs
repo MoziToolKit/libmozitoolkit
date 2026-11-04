@@ -7,8 +7,8 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyMemoryView};
 
 use libmtk::scene::{
-    export_scene_package_with_ctm as libmtk_export_scene, SceneExporterConfig, SceneMetadata,
-    ScenePackageReader,
+    export_scene_package as libmtk_export_scene, CtmMode, SceneExportRequest, SceneExporterConfig,
+    SceneMetadata, ScenePackageReader,
 };
 use mtk_voxel::{CoordinateSystem, MesherConfig, SparseVoxelPayload};
 
@@ -213,9 +213,32 @@ impl PyScenePackageReader {
             .map(|bytes| PyBytes::new(py, &bytes))
     }
 
+    /// Reads packaged colormaps into a parsed VanillaColormaps structure.
+    pub fn read_colormaps(&self) -> PyResult<Option<crate::material::PyVanillaColormaps>> {
+        let cms = self
+            .inner
+            .read_colormaps()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        Ok(cms.map(|c| crate::material::PyVanillaColormaps { inner: c }))
+    }
+
     /// Re-installs or updates the resident colormaps from this package into the active palette cache.
     pub fn install_colormaps(&self) {
         self.inner.install_colormaps();
+    }
+
+    /// Checks whether dynamic entity slots mapping is carried in this package.
+    pub fn has_dynamic_entity_slots(&self) -> bool {
+        self.inner.has_dynamic_entity_slots()
+    }
+
+    /// Reads dynamic entity slot mapping if present in the package.
+    pub fn read_dynamic_entity_slots(
+        &self,
+    ) -> PyResult<Option<std::collections::HashMap<String, (u16, u16)>>> {
+        self.inner
+            .read_dynamic_entity_slots()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 
     /// Reads the packaged BiomeResolver if present in the package.
@@ -316,7 +339,7 @@ impl PyScenePackageReader {
 
 /// End-to-end exporter: builds Scene Mini-Atlas, remaps UVs, tree-shakes models, and writes `.mtkscene`.
 #[pyfunction]
-#[pyo3(signature = (output_path, point_cloud, asset_cache, max_atlas_size=2048, mip_level=0, dynamic_entity_atlases=None, ctm_solver=None))]
+#[pyo3(signature = (output_path, point_cloud, asset_cache, max_atlas_size=2048, mip_level=0, dynamic_entity_atlases=None, ctm_solver=None, enable_ctm=None, dynamic_entity_slots=None))]
 pub fn export_scene_package(
     output_path: &str,
     point_cloud: &PyVoxelPointCloud,
@@ -325,6 +348,8 @@ pub fn export_scene_package(
     mip_level: Option<u32>,
     dynamic_entity_atlases: Option<std::collections::HashMap<u16, Bound<'_, PyBytes>>>,
     ctm_solver: Option<&crate::ctm::PyCtmSolver>,
+    enable_ctm: Option<bool>,
+    dynamic_entity_slots: Option<std::collections::HashMap<String, (u16, u16)>>,
 ) -> PyResult<PySceneMetadata> {
     let sparse_voxels = SparseVoxelPayload::from_point_cloud(&point_cloud.inner);
     let models = asset_cache
@@ -348,20 +373,33 @@ pub fn export_scene_package(
                 .collect()
         });
 
-    let explicit_ctm_rules = ctm_solver.map(|s| s.inner.rules.as_slice());
+    let resolved_ctm_mode = if let Some(solver) = ctm_solver {
+        if enable_ctm == Some(false) {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Conflicting CTM arguments: explicit ctm_solver was provided, but enable_ctm is False",
+            ));
+        }
+        CtmMode::Explicit(solver.inner.rules.as_slice())
+    } else {
+        match enable_ctm {
+            Some(true) => CtmMode::Auto,
+            Some(false) | None => CtmMode::Disabled,
+        }
+    };
 
-    let result = libmtk_export_scene(
-        output_path,
-        &sparse_voxels,
-        &models,
-        &atlas_map,
-        &mut asset_cache.inner,
-        &config,
-        converted_dyn_atlases.as_ref(),
-        explicit_ctm_rules,
-        None,
-    )
-    .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+    let request = SceneExportRequest {
+        voxels: &sparse_voxels,
+        source_models: &models,
+        source_atlas_map: &atlas_map,
+        atlas_source: &mut asset_cache.inner,
+        config: &config,
+        dynamic_entity_atlases: converted_dyn_atlases.as_ref(),
+        dynamic_entity_slots: dynamic_entity_slots.as_ref(),
+        ctm_mode: resolved_ctm_mode,
+    };
+
+    let result = libmtk_export_scene(output_path, request, None)
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
     Ok(PySceneMetadata {
         inner: result.metadata,

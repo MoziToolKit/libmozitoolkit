@@ -134,6 +134,9 @@ pub fn build_scene_atlas_and_models(
                 .cloned()
             {
                 insert_sprite_aliases(&mut baked_atlas.address_map, &crop.key, &loc);
+                for alias in &crop.aliases {
+                    insert_sprite_aliases(&mut baked_atlas.address_map, alias, &loc);
+                }
             }
             if let Some(loc) = baked_atlas
                 .address_map
@@ -141,6 +144,9 @@ pub fn build_scene_atlas_and_models(
                 .cloned()
             {
                 insert_anim_aliases(&mut baked_atlas.address_map, &crop.key, &loc);
+                for alias in &crop.aliases {
+                    insert_anim_aliases(&mut baked_atlas.address_map, alias, &loc);
+                }
             }
         }
 

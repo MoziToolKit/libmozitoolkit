@@ -231,6 +231,20 @@ impl PyAssetCache {
         Ok(crate::material::PyBiomeResolver { inner: resolver })
     }
 
+    /// Loads colormaps from the asset cache package.
+    pub fn load_colormaps(&self) -> PyResult<Option<crate::material::PyVanillaColormaps>> {
+        let cms = self
+            .inner
+            .load_colormaps()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        Ok(cms.map(|c| crate::material::PyVanillaColormaps { inner: c }))
+    }
+
+    /// Explicitly installs colormaps from this cache into the process-level active singletons.
+    pub fn install_colormaps(&self) {
+        self.inner.install_colormaps();
+    }
+
     /// Extracts a single texture chunk to the specified destination path.
     pub fn extract_atlas_texture(&self, filename: &str, output_path: &str) -> PyResult<()> {
         self.inner

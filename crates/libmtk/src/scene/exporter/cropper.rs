@@ -210,10 +210,11 @@ impl SceneAtlasSource for HashMap<String, RgbaBuffer> {
     }
 }
 
-/// A cropped sprite pairing its original string key with a canonical `DecodedSprite`.
+/// A cropped sprite pairing its original string key and aliases with a canonical `DecodedSprite`.
 #[derive(Debug, Clone)]
 pub struct CroppedSprite {
     pub key: String,
+    pub aliases: Vec<String>,
     pub sprite: DecodedSprite,
 }
 
@@ -261,6 +262,7 @@ pub fn crop_needed_sprites(
     source_atlas_map: &AtlasAddressMap,
     atlas_source: &mut impl SceneAtlasSource,
     dynamic_entity_atlases: Option<&HashMap<u16, Vec<u8>>>,
+    dynamic_entity_slots: Option<&HashMap<String, (u16, u16)>>,
 ) -> Result<Vec<CroppedSprite>, MtkError> {
     let mut loaded_albedo: HashMap<u16, Option<RgbaBuffer>> = HashMap::new();
     let mut loaded_normal: HashMap<u16, Option<RgbaBuffer>> = HashMap::new();
@@ -269,15 +271,28 @@ pub fn crop_needed_sprites(
     let mut loaded_overlay: HashMap<u16, Option<RgbaBuffer>> = HashMap::new();
 
     let mut crops = Vec::new();
-    let mut banner_baker = atlas_source.get_banner_baker()?.unwrap_or_default();
-    let mut next_unregistered_skin_slot: Option<u16> = None;
+    let mut banner_baker_opt = atlas_source.get_banner_baker()?;
     let mut visited_sprite_ids = HashSet::new();
+
+    // Group needed textures by canonical ResourceLocation so no alias is lost
+    let mut sprite_id_to_keys: HashMap<ResourceLocation, Vec<String>> = HashMap::new();
+    for tex_key in needed_textures {
+        let sprite_id = parse_res_loc(tex_key);
+        sprite_id_to_keys
+            .entry(sprite_id)
+            .or_default()
+            .push(tex_key.clone());
+    }
 
     for tex_key in needed_textures {
         let sprite_id = parse_res_loc(tex_key);
-        if !visited_sprite_ids.insert(sprite_id) {
+        if !visited_sprite_ids.insert(sprite_id.clone()) {
             continue;
         }
+        let aliases = sprite_id_to_keys
+            .get(&sprite_id)
+            .cloned()
+            .unwrap_or_default();
 
         let maybe_loc = source_atlas_map.lookup_str(tex_key).or_else(|| {
             if let Some(stripped) = tex_key.strip_prefix("minecraft:skin/") {
@@ -294,6 +309,7 @@ pub fn crop_needed_sprites(
         });
 
         // Case A: Dynamic entity sprite in chunk 0xFFF0..=0xFFFF
+        let mut cropped_from_dynamic = false;
         if let Some(sprite_loc) = maybe_loc {
             if sprite_loc.chunk_id >= DYNAMIC_CHUNK_START {
                 let chunk_id = sprite_loc.chunk_id;
@@ -314,116 +330,159 @@ pub fn crop_needed_sprites(
                                 let albedo = full_buf.crop(x, y, w, h);
                                 crops.push(CroppedSprite {
                                     key: tex_key.clone(),
-                                    sprite: DecodedSprite::simple(
-                                        parse_res_loc(tex_key),
-                                        albedo,
-                                        w,
-                                        h,
-                                    ),
+                                    aliases: aliases.clone(),
+                                    sprite: DecodedSprite::simple(sprite_id.clone(), albedo, w, h),
                                 });
-                                continue;
+                                cropped_from_dynamic = true;
                             }
                         }
                     }
                 }
-                // Zero fake fallback: skip unregistered/missing dynamic entities cleanly
-                continue;
             }
         }
+        if cropped_from_dynamic {
+            continue;
+        }
 
-        // Case B: Entity texture fallback when not registered in source atlas map
-        if maybe_loc.is_none() {
-            // Check if it's a banner parsed via authoritative banner model module
-            if let Some((base_color, patterns)) =
-                mtk_model::entity::banner::parse_banner_texture_identifier(tex_key)
-            {
+        // Case B: Entity texture fallback when not cropped from dynamic chunk
+        // 1. Procedural Banner Synthesis
+        if let Some((base_color, patterns)) =
+            mtk_model::entity::banner::parse_banner_texture_identifier(tex_key)
+        {
+            if let Some(ref mut baker) = banner_baker_opt {
                 let pat_refs: Vec<(&str, &str)> = patterns
                     .iter()
                     .map(|p| (p.pattern.as_str(), p.color.as_str()))
                     .collect();
-                let baked = banner_baker.bake(&base_color, &pat_refs);
+                let baked = baker.bake(&base_color, &pat_refs);
                 let (w, h) = (baked.width, baked.height);
                 crops.push(CroppedSprite {
                     key: tex_key.clone(),
-                    sprite: DecodedSprite::simple(parse_res_loc(tex_key), (*baked).clone(), w, h),
+                    aliases: aliases.clone(),
+                    sprite: DecodedSprite::simple(sprite_id.clone(), (*baked).clone(), w, h),
                 });
                 continue;
+            } else {
+                return Err(MtkError::Resource(
+                    mtk_resource::error::ResourceError::NotFound(format!(
+                        "Banner texture '{tex_key}' referenced but no BannerBaker pattern assets are available in cache"
+                    )),
+                ));
             }
+        }
 
-            // Check if it's a player skin
-            let is_skin = tex_key.starts_with("minecraft:skin/") || tex_key.starts_with("skin/");
-            if is_skin {
-                if let Some(dyn_map) = dynamic_entity_atlases {
-                    if let Some(raw_bytes) = dyn_map.get(&DYNAMIC_CHUNK_START) {
-                        if raw_bytes.len()
-                            >= (DYNAMIC_ATLAS_WIDTH * DYNAMIC_ATLAS_HEIGHT * 4) as usize
-                        {
-                            if next_unregistered_skin_slot.is_none() {
-                                let has_prewarmed_banners = {
-                                    let px_20_20_a = raw_bytes[(20 * 1024 + 20) * 4 + 3];
-                                    let px_60_60_a = raw_bytes[(60 * 1024 + 60) * 4 + 3];
-                                    px_20_20_a > 0 && px_60_60_a == 0
-                                };
-                                next_unregistered_skin_slot =
-                                    Some(if has_prewarmed_banners { 16 } else { 0 });
-                            }
+        // 2. Player Skin Dynamic Crop
+        let is_skin = tex_key.starts_with("minecraft:skin/") || tex_key.starts_with("skin/");
+        if is_skin {
+            if let Some(dyn_map) = dynamic_entity_atlases {
+                let stripped = tex_key
+                    .strip_prefix("minecraft:skin/")
+                    .or_else(|| tex_key.strip_prefix("skin/"))
+                    .unwrap_or(tex_key);
 
-                            let stripped = tex_key
-                                .strip_prefix("minecraft:skin/")
-                                .or_else(|| tex_key.strip_prefix("skin/"))
-                                .unwrap_or(tex_key);
-                            let slot_idx = if let Some(idx) = stripped
-                                .strip_prefix("slot_")
-                                .or(Some(stripped))
-                                .and_then(|s| s.parse::<u16>().ok())
-                            {
-                                idx
+                let base_name = stripped
+                    .strip_prefix("uuid_")
+                    .or_else(|| stripped.strip_prefix("player_"))
+                    .unwrap_or(stripped);
+
+                let loc_opt = maybe_loc.or_else(|| {
+                    source_atlas_map
+                        .lookup_str(&format!("minecraft:skin/{base_name}"))
+                        .or_else(|| source_atlas_map.lookup_str(&format!("skin/{base_name}")))
+                        .or_else(|| source_atlas_map.lookup_str(base_name))
+                });
+
+                let resolved_slot: Option<(u16, u16)> = loc_opt
+                    .and_then(|loc| {
+                        if loc.chunk_id >= DYNAMIC_CHUNK_START {
+                            if let Some(s) = loc.slot_index {
+                                Some((loc.chunk_id, s))
                             } else {
-                                let cur = next_unregistered_skin_slot.unwrap();
-                                next_unregistered_skin_slot = Some(cur + 1);
-                                cur
-                            };
-
-                            let chunk_offset = slot_idx / 256;
-                            let target_chunk_id = DYNAMIC_CHUNK_START + chunk_offset;
-                            let in_chunk_slot = slot_idx % 256;
-                            let col = (in_chunk_slot as u32) % 16;
-                            let row = (in_chunk_slot as u32) / 16;
-                            let px = col * 64;
-                            let py = row * 64;
-
-                            if let Some(target_bytes) = dyn_map.get(&target_chunk_id) {
-                                if target_bytes.len()
-                                    >= (DYNAMIC_ATLAS_WIDTH * DYNAMIC_ATLAS_HEIGHT * 4) as usize
-                                    && px + 64 <= DYNAMIC_ATLAS_WIDTH
-                                    && py + 64 <= DYNAMIC_ATLAS_HEIGHT
-                                {
-                                    let full = RgbaBuffer {
-                                        width: DYNAMIC_ATLAS_WIDTH,
-                                        height: DYNAMIC_ATLAS_HEIGHT,
-                                        pixels: target_bytes.clone(),
-                                    };
-                                    let albedo = full.crop(px, py, 64, 64);
-                                    crops.push(CroppedSprite {
-                                        key: tex_key.clone(),
-                                        sprite: DecodedSprite::simple(
-                                            parse_res_loc(tex_key),
-                                            albedo,
-                                            64,
-                                            64,
-                                        ),
-                                    });
-                                    continue;
-                                }
+                                let col = loc.pixel_rect[0] / 64;
+                                let row = loc.pixel_rect[1] / 64;
+                                Some((loc.chunk_id, (row * 16 + col) as u16))
                             }
+                        } else {
+                            None
                         }
-                    }
-                }
-                // Zero fake fallback: no pink RgbaBuffer::solid
-                continue;
-            }
+                    })
+                    .or_else(|| {
+                        dynamic_entity_slots.and_then(|slots| {
+                            slots
+                                .get(tex_key)
+                                .or_else(|| slots.get(stripped))
+                                .or_else(|| slots.get(base_name))
+                                .or_else(|| slots.get(&format!("minecraft:skin/{stripped}")))
+                                .or_else(|| slots.get(&format!("minecraft:skin/{base_name}")))
+                                .copied()
+                        })
+                    })
+                    .or_else(|| {
+                        stripped
+                            .strip_prefix("slot_")
+                            .and_then(|s| s.parse::<u16>().ok())
+                            .map(|slot_idx| {
+                                let chunk_offset = slot_idx / 256;
+                                (DYNAMIC_CHUNK_START + chunk_offset, slot_idx % 256)
+                            })
+                    });
 
-            continue;
+                if let Some((target_chunk_id, in_chunk_slot)) = resolved_slot {
+                    let col = (in_chunk_slot as u32) % 16;
+                    let row = (in_chunk_slot as u32) / 16;
+                    let px = col * 64;
+                    let py = row * 64;
+
+                    if let Some(target_bytes) = dyn_map.get(&target_chunk_id) {
+                        if target_bytes.len()
+                            >= (DYNAMIC_ATLAS_WIDTH * DYNAMIC_ATLAS_HEIGHT * 4) as usize
+                            && px + 64 <= DYNAMIC_ATLAS_WIDTH
+                            && py + 64 <= DYNAMIC_ATLAS_HEIGHT
+                        {
+                            let full = RgbaBuffer {
+                                width: DYNAMIC_ATLAS_WIDTH,
+                                height: DYNAMIC_ATLAS_HEIGHT,
+                                pixels: target_bytes.clone(),
+                            };
+                            let albedo = full.crop(px, py, 64, 64);
+                            crops.push(CroppedSprite {
+                                key: tex_key.clone(),
+                                aliases: aliases.clone(),
+                                sprite: DecodedSprite::simple(sprite_id.clone(), albedo, 64, 64),
+                            });
+                            continue;
+                        } else {
+                            return Err(MtkError::Resource(
+                                mtk_resource::error::ResourceError::NotFound(format!(
+                                    "Dynamic entity atlas buffer for chunk {} is invalid or too small for slot {} (texture '{}')",
+                                    target_chunk_id, in_chunk_slot, tex_key
+                                )),
+                            ));
+                        }
+                    } else {
+                        return Err(MtkError::Resource(
+                            mtk_resource::error::ResourceError::NotFound(format!(
+                                "Dynamic entity chunk {} not found in dynamic entity atlases for texture '{}'",
+                                target_chunk_id, tex_key
+                            )),
+                        ));
+                    }
+                } else {
+                    return Err(MtkError::Resource(
+                        mtk_resource::error::ResourceError::NotFound(format!(
+                            "Unresolved slot for dynamic entity texture '{}': not found in atlas address map or dynamic entity slots",
+                            tex_key
+                        )),
+                    ));
+                }
+            } else {
+                return Err(MtkError::Resource(
+                    mtk_resource::error::ResourceError::NotFound(format!(
+                        "Dynamic entity texture '{}' requires dynamic entity atlases, but none were provided",
+                        tex_key
+                    )),
+                ));
+            }
         }
 
         // Case C: Standard static or animated sprite from source atlas
@@ -477,8 +536,9 @@ pub fn crop_needed_sprites(
 
                     crops.push(CroppedSprite {
                         key: tex_key.clone(),
+                        aliases: aliases.clone(),
                         sprite: DecodedSprite {
-                            sprite_id: parse_res_loc(tex_key),
+                            sprite_id: sprite_id.clone(),
                             albedo: anim_alb_crop,
                             normal: None,
                             specular: None,
@@ -536,8 +596,9 @@ pub fn crop_needed_sprites(
 
         crops.push(CroppedSprite {
             key: tex_key.clone(),
+            aliases,
             sprite: DecodedSprite {
-                sprite_id: parse_res_loc(tex_key),
+                sprite_id,
                 albedo: albedo_crop,
                 normal: None,
                 specular: None,

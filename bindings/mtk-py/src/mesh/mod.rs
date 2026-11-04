@@ -25,6 +25,8 @@ pub struct PyMeshData {
     pub profile: Option<mtk_core::profile::ExecutionProfile>,
     /// Dynamic entity atlas chunks keyed by chunk id (`{0xFFF0: RGBA bytes, ...}`).
     pub dynamic_entity_atlases: Option<std::collections::HashMap<u16, Vec<u8>>>,
+    /// Dynamic entity slots keyed by skin/entity key (`{"player_Alex": (0xFFF0, 0), ...}`).
+    pub dynamic_entity_slots: Option<std::collections::HashMap<String, (u16, u16)>>,
 }
 
 impl From<MeshData> for PyMeshData {
@@ -33,6 +35,7 @@ impl From<MeshData> for PyMeshData {
             inner,
             profile: None,
             dynamic_entity_atlases: None,
+            dynamic_entity_slots: None,
         }
     }
 }
@@ -44,6 +47,7 @@ impl PyMeshData {
             inner,
             profile: None,
             dynamic_entity_atlases: None,
+            dynamic_entity_slots: None,
         }
     }
 
@@ -72,6 +76,7 @@ impl PyMeshData {
             inner: MeshData::new(),
             profile: None,
             dynamic_entity_atlases: None,
+            dynamic_entity_slots: None,
         }
     }
 
@@ -96,6 +101,20 @@ impl PyMeshData {
         } else {
             None
         }
+    }
+
+    /// Returns dynamic entity slots mapping if present.
+    #[getter]
+    pub fn dynamic_entity_slots(&self) -> Option<std::collections::HashMap<String, (u16, u16)>> {
+        self.dynamic_entity_slots.clone()
+    }
+
+    #[setter]
+    pub fn set_dynamic_entity_slots(
+        &mut self,
+        slots: Option<std::collections::HashMap<String, (u16, u16)>>,
+    ) {
+        self.dynamic_entity_slots = slots;
     }
 
     /// Number of vertices in the mesh buffer.

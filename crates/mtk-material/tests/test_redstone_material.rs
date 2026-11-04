@@ -26,6 +26,7 @@ fn make_sprite_loc(chunk_id: u16, texture_id: u32, uv_bounds: [f32; 4]) -> Atlas
         has_specular: false,
         has_overlay: false,
         average_color: None,
+        slot_index: None,
     }
 }
 

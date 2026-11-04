@@ -78,6 +78,7 @@ tiles=0-3
                 has_specular: false,
                 has_overlay: false,
                 average_color: None,
+                slot_index: None,
             },
         );
     }

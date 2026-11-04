@@ -878,6 +878,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
                 has_specular: false,
                 has_overlay: false,
                 average_color: None,
+                slot_index: None,
             },
         );
         // Insert vertical strip sprite into animated cache
@@ -902,6 +903,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
                 has_specular: false,
                 has_overlay: false,
                 average_color: None,
+                slot_index: None,
             },
         );
     }
@@ -929,6 +931,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
             has_specular: false,
             has_overlay: false,
             average_color: None,
+            slot_index: None,
         },
     );
 
@@ -1896,6 +1899,7 @@ fn test_plain_banner_without_block_entity_meshing() {
         has_specular: false,
         has_overlay: false,
         average_color: None,
+        slot_index: None,
     };
     addr_map.sprites.insert(banner_base_id, banner_base_loc);
 

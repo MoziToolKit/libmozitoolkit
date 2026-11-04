@@ -484,6 +484,11 @@ impl VoxelWorld {
         self.dynamic_entities.all_chunk_buffers_owned()
     }
 
+    /// Returns a copy of the dynamic entity key and alias to (chunk_id, slot_index) mapping.
+    pub fn dynamic_entity_slots(&self) -> HashMap<String, (u16, u16)> {
+        self.dynamic_entities.all_slot_locations()
+    }
+
     /// Sets the on-disk cache directory for downloaded player skins.
     pub fn set_skin_cache_dir(&mut self, cache_dir: Option<std::path::PathBuf>) {
         self.skin_resolver = mtk_resource::skin::SkinResolver::new(cache_dir);

@@ -274,6 +274,51 @@ pub fn sample_colormap_pixel_u8(
     }
 }
 
+/// Sample normalized sRGB floats `[r, g, b]` from a colormap buffer directly using normalized UV coordinates.
+#[inline]
+pub fn sample_colormap_pixel_uv(
+    image_pixels: &[u8],
+    width: u32,
+    height: u32,
+    u: f32,
+    v: f32,
+    channels: usize,
+) -> [f32; 3] {
+    let [r, g, b] = sample_colormap_pixel_uv_u8(image_pixels, width, height, u, v, channels);
+    [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0]
+}
+
+/// Sample raw sRGB bytes `[r, g, b]` from a colormap buffer directly using normalized UV coordinates.
+#[inline]
+pub fn sample_colormap_pixel_uv_u8(
+    image_pixels: &[u8],
+    width: u32,
+    height: u32,
+    u: f32,
+    v: f32,
+    channels: usize,
+) -> [u8; 3] {
+    if width == 0 || height == 0 || image_pixels.is_empty() || channels < 3 {
+        return [255, 255, 255];
+    }
+    let u_clamped = (u as f64).clamp(0.0, 1.0);
+    let v_clamped = (v as f64).clamp(0.0, 1.0);
+
+    let x = ((u_clamped * (width as f64 - 1.0)) as usize).min(width as usize - 1);
+    let y = (((1.0 - v_clamped) * (height as f64 - 1.0)) as usize).min(height as usize - 1);
+
+    let idx = (y * width as usize + x) * channels;
+    if idx + 2 < image_pixels.len() {
+        [
+            image_pixels[idx],
+            image_pixels[idx + 1],
+            image_pixels[idx + 2],
+        ]
+    } else {
+        [255, 255, 255]
+    }
+}
+
 /// Sample colormap color and format directly as uppercase hex string (e.g. `"#91BD59"`).
 #[inline]
 pub fn sample_colormap_hex(

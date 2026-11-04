@@ -9,14 +9,16 @@
 
 use std::sync::{Arc, OnceLock, RwLock};
 
-use super::palettes::{sample_colormap_hex, sample_colormap_pixel, srgb_to_linear};
+use super::palettes::{
+    sample_colormap_hex, sample_colormap_pixel, sample_colormap_pixel_uv, srgb_to_linear,
+};
 
 const GRASS_PNG: &[u8] = include_bytes!("../../assets/colormap/grass.png");
 const FOLIAGE_PNG: &[u8] = include_bytes!("../../assets/colormap/foliage.png");
 const DRY_FOLIAGE_PNG: &[u8] = include_bytes!("../../assets/colormap/dry_foliage.png");
 
 /// Resident RGB colormap buffers with their source dimensions.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VanillaColormaps {
     pub grass_pixels: Vec<u8>,
     pub foliage_pixels: Vec<u8>,
@@ -42,7 +44,7 @@ impl VanillaColormaps {
     }
 
     /// Decodes embedded canonical vanilla colormaps.
-    fn load_embedded() -> Self {
+    pub fn load_embedded() -> Self {
         let (grass_pixels, grass_width, grass_height) = Self::decode_png(GRASS_PNG, "grass.png")
             .expect("embedded vanilla grass colormap must be a valid PNG");
         let (foliage_pixels, foliage_width, foliage_height) =
@@ -163,6 +165,81 @@ impl VanillaColormaps {
     #[inline]
     pub fn sample_dry_foliage_linear(&self, temperature: f32, downfall: f32) -> [f32; 4] {
         let srgb = self.sample_dry_foliage_srgb(temperature, downfall);
+        [
+            srgb_to_linear(srgb[0]),
+            srgb_to_linear(srgb[1]),
+            srgb_to_linear(srgb[2]),
+            1.0,
+        ]
+    }
+
+    /// Sample grass sRGB color [0.0..1.0] from colormap UV coordinates.
+    #[inline]
+    pub fn sample_grass_srgb_uv(&self, u: f32, v: f32) -> [f32; 3] {
+        sample_colormap_pixel_uv(
+            &self.grass_pixels,
+            self.grass_width as u32,
+            self.grass_height as u32,
+            u,
+            v,
+            3,
+        )
+    }
+
+    /// Sample foliage sRGB color [0.0..1.0] from colormap UV coordinates.
+    #[inline]
+    pub fn sample_foliage_srgb_uv(&self, u: f32, v: f32) -> [f32; 3] {
+        sample_colormap_pixel_uv(
+            &self.foliage_pixels,
+            self.foliage_width as u32,
+            self.foliage_height as u32,
+            u,
+            v,
+            3,
+        )
+    }
+
+    /// Sample dry foliage sRGB color [0.0..1.0] from colormap UV coordinates.
+    #[inline]
+    pub fn sample_dry_foliage_srgb_uv(&self, u: f32, v: f32) -> [f32; 3] {
+        sample_colormap_pixel_uv(
+            &self.dry_foliage_pixels,
+            self.dry_foliage_width as u32,
+            self.dry_foliage_height as u32,
+            u,
+            v,
+            3,
+        )
+    }
+
+    /// Sample grass color directly as Linear RGBA [r, g, b, 1.0] from colormap UV coordinates.
+    #[inline]
+    pub fn sample_grass_linear_uv(&self, u: f32, v: f32) -> [f32; 4] {
+        let srgb = self.sample_grass_srgb_uv(u, v);
+        [
+            srgb_to_linear(srgb[0]),
+            srgb_to_linear(srgb[1]),
+            srgb_to_linear(srgb[2]),
+            1.0,
+        ]
+    }
+
+    /// Sample foliage color directly as Linear RGBA [r, g, b, 1.0] from colormap UV coordinates.
+    #[inline]
+    pub fn sample_foliage_linear_uv(&self, u: f32, v: f32) -> [f32; 4] {
+        let srgb = self.sample_foliage_srgb_uv(u, v);
+        [
+            srgb_to_linear(srgb[0]),
+            srgb_to_linear(srgb[1]),
+            srgb_to_linear(srgb[2]),
+            1.0,
+        ]
+    }
+
+    /// Sample dry foliage color directly as Linear RGBA [r, g, b, 1.0] from colormap UV coordinates.
+    #[inline]
+    pub fn sample_dry_foliage_linear_uv(&self, u: f32, v: f32) -> [f32; 4] {
+        let srgb = self.sample_dry_foliage_srgb_uv(u, v);
         [
             srgb_to_linear(srgb[0]),
             srgb_to_linear(srgb[1]),

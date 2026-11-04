@@ -1,6 +1,6 @@
 //! MesherConfig Python bindings.
 
-use crate::material::PyBiomeResolver;
+use crate::material::{PyBiomeResolver, PyVanillaColormaps};
 use crate::texture::PyBakedAtlas;
 use mtk_voxel::types::{CoordinateSystem, MesherConfig};
 use pyo3::prelude::*;
@@ -18,7 +18,7 @@ pub struct PyMesherConfig {
 #[pymethods]
 impl PyMesherConfig {
     #[new]
-    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_vertices=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None, enable_alternate_blocks=true, enable_random_offsets=true, ctm_solver=None, enable_animated_textures=true))]
+    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_vertices=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None, enable_alternate_blocks=true, enable_random_offsets=true, ctm_solver=None, enable_animated_textures=true, colormaps=None))]
     pub fn new(
         enable_ao: bool,
         mesh_fluids: bool,
@@ -33,6 +33,7 @@ impl PyMesherConfig {
         enable_random_offsets: bool,
         ctm_solver: Option<&crate::ctm::PyCtmSolver>,
         enable_animated_textures: bool,
+        colormaps: Option<&PyVanillaColormaps>,
     ) -> Self {
         let config = MesherConfig {
             enable_ao,
@@ -52,6 +53,7 @@ impl PyMesherConfig {
             ctm_solver: ctm_solver.map(|s| s.inner.clone()),
             enable_animated_textures,
             banner_baker: atlas.and_then(|a| a.banner_baker.clone()),
+            colormaps: colormaps.map(|c| c.inner.clone()),
             ..Default::default()
         };
         Self {
@@ -68,6 +70,16 @@ impl PyMesherConfig {
     /// Checks if a BiomeResolver is configured.
     pub fn has_biome_resolver(&self) -> bool {
         self.inner.biome_resolver.is_some()
+    }
+
+    /// Checks if custom colormaps are configured.
+    pub fn has_colormaps(&self) -> bool {
+        self.inner.colormaps.is_some()
+    }
+
+    /// Sets or clears colormaps.
+    pub fn set_colormaps(&mut self, colormaps: Option<&PyVanillaColormaps>) {
+        self.inner.colormaps = colormaps.map(|c| c.inner.clone());
     }
 
     /// Sets or clears the CTM solver for connected textures.

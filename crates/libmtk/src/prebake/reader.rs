@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
@@ -84,10 +85,9 @@ pub struct AssetCacheReader {
 }
 
 impl AssetCacheReader {
-    /// Opens an asset cache package file using memory mapping.
+    /// Opens an asset cache package file using memory mapping (read-only, no side effects).
     pub fn open(path: impl AsRef<Path>) -> Result<Self, MtkError> {
         let reader = MtkPackageReader::open_file(path)?;
-        install_cached_colormaps(&reader);
         Ok(Self { reader })
     }
 
@@ -246,6 +246,36 @@ impl AssetCacheReader {
             extracted.push(target);
         }
         Ok(extracted)
+    }
+
+    /// Loads resident colormaps carried by this asset cache without global side effects.
+    pub fn load_colormaps(&self) -> Result<Option<Arc<mtk_material::VanillaColormaps>>, MtkError> {
+        let read = |name: &str| {
+            self.reader
+                .read_chunk_decompressed(&format!("biome/colormap/{name}"))
+                .ok()
+        };
+        let grass = read("grass");
+        let foliage = read("foliage");
+        let dry_foliage = read("dry_foliage");
+
+        if grass.is_none() && foliage.is_none() && dry_foliage.is_none() {
+            return Ok(None);
+        }
+
+        let colormaps = mtk_material::VanillaColormaps::with_overrides(
+            grass.as_deref(),
+            foliage.as_deref(),
+            dry_foliage.as_deref(),
+        )
+        .map_err(|e| MtkError::Texture(mtk_texture::error::TextureError::Baking(e)))?;
+
+        Ok(Some(Arc::new(colormaps)))
+    }
+
+    /// Explicitly installs resource-pack colormap overrides into the global process-level cache.
+    pub fn install_colormaps(&self) {
+        install_cached_colormaps(&self.reader);
     }
 
     /// Raw package reader accessor.

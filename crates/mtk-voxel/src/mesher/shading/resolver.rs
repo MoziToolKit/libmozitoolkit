@@ -84,6 +84,7 @@ where
                         state_str,
                         face.tint_index,
                         config.biome_resolver.as_deref(),
+                        config.colormaps.as_deref(),
                     );
                     let (timing, fsize) = extract_anim_metrics(Some(atlas_loc));
                     let avg_col = atlas_loc
@@ -110,6 +111,7 @@ where
                     state_str,
                     face.tint_index,
                     config.biome_resolver.as_deref(),
+                    config.colormaps.as_deref(),
                 );
                 return ResolvedFaceShading {
                     texture_key: Cow::Owned(ctm_key),
@@ -197,6 +199,7 @@ where
                         state_str,
                         -1,
                         config.biome_resolver.as_deref(),
+                        config.colormaps.as_deref(),
                     );
                     let (timing, fsize) = extract_anim_metrics(Some(atlas_loc));
                     let avg_col = atlas_loc
@@ -218,8 +221,13 @@ where
                 }
             } else {
                 let ctm_key = resolved_loc.as_string();
-                let (td, tc) =
-                    compute_face_tint(&ctm_key, state_str, -1, config.biome_resolver.as_deref());
+                let (td, tc) = compute_face_tint(
+                    &ctm_key,
+                    state_str,
+                    -1,
+                    config.biome_resolver.as_deref(),
+                    config.colormaps.as_deref(),
+                );
                 return ResolvedFaceShading {
                     texture_key: Cow::Owned(ctm_key),
                     override_uvs: None,
@@ -256,6 +264,7 @@ pub fn sample_biome_tint(
     lz: usize,
     mut tint_data: [f32; 4],
     default_tint_color: [f32; 4],
+    colormaps: Option<&mtk_material::VanillaColormaps>,
 ) -> ([f32; 4], [f32; 4]) {
     if tint_data[2] <= 0.0 {
         return (tint_data, default_tint_color);
@@ -271,10 +280,44 @@ pub fn sample_biome_tint(
             let col = &biome_cols[col_idx];
             let tt = tint_data[3] as u8;
             let (c, has_custom) = match tt {
-                mtk_material::TINT_TYPE_GRASS => (col.grass_color, col.has_custom_grass),
-                mtk_material::TINT_TYPE_FOLIAGE => (col.foliage_color, col.has_custom_foliage),
+                mtk_material::TINT_TYPE_GRASS => {
+                    if col.has_custom_grass {
+                        (col.grass_color, true)
+                    } else if let Some(cms) = colormaps {
+                        (
+                            cms.sample_grass_linear_uv(col.colormap_uv[0], col.colormap_uv[1]),
+                            false,
+                        )
+                    } else {
+                        (col.grass_color, false)
+                    }
+                }
+                mtk_material::TINT_TYPE_FOLIAGE => {
+                    if col.has_custom_foliage {
+                        (col.foliage_color, true)
+                    } else if let Some(cms) = colormaps {
+                        (
+                            cms.sample_foliage_linear_uv(col.colormap_uv[0], col.colormap_uv[1]),
+                            false,
+                        )
+                    } else {
+                        (col.foliage_color, false)
+                    }
+                }
                 mtk_material::TINT_TYPE_DRY_FOLIAGE => {
-                    (col.dry_foliage_color, col.has_custom_dry_foliage)
+                    if col.has_custom_dry_foliage {
+                        (col.dry_foliage_color, true)
+                    } else if let Some(cms) = colormaps {
+                        (
+                            cms.sample_dry_foliage_linear_uv(
+                                col.colormap_uv[0],
+                                col.colormap_uv[1],
+                            ),
+                            false,
+                        )
+                    } else {
+                        (col.dry_foliage_color, false)
+                    }
                 }
                 mtk_material::TINT_TYPE_WATER => (col.water_color, false),
                 mtk_material::TINT_TYPE_HARDCODED => (default_tint_color, true),

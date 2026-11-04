@@ -286,6 +286,7 @@ fn resolve_model_face(
         state_str,
         face.tint_index,
         config.biome_resolver.as_deref(),
+        config.colormaps.as_deref(),
     );
 
     PreResolvedModelFace {
@@ -522,6 +523,7 @@ pub fn resolve_palette_meshing_data_for_state<'a>(
                     state_str,
                     tint_idx,
                     config.biome_resolver.as_deref(),
+                    config.colormaps.as_deref(),
                 );
 
                 faces[dir.to_index()] = Some(PreResolvedFace {

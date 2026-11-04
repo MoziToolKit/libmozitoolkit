@@ -10,7 +10,9 @@ use mtk_texture::RgbaBuffer;
 use mtk_voxel::SparseVoxelPayload;
 
 use super::create_sample_cube;
-use crate::scene::exporter::{build_scene_interchange, export_scene_package, SceneExporterConfig};
+use crate::scene::exporter::{
+    build_scene_interchange, export_scene_package, CtmMode, SceneExportRequest, SceneExporterConfig,
+};
 
 #[test]
 fn test_export_dynamic_entity_atlas_stitching() {
@@ -111,14 +113,16 @@ fn test_export_dynamic_entity_atlas_stitching() {
     );
 
     let config = SceneExporterConfig::default();
-    let result = build_scene_interchange(
-        &voxels,
-        &source_models,
-        &source_map,
-        &mut source_images,
-        &config,
-        Some(&dynamic_entity_atlases),
-    )
+    let result = build_scene_interchange(SceneExportRequest {
+        voxels: &voxels,
+        source_models: &source_models,
+        source_atlas_map: &source_map,
+        atlas_source: &mut source_images,
+        config: &config,
+        dynamic_entity_atlases: Some(&dynamic_entity_atlases),
+        dynamic_entity_slots: None,
+        ctm_mode: CtmMode::Disabled,
+    })
     .expect("Build scene interchange with dynamic entities");
 
     // Verify that the skull model was remapped to mini-atlas chunk 0, NOT 0xFFF0!
@@ -208,12 +212,16 @@ fn test_export_scene_package_file_roundtrip() {
     let config = SceneExporterConfig::default();
     let export_res = export_scene_package(
         &temp_path,
-        &voxels,
-        &source_models,
-        &source_map,
-        &mut source_images,
-        &config,
-        None,
+        SceneExportRequest {
+            voxels: &voxels,
+            source_models: &source_models,
+            source_atlas_map: &source_map,
+            atlas_source: &mut source_images,
+            config: &config,
+            dynamic_entity_atlases: None,
+            dynamic_entity_slots: None,
+            ctm_mode: CtmMode::Disabled,
+        },
         None,
     )
     .expect("Export scene package file");

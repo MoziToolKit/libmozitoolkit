@@ -316,6 +316,7 @@ impl DynamicAtlasChunk {
                 has_specular: false,
                 has_overlay: false,
                 average_color: None,
+                slot_index: Some(slot_idx),
             };
 
             let mut variants = vec![
@@ -447,6 +448,23 @@ impl DynamicAtlasManager {
     /// Checks if a skin key has already been registered.
     pub fn contains_key(&self, skin_key: &str) -> bool {
         self.key_to_location.contains_key(skin_key)
+    }
+
+    /// Returns reference to the entire key -> (chunk_id, slot_idx) mapping table.
+    pub fn key_to_location(&self) -> &HashMap<String, (u16, u16)> {
+        &self.key_to_location
+    }
+
+    /// Returns a complete map of all allocated primary keys AND alias keys to their (chunk_id, slot_idx).
+    pub fn all_slot_locations(&self) -> HashMap<String, (u16, u16)> {
+        let mut map = self.key_to_location.clone();
+        for chunk in &self.chunks {
+            let cid = chunk.chunk_id;
+            for (key, &slot) in &chunk.slot_map {
+                map.entry(key.clone()).or_insert((cid, slot));
+            }
+        }
+        map
     }
 
     /// Returns the (chunk_id, slot_idx) for a skin key, if allocated.

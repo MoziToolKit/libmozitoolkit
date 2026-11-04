@@ -125,15 +125,19 @@ impl PyVoxelWorld {
             .used_chunk_ids()
             .iter()
             .any(|&c| c >= mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID as u32);
-        let dynamic_entity_atlases = if has_dynamic {
-            Some(self.inner.dynamic_entity_atlases_owned())
+        let (dynamic_entity_atlases, dynamic_entity_slots) = if has_dynamic {
+            (
+                Some(self.inner.dynamic_entity_atlases_owned()),
+                Some(self.inner.dynamic_entity_slots()),
+            )
         } else {
-            None
+            (None, None)
         };
         Ok(crate::mesh::PyMeshData {
             inner: mesh,
             profile,
             dynamic_entity_atlases,
+            dynamic_entity_slots,
         })
     }
 
@@ -157,14 +161,18 @@ impl PyVoxelWorld {
             .used_chunk_ids()
             .iter()
             .any(|&c| c >= mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID as u32);
-        let dyn_atlases = if has_dynamic {
-            Some(self.inner.dynamic_entity_atlases_owned())
+        let (dyn_atlases, dyn_slots) = if has_dynamic {
+            (
+                Some(self.inner.dynamic_entity_atlases_owned()),
+                Some(self.inner.dynamic_entity_slots()),
+            )
         } else {
-            None
+            (None, None)
         };
         for (coord, mesh) in rebuilt {
             let mut py_mesh = crate::mesh::PyMeshData::from_mesh(mesh);
             py_mesh.dynamic_entity_atlases = dyn_atlases.clone();
+            py_mesh.dynamic_entity_slots = dyn_slots.clone();
             dict.set_item((coord.x, coord.y, coord.z), py_mesh)?;
         }
         Ok(dict)
@@ -179,15 +187,19 @@ impl PyVoxelWorld {
             .used_chunk_ids()
             .iter()
             .any(|&c| c >= mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID as u32);
-        let dynamic_entity_atlases = if has_dynamic {
-            Some(self.inner.dynamic_entity_atlases_owned())
+        let (dynamic_entity_atlases, dynamic_entity_slots) = if has_dynamic {
+            (
+                Some(self.inner.dynamic_entity_atlases_owned()),
+                Some(self.inner.dynamic_entity_slots()),
+            )
         } else {
-            None
+            (None, None)
         };
         crate::mesh::PyMeshData {
             inner: mesh,
             profile,
             dynamic_entity_atlases,
+            dynamic_entity_slots,
         }
     }
 
@@ -317,6 +329,11 @@ impl PyVoxelWorld {
             let _ = dict.set_item(chunk_id, PyBytes::new(py, buf));
         }
         dict
+    }
+
+    /// Returns the dynamic entity key to (chunk_id, slot_index) mapping.
+    pub fn get_dynamic_entity_slots(&self) -> std::collections::HashMap<String, (u16, u16)> {
+        self.inner.dynamic_entity_slots()
     }
 
     /// Sets the on-disk cache directory for downloaded player skins.

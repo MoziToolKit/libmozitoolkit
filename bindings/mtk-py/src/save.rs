@@ -258,6 +258,7 @@ pub fn load_and_mesh_minecraft_save(
             inner: mesh,
             profile: Some(final_profile),
             dynamic_entity_atlases,
+            dynamic_entity_slots: None,
         },
         PyLevelData {
             inner: level_data,

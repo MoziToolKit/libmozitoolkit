@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 
 use mtk_model::BakedModelDatabase;
 use mtk_package::{ChunkWriteOptions, MtkPackageFileWriter, MtkPackageReader, PackageProfile};
@@ -167,6 +168,37 @@ impl ScenePackageReader {
             .ok()
     }
 
+    /// Reads resident colormaps carried by this scene package without global side effects.
+    pub fn read_colormaps(&self) -> Result<Option<Arc<mtk_material::VanillaColormaps>>, MtkError> {
+        let read = |name: &str| -> Result<Option<Vec<u8>>, MtkError> {
+            let chunk_id = format!("biome/colormap/{name}");
+            if !self.reader.has_chunk(&chunk_id) {
+                return Ok(None);
+            }
+            let bytes = self
+                .reader
+                .read_chunk_decompressed(&chunk_id)
+                .map_err(MtkError::Package)?;
+            Ok(Some(bytes))
+        };
+        let grass = read("grass")?;
+        let foliage = read("foliage")?;
+        let dry_foliage = read("dry_foliage")?;
+
+        if grass.is_none() && foliage.is_none() && dry_foliage.is_none() {
+            return Ok(None);
+        }
+
+        let colormaps = mtk_material::VanillaColormaps::with_overrides(
+            grass.as_deref(),
+            foliage.as_deref(),
+            dry_foliage.as_deref(),
+        )
+        .map_err(|e| MtkError::Texture(mtk_texture::error::TextureError::Baking(e)))?;
+
+        Ok(Some(Arc::new(colormaps)))
+    }
+
     /// Re-installs or updates the resident colormaps from this package.
     pub fn install_colormaps(&self) {
         install_scene_colormaps(&self.reader);
@@ -208,6 +240,22 @@ impl ScenePackageReader {
         } else {
             Ok(None)
         }
+    }
+
+    /// Checks whether dynamic entity slots mapping is carried in this package.
+    pub fn has_dynamic_entity_slots(&self) -> bool {
+        self.reader.has_chunk("entity/slots")
+    }
+
+    /// Reads dynamic entity slots mapping `key -> (chunk_id, slot_idx)` from this package if present.
+    pub fn read_dynamic_entity_slots(
+        &self,
+    ) -> Result<Option<HashMap<String, (u16, u16)>>, MtkError> {
+        if !self.has_dynamic_entity_slots() {
+            return Ok(None);
+        }
+        let map: HashMap<String, (u16, u16)> = self.reader.read_chunk_json("entity/slots")?;
+        Ok(Some(map))
     }
 }
 
@@ -258,6 +306,7 @@ pub fn write_scene_package(
     colormaps: Option<&[(String, Vec<u8>)]>,
     biome_resolver_json: Option<&str>,
     ctm_rules_json: Option<&str>,
+    dynamic_entity_slots: Option<&HashMap<String, (u16, u16)>>,
     options: Option<&ScenePackageWriteOptions>,
 ) -> Result<(), MtkError> {
     let fp = options.and_then(|o| o.fingerprint).unwrap_or([0u8; 16]);
@@ -336,6 +385,16 @@ pub fn write_scene_package(
         writer.add_str_chunk(*b"CTMR", "ctm/rules", json, &ChunkWriteOptions::zstd_fast())?;
     }
 
+    // 9. Dynamic Entity Slots (optional)
+    if let Some(slots) = dynamic_entity_slots {
+        writer.add_json_chunk(
+            *b"ENTT",
+            "entity/slots",
+            slots,
+            &ChunkWriteOptions::zstd_fast(),
+        )?;
+    }
+
     writer.finish()?;
     Ok(())
 }
@@ -409,6 +468,7 @@ mod tests {
             Some(&model_db),
             None,
             &textures,
+            None,
             None,
             None,
             None,
@@ -504,6 +564,41 @@ mod tests {
             ),
         }
 
+        let _ = std::fs::remove_file(&temp_path);
+    }
+
+    #[test]
+    fn test_scene_package_corrupted_colormap_error() {
+        let temp_path = std::env::temp_dir().join(format!(
+            "test_corrupt_cm_{}.mtkscene",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let metadata = SceneMetadata::new([0, 0, 0, 1, 1, 1], 1);
+        let mut writer = mtk_package::MtkPackageFileWriter::create(
+            &temp_path,
+            PackageProfile::SceneInterchange,
+            [0u8; 16],
+        )
+        .unwrap();
+        writer
+            .add_json_chunk(*b"META", "manifest", &metadata, &ChunkWriteOptions::raw())
+            .unwrap();
+        writer
+            .add_chunk(
+                *b"CMAP",
+                "biome/colormap/grass",
+                b"not a valid png file",
+                &ChunkWriteOptions::raw(),
+            )
+            .unwrap();
+        writer.finish().unwrap();
+
+        let reader = ScenePackageReader::open_file(&temp_path).unwrap();
+        let res = reader.read_colormaps();
+        assert!(res.is_err(), "Corrupted colormap must return Err, not Ok");
         let _ = std::fs::remove_file(&temp_path);
     }
 }

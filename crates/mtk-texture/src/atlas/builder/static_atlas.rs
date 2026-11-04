@@ -230,6 +230,7 @@ pub fn build_static_atlas_chunks(
                     has_specular: slot_has_specular,
                     has_overlay: slot_has_overlay,
                     average_color: Some(sp.albedo.average_rgb_hex()),
+                    slot_index: None,
                 };
 
                 address_map

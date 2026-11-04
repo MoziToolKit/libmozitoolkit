@@ -52,6 +52,9 @@ pub struct MesherConfig {
     /// Optional BiomeResolver for foliage, grass, and water tinting.
     #[cfg_attr(feature = "serde", serde(skip))]
     pub biome_resolver: Option<Arc<mtk_material::BiomeResolver>>,
+    /// Optional resident vanilla colormaps for foliage, grass, and dry foliage sampling.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub colormaps: Option<Arc<mtk_material::VanillaColormaps>>,
     /// Optional custom material/texture alias map.
     #[cfg_attr(feature = "serde", serde(skip))]
     pub custom_aliases: Option<Arc<std::collections::HashMap<String, Vec<String>>>>,
@@ -79,6 +82,7 @@ impl Default for MesherConfig {
             ctm_solver: None,
             atlas_address_map: None,
             biome_resolver: None,
+            colormaps: None,
             custom_aliases: None,
             enable_alternate_blocks: true,
             enable_random_offsets: true,

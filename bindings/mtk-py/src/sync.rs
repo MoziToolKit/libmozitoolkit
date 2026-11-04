@@ -70,6 +70,7 @@ impl PyLiveSyncSession {
             inner: mesh,
             profile,
             dynamic_entity_atlases,
+            dynamic_entity_slots: None,
         }
     }
 
@@ -239,6 +240,7 @@ impl PyLiveSyncSession {
                         inner: mesh,
                         profile,
                         dynamic_entity_atlases: dyn_atlases,
+                        dynamic_entity_slots: None,
                     };
                     dict.set_item("mesh", py_mesh)?;
                     dict.set_item("generation", generation)?;

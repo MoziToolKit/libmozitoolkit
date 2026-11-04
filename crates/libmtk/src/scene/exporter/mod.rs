@@ -25,75 +25,91 @@ use mtk_voxel::SparseVoxelPayload;
 use super::package::{write_scene_package, ScenePackageWriteOptions};
 use crate::MtkError;
 
-/// Builds all components of a Scene Interchange bundle in memory.
-pub fn build_scene_interchange(
-    voxels: &SparseVoxelPayload,
-    source_models: &BakedModelDatabase,
-    source_atlas_map: &AtlasAddressMap,
-    atlas_source: &mut impl SceneAtlasSource,
-    config: &SceneExporterConfig,
-    dynamic_entity_atlases: Option<&HashMap<u16, Vec<u8>>>,
-) -> Result<SceneExportResult, MtkError> {
-    build_scene_interchange_with_ctm(
-        voxels,
-        source_models,
-        source_atlas_map,
-        atlas_source,
-        config,
-        dynamic_entity_atlases,
-        None,
-    )
+/// Explicit CTM rule resolution mode during scene interchange export.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum CtmMode<'a> {
+    /// Strictly no CTM rules exported or sub-tiles tree-shaken (default).
+    #[default]
+    Disabled,
+    /// Automatically load CTM rules from the asset cache/source if present.
+    Auto,
+    /// Use an explicit slice of CTM rules (overriding the cache).
+    Explicit(&'a [mtk_resource::CtmRule]),
 }
 
-/// Builds all components of a Scene Interchange bundle in memory with explicit or auto-loaded CTM rules.
-pub fn build_scene_interchange_with_ctm(
-    voxels: &SparseVoxelPayload,
-    source_models: &BakedModelDatabase,
-    source_atlas_map: &AtlasAddressMap,
-    atlas_source: &mut impl SceneAtlasSource,
-    config: &SceneExporterConfig,
-    dynamic_entity_atlases: Option<&HashMap<u16, Vec<u8>>>,
-    source_ctm_rules: Option<&[mtk_resource::CtmRule]>,
+/// Request structure encapsulating all parameters for building or exporting a scene interchange package.
+pub struct SceneExportRequest<'a, S: SceneAtlasSource> {
+    pub voxels: &'a SparseVoxelPayload,
+    pub source_models: &'a BakedModelDatabase,
+    pub source_atlas_map: &'a AtlasAddressMap,
+    pub atlas_source: &'a mut S,
+    pub config: &'a SceneExporterConfig,
+    pub dynamic_entity_atlases: Option<&'a HashMap<u16, Vec<u8>>>,
+    pub dynamic_entity_slots: Option<&'a HashMap<String, (u16, u16)>>,
+    pub ctm_mode: CtmMode<'a>,
+}
+
+/// Builds all components of a Scene Interchange bundle in memory.
+pub fn build_scene_interchange<S: SceneAtlasSource>(
+    req: SceneExportRequest<'_, S>,
 ) -> Result<SceneExportResult, MtkError> {
-    // 1. Resolve source CTM rules: either explicit rules or loaded from atlas_source
-    let loaded_ctm_rules: Option<Vec<mtk_resource::CtmRule>> = if source_ctm_rules.is_some() {
-        None
-    } else {
-        atlas_source
-            .get_ctm_rules_json()
-            .ok()
-            .flatten()
-            .and_then(|json| serde_json::from_str(&json).ok())
+    // 1. Resolve source CTM rules based on the explicit CtmMode
+    let effective_ctm_rules: Option<Vec<mtk_resource::CtmRule>> = match req.ctm_mode {
+        CtmMode::Disabled => None,
+        CtmMode::Auto => match req.atlas_source.get_ctm_rules_json() {
+            Ok(Some(json)) => {
+                let rules: Vec<mtk_resource::CtmRule> =
+                    serde_json::from_str(&json).map_err(|e| {
+                        MtkError::Resource(mtk_resource::error::ResourceError::NotFound(format!(
+                            "Corrupted CTM rules JSON in asset source: {e}"
+                        )))
+                    })?;
+                Some(rules)
+            }
+            Ok(None) => None,
+            Err(e) => {
+                return Err(MtkError::Resource(
+                    mtk_resource::error::ResourceError::NotFound(format!(
+                        "Failed reading CTM rules from asset source: {e}"
+                    )),
+                ))
+            }
+        },
+        CtmMode::Explicit(rules) => Some(rules.to_vec()),
     };
-    let effective_ctm_rules = source_ctm_rules.or(loaded_ctm_rules.as_deref());
 
     // 2. Collect all unique texture and blockstate identifiers (plus tree-shaken CTM sub-tiles)
-    let assets = collector::collect_needed_assets(voxels, source_models, effective_ctm_rules);
+    let assets = collector::collect_needed_assets(
+        req.voxels,
+        req.source_models,
+        effective_ctm_rules.as_deref(),
+    );
 
     // 3. Crop referenced sprites into DecodedSprite instances
     let crops = cropper::crop_needed_sprites(
         &assets.needed_textures,
-        source_atlas_map,
-        atlas_source,
-        dynamic_entity_atlases,
+        req.source_atlas_map,
+        req.atlas_source,
+        req.dynamic_entity_atlases,
+        req.dynamic_entity_slots,
     )?;
 
     // 4. Extract resident colormaps and biome_resolver from atlas_source
     let mut colormaps = Vec::new();
     for cm_name in &["grass", "foliage", "dry_foliage"] {
-        if let Ok(Some(bytes)) = atlas_source.get_colormap(cm_name) {
+        if let Ok(Some(bytes)) = req.atlas_source.get_colormap(cm_name) {
             colormaps.push((cm_name.to_string(), bytes));
         }
     }
-    let biome_resolver_json = atlas_source.get_biome_resolver_json().ok().flatten();
+    let biome_resolver_json = req.atlas_source.get_biome_resolver_json().ok().flatten();
 
     // 5. Delegate stitching, PBR decoding, and model tree-shaking to AtlasBuilder
     builder::build_scene_atlas_and_models(
         crops,
-        source_models,
+        req.source_models,
         &assets.needed_blockstates,
-        voxels,
-        config,
+        req.voxels,
+        req.config,
         colormaps,
         biome_resolver_json,
         assets.shaken_ctm_rules,
@@ -101,50 +117,14 @@ pub fn build_scene_interchange_with_ctm(
 }
 
 /// End-to-end export function: builds the scene interchange and writes `.mtkscene` to disk.
-pub fn export_scene_package(
+pub fn export_scene_package<S: SceneAtlasSource>(
     path: impl AsRef<Path>,
-    voxels: &SparseVoxelPayload,
-    source_models: &BakedModelDatabase,
-    source_atlas_map: &AtlasAddressMap,
-    atlas_source: &mut impl SceneAtlasSource,
-    config: &SceneExporterConfig,
-    dynamic_entity_atlases: Option<&HashMap<u16, Vec<u8>>>,
+    req: SceneExportRequest<'_, S>,
     write_options: Option<&ScenePackageWriteOptions>,
 ) -> Result<SceneExportResult, MtkError> {
-    export_scene_package_with_ctm(
-        path,
-        voxels,
-        source_models,
-        source_atlas_map,
-        atlas_source,
-        config,
-        dynamic_entity_atlases,
-        None,
-        write_options,
-    )
-}
-
-/// End-to-end export function with optional explicit CTM rules.
-pub fn export_scene_package_with_ctm(
-    path: impl AsRef<Path>,
-    voxels: &SparseVoxelPayload,
-    source_models: &BakedModelDatabase,
-    source_atlas_map: &AtlasAddressMap,
-    atlas_source: &mut impl SceneAtlasSource,
-    config: &SceneExporterConfig,
-    dynamic_entity_atlases: Option<&HashMap<u16, Vec<u8>>>,
-    source_ctm_rules: Option<&[mtk_resource::CtmRule]>,
-    write_options: Option<&ScenePackageWriteOptions>,
-) -> Result<SceneExportResult, MtkError> {
-    let result = build_scene_interchange_with_ctm(
-        voxels,
-        source_models,
-        source_atlas_map,
-        atlas_source,
-        config,
-        dynamic_entity_atlases,
-        source_ctm_rules,
-    )?;
+    let voxels = req.voxels;
+    let dynamic_entity_slots = req.dynamic_entity_slots.cloned();
+    let result = build_scene_interchange(req)?;
 
     let colormaps = if !result.colormaps.is_empty() {
         Some(result.colormaps.as_slice())
@@ -162,6 +142,7 @@ pub fn export_scene_package_with_ctm(
         colormaps,
         result.biome_resolver_json.as_deref(),
         result.ctm_rules_json.as_deref(),
+        dynamic_entity_slots.as_ref(),
         write_options,
     )?;
 

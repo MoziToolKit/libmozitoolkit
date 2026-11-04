@@ -35,6 +35,7 @@ pub use material::{
     build_material_palette, compute_biome_tint_attributes, compute_biome_tint_attributes_paletted,
     compute_mesh_biome_attributes_from_storage, get_all_biomes, get_biome_meta,
     reapply_uniform_biome_tint, PyBiomeResolver, PyGridAtlasSpec, PyMaterialResolver,
+    PyVanillaColormaps,
 };
 pub use mesh::{PyAttributeDomain, PyMeshData};
 pub use model::PyBakedModelDatabase;
@@ -133,6 +134,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyGridAtlasSpec>()?;
     m.add_class::<PyMaterialResolver>()?;
     m.add_class::<PyBiomeResolver>()?;
+    m.add_class::<PyVanillaColormaps>()?;
     m.add_function(wrap_pyfunction!(build_material_palette, m)?)?;
     m.add_function(wrap_pyfunction!(compute_biome_tint_attributes, m)?)?;
     m.add_function(wrap_pyfunction!(compute_biome_tint_attributes_paletted, m)?)?;

@@ -13,6 +13,7 @@ pub fn compute_face_tint(
     block_name: &str,
     tint_index: i16,
     biome_resolver: Option<&mtk_material::BiomeResolver>,
+    colormaps: Option<&mtk_material::VanillaColormaps>,
 ) -> ([f32; 4], [f32; 4]) {
     // In Minecraft rendering, any face with negative tint index is strictly untinted,
     // UNLESS it has an overlay companion whose overlay part must be tinted (such as grass_block_side).
@@ -44,9 +45,27 @@ pub fn compute_face_tint(
 
     let packed_data = [bw, ow, tw, tt as f32];
     let final_col = match tt {
-        mtk_material::TINT_TYPE_GRASS => default_pal.grass_linear(),
-        mtk_material::TINT_TYPE_FOLIAGE => default_pal.foliage_linear(),
-        mtk_material::TINT_TYPE_DRY_FOLIAGE => default_pal.dry_foliage_linear(),
+        mtk_material::TINT_TYPE_GRASS => {
+            if let Some(cms) = colormaps {
+                cms.sample_grass_linear(default_pal.temperature, default_pal.humidity)
+            } else {
+                default_pal.grass_linear()
+            }
+        }
+        mtk_material::TINT_TYPE_FOLIAGE => {
+            if let Some(cms) = colormaps {
+                cms.sample_foliage_linear(default_pal.temperature, default_pal.humidity)
+            } else {
+                default_pal.foliage_linear()
+            }
+        }
+        mtk_material::TINT_TYPE_DRY_FOLIAGE => {
+            if let Some(cms) = colormaps {
+                cms.sample_dry_foliage_linear(default_pal.temperature, default_pal.humidity)
+            } else {
+                default_pal.dry_foliage_linear()
+            }
+        }
         mtk_material::TINT_TYPE_WATER => default_pal.water_linear(),
         mtk_material::TINT_TYPE_HARDCODED => info.hardcoded_color.unwrap_or([1.0, 1.0, 1.0, 1.0]),
         _ => {

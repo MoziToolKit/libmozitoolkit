@@ -41,7 +41,23 @@ fn cache_colormap_override_is_installed_on_open() {
     ));
     std::fs::write(&path, cursor.into_inner()).unwrap();
 
-    let _reader = AssetCacheReader::open(&path).expect("open cache");
+    let reader = AssetCacheReader::open(&path).expect("open cache");
+    // Verify open is side-effect-free (does not mutate global ACTIVE_COLORMAPS)
+    let default_colormaps = mtk_material::get_default_colormaps();
+    assert_ne!(
+        default_colormaps.sample_grass_linear(0.5, 0.5),
+        [1.0, 0.0, 0.0, 1.0]
+    );
+
+    // Verify load_colormaps loads them purely into an isolated instance
+    let loaded = reader
+        .load_colormaps()
+        .expect("load colormaps")
+        .expect("present colormaps");
+    assert_eq!(loaded.sample_grass_linear(0.5, 0.5), [1.0, 0.0, 0.0, 1.0]);
+
+    // Verify explicit install_colormaps installs into the global cache
+    reader.install_colormaps();
     let colormaps = mtk_material::get_default_colormaps();
     assert_eq!(
         colormaps.sample_grass_linear(0.5, 0.5),

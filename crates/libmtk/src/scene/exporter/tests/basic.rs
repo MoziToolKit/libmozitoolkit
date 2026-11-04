@@ -7,7 +7,9 @@ use mtk_texture::RgbaBuffer;
 use mtk_voxel::SparseVoxelPayload;
 
 use super::create_sample_cube;
-use crate::scene::exporter::{build_scene_interchange, SceneExporterConfig};
+use crate::scene::exporter::{
+    build_scene_interchange, CtmMode, SceneExportRequest, SceneExporterConfig,
+};
 
 #[test]
 fn test_build_scene_interchange_pipeline() {
@@ -84,14 +86,16 @@ fn test_build_scene_interchange_pipeline() {
     voxels.push(0, 0, 0, "minecraft:stone", "minecraft:plains", None, None);
 
     let config = SceneExporterConfig::default();
-    let result = build_scene_interchange(
-        &voxels,
-        &source_models,
-        &source_map,
-        &mut source_images,
-        &config,
-        None,
-    )
+    let result = build_scene_interchange(SceneExportRequest {
+        voxels: &voxels,
+        source_models: &source_models,
+        source_atlas_map: &source_map,
+        atlas_source: &mut source_images,
+        config: &config,
+        dynamic_entity_atlases: None,
+        dynamic_entity_slots: None,
+        ctm_mode: CtmMode::Disabled,
+    })
     .expect("Build scene interchange");
 
     assert_eq!(result.tree_shaken_models.len(), 1);
@@ -155,14 +159,16 @@ fn test_uv_coordinate_formula_orientation() {
     voxels.push(0, 0, 0, "minecraft:stone", "minecraft:plains", None, None);
 
     let config = SceneExporterConfig::default();
-    let result = build_scene_interchange(
-        &voxels,
-        &source_models,
-        &source_map,
-        &mut source_images,
-        &config,
-        None,
-    )
+    let result = build_scene_interchange(SceneExportRequest {
+        voxels: &voxels,
+        source_models: &source_models,
+        source_atlas_map: &source_map,
+        atlas_source: &mut source_images,
+        config: &config,
+        dynamic_entity_atlases: None,
+        dynamic_entity_slots: None,
+        ctm_mode: CtmMode::Disabled,
+    })
     .expect("Build scene interchange");
 
     let loc = result
@@ -307,14 +313,16 @@ fn test_export_with_overlay_and_animated_strips() {
     );
 
     let config = SceneExporterConfig::default();
-    let result = build_scene_interchange(
-        &voxels,
-        &source_models,
-        &source_map,
-        &mut source_images,
-        &config,
-        None,
-    )
+    let result = build_scene_interchange(SceneExportRequest {
+        voxels: &voxels,
+        source_models: &source_models,
+        source_atlas_map: &source_map,
+        atlas_source: &mut source_images,
+        config: &config,
+        dynamic_entity_atlases: None,
+        dynamic_entity_slots: None,
+        ctm_mode: CtmMode::Disabled,
+    })
     .expect("Build scene interchange with overlay and anim");
 
     assert!(result.metadata.has_animated_atlas);
@@ -501,12 +509,16 @@ fn test_scene_export_pbr_channels_and_colormaps_roundtrip() {
     let config = SceneExporterConfig::default();
     let export_result = export_scene_package(
         &temp_file,
-        &voxels,
-        &source_models,
-        &source_map,
-        &mut source,
-        &config,
-        None,
+        SceneExportRequest {
+            voxels: &voxels,
+            source_models: &source_models,
+            source_atlas_map: &source_map,
+            atlas_source: &mut source,
+            config: &config,
+            dynamic_entity_atlases: None,
+            dynamic_entity_slots: None,
+            ctm_mode: CtmMode::Disabled,
+        },
         None,
     )
     .expect("Export scene package");
@@ -552,7 +564,7 @@ fn test_scene_export_pbr_channels_and_colormaps_roundtrip() {
 
 #[test]
 fn test_scene_export_ctm_rules_and_subtiles_roundtrip() {
-    use crate::scene::exporter::export_scene_package_with_ctm;
+    use crate::scene::exporter::{export_scene_package, CtmMode, SceneExportRequest};
     use crate::scene::package::ScenePackageReader;
     use mtk_resource::CtmRule;
 
@@ -638,15 +650,18 @@ fn test_scene_export_ctm_rules_and_subtiles_roundtrip() {
     ));
 
     let config = SceneExporterConfig::default();
-    let export_result = export_scene_package_with_ctm(
+    let export_result = export_scene_package(
         &temp_file,
-        &voxels,
-        &source_models,
-        &source_map,
-        &mut source,
-        &config,
-        None,
-        Some(&[rule]),
+        SceneExportRequest {
+            voxels: &voxels,
+            source_models: &source_models,
+            source_atlas_map: &source_map,
+            atlas_source: &mut source,
+            config: &config,
+            dynamic_entity_atlases: None,
+            dynamic_entity_slots: None,
+            ctm_mode: CtmMode::Explicit(&[rule]),
+        },
         None,
     )
     .expect("Export scene package with CTM");
@@ -770,12 +785,16 @@ fn test_scene_export_banner_with_patterns_and_custom_baker() {
     let config = SceneExporterConfig::default();
     let export_result = export_scene_package(
         &temp_file,
-        &voxels,
-        &source_models,
-        &source_map,
-        &mut source,
-        &config,
-        None,
+        SceneExportRequest {
+            voxels: &voxels,
+            source_models: &source_models,
+            source_atlas_map: &source_map,
+            atlas_source: &mut source,
+            config: &config,
+            dynamic_entity_atlases: None,
+            dynamic_entity_slots: None,
+            ctm_mode: CtmMode::Disabled,
+        },
         None,
     )
     .expect("Export banner scene package");

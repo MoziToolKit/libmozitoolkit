@@ -26,11 +26,11 @@ pub use biome::{
     get_unit_cube_tint_index, get_unit_cube_tint_indices, hex_to_linear_rgba, hex_to_srgb,
     linear_to_srgb, reapply_uniform_biome_tint, reapply_uniform_biome_tint_flat,
     resolve_biome_color_set, sample_colormap_hex, sample_colormap_pixel, sample_colormap_pixel_u8,
-    set_cached_colormaps, srgb_to_linear, BiomeColorSet, BiomePalette, BiomeResolver,
-    BiomeTintFlatBuffers, CustomBiomeSettings, MeshBiomeAttributesResult, TintInfo,
-    VanillaColormaps, BLOCK_TINT_REGISTRY, CANONICAL_BIOMES, HARDCODED_BLOCK_TINTS,
-    TINT_TYPE_DRY_FOLIAGE, TINT_TYPE_FOLIAGE, TINT_TYPE_GRASS, TINT_TYPE_HARDCODED, TINT_TYPE_NONE,
-    TINT_TYPE_WATER,
+    sample_colormap_pixel_uv, sample_colormap_pixel_uv_u8, set_cached_colormaps, srgb_to_linear,
+    BiomeColorSet, BiomePalette, BiomeResolver, BiomeTintFlatBuffers, CustomBiomeSettings,
+    MeshBiomeAttributesResult, TintInfo, VanillaColormaps, BLOCK_TINT_REGISTRY, CANONICAL_BIOMES,
+    HARDCODED_BLOCK_TINTS, TINT_TYPE_DRY_FOLIAGE, TINT_TYPE_FOLIAGE, TINT_TYPE_GRASS,
+    TINT_TYPE_HARDCODED, TINT_TYPE_NONE, TINT_TYPE_WATER,
 };
 pub use error::MaterialError;
 pub use remap::batch::{

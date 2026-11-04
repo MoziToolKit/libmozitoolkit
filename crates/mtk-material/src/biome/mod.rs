@@ -27,6 +27,7 @@ pub use hardcoded::{
 pub use palettes::{
     blend_biome_colors, default_biome_palette, get_biome_palette, get_colormap_uv,
     hex_to_linear_rgba, hex_to_srgb, linear_to_srgb, sample_colormap_hex, sample_colormap_pixel,
-    sample_colormap_pixel_u8, srgb_to_linear, BiomePalette, CANONICAL_BIOMES,
+    sample_colormap_pixel_u8, sample_colormap_pixel_uv, sample_colormap_pixel_uv_u8,
+    srgb_to_linear, BiomePalette, CANONICAL_BIOMES,
 };
 pub use resolver::{BiomeResolver, TintInfo};

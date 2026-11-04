@@ -1,5 +1,7 @@
 //! Standalone Biome, Colormap, and Material attribute functions.
 
+use std::sync::Arc;
+
 use super::resolver::PyBiomeResolver;
 use crate::buffer::create_owned_f32_memoryview;
 use crate::voxel::PyVoxelStorage;
@@ -134,15 +136,78 @@ pub fn get_all_biomes(py: Python<'_>) -> PyResult<Py<PyAny>> {
     Ok(list.into())
 }
 
+/// Native container for resident Minecraft vanilla/resource-pack colormaps.
+#[pyclass(name = "VanillaColormaps")]
+#[derive(Clone)]
+pub struct PyVanillaColormaps {
+    pub(crate) inner: Arc<mtk_material::VanillaColormaps>,
+}
+
+#[pymethods]
+impl PyVanillaColormaps {
+    /// Loads the embedded vanilla default colormaps.
+    #[staticmethod]
+    pub fn load_embedded() -> Self {
+        Self {
+            inner: Arc::new(mtk_material::VanillaColormaps::load_embedded()),
+        }
+    }
+
+    /// Constructs colormaps with optional PNG byte overrides for grass, foliage, and dry_foliage.
+    #[staticmethod]
+    #[pyo3(signature = (grass=None, foliage=None, dry_foliage=None))]
+    pub fn from_bytes(
+        grass: Option<&[u8]>,
+        foliage: Option<&[u8]>,
+        dry_foliage: Option<&[u8]>,
+    ) -> PyResult<Self> {
+        let cms = mtk_material::VanillaColormaps::with_overrides(grass, foliage, dry_foliage)
+            .map_err(pyo3::exceptions::PyValueError::new_err)?;
+        Ok(Self {
+            inner: Arc::new(cms),
+        })
+    }
+
+    /// Sample linear RGBA grass color at temperature and humidity.
+    pub fn sample_grass_linear(&self, temperature: f32, humidity: f32) -> [f32; 4] {
+        self.inner.sample_grass_linear(temperature, humidity)
+    }
+
+    /// Sample linear RGBA foliage color at temperature and humidity.
+    pub fn sample_foliage_linear(&self, temperature: f32, humidity: f32) -> [f32; 4] {
+        self.inner.sample_foliage_linear(temperature, humidity)
+    }
+
+    /// Sample linear RGBA dry foliage color at temperature and humidity.
+    pub fn sample_dry_foliage_linear(&self, temperature: f32, humidity: f32) -> [f32; 4] {
+        self.inner.sample_dry_foliage_linear(temperature, humidity)
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<VanillaColormaps grass={}x{} foliage={}x{} dry_foliage={}x{}>",
+            self.inner.grass_width,
+            self.inner.grass_height,
+            self.inner.foliage_width,
+            self.inner.foliage_height,
+            self.inner.dry_foliage_width,
+            self.inner.dry_foliage_height
+        )
+    }
+}
+
 /// Sample resident vanilla colormap linear RGBA colors and hex strings from temperature and humidity.
 #[pyfunction]
-#[pyo3(signature = (temperature, humidity))]
+#[pyo3(signature = (temperature, humidity, colormaps=None))]
 pub fn sample_colormap_colors(
     py: Python<'_>,
     temperature: f32,
     humidity: f32,
+    colormaps: Option<&PyVanillaColormaps>,
 ) -> PyResult<Py<PyAny>> {
-    let cms = mtk_material::get_default_colormaps();
+    let cms = colormaps
+        .map(|c| c.inner.clone())
+        .unwrap_or_else(mtk_material::get_default_colormaps);
     let dict = PyDict::new(py);
     dict.set_item(
         "grass_linear",
