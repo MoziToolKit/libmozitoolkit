@@ -57,15 +57,7 @@ impl PyLiveSyncSession {
     pub fn get_world_mesh(&self) -> PyMeshData {
         let mesh = self.inner.get_world_mesh();
         let profile = self.inner.last_profile();
-        let has_dynamic = mesh
-            .used_materials()
-            .iter()
-            .any(|&c| c >= mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID);
-        let dynamic_entity_atlases = if has_dynamic {
-            Some(self.inner.dynamic_entity_atlases())
-        } else {
-            None
-        };
+        let dynamic_entity_atlases = self.inner.dynamic_entity_atlases_if_used();
         PyMeshData {
             inner: mesh,
             profile,
@@ -227,11 +219,7 @@ impl PyLiveSyncSession {
                     profile,
                 } => {
                     dict.set_item("type", "WORLD_MESH_READY")?;
-                    let has_dynamic = mesh
-                        .used_materials()
-                        .iter()
-                        .any(|&c| c >= mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID);
-                    let dyn_atlases = if has_dynamic {
+                    let dyn_atlases = if mesh.has_dynamic_entity_chunks() {
                         Some(self.inner.dynamic_entity_atlases())
                     } else {
                         None

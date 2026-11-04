@@ -232,6 +232,16 @@ impl CtmRule {
         }
         true
     }
+
+    /// Serializes this CTM rule to a JSON string.
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(self)
+    }
+
+    /// Deserializes a CTM rule from a JSON string.
+    pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(json)
+    }
 }
 
 /// Helper to extract the block identifier before any property brackets `[...]`.

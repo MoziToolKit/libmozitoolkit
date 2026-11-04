@@ -12,6 +12,7 @@ pub mod identifier;
 pub mod meta;
 pub mod pack;
 pub mod skin;
+pub mod texture_key;
 
 pub use atlas::{AtlasCategory, AtlasDefinition, AtlasFilterPattern, AtlasSource, UnstitchRegion};
 pub use banner::{
@@ -31,3 +32,4 @@ pub use pack::{
     is_companion_asset_path, DirectoryPack, DiscoveredSprite, MemoryPack, PbrCompanions,
     ResourcePack, ResourcePackStack,
 };
+pub use texture_key::TextureKeyVariants;

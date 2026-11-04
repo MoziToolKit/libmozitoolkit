@@ -88,3 +88,158 @@ impl BakedAtlas {
 pub struct AtlasBuilder {
     pub(crate) config: AtlasBuilderConfig,
 }
+
+/// Default OpenGL Normal buffer fill color: flat tangent-space normal (X=0.5, Y=0.5, Z=1.0, Height=1.0).
+pub const NORMAL_DEFAULT_RGBA: [u8; 4] = [128, 128, 255, 255];
+
+/// Default ORM buffer fill color: AO=1.0, Roughness=1.0, Metallic=0.0, Emission=0.0.
+pub const ORM_DEFAULT_RGBA: [u8; 4] = [255, 255, 0, 0];
+
+/// Default AUX buffer fill color: IOR=1.0, Porosity=0.0, SSS=0.0, Transmission=0.0.
+pub const AUX_DEFAULT_RGBA: [u8; 4] = [0, 0, 0, 0];
+
+/// Unified container for companion PBR layers during atlas chunk assembly.
+#[derive(Debug, Default)]
+pub struct PbrLayerBuffers {
+    pub normal: Option<RgbaBuffer>,
+    pub specular: Option<RgbaBuffer>,
+    pub overlay: Option<RgbaBuffer>,
+    pub normal_gl: Option<RgbaBuffer>,
+    pub orm: Option<RgbaBuffer>,
+    pub aux: Option<RgbaBuffer>,
+}
+
+impl PbrLayerBuffers {
+    /// Constructs buffers for all active PBR layers with standard neutral fill colors.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        width: u32,
+        height: u32,
+        has_normal: bool,
+        has_specular: bool,
+        has_overlay: bool,
+        has_normal_gl: bool,
+        has_orm: bool,
+        has_aux: bool,
+    ) -> Self {
+        Self {
+            normal: if has_normal {
+                Some(RgbaBuffer::solid(
+                    width,
+                    height,
+                    NORMAL_DEFAULT_RGBA[0],
+                    NORMAL_DEFAULT_RGBA[1],
+                    NORMAL_DEFAULT_RGBA[2],
+                    NORMAL_DEFAULT_RGBA[3],
+                ))
+            } else {
+                None
+            },
+            specular: if has_specular {
+                Some(RgbaBuffer::new(width, height))
+            } else {
+                None
+            },
+            overlay: if has_overlay {
+                Some(RgbaBuffer::new(width, height))
+            } else {
+                None
+            },
+            normal_gl: if has_normal_gl {
+                Some(RgbaBuffer::solid(
+                    width,
+                    height,
+                    NORMAL_DEFAULT_RGBA[0],
+                    NORMAL_DEFAULT_RGBA[1],
+                    NORMAL_DEFAULT_RGBA[2],
+                    NORMAL_DEFAULT_RGBA[3],
+                ))
+            } else {
+                None
+            },
+            orm: if has_orm {
+                Some(RgbaBuffer::solid(
+                    width,
+                    height,
+                    ORM_DEFAULT_RGBA[0],
+                    ORM_DEFAULT_RGBA[1],
+                    ORM_DEFAULT_RGBA[2],
+                    ORM_DEFAULT_RGBA[3],
+                ))
+            } else {
+                None
+            },
+            aux: if has_aux {
+                Some(RgbaBuffer::new(width, height))
+            } else {
+                None
+            },
+        }
+    }
+
+    /// Blits all active PBR companion layers of a sprite with padding.
+    pub fn blit_sprite_layers(
+        &mut self,
+        sp: &crate::image::loader::DecodedSprite,
+        inner_x: u32,
+        inner_y: u32,
+        width: u32,
+        height: u32,
+        padding: u32,
+    ) {
+        super::blit_and_pad_optional_layer(
+            &mut self.normal,
+            &sp.normal,
+            inner_x,
+            inner_y,
+            width,
+            height,
+            padding,
+        );
+        super::blit_and_pad_optional_layer(
+            &mut self.specular,
+            &sp.specular,
+            inner_x,
+            inner_y,
+            width,
+            height,
+            padding,
+        );
+        super::blit_and_pad_optional_layer(
+            &mut self.overlay,
+            &sp.overlay,
+            inner_x,
+            inner_y,
+            width,
+            height,
+            padding,
+        );
+        super::blit_and_pad_optional_layer(
+            &mut self.normal_gl,
+            &sp.normal_gl,
+            inner_x,
+            inner_y,
+            width,
+            height,
+            padding,
+        );
+        super::blit_and_pad_optional_layer(
+            &mut self.orm,
+            &sp.orm,
+            inner_x,
+            inner_y,
+            width,
+            height,
+            padding,
+        );
+        super::blit_and_pad_optional_layer(
+            &mut self.aux,
+            &sp.aux,
+            inner_x,
+            inner_y,
+            width,
+            height,
+            padding,
+        );
+    }
+}

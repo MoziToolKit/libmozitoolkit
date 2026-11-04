@@ -44,7 +44,7 @@ Python 模块名：`libmtk_py`
 
 ### 2.1 几何网格与自定义属性 (`mesh` & `attributes`)
 - **`MeshData` (`PyMeshData`)**：连续内存紧凑几何网格缓冲容器。
-  - 属性：`vertex_count`, `triangle_count`, `face_count`, `is_empty`
+  - 属性：`vertex_count`, `triangle_count`, `face_count`, `is_empty`, `has_dynamic_entity_chunks` (是否包含动态实体图集切片), `dynamic_entity_atlases` (返回 `{chunk_id: bytes}` 字典，无动态图集时返回 `{}`)
   - 构造与修改：`MeshData()`, `MeshData.with_capacity(verts, indices, faces)`, `MeshData.from_flat_polygons(...)`, `MeshData.from_polygon_offsets(positions, loop_vertices, loop_uvs, face_offsets, normals=None, face_materials=None)`（CSR 面偏移直接构造）, `append_mesh(other)`, `clear()`
   - UV 布局：`uv_layout` 显式区分 `PerVertex` / `PerLoop`，不再用 `uvs.len()` 猜测；`loop_uvs_memoryview()` 自动展开为逐 loop。
   - 内存视图（标准零拷贝通道，推荐）：`positions_memoryview()`, `normals_memoryview()`, `uvs_memoryview()`, `indices_memoryview()`, `quad_indices_memoryview()`, `loop_uvs_memoryview()`, `loop_starts_memoryview()`, `loop_totals_memoryview()`, `face_materials_memoryview()`
@@ -140,6 +140,7 @@ Python 模块名：`libmtk_py`
 ### 2.10 场景交换包与 Mini-Atlas (`scene`)
 - **`ScenePackageReader`**：`.mtkscene` 单文件中间交换容器读取器（只读无副作用设计，构造时不污染全局进程状态）。
   - `open(path)`：快速打开并校验场景元数据；
+  - `validate() -> ValidationReport`：执行场景包完整性与引用完整性校验（校验模型贴图是否已映射到 mini-atlas、CTM 规则纹理是否存在、色盘 PNG 是否合法等）；
   - `metadata -> SceneMetadata`：获取场景 AABB 范围、体素总量与图集分辨率等；
   - `read_point_cloud(origin_centered=True, z_up=True) -> VoxelPointCloud`：提取稀疏体素列存并构造点云；
   - `read_models() -> BakedModelDatabase | None`：读取已重映射至 Mini-Atlas 的 Tree-Shaken 方块模型库；
@@ -156,10 +157,10 @@ Python 模块名：`libmtk_py`
   - `read_ctm_rules_json() -> str | None`：读取原始 CTM 规则 JSON 字符串；
   - `read_ctm_solver() -> CtmSolver | None`：现场构造带优先级倒序索引的高速 CTM 解算器。
 - **`SceneMetadata`**：场景包元数据对象。
-  - 属性：`format_version`, `bounds`, `voxel_count`, `unique_states_count`, `unique_biomes_count`, `unique_entities_count`, `atlas_resolution`, `generator`, `created_at_epoch_secs`；
+  - 属性：`format_version`, `bounds`, `voxel_count`, `unique_states_count`, `unique_biomes_count`, `unique_entities_count`, `atlas_resolution`, `generator`, `created_at_epoch_secs`, `capabilities` (`SceneCapabilities`，包含 `has_colormaps`, `has_ctm`, `has_pbr`, `has_dynamic_entities`)；
   - `to_dict() -> dict`：快速转化为 Python 字典。
-- **`export_scene_package(path, point_cloud, cache, max_atlas_size=2048, mip_level=0, dynamic_entity_atlases=None, ctm_solver=None) -> SceneMetadata`**：
-  端到端场景交换导出算子：自动扫描伴生体素点云、执行模型树剪枝、从激活缓存裁剪贴图、自适应缝合动态实体皮肤与旗帜纹理、剪枝并嵌入 CTM 规则与子贴图、自包含打包 Biome 色盘与 Resolver、拼接微型多通道图集、并行重映射模型 UV 并压缩打包为 `.mtkscene`。
+- **`export_scene_package(path, point_cloud, cache, *, max_atlas_size=2048, mip_level=0, dynamic_entity_atlases=None, ctm_solver=None, enable_ctm=None, dynamic_entity_slots=None) -> SceneMetadata`**：
+  端到端场景交换导出算子（所有可选参数均为 keyword-only）：自动扫描伴生体素点云、执行模型树剪枝、从激活缓存裁剪贴图、自适应缝合动态实体皮肤与旗帜纹理、剪枝并嵌入 CTM 规则与子贴图、自包含打包 Biome 色盘与 Resolver、拼接微型多通道图集、并行重映射模型 UV 并压缩打包为 `.mtkscene`。
 - **稀疏体素数据结构 (`mtk_voxel`)**：
   - `SparseVoxelPayload` / `SparseVoxelColumns`：正交离散调色板（`state_palette`, `biome_palette`, `entity_palette`）与紧凑 SoA 列存布局，实现与伴生体素点云的 1:1 零拷贝互转。
 

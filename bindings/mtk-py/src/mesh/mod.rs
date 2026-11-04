@@ -86,21 +86,23 @@ impl PyMeshData {
         self.profile.clone().map(Into::into)
     }
 
-    /// Returns a dict mapping Chunk ID (e.g. 0xFFF0, 0xFFF1) to dynamic entity atlas RGBA bytes if present.
+    /// Returns a dict mapping Chunk ID (e.g. 0xFFF0, 0xFFF1) to dynamic entity atlas RGBA bytes.
+    /// Returns an empty dict `{}` if no dynamic entity atlases are present.
     #[getter]
-    pub fn dynamic_entity_atlases<'py>(
-        &self,
-        py: Python<'py>,
-    ) -> Option<Bound<'py, pyo3::types::PyDict>> {
+    pub fn dynamic_entity_atlases<'py>(&self, py: Python<'py>) -> Bound<'py, pyo3::types::PyDict> {
+        let dict = pyo3::types::PyDict::new(py);
         if let Some(ref map) = self.dynamic_entity_atlases {
-            let dict = pyo3::types::PyDict::new(py);
             for (&chunk_id, bytes) in map {
                 let _ = dict.set_item(chunk_id, pyo3::types::PyBytes::new(py, bytes));
             }
-            Some(dict)
-        } else {
-            None
         }
+        dict
+    }
+
+    /// Whether this mesh contains any faces referencing dynamic entity atlas chunks (>= 0xFFF0).
+    #[getter]
+    pub fn has_dynamic_entity_chunks(&self) -> bool {
+        self.inner.has_dynamic_entity_chunks()
     }
 
     /// Returns dynamic entity slots mapping if present.

@@ -76,6 +76,19 @@ impl PySceneMetadata {
         self.inner.created_at_epoch_secs
     }
 
+    #[getter]
+    pub fn capabilities<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let dict = PyDict::new(py);
+        dict.set_item("has_colormaps", self.inner.capabilities.has_colormaps)?;
+        dict.set_item("has_ctm", self.inner.capabilities.has_ctm)?;
+        dict.set_item("has_pbr", self.inner.capabilities.has_pbr)?;
+        dict.set_item(
+            "has_dynamic_entities",
+            self.inner.capabilities.has_dynamic_entities,
+        )?;
+        Ok(dict)
+    }
+
     /// Converts metadata into a Python dictionary.
     pub fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
@@ -89,6 +102,16 @@ impl PySceneMetadata {
         dict.set_item("has_animated_atlas", self.inner.has_animated_atlas)?;
         dict.set_item("generator", &self.inner.generator)?;
         dict.set_item("created_at_epoch_secs", self.inner.created_at_epoch_secs)?;
+
+        let cap_dict = PyDict::new(py);
+        cap_dict.set_item("has_colormaps", self.inner.capabilities.has_colormaps)?;
+        cap_dict.set_item("has_ctm", self.inner.capabilities.has_ctm)?;
+        cap_dict.set_item("has_pbr", self.inner.capabilities.has_pbr)?;
+        cap_dict.set_item(
+            "has_dynamic_entities",
+            self.inner.capabilities.has_dynamic_entities,
+        )?;
+        dict.set_item("capabilities", cap_dict)?;
         Ok(dict)
     }
 
@@ -207,10 +230,31 @@ impl PyScenePackageReader {
     }
 
     /// Reads raw PNG bytes of a packaged colormap if present.
-    pub fn read_colormap<'py>(&self, py: Python<'py>, name: &str) -> Option<Bound<'py, PyBytes>> {
-        self.inner
+    pub fn read_colormap<'py>(
+        &self,
+        py: Python<'py>,
+        name: &str,
+    ) -> PyResult<Option<Bound<'py, PyBytes>>> {
+        let opt = self
+            .inner
             .read_colormap(name)
-            .map(|bytes| PyBytes::new(py, &bytes))
+            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+        Ok(opt.map(|bytes| PyBytes::new(py, &bytes)))
+    }
+
+    /// Performs an integrity check on models, atlas, colormaps, and CTM rules.
+    pub fn validate(&self) -> PyResult<bool> {
+        let report = self
+            .inner
+            .validate()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        if !report.is_valid {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Scene package validation failed: {}",
+                report.errors.join("; ")
+            )));
+        }
+        Ok(true)
     }
 
     /// Reads packaged colormaps into a parsed VanillaColormaps structure.
@@ -339,7 +383,7 @@ impl PyScenePackageReader {
 
 /// End-to-end exporter: builds Scene Mini-Atlas, remaps UVs, tree-shakes models, and writes `.mtkscene`.
 #[pyfunction]
-#[pyo3(signature = (output_path, point_cloud, asset_cache, max_atlas_size=2048, mip_level=0, dynamic_entity_atlases=None, ctm_solver=None, enable_ctm=None, dynamic_entity_slots=None))]
+#[pyo3(signature = (output_path, point_cloud, asset_cache, *, max_atlas_size=2048, mip_level=0, dynamic_entity_atlases=None, ctm_solver=None, enable_ctm=None, dynamic_entity_slots=None))]
 pub fn export_scene_package(
     output_path: &str,
     point_cloud: &PyVoxelPointCloud,

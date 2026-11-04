@@ -167,6 +167,12 @@ pub mod concurrency {
     }
 }
 
+/// Texture atlas domain constants.
+pub mod atlas {
+    /// Starting chunk ID for dynamically generated entity atlas sheets (65520 / 0xFFF0).
+    pub const DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID: u16 = 0xFFF0;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -120,19 +120,8 @@ impl PyVoxelWorld {
         }
         .map_err(map_voxel_err)?;
         let profile = self.inner.last_profile.clone();
-        let has_dynamic = self
-            .inner
-            .used_chunk_ids()
-            .iter()
-            .any(|&c| c >= mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID as u32);
-        let (dynamic_entity_atlases, dynamic_entity_slots) = if has_dynamic {
-            (
-                Some(self.inner.dynamic_entity_atlases_owned()),
-                Some(self.inner.dynamic_entity_slots()),
-            )
-        } else {
-            (None, None)
-        };
+        let (dynamic_entity_atlases, dynamic_entity_slots) =
+            self.inner.dynamic_entity_atlases_if_used();
         Ok(crate::mesh::PyMeshData {
             inner: mesh,
             profile,
@@ -156,19 +145,7 @@ impl PyVoxelWorld {
             .detach(|| self.inner.rebuild_dirty())
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         let dict = pyo3::types::PyDict::new(py);
-        let has_dynamic = self
-            .inner
-            .used_chunk_ids()
-            .iter()
-            .any(|&c| c >= mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID as u32);
-        let (dyn_atlases, dyn_slots) = if has_dynamic {
-            (
-                Some(self.inner.dynamic_entity_atlases_owned()),
-                Some(self.inner.dynamic_entity_slots()),
-            )
-        } else {
-            (None, None)
-        };
+        let (dyn_atlases, dyn_slots) = self.inner.dynamic_entity_atlases_if_used();
         for (coord, mesh) in rebuilt {
             let mut py_mesh = crate::mesh::PyMeshData::from_mesh(mesh);
             py_mesh.dynamic_entity_atlases = dyn_atlases.clone();
@@ -182,19 +159,8 @@ impl PyVoxelWorld {
     pub fn get_world_mesh(&self) -> crate::mesh::PyMeshData {
         let mesh = self.inner.get_world_mesh().cloned().unwrap_or_default();
         let profile = self.inner.last_profile.clone();
-        let has_dynamic = self
-            .inner
-            .used_chunk_ids()
-            .iter()
-            .any(|&c| c >= mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID as u32);
-        let (dynamic_entity_atlases, dynamic_entity_slots) = if has_dynamic {
-            (
-                Some(self.inner.dynamic_entity_atlases_owned()),
-                Some(self.inner.dynamic_entity_slots()),
-            )
-        } else {
-            (None, None)
-        };
+        let (dynamic_entity_atlases, dynamic_entity_slots) =
+            self.inner.dynamic_entity_atlases_if_used();
         crate::mesh::PyMeshData {
             inner: mesh,
             profile,

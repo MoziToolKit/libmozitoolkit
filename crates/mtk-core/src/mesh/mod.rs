@@ -552,6 +552,14 @@ impl MeshData {
         set.into_iter().collect()
     }
 
+    /// Returns true if this mesh contains any faces referencing dynamic entity atlas chunks (>= 0xFFF0).
+    #[inline]
+    pub fn has_dynamic_entity_chunks(&self) -> bool {
+        self.face_materials
+            .iter()
+            .any(|&c| c >= crate::constants::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID)
+    }
+
     /// Compacts `face_materials` to contiguous indices `0..N-1` and returns the mapping of original material IDs.
     pub fn compact_materials(&mut self) -> Vec<MaterialSlotId> {
         let original_ids = self.used_materials();

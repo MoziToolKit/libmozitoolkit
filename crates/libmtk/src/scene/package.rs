@@ -12,6 +12,14 @@ use mtk_voxel::SparseVoxelPayload;
 use super::metadata::SceneMetadata;
 use crate::MtkError;
 
+/// Integrity and validation report produced by `ScenePackageReader::validate`.
+#[derive(Debug, Clone, Default)]
+pub struct ValidationReport {
+    pub is_valid: bool,
+    pub warnings: Vec<String>,
+    pub errors: Vec<String>,
+}
+
 /// High-level reader for `.mtkscene` packages.
 pub struct ScenePackageReader {
     reader: MtkPackageReader,
@@ -162,28 +170,23 @@ impl ScenePackageReader {
     }
 
     /// Reads raw decompressed PNG bytes for a specific colormap channel (e.g. `"grass"`, `"foliage"`).
-    pub fn read_colormap(&self, name: &str) -> Option<Vec<u8>> {
-        self.reader
-            .read_chunk_decompressed(&format!("biome/colormap/{name}"))
-            .ok()
+    pub fn read_colormap(&self, name: &str) -> Result<Option<Vec<u8>>, MtkError> {
+        let chunk_id = format!("biome/colormap/{name}");
+        if !self.reader.has_chunk(&chunk_id) {
+            return Ok(None);
+        }
+        let bytes = self
+            .reader
+            .read_chunk_decompressed(&chunk_id)
+            .map_err(MtkError::Package)?;
+        Ok(Some(bytes))
     }
 
     /// Reads resident colormaps carried by this scene package without global side effects.
     pub fn read_colormaps(&self) -> Result<Option<Arc<mtk_material::VanillaColormaps>>, MtkError> {
-        let read = |name: &str| -> Result<Option<Vec<u8>>, MtkError> {
-            let chunk_id = format!("biome/colormap/{name}");
-            if !self.reader.has_chunk(&chunk_id) {
-                return Ok(None);
-            }
-            let bytes = self
-                .reader
-                .read_chunk_decompressed(&chunk_id)
-                .map_err(MtkError::Package)?;
-            Ok(Some(bytes))
-        };
-        let grass = read("grass")?;
-        let foliage = read("foliage")?;
-        let dry_foliage = read("dry_foliage")?;
+        let grass = self.read_colormap("grass")?;
+        let foliage = self.read_colormap("foliage")?;
+        let dry_foliage = self.read_colormap("dry_foliage")?;
 
         if grass.is_none() && foliage.is_none() && dry_foliage.is_none() {
             return Ok(None);
@@ -209,6 +212,7 @@ impl ScenePackageReader {
         let chunk_id = if self.reader.has_chunk("biome/mapping") {
             "biome/mapping"
         } else if self.reader.has_chunk("biome/resolver") {
+            // DEPRECATED: "biome/resolver" chunk ID is deprecated and will be removed in version 2.2. Use "biome/mapping".
             "biome/resolver"
         } else {
             return Ok(None);
@@ -257,6 +261,86 @@ impl ScenePackageReader {
         let map: HashMap<String, (u16, u16)> = self.reader.read_chunk_json("entity/slots")?;
         Ok(Some(map))
     }
+
+    /// Performs an integrity check on models, atlas textures, colormaps, and CTM rules.
+    pub fn validate(&self) -> Result<ValidationReport, MtkError> {
+        let mut report = ValidationReport::default();
+
+        // 1. Check colormaps PNG validity
+        for name in &["grass", "foliage", "dry_foliage"] {
+            match self.read_colormap(name) {
+                Ok(Some(bytes)) => {
+                    if bytes.len() < 8
+                        || bytes[0..8] != [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]
+                    {
+                        report.errors.push(format!(
+                            "Corrupted colormap '{name}': invalid PNG signature"
+                        ));
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    report
+                        .errors
+                        .push(format!("Failed reading colormap '{name}': {e}"));
+                }
+            }
+        }
+
+        // 2. Check Biome Resolver
+        if self.reader.has_chunk("biome/mapping") || self.reader.has_chunk("biome/resolver") {
+            if let Err(e) = self.read_biome_resolver() {
+                report
+                    .errors
+                    .push(format!("Invalid BiomeResolver in package: {e}"));
+            }
+        }
+
+        // 3. Check CTM Rules
+        if self.has_ctm_rules() {
+            match self.read_ctm_solver() {
+                Ok(Some(solver)) => {
+                    if let Ok(Some(map)) = self.read_atlas_mapping() {
+                        for rule in &solver.rules {
+                            for tile in rule.tiles.iter().flatten() {
+                                if map.lookup(tile).is_none() {
+                                    report.warnings.push(format!(
+                                        "CTM rule '{}' references tile '{}' not found in mini-atlas",
+                                        rule.name, tile
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    report
+                        .errors
+                        .push(format!("Corrupted CTM rules JSON in package: {e}"));
+                }
+            }
+        }
+
+        // 4. Check Models vs Atlas Mapping
+        if let (Ok(Some(models)), Ok(Some(map))) = (self.read_models(), self.read_atlas_mapping()) {
+            for (state, model) in &models.models {
+                for element in &model.elements {
+                    for face in element.faces.values() {
+                        if map.lookup_str(&face.texture).is_none() {
+                            report.warnings.push(format!(
+                                "Model for state '{}' references texture '{}' not found in mini-atlas",
+                                state, face.texture
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        report.is_valid = report.errors.is_empty();
+        Ok(report)
+    }
 }
 
 /// Installs resource-pack colormap overrides carried by a scene package.
@@ -295,21 +379,49 @@ pub struct ScenePackageWriteOptions {
     pub fingerprint: Option<[u8; 16]>,
 }
 
+/// Request parameters for writing an `.mtkscene` scene interchange package.
+#[derive(Debug, Clone)]
+pub struct SceneWriteRequest<'a> {
+    pub metadata: &'a SceneMetadata,
+    pub voxels: &'a SparseVoxelPayload,
+    pub models: Option<&'a BakedModelDatabase>,
+    pub atlas_mapping: Option<&'a AtlasAddressMap>,
+    pub atlas_textures: &'a [(String, Vec<u8>)],
+    pub colormaps: Option<&'a [(String, Vec<u8>)]>,
+    pub biome_resolver_json: Option<&'a str>,
+    pub ctm_rules: Option<&'a [mtk_resource::CtmRule]>,
+    pub dynamic_entity_slots: Option<&'a HashMap<String, (u16, u16)>>,
+    pub options: Option<&'a ScenePackageWriteOptions>,
+}
+
+impl<'a> SceneWriteRequest<'a> {
+    /// Creates a minimal `SceneWriteRequest` with required fields.
+    pub fn new(
+        metadata: &'a SceneMetadata,
+        voxels: &'a SparseVoxelPayload,
+        atlas_textures: &'a [(String, Vec<u8>)],
+    ) -> Self {
+        Self {
+            metadata,
+            voxels,
+            models: None,
+            atlas_mapping: None,
+            atlas_textures,
+            colormaps: None,
+            biome_resolver_json: None,
+            ctm_rules: None,
+            dynamic_entity_slots: None,
+            options: None,
+        }
+    }
+}
+
 /// High-level function to write an `.mtkscene` package file to disk.
 pub fn write_scene_package(
     path: impl AsRef<Path>,
-    metadata: &SceneMetadata,
-    voxels: &SparseVoxelPayload,
-    models: Option<&BakedModelDatabase>,
-    atlas_mapping: Option<&AtlasAddressMap>,
-    atlas_textures: &[(String, Vec<u8>)],
-    colormaps: Option<&[(String, Vec<u8>)]>,
-    biome_resolver_json: Option<&str>,
-    ctm_rules_json: Option<&str>,
-    dynamic_entity_slots: Option<&HashMap<String, (u16, u16)>>,
-    options: Option<&ScenePackageWriteOptions>,
+    req: SceneWriteRequest<'_>,
 ) -> Result<(), MtkError> {
-    let fp = options.and_then(|o| o.fingerprint).unwrap_or([0u8; 16]);
+    let fp = req.options.and_then(|o| o.fingerprint).unwrap_or([0u8; 16]);
 
     let mut writer = MtkPackageFileWriter::create(path, PackageProfile::SceneInterchange, fp)?;
 
@@ -317,12 +429,12 @@ pub fn write_scene_package(
     writer.add_json_chunk(
         *b"META",
         "manifest",
-        metadata,
+        req.metadata,
         &ChunkWriteOptions::zstd_fast(),
     )?;
 
     // 2. Sparse Voxels
-    let voxl_bytes = postcard::to_allocvec(voxels)?;
+    let voxl_bytes = postcard::to_allocvec(req.voxels)?;
     writer.add_chunk(
         *b"VOXL",
         "voxels/sparse",
@@ -331,7 +443,7 @@ pub fn write_scene_package(
     )?;
 
     // 3. Models (optional)
-    if let Some(db) = models {
+    if let Some(db) = req.models {
         let db_bytes = db.to_binary()?;
         writer.add_chunk(
             *b"MODL",
@@ -342,7 +454,7 @@ pub fn write_scene_package(
     }
 
     // 4. Atlas mapping (optional)
-    if let Some(map) = atlas_mapping {
+    if let Some(map) = req.atlas_mapping {
         let map_json = map.to_json()?;
         writer.add_str_chunk(
             *b"ATLS",
@@ -353,7 +465,7 @@ pub fn write_scene_package(
     }
 
     // 5. Atlas textures (optional)
-    for (name, bytes) in atlas_textures {
+    for (name, bytes) in req.atlas_textures {
         let chunk_id = if name.starts_with("atlas/textures/") {
             name.clone()
         } else {
@@ -363,7 +475,7 @@ pub fn write_scene_package(
     }
 
     // 6. Colormaps (optional)
-    if let Some(cms) = colormaps {
+    if let Some(cms) = req.colormaps {
         for (name, bytes) in cms {
             let chunk_id = format!("biome/colormap/{name}");
             writer.add_chunk(*b"BIOM", chunk_id, bytes, &ChunkWriteOptions::zstd_fast())?;
@@ -371,7 +483,7 @@ pub fn write_scene_package(
     }
 
     // 7. Biome Resolver (optional)
-    if let Some(json) = biome_resolver_json {
+    if let Some(json) = req.biome_resolver_json {
         writer.add_str_chunk(
             *b"BIOM",
             "biome/mapping",
@@ -381,12 +493,20 @@ pub fn write_scene_package(
     }
 
     // 8. CTM Rules (optional)
-    if let Some(json) = ctm_rules_json {
-        writer.add_str_chunk(*b"CTMR", "ctm/rules", json, &ChunkWriteOptions::zstd_fast())?;
+    if let Some(rules) = req.ctm_rules {
+        if !rules.is_empty() {
+            let json = serde_json::to_string(rules).map_err(MtkError::Json)?;
+            writer.add_str_chunk(
+                *b"CTMR",
+                "ctm/rules",
+                &json,
+                &ChunkWriteOptions::zstd_fast(),
+            )?;
+        }
     }
 
     // 9. Dynamic Entity Slots (optional)
-    if let Some(slots) = dynamic_entity_slots {
+    if let Some(slots) = req.dynamic_entity_slots {
         writer.add_json_chunk(
             *b"ENTT",
             "entity/slots",
@@ -461,20 +581,9 @@ mod tests {
             },
         );
 
-        write_scene_package(
-            &temp_path,
-            &metadata,
-            &voxels,
-            Some(&model_db),
-            None,
-            &textures,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-        .expect("Write scene package");
+        let mut write_req = SceneWriteRequest::new(&metadata, &voxels, &textures);
+        write_req.models = Some(&model_db);
+        write_scene_package(&temp_path, write_req).expect("Write scene package");
 
         let reader = ScenePackageReader::open_file(&temp_path).expect("Open scene package");
         assert_eq!(reader.metadata().voxel_count, 2);
@@ -599,6 +708,11 @@ mod tests {
         let reader = ScenePackageReader::open_file(&temp_path).unwrap();
         let res = reader.read_colormaps();
         assert!(res.is_err(), "Corrupted colormap must return Err, not Ok");
+
+        let validation = reader.validate().expect("validate report");
+        assert!(!validation.is_valid);
+        assert!(!validation.errors.is_empty());
+
         let _ = std::fs::remove_file(&temp_path);
     }
 }

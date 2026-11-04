@@ -76,50 +76,16 @@ pub fn build_anim_atlas_chunks(
         }
 
         let mut albedo_buf = RgbaBuffer::new(chunk.width, chunk.height);
-        let mut normal_buf = if has_normal {
-            Some(RgbaBuffer::solid(
-                chunk.width,
-                chunk.height,
-                128,
-                128,
-                255,
-                255,
-            ))
-        } else {
-            None
-        };
-        let mut specular_buf = if has_specular {
-            Some(RgbaBuffer::new(chunk.width, chunk.height))
-        } else {
-            None
-        };
-        let mut overlay_buf = if has_overlay {
-            Some(RgbaBuffer::new(chunk.width, chunk.height))
-        } else {
-            None
-        };
-        let mut normal_gl_buf = if has_normal_gl {
-            Some(RgbaBuffer::solid(
-                chunk.width,
-                chunk.height,
-                128,
-                128,
-                255,
-                255,
-            ))
-        } else {
-            None
-        };
-        let mut orm_buf = if has_orm {
-            Some(RgbaBuffer::solid(chunk.width, chunk.height, 255, 255, 0, 0))
-        } else {
-            None
-        };
-        let mut aux_buf = if has_aux {
-            Some(RgbaBuffer::new(chunk.width, chunk.height))
-        } else {
-            None
-        };
+        let mut pbr_layers = super::PbrLayerBuffers::new(
+            chunk.width,
+            chunk.height,
+            has_normal,
+            has_specular,
+            has_overlay,
+            has_normal_gl,
+            has_orm,
+            has_aux,
+        );
 
         for slot in chunk.slots {
             if let Some(sp) = anim_sprite_map.get(&slot.entry) {
@@ -141,70 +107,11 @@ pub fn build_anim_atlas_chunks(
                 }
 
                 let slot_has_normal = sp.normal.is_some();
-                super::blit_and_pad_optional_layer(
-                    &mut normal_buf,
-                    &sp.normal,
-                    inner_x,
-                    inner_y,
-                    fw,
-                    strip_h,
-                    config.padding,
-                );
-
                 let slot_has_specular = sp.specular.is_some();
-                super::blit_and_pad_optional_layer(
-                    &mut specular_buf,
-                    &sp.specular,
-                    inner_x,
-                    inner_y,
-                    fw,
-                    strip_h,
-                    config.padding,
-                );
-
                 let slot_has_overlay = sp.overlay.is_some();
-                super::blit_and_pad_optional_layer(
-                    &mut overlay_buf,
-                    &sp.overlay,
-                    inner_x,
-                    inner_y,
-                    fw,
-                    strip_h,
-                    config.padding,
-                );
-
                 let slot_has_normal_gl = sp.normal_gl.is_some();
-                super::blit_and_pad_optional_layer(
-                    &mut normal_gl_buf,
-                    &sp.normal_gl,
-                    inner_x,
-                    inner_y,
-                    fw,
-                    strip_h,
-                    config.padding,
-                );
 
-                let _slot_has_orm = sp.orm.is_some();
-                super::blit_and_pad_optional_layer(
-                    &mut orm_buf,
-                    &sp.orm,
-                    inner_x,
-                    inner_y,
-                    fw,
-                    strip_h,
-                    config.padding,
-                );
-
-                let _slot_has_aux = sp.aux.is_some();
-                super::blit_and_pad_optional_layer(
-                    &mut aux_buf,
-                    &sp.aux,
-                    inner_x,
-                    inner_y,
-                    fw,
-                    strip_h,
-                    config.padding,
-                );
+                pbr_layers.blit_sprite_layers(sp, inner_x, inner_y, fw, strip_h, config.padding);
 
                 let u_min = (inner_x as f32) / (chunk.width as f32);
                 let u_max = ((inner_x + fw) as f32) / (chunk.width as f32);
@@ -289,12 +196,12 @@ pub fn build_anim_atlas_chunks(
             width: chunk.width,
             height: chunk.height,
             albedo: albedo_buf,
-            normal: normal_buf,
-            specular: specular_buf,
-            overlay: overlay_buf,
-            normal_gl: normal_gl_buf,
-            orm: orm_buf,
-            aux: aux_buf,
+            normal: pbr_layers.normal,
+            specular: pbr_layers.specular,
+            overlay: pbr_layers.overlay,
+            normal_gl: pbr_layers.normal_gl,
+            orm: pbr_layers.orm,
+            aux: pbr_layers.aux,
         });
     }
 

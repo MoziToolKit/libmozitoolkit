@@ -17,12 +17,15 @@ use std::collections::HashMap;
 use std::path::Path;
 
 pub use builder::{SceneExportResult, SceneExporterConfig};
-pub use cropper::SceneAtlasSource;
+pub use cropper::{
+    AtlasLayerSource, BiomeAssetSource, CtmAssetSource, EntityAssetSource, SceneAtlasSource,
+    SceneSourceCapabilities,
+};
 use mtk_model::BakedModelDatabase;
 use mtk_texture::atlas::AtlasAddressMap;
 use mtk_voxel::SparseVoxelPayload;
 
-use super::package::{write_scene_package, ScenePackageWriteOptions};
+use super::package::{write_scene_package, ScenePackageWriteOptions, SceneWriteRequest};
 use crate::MtkError;
 
 /// Explicit CTM rule resolution mode during scene interchange export.
@@ -97,11 +100,44 @@ pub fn build_scene_interchange<S: SceneAtlasSource>(
     // 4. Extract resident colormaps and biome_resolver from atlas_source
     let mut colormaps = Vec::new();
     for cm_name in &["grass", "foliage", "dry_foliage"] {
-        if let Ok(Some(bytes)) = req.atlas_source.get_colormap(cm_name) {
-            colormaps.push((cm_name.to_string(), bytes));
+        match req.atlas_source.get_colormap(cm_name) {
+            Ok(Some(bytes)) => {
+                if bytes.len() >= 8
+                    && bytes[0..8] == [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]
+                {
+                    colormaps.push((cm_name.to_string(), bytes));
+                } else {
+                    return Err(MtkError::Resource(
+                        mtk_resource::error::ResourceError::NotFound(format!(
+                            "Corrupted colormap '{cm_name}': invalid PNG signature"
+                        )),
+                    ));
+                }
+            }
+            Ok(None) => {}
+            Err(e) => {
+                return Err(MtkError::Resource(
+                    mtk_resource::error::ResourceError::NotFound(format!(
+                        "Failed reading colormap '{cm_name}' from asset source: {e}"
+                    )),
+                ));
+            }
         }
     }
-    let biome_resolver_json = req.atlas_source.get_biome_resolver_json().ok().flatten();
+    let biome_resolver_json = match req.atlas_source.get_biome_resolver_json() {
+        Ok(Some(json)) => {
+            mtk_material::BiomeResolver::from_json(&json)?;
+            Some(json)
+        }
+        Ok(None) => None,
+        Err(e) => {
+            return Err(MtkError::Resource(
+                mtk_resource::error::ResourceError::NotFound(format!(
+                    "Failed reading biome resolver from asset source: {e}"
+                )),
+            ));
+        }
+    };
 
     // 5. Delegate stitching, PBR decoding, and model tree-shaking to AtlasBuilder
     builder::build_scene_atlas_and_models(
@@ -126,25 +162,25 @@ pub fn export_scene_package<S: SceneAtlasSource>(
     let dynamic_entity_slots = req.dynamic_entity_slots.cloned();
     let result = build_scene_interchange(req)?;
 
-    let colormaps = if !result.colormaps.is_empty() {
+    let mut write_req =
+        SceneWriteRequest::new(&result.metadata, voxels, &result.mini_atlas_textures);
+    write_req.models = Some(&result.tree_shaken_models);
+    write_req.atlas_mapping = Some(&result.mini_atlas_map);
+    write_req.colormaps = if !result.colormaps.is_empty() {
         Some(result.colormaps.as_slice())
     } else {
         None
     };
+    write_req.biome_resolver_json = result.biome_resolver_json.as_deref();
+    write_req.ctm_rules = if !result.ctm_rules.is_empty() {
+        Some(result.ctm_rules.as_slice())
+    } else {
+        None
+    };
+    write_req.dynamic_entity_slots = dynamic_entity_slots.as_ref();
+    write_req.options = write_options;
 
-    write_scene_package(
-        path,
-        &result.metadata,
-        voxels,
-        Some(&result.tree_shaken_models),
-        Some(&result.mini_atlas_map),
-        &result.mini_atlas_textures,
-        colormaps,
-        result.biome_resolver_json.as_deref(),
-        result.ctm_rules_json.as_deref(),
-        dynamic_entity_slots.as_ref(),
-        write_options,
-    )?;
+    write_scene_package(path, write_req)?;
 
     Ok(result)
 }

@@ -211,6 +211,18 @@ impl LiveSyncSession {
         w.dynamic_entity_atlases_owned()
     }
 
+    /// Returns dynamic entity atlases if any dynamic entity chunk is referenced by the world geometry.
+    pub fn dynamic_entity_atlases_if_used(
+        &self,
+    ) -> Option<std::collections::HashMap<u16, Vec<u8>>> {
+        let w = self.world.read().unwrap_or_else(|e| e.into_inner());
+        if w.has_dynamic_entity_chunks() {
+            Some(w.dynamic_entity_atlases_owned())
+        } else {
+            None
+        }
+    }
+
     /// Sets the on-disk cache directory for downloaded player skins.
     pub fn set_skin_cache_dir(&self, cache_dir: Option<std::path::PathBuf>) {
         let mut w = self.world.write().unwrap_or_else(|e| e.into_inner());

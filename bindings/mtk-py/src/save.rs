@@ -230,15 +230,7 @@ pub fn load_and_mesh_minecraft_save(
             world.ensure_dynamic_entities_resolved_sync_with_progress(progress_ref);
             let m = world.rebuild_all_with_progress(progress_ref)?.clone();
             let p = world.last_profile.clone();
-            let has_dynamic = world
-                .used_chunk_ids()
-                .iter()
-                .any(|&c| c >= mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID as u32);
-            let dyn_atlases = if has_dynamic {
-                Some(world.dynamic_entity_atlases_owned())
-            } else {
-                None
-            };
+            let (dyn_atlases, _) = world.dynamic_entity_atlases_if_used();
             Ok::<_, mtk_voxel::VoxelError>((m, p, dyn_atlases))
         })
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;

@@ -45,31 +45,12 @@ pub struct SceneExportResult {
     pub colormaps: Vec<(String, Vec<u8>)>,
     pub biome_resolver_json: Option<String>,
     pub ctm_rules: Vec<mtk_resource::CtmRule>,
-    pub ctm_rules_json: Option<String>,
+    pub warnings: Vec<String>,
 }
 
 fn insert_sprite_aliases(map: &mut AtlasAddressMap, key: &str, loc: &AtlasSpriteLocation) {
-    if let Ok(res_loc) = ResourceLocation::parse_texture_path(key) {
+    for res_loc in mtk_resource::TextureKeyVariants::resource_locations_for_key(key) {
         map.sprites.insert(res_loc, loc.clone());
-    }
-    if let Ok(res_loc) = ResourceLocation::parse(key) {
-        map.sprites.insert(res_loc, loc.clone());
-    }
-    if let Some(stripped) = key.strip_prefix("minecraft:skin/") {
-        if let Ok(r) = ResourceLocation::parse(&format!("skin/{}", stripped)) {
-            map.sprites.insert(r, loc.clone());
-        }
-    } else if let Some(stripped) = key.strip_prefix("minecraft:banner/") {
-        if let Ok(r) = ResourceLocation::parse(&format!("banner:{}", stripped)) {
-            map.sprites.insert(r, loc.clone());
-        }
-        if let Ok(r) = ResourceLocation::parse(&format!("banner/{}", stripped)) {
-            map.sprites.insert(r, loc.clone());
-        }
-    } else if let Some(stripped) = key.strip_prefix("banner:") {
-        if let Ok(r) = ResourceLocation::parse(&format!("minecraft:banner/{}", stripped)) {
-            map.sprites.insert(r, loc.clone());
-        }
     }
 }
 
@@ -206,18 +187,20 @@ pub fn build_scene_atlas_and_models(
         }
     }
 
-    // 3. Assemble SceneMetadata
+    // 3. Assemble SceneMetadata and Capabilities
     let mut metadata = SceneMetadata::new(voxels.bounds, voxels.len());
     metadata.unique_states_count = voxels.state_palette.len();
     metadata.unique_biomes_count = voxels.biome_palette.len();
     metadata.unique_entities_count = voxels.entity_palette.len();
     metadata.atlas_resolution = first_chunk_dims;
     metadata.has_animated_atlas = !mini_atlas_map.anim_sprites.is_empty();
-
-    let ctm_rules_json = if !ctm_rules.is_empty() {
-        serde_json::to_string(&ctm_rules).ok()
-    } else {
-        None
+    metadata.capabilities = crate::scene::metadata::SceneCapabilities {
+        has_colormaps: !colormaps.is_empty(),
+        has_ctm: !ctm_rules.is_empty(),
+        has_pbr: mini_atlas_textures
+            .iter()
+            .any(|(name, _)| name.ends_with("_orm.png") || name.ends_with("_aux.png")),
+        has_dynamic_entities: !voxels.entity_palette.is_empty(),
     };
 
     Ok(SceneExportResult {
@@ -229,6 +212,6 @@ pub fn build_scene_atlas_and_models(
         colormaps,
         biome_resolver_json,
         ctm_rules,
-        ctm_rules_json,
+        warnings: Vec::new(),
     })
 }

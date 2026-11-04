@@ -1,8 +1,18 @@
-use mtk_resource::{AnimationMetadata, ResourceLocation};
+use mtk_resource::{AnimationMetadata, ResourceLocation, TextureKeyVariants};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::atlas::dynamic::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
 use crate::atlas::pbr::PbrMeta;
+
+/// Source priority level for atlas address map keys.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum AtlasKeySource {
+    /// Authoritative prebaked static asset from resource packs (higher priority).
+    Static = 0,
+    /// Procedurally registered dynamic entity sprite (e.g. skin, banner).
+    Dynamic = 1,
+}
 
 /// Classification of sprite placement and usage mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -323,6 +333,44 @@ impl AtlasAddressMap {
             }
         }
         None
+    }
+
+    /// Resolves a texture key across all possible canonical aliases (skin/, banner:, etc.).
+    pub fn resolve_texture_key(&self, key: &str) -> Option<&AtlasSpriteLocation> {
+        if let Some(loc) = self.lookup_str(key) {
+            return Some(loc);
+        }
+        for variant in TextureKeyVariants::for_key(key) {
+            if let Some(loc) = self.lookup_str(&variant) {
+                return Some(loc);
+            }
+        }
+        None
+    }
+
+    /// Inserts a sprite location with source priority tracking.
+    ///
+    /// Static sprites take precedence over dynamic sprites. If an alias already resolves
+    /// to a static chunk (`chunk_id < DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID`), a dynamic insertion
+    /// will not override it and returns `false`.
+    pub fn insert_with_source(
+        &mut self,
+        key: ResourceLocation,
+        loc: AtlasSpriteLocation,
+        source: AtlasKeySource,
+    ) -> bool {
+        if let Some(existing) = self.sprites.get(&key) {
+            let existing_source = if existing.chunk_id < DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID {
+                AtlasKeySource::Static
+            } else {
+                AtlasKeySource::Dynamic
+            };
+            if source == AtlasKeySource::Dynamic && existing_source == AtlasKeySource::Static {
+                return false;
+            }
+        }
+        self.sprites.insert(key, loc);
+        true
     }
 
     /// Merge another address map into this one.

@@ -26,6 +26,14 @@ pub fn decode_baked_atlas(
 ) -> Result<PbrDecodeSummary, crate::MaterialError> {
     let mut summary = PbrDecodeSummary::default();
 
+    // Index chunk metadata by chunk ID to avoid O(n^2) linear scans during iteration
+    let mut meta_by_id: std::collections::HashMap<u16, &mut mtk_texture::AtlasChunkMeta> = atlas
+        .address_map
+        .chunks
+        .iter_mut()
+        .map(|m| (m.chunk_id, m))
+        .collect();
+
     for chunk in &mut atlas.chunks {
         // Legacy decoder behavior: transparent albedo pixels use white RGB so
         // bilinear filtering at cutout edges does not produce dark fringes.
@@ -35,21 +43,14 @@ pub fn decode_baked_atlas(
             let has_normal = chunk.normal_gl.is_some();
             let has_orm = chunk.orm.is_some();
             let has_aux = chunk.aux.is_some();
-            let is_empty = !has_normal && !has_orm && !has_aux;
-            if let Some(chunk_meta) = atlas
-                .address_map
-                .chunks
-                .iter_mut()
-                .find(|candidate| candidate.chunk_id == chunk.chunk_id)
-            {
-                chunk_meta.has_orm = has_orm;
-                chunk_meta.has_aux = has_aux;
-                chunk_meta.pbr = if is_empty {
-                    None
-                } else {
-                    Some(crate::pbr::PbrMeta::labpbr13())
-                };
-                chunk_meta.refresh_textures();
+            if let Some(chunk_meta) = meta_by_id.get_mut(&chunk.chunk_id) {
+                sync_chunk_meta(
+                    chunk_meta,
+                    has_normal,
+                    has_orm,
+                    has_aux,
+                    Some(crate::pbr::PbrMeta::labpbr13()),
+                );
             }
             summary.chunks += 1;
             summary.with_normal += usize::from(has_normal);
@@ -73,16 +74,14 @@ pub fn decode_baked_atlas(
         chunk.normal = None;
         chunk.specular = None;
 
-        if let Some(chunk_meta) = atlas
-            .address_map
-            .chunks
-            .iter_mut()
-            .find(|candidate| candidate.chunk_id == chunk.chunk_id)
-        {
-            chunk_meta.has_orm = has_orm;
-            chunk_meta.has_aux = has_aux;
-            chunk_meta.pbr = if is_empty { None } else { Some(meta) };
-            chunk_meta.refresh_textures();
+        if let Some(chunk_meta) = meta_by_id.get_mut(&chunk.chunk_id) {
+            sync_chunk_meta(
+                chunk_meta,
+                has_normal,
+                has_orm,
+                has_aux,
+                if is_empty { None } else { Some(meta) },
+            );
         }
 
         summary.chunks += 1;
@@ -92,6 +91,21 @@ pub fn decode_baked_atlas(
     }
 
     Ok(summary)
+}
+
+fn sync_chunk_meta(
+    chunk_meta: &mut mtk_texture::AtlasChunkMeta,
+    has_normal: bool,
+    has_orm: bool,
+    has_aux: bool,
+    pbr_meta: Option<crate::pbr::PbrMeta>,
+) {
+    chunk_meta.has_normal = has_normal;
+    chunk_meta.has_specular = false;
+    chunk_meta.has_orm = has_orm;
+    chunk_meta.has_aux = has_aux;
+    chunk_meta.pbr = pbr_meta;
+    chunk_meta.refresh_textures();
 }
 
 fn clean_transparent_albedo(buffer: &mut mtk_texture::RgbaBuffer) {

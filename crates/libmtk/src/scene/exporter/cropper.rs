@@ -14,49 +14,75 @@ use mtk_texture::{DecodedSprite, RgbaBuffer};
 
 use crate::MtkError;
 
-/// Abstract source for reading raw or prebaked atlas chunk images.
-pub trait SceneAtlasSource {
+/// Source providing rasterized texture layers (Albedo, Normal, ORM, AUX, Overlay) for atlas chunks.
+pub trait AtlasLayerSource {
     /// Loads the Albedo RGBA image for the specified atlas chunk stem (e.g. `"blocks_chunk_001"`).
     fn get_albedo(
         &mut self,
         chunk_id: u16,
         chunk_stem: &str,
     ) -> Result<Option<RgbaBuffer>, MtkError>;
+
     /// Loads the Normal RGBA image for the specified atlas chunk stem (if present).
     fn get_normal(
         &mut self,
         chunk_id: u16,
         chunk_stem: &str,
     ) -> Result<Option<RgbaBuffer>, MtkError>;
+
     /// Loads the ORM RGBA image for the specified atlas chunk stem (if present).
     fn get_orm(&mut self, chunk_id: u16, chunk_stem: &str) -> Result<Option<RgbaBuffer>, MtkError>;
+
     /// Loads the AUX RGBA image for the specified atlas chunk stem (if present).
     fn get_aux(&mut self, chunk_id: u16, chunk_stem: &str) -> Result<Option<RgbaBuffer>, MtkError>;
+
     /// Loads the Overlay RGBA image for the specified atlas chunk stem (if present).
     fn get_overlay(
         &mut self,
         chunk_id: u16,
         chunk_stem: &str,
     ) -> Result<Option<RgbaBuffer>, MtkError>;
-    /// Loads a biome colormap PNG buffer (e.g. `"grass"`, `"foliage"`, `"dry_foliage"`).
-    fn get_colormap(&mut self, _name: &str) -> Result<Option<Vec<u8>>, MtkError> {
-        Ok(None)
-    }
-    /// Loads the authoritative BiomeResolver JSON if present in the cache.
-    fn get_biome_resolver_json(&mut self) -> Result<Option<String>, MtkError> {
-        Ok(None)
-    }
-    /// Loads cached CTM rules JSON if present in the cache or source.
-    fn get_ctm_rules_json(&mut self) -> Result<Option<String>, MtkError> {
-        Ok(None)
-    }
-    /// Loads a pre-populated `BannerBaker` containing cached base cloth and pattern sprites.
-    fn get_banner_baker(&mut self) -> Result<Option<BannerBaker>, MtkError> {
-        Ok(None)
-    }
 }
 
-impl SceneAtlasSource for crate::prebake::AssetCacheReader {
+/// Source providing resident colormap PNG buffers and BiomeResolver mapping JSON.
+pub trait BiomeAssetSource {
+    /// Loads a biome colormap PNG buffer (e.g. `"grass"`, `"foliage"`, `"dry_foliage"`).
+    fn get_colormap(&mut self, name: &str) -> Result<Option<Vec<u8>>, MtkError>;
+
+    /// Loads the authoritative BiomeResolver JSON if present in the cache.
+    fn get_biome_resolver_json(&mut self) -> Result<Option<String>, MtkError>;
+}
+
+/// Source providing CTM (Connected Textures Mod) rules.
+pub trait CtmAssetSource {
+    /// Loads cached CTM rules JSON if present in the cache or source.
+    fn get_ctm_rules_json(&mut self) -> Result<Option<String>, MtkError>;
+}
+
+/// Source providing procedural entity baking assets (e.g. banner base and patterns).
+pub trait EntityAssetSource {
+    /// Loads a pre-populated `BannerBaker` containing cached base cloth and pattern sprites.
+    fn get_banner_baker(&mut self) -> Result<Option<BannerBaker>, MtkError>;
+}
+
+/// Capabilities exposed by a `SceneAtlasSource`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SceneSourceCapabilities {
+    pub has_colormaps: bool,
+    pub has_biome_resolver: bool,
+    pub has_ctm_rules: bool,
+    pub has_banner_baker: bool,
+}
+
+/// Composite trait bundling all asset sources required for scene package export.
+pub trait SceneAtlasSource:
+    AtlasLayerSource + BiomeAssetSource + CtmAssetSource + EntityAssetSource
+{
+    /// Returns the active capabilities supported by this asset source.
+    fn capabilities(&self) -> SceneSourceCapabilities;
+}
+
+impl AtlasLayerSource for crate::prebake::AssetCacheReader {
     fn get_albedo(
         &mut self,
         _chunk_id: u16,
@@ -126,7 +152,9 @@ impl SceneAtlasSource for crate::prebake::AssetCacheReader {
             Ok(None)
         }
     }
+}
 
+impl BiomeAssetSource for crate::prebake::AssetCacheReader {
     fn get_colormap(&mut self, name: &str) -> Result<Option<Vec<u8>>, MtkError> {
         let chunk_path = format!("biome/colormap/{name}");
         if self.package_reader().has_chunk(&chunk_path) {
@@ -148,7 +176,9 @@ impl SceneAtlasSource for crate::prebake::AssetCacheReader {
             Ok(None)
         }
     }
+}
 
+impl CtmAssetSource for crate::prebake::AssetCacheReader {
     fn get_ctm_rules_json(&mut self) -> Result<Option<String>, MtkError> {
         if self.package_reader().has_chunk("ctm/rules") {
             let json = self.package_reader().read_chunk_str("ctm/rules")?;
@@ -157,13 +187,31 @@ impl SceneAtlasSource for crate::prebake::AssetCacheReader {
             Ok(None)
         }
     }
+}
 
+impl EntityAssetSource for crate::prebake::AssetCacheReader {
     fn get_banner_baker(&mut self) -> Result<Option<BannerBaker>, MtkError> {
         self.load_banner_baker().map(Some)
     }
 }
 
-impl SceneAtlasSource for HashMap<String, RgbaBuffer> {
+impl SceneAtlasSource for crate::prebake::AssetCacheReader {
+    fn capabilities(&self) -> SceneSourceCapabilities {
+        SceneSourceCapabilities {
+            has_colormaps: self.package_reader().has_chunk("biome/colormap/grass")
+                || self.package_reader().has_chunk("biome/colormap/foliage")
+                || self
+                    .package_reader()
+                    .has_chunk("biome/colormap/dry_foliage"),
+            has_biome_resolver: self.package_reader().has_chunk("biome/mapping")
+                || self.package_reader().has_chunk("biome/resolver"),
+            has_ctm_rules: self.package_reader().has_chunk("ctm/rules"),
+            has_banner_baker: true,
+        }
+    }
+}
+
+impl AtlasLayerSource for HashMap<String, RgbaBuffer> {
     fn get_albedo(
         &mut self,
         _chunk_id: u16,
@@ -207,6 +255,34 @@ impl SceneAtlasSource for HashMap<String, RgbaBuffer> {
     ) -> Result<Option<RgbaBuffer>, MtkError> {
         let key = format!("{}_overlay.png", chunk_stem);
         Ok(self.get(&key).cloned())
+    }
+}
+
+impl BiomeAssetSource for HashMap<String, RgbaBuffer> {
+    fn get_colormap(&mut self, _name: &str) -> Result<Option<Vec<u8>>, MtkError> {
+        Ok(None)
+    }
+
+    fn get_biome_resolver_json(&mut self) -> Result<Option<String>, MtkError> {
+        Ok(None)
+    }
+}
+
+impl CtmAssetSource for HashMap<String, RgbaBuffer> {
+    fn get_ctm_rules_json(&mut self) -> Result<Option<String>, MtkError> {
+        Ok(None)
+    }
+}
+
+impl EntityAssetSource for HashMap<String, RgbaBuffer> {
+    fn get_banner_baker(&mut self) -> Result<Option<BannerBaker>, MtkError> {
+        Ok(None)
+    }
+}
+
+impl SceneAtlasSource for HashMap<String, RgbaBuffer> {
+    fn capabilities(&self) -> SceneSourceCapabilities {
+        SceneSourceCapabilities::default()
     }
 }
 

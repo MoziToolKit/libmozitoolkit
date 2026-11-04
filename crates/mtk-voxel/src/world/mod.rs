@@ -80,7 +80,7 @@ impl VoxelWorld {
         self.config
             .atlas_address_map
             .as_ref()
-            .and_then(|m| m.lookup_str(key))
+            .and_then(|m| m.resolve_texture_key(key))
             .map(|loc| loc.chunk_id < mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID)
             .unwrap_or(false)
     }
@@ -489,6 +489,31 @@ impl VoxelWorld {
         self.dynamic_entities.all_slot_locations()
     }
 
+    /// Returns true if the active world mesh contains any faces referencing dynamic entity atlas chunks.
+    #[inline]
+    pub fn has_dynamic_entity_chunks(&self) -> bool {
+        self.used_chunk_ids()
+            .iter()
+            .any(|&c| c >= mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID as u32)
+    }
+
+    /// Returns dynamic entity atlases and slot mapping if any dynamic entity chunk is referenced by the world geometry.
+    pub fn dynamic_entity_atlases_if_used(
+        &self,
+    ) -> (
+        Option<HashMap<u16, Vec<u8>>>,
+        Option<HashMap<String, (u16, u16)>>,
+    ) {
+        if self.has_dynamic_entity_chunks() {
+            (
+                Some(self.dynamic_entity_atlases_owned()),
+                Some(self.dynamic_entity_slots()),
+            )
+        } else {
+            (None, None)
+        }
+    }
+
     /// Sets the on-disk cache directory for downloaded player skins.
     pub fn set_skin_cache_dir(&mut self, cache_dir: Option<std::path::PathBuf>) {
         self.skin_resolver = mtk_resource::skin::SkinResolver::new(cache_dir);
@@ -558,9 +583,7 @@ impl VoxelWorld {
                                 self.skin_resolver.resolve_skin_hash(skin_url, uuid, name);
                             let primary = hash_opt.as_deref().unwrap_or(&key);
 
-                            let in_static_atlas = self
-                                .is_key_in_static_atlas(&format!("minecraft:skin/{}", primary))
-                                || self.is_key_in_static_atlas(primary)
+                            let in_static_atlas = self.is_key_in_static_atlas(primary)
                                 || self.is_key_in_static_atlas(&key);
 
                             if !in_static_atlas
@@ -741,9 +764,7 @@ impl VoxelWorld {
                                 self.skin_resolver.resolve_skin_hash(skin_url, uuid, name);
                             let primary = hash_opt.unwrap_or_else(|| key.clone());
 
-                            let in_static_atlas = self
-                                .is_key_in_static_atlas(&format!("minecraft:skin/{}", primary))
-                                || self.is_key_in_static_atlas(&primary)
+                            let in_static_atlas = self.is_key_in_static_atlas(&primary)
                                 || self.is_key_in_static_atlas(&key);
 
                             if !in_static_atlas

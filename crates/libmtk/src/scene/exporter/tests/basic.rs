@@ -340,8 +340,12 @@ fn test_export_with_overlay_and_animated_strips() {
         .contains_key(&ResourceLocation::new("minecraft", "block/water_still")));
 }
 
-use crate::scene::exporter::cropper::SceneAtlasSource;
+use crate::scene::exporter::cropper::{
+    AtlasLayerSource, BiomeAssetSource, CtmAssetSource, EntityAssetSource, SceneAtlasSource,
+    SceneSourceCapabilities,
+};
 use crate::MtkError;
+use mtk_texture::banner::BannerBaker;
 
 struct MockAtlasSource {
     textures: HashMap<String, RgbaBuffer>,
@@ -350,7 +354,7 @@ struct MockAtlasSource {
     ctm_rules_json: Option<String>,
 }
 
-impl SceneAtlasSource for MockAtlasSource {
+impl AtlasLayerSource for MockAtlasSource {
     fn get_albedo(
         &mut self,
         _chunk_id: u16,
@@ -395,14 +399,37 @@ impl SceneAtlasSource for MockAtlasSource {
             .get(&format!("{}_overlay.png", chunk_stem))
             .cloned())
     }
+}
+
+impl BiomeAssetSource for MockAtlasSource {
     fn get_colormap(&mut self, name: &str) -> Result<Option<Vec<u8>>, MtkError> {
         Ok(self.colormaps.get(name).cloned())
     }
     fn get_biome_resolver_json(&mut self) -> Result<Option<String>, MtkError> {
         Ok(self.biome_resolver_json.clone())
     }
+}
+
+impl CtmAssetSource for MockAtlasSource {
     fn get_ctm_rules_json(&mut self) -> Result<Option<String>, MtkError> {
         Ok(self.ctm_rules_json.clone())
+    }
+}
+
+impl EntityAssetSource for MockAtlasSource {
+    fn get_banner_baker(&mut self) -> Result<Option<BannerBaker>, MtkError> {
+        Ok(None)
+    }
+}
+
+impl SceneAtlasSource for MockAtlasSource {
+    fn capabilities(&self) -> SceneSourceCapabilities {
+        SceneSourceCapabilities {
+            has_colormaps: !self.colormaps.is_empty(),
+            has_biome_resolver: self.biome_resolver_json.is_some(),
+            has_ctm_rules: self.ctm_rules_json.is_some(),
+            has_banner_baker: false,
+        }
     }
 }
 
@@ -548,7 +575,7 @@ fn test_scene_export_pbr_channels_and_colormaps_roundtrip() {
     // 2. Open package and verify colormaps and BiomeResolver (no implicit global side-effects)
     let reader = ScenePackageReader::open_file(&temp_file).expect("Open exported package");
     assert!(reader.has_colormaps());
-    assert!(reader.read_colormap("grass").is_some());
+    assert!(reader.read_colormap("grass").unwrap().is_some());
     assert!(reader.read_biome_resolver().unwrap().is_some());
 
     // Explicitly install colormaps and verify active resident colormaps sampled the custom grass color (10, 220, 30)
@@ -668,7 +695,7 @@ fn test_scene_export_ctm_rules_and_subtiles_roundtrip() {
 
     // 1. Verify CTM rule was preserved in export result
     assert_eq!(export_result.ctm_rules.len(), 1);
-    assert!(export_result.ctm_rules_json.is_some());
+    assert!(!export_result.ctm_rules.is_empty());
 
     // 2. Verify Mini-Atlas mapped the CTM sub-tile!
     let subtile_loc = ResourceLocation::new("minecraft", "optifine/ctm/glass/0");
@@ -701,7 +728,7 @@ fn test_scene_export_banner_with_patterns_and_custom_baker() {
         baker: BannerBaker,
     }
 
-    impl SceneAtlasSource for BannerTestAtlasSource {
+    impl AtlasLayerSource for BannerTestAtlasSource {
         fn get_albedo(
             &mut self,
             _chunk_id: u16,
@@ -737,8 +764,35 @@ fn test_scene_export_banner_with_patterns_and_custom_baker() {
         ) -> Result<Option<RgbaBuffer>, crate::MtkError> {
             Ok(None)
         }
+    }
+
+    impl BiomeAssetSource for BannerTestAtlasSource {
+        fn get_colormap(&mut self, _name: &str) -> Result<Option<Vec<u8>>, crate::MtkError> {
+            Ok(None)
+        }
+        fn get_biome_resolver_json(&mut self) -> Result<Option<String>, crate::MtkError> {
+            Ok(None)
+        }
+    }
+
+    impl CtmAssetSource for BannerTestAtlasSource {
+        fn get_ctm_rules_json(&mut self) -> Result<Option<String>, crate::MtkError> {
+            Ok(None)
+        }
+    }
+
+    impl EntityAssetSource for BannerTestAtlasSource {
         fn get_banner_baker(&mut self) -> Result<Option<BannerBaker>, crate::MtkError> {
             Ok(Some(self.baker.clone()))
+        }
+    }
+
+    impl SceneAtlasSource for BannerTestAtlasSource {
+        fn capabilities(&self) -> SceneSourceCapabilities {
+            SceneSourceCapabilities {
+                has_banner_baker: true,
+                ..Default::default()
+            }
         }
     }
 

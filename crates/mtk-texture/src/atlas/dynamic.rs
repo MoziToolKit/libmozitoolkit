@@ -319,43 +319,33 @@ impl DynamicAtlasChunk {
                 slot_index: Some(slot_idx),
             };
 
-            let mut variants = vec![
-                format!("minecraft:skin/{}", skin_key),
-                format!("skin/{}", skin_key),
-                format!("minecraft:player/{}", skin_key),
-                format!("player/{}", skin_key),
-                format!("entity/player/{}", skin_key),
-                format!("minecraft:banner/{}", skin_key),
-                format!("banner/{}", skin_key),
-                format!("minecraft:entity/banner/{}", skin_key),
-                format!("entity/banner/{}", skin_key),
-                skin_key.clone(),
-            ];
+            let key_locs = mtk_resource::TextureKeyVariants::resource_locations_for_key(skin_key);
 
-            if let Some(stripped) = skin_key.strip_prefix("banner:") {
-                variants.push(format!("minecraft:banner/{}", stripped));
-                variants.push(format!("banner/{}", stripped));
-                variants.push(format!("minecraft:entity/banner/{}", stripped));
-                variants.push(format!("entity/banner/{}", stripped));
-                variants.push(format!("minecraft:{}_banner", stripped));
-                variants.push(format!("{}_banner", stripped));
-            }
-            if let Some(stripped) = skin_key.strip_prefix("minecraft:banner/") {
-                variants.push(format!("banner:{}", stripped));
-                variants.push(format!("banner/{}", stripped));
-                variants.push(format!("minecraft:{}_banner", stripped));
-                variants.push(format!("{}_banner", stripped));
+            // Atomic collision check: if any alias of this skin already resolves to a static
+            // atlas chunk, skip all dynamic aliases for this skin to prevent dual-mapping
+            // to different chunks under different string aliases.
+            let collides_with_static = key_locs.iter().any(|loc_key| {
+                address_map
+                    .sprites
+                    .get(loc_key)
+                    .map(|existing| existing.chunk_id < DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID)
+                    .unwrap_or(false)
+            });
+
+            if collides_with_static {
+                eprintln!(
+                    "Warning: Dynamic entity skin '{}' collides with existing static atlas chunk; skipping dynamic registration to prevent dual-mapping",
+                    skin_key
+                );
+                continue;
             }
 
-            for v in variants {
-                if let Ok(loc_key) = mtk_resource::ResourceLocation::parse(&v) {
-                    if let Some(existing) = address_map.sprites.get(&loc_key) {
-                        if existing.chunk_id < DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID {
-                            continue;
-                        }
-                    }
-                    address_map.sprites.insert(loc_key, loc.clone());
-                }
+            for loc_key in key_locs {
+                address_map.insert_with_source(
+                    loc_key,
+                    loc.clone(),
+                    crate::atlas::AtlasKeySource::Dynamic,
+                );
             }
         }
     }

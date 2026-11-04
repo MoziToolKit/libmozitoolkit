@@ -4,7 +4,8 @@ pub mod dynamic;
 pub mod pbr;
 
 pub use address_map::{
-    AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation, AtlasTextureSlot, SpriteKind,
+    AtlasAddressMap, AtlasChunkMeta, AtlasKeySource, AtlasSpriteLocation, AtlasTextureSlot,
+    SpriteKind,
 };
 pub use builder::{AtlasBuilder, AtlasBuilderConfig, BakedAtlas, BakedAtlasChunk};
 pub use dynamic::{

@@ -7,6 +7,23 @@ use serde::{Deserialize, Serialize};
 /// Current format version for `.mtkscene` scene interchange packages.
 pub const SCENE_PACKAGE_FORMAT_VERSION: u32 = 1;
 
+/// Detailed capability flags declared by this scene interchange package.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct SceneCapabilities {
+    /// Whether custom colormaps (grass, foliage, dry_foliage) are bundled.
+    #[serde(default)]
+    pub has_colormaps: bool,
+    /// Whether connected textures (CTM) rule definitions are bundled.
+    #[serde(default)]
+    pub has_ctm: bool,
+    /// Whether canonical PBR textures (_orm, _aux) are bundled.
+    #[serde(default)]
+    pub has_pbr: bool,
+    /// Whether dynamic entity slots or textures (skins, banners) are bundled.
+    #[serde(default)]
+    pub has_dynamic_entities: bool,
+}
+
 /// Global metadata manifest for `.mtkscene` scene interchange packages.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SceneMetadata {
@@ -31,6 +48,9 @@ pub struct SceneMetadata {
     /// Whether the package contains dedicated animated atlas chunks for fluid/fire playback.
     #[serde(default)]
     pub has_animated_atlas: bool,
+    /// Active feature and asset capabilities bundled in this package.
+    #[serde(default)]
+    pub capabilities: SceneCapabilities,
     /// Custom key-value properties (scene title, author, description, tags, etc.).
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub extra_props: HashMap<String, String>,
@@ -55,6 +75,7 @@ impl SceneMetadata {
             unique_entities_count: 0,
             atlas_resolution: [0, 0],
             has_animated_atlas: false,
+            capabilities: SceneCapabilities::default(),
             extra_props: HashMap::new(),
         }
     }
