@@ -2,6 +2,8 @@
 
 本文档为 `libmtk` 底层核心库的功能演进规划，严格遵循**宿主无关（Host-Agnostic）**与**纯数据输入输出（Data-in, Data-out）**设计原则。前端 Blender 插件规划见 [`MoziToolKit/TODO.md`](../MoziToolKit/TODO.md)。实时协同服务端见 [`yefira/GEMINI.md`](../yefira/GEMINI.md)。
 
+> **API 收敛前置任务**：当前零消费者 API 与过度复杂接口的完整诊断、删除清单与建议批次见 [`docs/API_SURFACE_AUDIT.md`](docs/API_SURFACE_AUDIT.md)。在启动 v2.1 新能力前，先完成该文档中的 Batch 1–6。
+
 ---
 
 ## 📌 版本演进总览 (Milestones Overview)

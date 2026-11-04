@@ -58,6 +58,7 @@
 - 🏛️ **[系统架构设计 (`docs/ARCHITECTURE.md`)](docs/ARCHITECTURE.md)**：分层拓扑、模块职责、数据流向。
 - 📖 **[API 抽象与全局契约手册 (`docs/API_REFERENCE.md`)](docs/API_REFERENCE.md)**：全局通用契约、坐标系规范、连续内存协议、错误体系。
 - 🔌 **[跨语言绑定与胶水层设计 (`docs/BINDINGS_DESIGN.md`)](docs/BINDINGS_DESIGN.md)**：Python Wheel、C-ABI FFI、WASM 规范与 Blender 对接范式。
+- 🧹 **[API 暴露面审计 (`docs/API_SURFACE_AUDIT.md`)](docs/API_SURFACE_AUDIT.md)**：零消费者 Python/Rust API 清单、过度复杂接口诊断与下一轮清理批次。
 
 ---
 
