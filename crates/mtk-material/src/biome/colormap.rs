@@ -305,6 +305,16 @@ pub fn get_default_colormaps() -> Arc<VanillaColormaps> {
     Arc::clone(EMBEDDED_COLORMAPS.get_or_init(|| Arc::new(VanillaColormaps::load_embedded())))
 }
 
+/// Checks whether an active resource-pack colormap override is currently installed.
+#[inline]
+pub fn has_active_colormaps_override() -> bool {
+    if let Ok(guard) = ACTIVE_COLORMAPS.read() {
+        guard.is_some()
+    } else {
+        false
+    }
+}
+
 /// Installs resource-pack colormap overrides from an opened asset cache.
 ///
 /// Missing channels keep the embedded vanilla data. Passing all `None` clears

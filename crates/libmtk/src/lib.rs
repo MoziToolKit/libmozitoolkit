@@ -25,7 +25,7 @@ pub use prebake::{
 };
 pub use scene::{
     build_scene_interchange, export_scene_package, write_scene_package, AtlasLayerSource,
-    BiomeAssetSource, CtmAssetSource, CtmMode, EntityAssetSource, SceneAtlasSource,
+    BiomeAssetSource, CtmAssetSource, CtmMode, EntityAssetSource, SceneAtlasSource, SceneBundle,
     SceneCapabilities, SceneExportRequest, SceneExportResult, SceneExporterConfig, SceneMetadata,
     ScenePackageReader, ScenePackageWriteOptions, SceneSourceCapabilities, SceneWriteRequest,
     ValidationReport, SCENE_PACKAGE_FORMAT_VERSION,

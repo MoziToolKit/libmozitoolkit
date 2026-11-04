@@ -9,7 +9,7 @@ pub mod resolver;
 
 pub use colormap::{
     apply_dark_forest_grass_modifier, clear_cached_colormaps, compute_resolved_tint_color,
-    get_default_colormaps, set_cached_colormaps, VanillaColormaps,
+    get_default_colormaps, has_active_colormaps_override, set_cached_colormaps, VanillaColormaps,
 };
 
 pub use batch::{

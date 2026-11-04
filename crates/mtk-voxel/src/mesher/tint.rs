@@ -43,24 +43,35 @@ pub fn compute_face_tint(
     let tt = info.tint_type;
     let is_hc = info.is_hardcoded;
 
+    let (cms_override, active_guard);
+    let effective_cms: Option<&mtk_material::VanillaColormaps> = if let Some(cms) = colormaps {
+        cms_override = cms;
+        Some(cms_override)
+    } else if mtk_material::has_active_colormaps_override() {
+        active_guard = mtk_material::get_default_colormaps();
+        Some(&active_guard)
+    } else {
+        None
+    };
+
     let packed_data = [bw, ow, tw, tt as f32];
     let final_col = match tt {
         mtk_material::TINT_TYPE_GRASS => {
-            if let Some(cms) = colormaps {
+            if let Some(cms) = effective_cms {
                 cms.sample_grass_linear(default_pal.temperature, default_pal.humidity)
             } else {
                 default_pal.grass_linear()
             }
         }
         mtk_material::TINT_TYPE_FOLIAGE => {
-            if let Some(cms) = colormaps {
+            if let Some(cms) = effective_cms {
                 cms.sample_foliage_linear(default_pal.temperature, default_pal.humidity)
             } else {
                 default_pal.foliage_linear()
             }
         }
         mtk_material::TINT_TYPE_DRY_FOLIAGE => {
-            if let Some(cms) = colormaps {
+            if let Some(cms) = effective_cms {
                 cms.sample_dry_foliage_linear(default_pal.temperature, default_pal.humidity)
             } else {
                 default_pal.dry_foliage_linear()

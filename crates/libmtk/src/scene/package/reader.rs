@@ -13,6 +13,21 @@ use super::validator::{validate_scene_package, ValidationReport};
 use crate::scene::metadata::SceneMetadata;
 use crate::MtkError;
 
+/// Unpacked contents of a `.mtkscene` scene interchange package.
+#[derive(Debug, Clone)]
+pub struct SceneBundle {
+    pub metadata: SceneMetadata,
+    pub sparse_voxels: SparseVoxelPayload,
+    pub models: Option<BakedModelDatabase>,
+    pub atlas_mapping: Option<AtlasAddressMap>,
+    pub atlas_mapping_json: Option<String>,
+    pub texture_names: Vec<String>,
+    pub biome_resolver: Option<mtk_material::BiomeResolver>,
+    pub colormaps: Option<Arc<mtk_material::VanillaColormaps>>,
+    pub dynamic_entity_slots: Option<HashMap<String, (u16, u16)>>,
+    pub ctm_solver: Option<mtk_resource::CtmSolver>,
+}
+
 /// High-level reader for `.mtkscene` packages.
 pub struct ScenePackageReader {
     reader: MtkPackageReader,
@@ -24,6 +39,43 @@ impl ScenePackageReader {
     pub fn open_file(path: impl AsRef<Path>) -> Result<Self, MtkError> {
         let reader = MtkPackageReader::open_file(path)?;
         Self::validate_and_build(reader)
+    }
+
+    /// Unpacks all major components of the scene package in a single pass.
+    pub fn unpack(&self) -> Result<SceneBundle, MtkError> {
+        let metadata = self.metadata.clone();
+        let sparse_voxels = self.read_sparse_voxels()?;
+        let models = self.read_models()?;
+        let atlas_mapping = self.read_atlas_mapping()?;
+        let atlas_mapping_json = if self.reader.has_chunk("atlas/mapping") {
+            Some(self.reader.read_chunk_str("atlas/mapping")?)
+        } else {
+            None
+        };
+        let texture_names = self
+            .reader
+            .toc()
+            .iter_by_type(*b"ATLS")
+            .filter(|e| e.identifier.starts_with("atlas/textures/"))
+            .map(|e| e.identifier.clone())
+            .collect();
+        let biome_resolver = self.read_biome_resolver()?;
+        let colormaps = self.read_colormaps()?;
+        let dynamic_entity_slots = self.read_dynamic_entity_slots()?;
+        let ctm_solver = self.read_ctm_solver()?;
+
+        Ok(SceneBundle {
+            metadata,
+            sparse_voxels,
+            models,
+            atlas_mapping,
+            atlas_mapping_json,
+            texture_names,
+            biome_resolver,
+            colormaps,
+            dynamic_entity_slots,
+            ctm_solver,
+        })
     }
 
     /// Creates a reader from in-memory package bytes.

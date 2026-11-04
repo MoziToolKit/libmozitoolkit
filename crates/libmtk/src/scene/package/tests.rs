@@ -94,6 +94,16 @@ fn test_scene_package_roundtrip() {
         &dummy_png
     );
 
+    // Verify cohesive unpack() delivers the full bundle in one pass
+    let bundle = reader.unpack().expect("Unpack scene bundle");
+    assert_eq!(bundle.sparse_voxels.len(), 2);
+    assert_eq!(bundle.texture_names.len(), 1);
+    assert_eq!(bundle.texture_names[0], "atlas/textures/atlas_0.png");
+    assert_eq!(
+        bundle.metadata.format_version,
+        crate::scene::metadata::SCENE_PACKAGE_FORMAT_VERSION
+    );
+
     let _ = std::fs::remove_file(&temp_path);
 }
 

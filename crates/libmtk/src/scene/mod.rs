@@ -14,6 +14,6 @@ pub use exporter::{
 };
 pub use metadata::{SceneCapabilities, SceneMetadata, SCENE_PACKAGE_FORMAT_VERSION};
 pub use package::{
-    write_scene_package, ScenePackageReader, ScenePackageWriteOptions, SceneWriteRequest,
-    ValidationReport,
+    write_scene_package, SceneBundle, ScenePackageReader, ScenePackageWriteOptions,
+    SceneWriteRequest, ValidationReport,
 };

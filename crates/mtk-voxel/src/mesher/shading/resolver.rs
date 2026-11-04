@@ -269,6 +269,17 @@ pub fn sample_biome_tint(
     if tint_data[2] <= 0.0 {
         return (tint_data, default_tint_color);
     }
+    let (cms_override, active_guard);
+    let effective_cms: Option<&mtk_material::VanillaColormaps> = if let Some(cms) = colormaps {
+        cms_override = cms;
+        Some(cms_override)
+    } else if mtk_material::has_active_colormaps_override() {
+        active_guard = mtk_material::get_default_colormaps();
+        Some(&active_guard)
+    } else {
+        None
+    };
+
     if let Some(biome_cols) = biome_data {
         let col_idx = if biome_cols.len() == 1024 {
             let qy = (ly >> 2) & 3;
@@ -283,7 +294,7 @@ pub fn sample_biome_tint(
                 mtk_material::TINT_TYPE_GRASS => {
                     if col.has_custom_grass {
                         (col.grass_color, true)
-                    } else if let Some(cms) = colormaps {
+                    } else if let Some(cms) = effective_cms {
                         (
                             cms.sample_grass_linear_uv(col.colormap_uv[0], col.colormap_uv[1]),
                             false,
@@ -295,7 +306,7 @@ pub fn sample_biome_tint(
                 mtk_material::TINT_TYPE_FOLIAGE => {
                     if col.has_custom_foliage {
                         (col.foliage_color, true)
-                    } else if let Some(cms) = colormaps {
+                    } else if let Some(cms) = effective_cms {
                         (
                             cms.sample_foliage_linear_uv(col.colormap_uv[0], col.colormap_uv[1]),
                             false,
@@ -307,7 +318,7 @@ pub fn sample_biome_tint(
                 mtk_material::TINT_TYPE_DRY_FOLIAGE => {
                     if col.has_custom_dry_foliage {
                         (col.dry_foliage_color, true)
-                    } else if let Some(cms) = colormaps {
+                    } else if let Some(cms) = effective_cms {
                         (
                             cms.sample_dry_foliage_linear_uv(
                                 col.colormap_uv[0],
