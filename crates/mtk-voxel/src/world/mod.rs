@@ -75,6 +75,16 @@ fn create_default_dynamic_atlas() -> mtk_texture::atlas::DynamicAtlasManager {
 }
 
 impl VoxelWorld {
+    #[inline]
+    fn is_key_in_static_atlas(&self, key: &str) -> bool {
+        self.config
+            .atlas_address_map
+            .as_ref()
+            .and_then(|m| m.lookup_str(key))
+            .map(|loc| loc.chunk_id < mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID)
+            .unwrap_or(false)
+    }
+
     /// Synchronizes all registered dynamic entity slots into `self.config.atlas_address_map`.
     pub fn sync_dynamic_atlas_to_config(&mut self) {
         if let Some(ref current_map) = self.config.atlas_address_map {
@@ -543,7 +553,13 @@ impl VoxelWorld {
                                 self.skin_resolver.resolve_skin_hash(skin_url, uuid, name);
                             let primary = hash_opt.as_deref().unwrap_or(&key);
 
-                            if !self.dynamic_entities.contains_key(primary)
+                            let in_static_atlas = self
+                                .is_key_in_static_atlas(&format!("minecraft:skin/{}", primary))
+                                || self.is_key_in_static_atlas(primary)
+                                || self.is_key_in_static_atlas(&key);
+
+                            if !in_static_atlas
+                                && !self.dynamic_entities.contains_key(primary)
                                 && !self.dynamic_entities.contains_key(&key)
                             {
                                 if let Some(png) =
@@ -610,7 +626,9 @@ impl VoxelWorld {
                     {
                         let key =
                             mtk_model::entity::banner_texture_identifier(base_color, patterns);
-                        if !self.dynamic_entities.contains_key(&key) {
+                        if !self.is_key_in_static_atlas(&key)
+                            && !self.dynamic_entities.contains_key(&key)
+                        {
                             let pat_tuples: Vec<(&str, &str)> = patterns
                                 .iter()
                                 .map(|p| (p.pattern.as_str(), p.color.as_str()))
@@ -718,7 +736,13 @@ impl VoxelWorld {
                                 self.skin_resolver.resolve_skin_hash(skin_url, uuid, name);
                             let primary = hash_opt.unwrap_or_else(|| key.clone());
 
-                            if !self.dynamic_entities.contains_key(&primary)
+                            let in_static_atlas = self
+                                .is_key_in_static_atlas(&format!("minecraft:skin/{}", primary))
+                                || self.is_key_in_static_atlas(&primary)
+                                || self.is_key_in_static_atlas(&key);
+
+                            if !in_static_atlas
+                                && !self.dynamic_entities.contains_key(&primary)
                                 && !self.dynamic_entities.contains_key(&key)
                             {
                                 if let Some(png) =
@@ -788,7 +812,9 @@ impl VoxelWorld {
                     {
                         let key =
                             mtk_model::entity::banner_texture_identifier(base_color, patterns);
-                        if !self.dynamic_entities.contains_key(&key) {
+                        if !self.is_key_in_static_atlas(&key)
+                            && !self.dynamic_entities.contains_key(&key)
+                        {
                             let pat_tuples: Vec<(&str, &str)> = patterns
                                 .iter()
                                 .map(|p| (p.pattern.as_str(), p.color.as_str()))

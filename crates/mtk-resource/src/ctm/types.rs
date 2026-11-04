@@ -1,10 +1,11 @@
 use crate::identifier::{ResourceLocation, DEFAULT_NAMESPACE};
 use glam::IVec3;
 use mtk_core::direction::{DirMask, Direction};
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeSet, HashMap};
 
 /// Symmetry modes for random CTM.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum CtmSymmetry {
     #[default]
     None,
@@ -23,7 +24,7 @@ impl CtmSymmetry {
 }
 
 /// The CTM connection algorithm method.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum CtmMethod {
     /// 47-tile full connected textures
     Full { inner_seams: bool },
@@ -55,7 +56,7 @@ pub enum CtmMethod {
 }
 
 /// Connection logic determining which neighboring blocks connect.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ConnectLogic {
     SameBlock,
     SameTile,
@@ -65,7 +66,7 @@ pub enum ConnectLogic {
 }
 
 /// A block pattern match with optional BlockState property constraints (e.g. `grass_block:snowy=false`).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BlockMatch {
     pub block: String,
     pub properties: HashMap<String, Vec<String>>,
@@ -141,7 +142,7 @@ impl BlockMatch {
 }
 
 /// Fully parsed OptiFine / Continuity CTM rule definition.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CtmRule {
     pub name: String,
     pub source_path: String,
@@ -160,6 +161,32 @@ pub struct CtmRule {
 }
 
 impl CtmRule {
+    /// Checks whether this rule could potentially match any of the given block states or base texture identifiers.
+    pub fn applies_to_scene(
+        &self,
+        blockstates: &BTreeSet<String>,
+        textures: &BTreeSet<String>,
+    ) -> bool {
+        if !self.match_blocks.is_empty() {
+            for state in blockstates {
+                if self.match_blocks.iter().any(|m| m.matches(state)) {
+                    return true;
+                }
+            }
+        }
+        if !self.match_tiles.is_empty() {
+            for tex in textures {
+                let loc = ResourceLocation::parse_texture_path(tex)
+                    .or_else(|_| ResourceLocation::parse(tex))
+                    .unwrap_or_else(|_| ResourceLocation::new(DEFAULT_NAMESPACE, tex));
+                if self.match_tiles.contains(&loc) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// Checks if this rule applies to the given block state, face, world coordinates, and biome.
     pub fn matches_block(
         &self,

@@ -3,7 +3,7 @@
 //! Extracts only the referenced textures from the source global atlas,
 //! dynamic entity buffers, or banner procedural synthesis into canonical `DecodedSprite`s.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use mtk_resource::ResourceLocation;
 use mtk_texture::atlas::{
@@ -38,6 +38,22 @@ pub trait SceneAtlasSource {
         chunk_id: u16,
         chunk_stem: &str,
     ) -> Result<Option<RgbaBuffer>, MtkError>;
+    /// Loads a biome colormap PNG buffer (e.g. `"grass"`, `"foliage"`, `"dry_foliage"`).
+    fn get_colormap(&mut self, _name: &str) -> Result<Option<Vec<u8>>, MtkError> {
+        Ok(None)
+    }
+    /// Loads the authoritative BiomeResolver JSON if present in the cache.
+    fn get_biome_resolver_json(&mut self) -> Result<Option<String>, MtkError> {
+        Ok(None)
+    }
+    /// Loads cached CTM rules JSON if present in the cache or source.
+    fn get_ctm_rules_json(&mut self) -> Result<Option<String>, MtkError> {
+        Ok(None)
+    }
+    /// Loads a pre-populated `BannerBaker` containing cached base cloth and pattern sprites.
+    fn get_banner_baker(&mut self) -> Result<Option<BannerBaker>, MtkError> {
+        Ok(None)
+    }
 }
 
 impl SceneAtlasSource for crate::prebake::AssetCacheReader {
@@ -110,6 +126,41 @@ impl SceneAtlasSource for crate::prebake::AssetCacheReader {
             Ok(None)
         }
     }
+
+    fn get_colormap(&mut self, name: &str) -> Result<Option<Vec<u8>>, MtkError> {
+        let chunk_path = format!("biome/colormap/{name}");
+        if self.package_reader().has_chunk(&chunk_path) {
+            let bytes = self.package_reader().read_chunk_decompressed(&chunk_path)?;
+            Ok(Some(bytes))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn get_biome_resolver_json(&mut self) -> Result<Option<String>, MtkError> {
+        if self.package_reader().has_chunk("biome/mapping") {
+            let json = self.package_reader().read_chunk_str("biome/mapping")?;
+            Ok(Some(json))
+        } else if self.package_reader().has_chunk("biome/resolver") {
+            let json = self.package_reader().read_chunk_str("biome/resolver")?;
+            Ok(Some(json))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn get_ctm_rules_json(&mut self) -> Result<Option<String>, MtkError> {
+        if self.package_reader().has_chunk("ctm/rules") {
+            let json = self.package_reader().read_chunk_str("ctm/rules")?;
+            Ok(Some(json))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn get_banner_baker(&mut self) -> Result<Option<BannerBaker>, MtkError> {
+        self.load_banner_baker().map(Some)
+    }
 }
 
 impl SceneAtlasSource for HashMap<String, RgbaBuffer> {
@@ -172,6 +223,38 @@ fn parse_res_loc(key: &str) -> ResourceLocation {
         .unwrap_or_else(|_| ResourceLocation::new("minecraft", key))
 }
 
+fn crop_optional_layer(
+    layer_map: &HashMap<u16, Option<RgbaBuffer>>,
+    chunk_id: u16,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+) -> Option<RgbaBuffer> {
+    layer_map
+        .get(&chunk_id)
+        .and_then(|opt| opt.as_ref())
+        .and_then(|b| {
+            if x + w <= b.width && y + h <= b.height {
+                Some(b.crop(x, y, w, h))
+            } else {
+                None
+            }
+        })
+}
+
+fn crop_optional_overlay_layer(
+    layer_map: &HashMap<u16, Option<RgbaBuffer>>,
+    chunk_id: u16,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+) -> Option<RgbaBuffer> {
+    crop_optional_layer(layer_map, chunk_id, x, y, w, h)
+        .filter(|c| c.pixels.as_chunks::<4>().0.iter().any(|p| p[3] > 0))
+}
+
 /// Crops referenced sprites from atlas source, dynamic entity buffers, or banner synthesis.
 pub fn crop_needed_sprites(
     needed_textures: &BTreeSet<String>,
@@ -181,13 +264,34 @@ pub fn crop_needed_sprites(
 ) -> Result<Vec<CroppedSprite>, MtkError> {
     let mut loaded_albedo: HashMap<u16, Option<RgbaBuffer>> = HashMap::new();
     let mut loaded_normal: HashMap<u16, Option<RgbaBuffer>> = HashMap::new();
+    let mut loaded_orm: HashMap<u16, Option<RgbaBuffer>> = HashMap::new();
+    let mut loaded_aux: HashMap<u16, Option<RgbaBuffer>> = HashMap::new();
     let mut loaded_overlay: HashMap<u16, Option<RgbaBuffer>> = HashMap::new();
 
     let mut crops = Vec::new();
-    let mut banner_baker = BannerBaker::default();
+    let mut banner_baker = atlas_source.get_banner_baker()?.unwrap_or_default();
+    let mut next_unregistered_skin_slot: Option<u16> = None;
+    let mut visited_sprite_ids = HashSet::new();
 
     for tex_key in needed_textures {
-        let maybe_loc = source_atlas_map.lookup_str(tex_key);
+        let sprite_id = parse_res_loc(tex_key);
+        if !visited_sprite_ids.insert(sprite_id) {
+            continue;
+        }
+
+        let maybe_loc = source_atlas_map.lookup_str(tex_key).or_else(|| {
+            if let Some(stripped) = tex_key.strip_prefix("minecraft:skin/") {
+                source_atlas_map
+                    .lookup_str(&format!("skin/{}", stripped))
+                    .or_else(|| source_atlas_map.lookup_str(stripped))
+            } else if let Some(stripped) = tex_key.strip_prefix("skin/") {
+                source_atlas_map
+                    .lookup_str(&format!("minecraft:skin/{}", stripped))
+                    .or_else(|| source_atlas_map.lookup_str(stripped))
+            } else {
+                None
+            }
+        });
 
         // Case A: Dynamic entity sprite in chunk 0xFFF0..=0xFFFF
         if let Some(sprite_loc) = maybe_loc {
@@ -210,18 +314,12 @@ pub fn crop_needed_sprites(
                                 let albedo = full_buf.crop(x, y, w, h);
                                 crops.push(CroppedSprite {
                                     key: tex_key.clone(),
-                                    sprite: DecodedSprite {
-                                        sprite_id: parse_res_loc(tex_key),
+                                    sprite: DecodedSprite::simple(
+                                        parse_res_loc(tex_key),
                                         albedo,
-                                        normal: None,
-                                        specular: None,
-                                        overlay: None,
-                                        emissive: None,
-                                        frame_width: w,
-                                        frame_height: h,
-                                        frame_count: 1,
-                                        metadata: None,
-                                    },
+                                        w,
+                                        h,
+                                    ),
                                 });
                                 continue;
                             }
@@ -247,51 +345,77 @@ pub fn crop_needed_sprites(
                 let (w, h) = (baked.width, baked.height);
                 crops.push(CroppedSprite {
                     key: tex_key.clone(),
-                    sprite: DecodedSprite {
-                        sprite_id: parse_res_loc(tex_key),
-                        albedo: (*baked).clone(),
-                        normal: None,
-                        specular: None,
-                        overlay: None,
-                        emissive: None,
-                        frame_width: w,
-                        frame_height: h,
-                        frame_count: 1,
-                        metadata: None,
-                    },
+                    sprite: DecodedSprite::simple(parse_res_loc(tex_key), (*baked).clone(), w, h),
                 });
                 continue;
             }
 
             // Check if it's a player skin
-            if tex_key.starts_with("minecraft:skin/") {
+            let is_skin = tex_key.starts_with("minecraft:skin/") || tex_key.starts_with("skin/");
+            if is_skin {
                 if let Some(dyn_map) = dynamic_entity_atlases {
                     if let Some(raw_bytes) = dyn_map.get(&DYNAMIC_CHUNK_START) {
                         if raw_bytes.len()
                             >= (DYNAMIC_ATLAS_WIDTH * DYNAMIC_ATLAS_HEIGHT * 4) as usize
                         {
-                            let full = RgbaBuffer {
-                                width: DYNAMIC_ATLAS_WIDTH,
-                                height: DYNAMIC_ATLAS_HEIGHT,
-                                pixels: raw_bytes.clone(),
+                            if next_unregistered_skin_slot.is_none() {
+                                let has_prewarmed_banners = {
+                                    let px_20_20_a = raw_bytes[(20 * 1024 + 20) * 4 + 3];
+                                    let px_60_60_a = raw_bytes[(60 * 1024 + 60) * 4 + 3];
+                                    px_20_20_a > 0 && px_60_60_a == 0
+                                };
+                                next_unregistered_skin_slot =
+                                    Some(if has_prewarmed_banners { 16 } else { 0 });
+                            }
+
+                            let stripped = tex_key
+                                .strip_prefix("minecraft:skin/")
+                                .or_else(|| tex_key.strip_prefix("skin/"))
+                                .unwrap_or(tex_key);
+                            let slot_idx = if let Some(idx) = stripped
+                                .strip_prefix("slot_")
+                                .or(Some(stripped))
+                                .and_then(|s| s.parse::<u16>().ok())
+                            {
+                                idx
+                            } else {
+                                let cur = next_unregistered_skin_slot.unwrap();
+                                next_unregistered_skin_slot = Some(cur + 1);
+                                cur
                             };
-                            let albedo = full.crop(0, 0, 64, 64);
-                            crops.push(CroppedSprite {
-                                key: tex_key.clone(),
-                                sprite: DecodedSprite {
-                                    sprite_id: parse_res_loc(tex_key),
-                                    albedo,
-                                    normal: None,
-                                    specular: None,
-                                    overlay: None,
-                                    emissive: None,
-                                    frame_width: 64,
-                                    frame_height: 64,
-                                    frame_count: 1,
-                                    metadata: None,
-                                },
-                            });
-                            continue;
+
+                            let chunk_offset = slot_idx / 256;
+                            let target_chunk_id = DYNAMIC_CHUNK_START + chunk_offset;
+                            let in_chunk_slot = slot_idx % 256;
+                            let col = (in_chunk_slot as u32) % 16;
+                            let row = (in_chunk_slot as u32) / 16;
+                            let px = col * 64;
+                            let py = row * 64;
+
+                            if let Some(target_bytes) = dyn_map.get(&target_chunk_id) {
+                                if target_bytes.len()
+                                    >= (DYNAMIC_ATLAS_WIDTH * DYNAMIC_ATLAS_HEIGHT * 4) as usize
+                                    && px + 64 <= DYNAMIC_ATLAS_WIDTH
+                                    && py + 64 <= DYNAMIC_ATLAS_HEIGHT
+                                {
+                                    let full = RgbaBuffer {
+                                        width: DYNAMIC_ATLAS_WIDTH,
+                                        height: DYNAMIC_ATLAS_HEIGHT,
+                                        pixels: target_bytes.clone(),
+                                    };
+                                    let albedo = full.crop(px, py, 64, 64);
+                                    crops.push(CroppedSprite {
+                                        key: tex_key.clone(),
+                                        sprite: DecodedSprite::simple(
+                                            parse_res_loc(tex_key),
+                                            albedo,
+                                            64,
+                                            64,
+                                        ),
+                                    });
+                                    continue;
+                                }
+                            }
                         }
                     }
                 }
@@ -321,8 +445,14 @@ pub fn crop_needed_sprites(
             {
                 let alb = atlas_source.get_albedo(anim_chunk_id, &anim_stem)?;
                 let norm = atlas_source.get_normal(anim_chunk_id, &anim_stem)?;
+                let orm = atlas_source.get_orm(anim_chunk_id, &anim_stem)?;
+                let aux = atlas_source.get_aux(anim_chunk_id, &anim_stem)?;
+                let over = atlas_source.get_overlay(anim_chunk_id, &anim_stem)?;
                 e.insert(alb);
                 loaded_normal.insert(anim_chunk_id, norm);
+                loaded_orm.insert(anim_chunk_id, orm);
+                loaded_aux.insert(anim_chunk_id, aux);
+                loaded_overlay.insert(anim_chunk_id, over);
             }
 
             if let Some(anim_alb_buf) = loaded_albedo.get(&anim_chunk_id).and_then(|o| o.as_ref()) {
@@ -333,16 +463,14 @@ pub fn crop_needed_sprites(
                     && ay + ah <= anim_alb_buf.height
                 {
                     let anim_alb_crop = anim_alb_buf.crop(ax, ay, aw, ah);
-                    let anim_norm_crop = loaded_normal
-                        .get(&anim_chunk_id)
-                        .and_then(|o| o.as_ref())
-                        .and_then(|b| {
-                            if ax + aw <= b.width && ay + ah <= b.height {
-                                Some(b.crop(ax, ay, aw, ah))
-                            } else {
-                                None
-                            }
-                        });
+                    let anim_norm_crop =
+                        crop_optional_layer(&loaded_normal, anim_chunk_id, ax, ay, aw, ah);
+                    let anim_orm_crop =
+                        crop_optional_layer(&loaded_orm, anim_chunk_id, ax, ay, aw, ah);
+                    let anim_aux_crop =
+                        crop_optional_layer(&loaded_aux, anim_chunk_id, ax, ay, aw, ah);
+                    let anim_overlay_crop =
+                        crop_optional_overlay_layer(&loaded_overlay, anim_chunk_id, ax, ay, aw, ah);
 
                     let frame_h = anim_loc.frame_size[1].max(1);
                     let frame_count = anim_loc.frame_count.max(1);
@@ -352,10 +480,13 @@ pub fn crop_needed_sprites(
                         sprite: DecodedSprite {
                             sprite_id: parse_res_loc(tex_key),
                             albedo: anim_alb_crop,
-                            normal: anim_norm_crop,
+                            normal: None,
                             specular: None,
-                            overlay: None,
+                            overlay: anim_overlay_crop,
                             emissive: None,
+                            normal_gl: anim_norm_crop,
+                            orm: anim_orm_crop,
+                            aux: anim_aux_crop,
                             frame_width: aw,
                             frame_height: frame_h,
                             frame_count,
@@ -377,9 +508,13 @@ pub fn crop_needed_sprites(
         if let std::collections::hash_map::Entry::Vacant(e) = loaded_albedo.entry(chunk_id) {
             let alb = atlas_source.get_albedo(chunk_id, &stem)?;
             let norm = atlas_source.get_normal(chunk_id, &stem)?;
+            let orm = atlas_source.get_orm(chunk_id, &stem)?;
+            let aux = atlas_source.get_aux(chunk_id, &stem)?;
             let over = atlas_source.get_overlay(chunk_id, &stem)?;
             e.insert(alb);
             loaded_normal.insert(chunk_id, norm);
+            loaded_orm.insert(chunk_id, orm);
+            loaded_aux.insert(chunk_id, aux);
             loaded_overlay.insert(chunk_id, over);
         }
 
@@ -394,42 +529,23 @@ pub fn crop_needed_sprites(
         }
 
         let albedo_crop = albedo_buf.crop(x, y, w, h);
-        let normal_crop = loaded_normal
-            .get(&chunk_id)
-            .and_then(|opt| opt.as_ref())
-            .and_then(|b| {
-                if x + w <= b.width && y + h <= b.height {
-                    Some(b.crop(x, y, w, h))
-                } else {
-                    None
-                }
-            });
-
-        let overlay_crop = loaded_overlay
-            .get(&chunk_id)
-            .and_then(|opt| opt.as_ref())
-            .and_then(|b| {
-                if x + w <= b.width && y + h <= b.height {
-                    let c = b.crop(x, y, w, h);
-                    if c.pixels.as_chunks::<4>().0.iter().any(|p| p[3] > 0) {
-                        Some(c)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            });
+        let normal_crop = crop_optional_layer(&loaded_normal, chunk_id, x, y, w, h);
+        let orm_crop = crop_optional_layer(&loaded_orm, chunk_id, x, y, w, h);
+        let aux_crop = crop_optional_layer(&loaded_aux, chunk_id, x, y, w, h);
+        let overlay_crop = crop_optional_overlay_layer(&loaded_overlay, chunk_id, x, y, w, h);
 
         crops.push(CroppedSprite {
             key: tex_key.clone(),
             sprite: DecodedSprite {
                 sprite_id: parse_res_loc(tex_key),
                 albedo: albedo_crop,
-                normal: normal_crop,
+                normal: None,
                 specular: None,
                 overlay: overlay_crop,
                 emissive: None,
+                normal_gl: normal_crop,
+                orm: orm_crop,
+                aux: aux_crop,
                 frame_width: w,
                 frame_height: h,
                 frame_count: 1,

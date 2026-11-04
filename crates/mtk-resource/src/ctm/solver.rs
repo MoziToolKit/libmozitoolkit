@@ -245,4 +245,15 @@ impl CtmSolver {
 
         None
     }
+
+    /// Serializes internal rules list to a JSON string.
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(&self.rules)
+    }
+
+    /// Deserializes a `CtmSolver` from a JSON string of rules.
+    pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
+        let rules: Vec<CtmRule> = serde_json::from_str(json)?;
+        Ok(Self::new(rules))
+    }
 }

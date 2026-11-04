@@ -152,6 +152,92 @@ impl ScenePackageReader {
         std::fs::write(output_path, bytes)?;
         Ok(())
     }
+
+    /// Checks whether the package contains custom resource pack colormaps.
+    pub fn has_colormaps(&self) -> bool {
+        self.reader.has_chunk("biome/colormap/grass")
+            || self.reader.has_chunk("biome/colormap/foliage")
+            || self.reader.has_chunk("biome/colormap/dry_foliage")
+    }
+
+    /// Reads raw decompressed PNG bytes for a specific colormap channel (e.g. `"grass"`, `"foliage"`).
+    pub fn read_colormap(&self, name: &str) -> Option<Vec<u8>> {
+        self.reader
+            .read_chunk_decompressed(&format!("biome/colormap/{name}"))
+            .ok()
+    }
+
+    /// Re-installs or updates the resident colormaps from this package.
+    pub fn install_colormaps(&self) {
+        install_scene_colormaps(&self.reader);
+    }
+
+    /// Reads the packaged BiomeResolver if present in the package.
+    pub fn read_biome_resolver(&self) -> Result<Option<mtk_material::BiomeResolver>, MtkError> {
+        let chunk_id = if self.reader.has_chunk("biome/mapping") {
+            "biome/mapping"
+        } else if self.reader.has_chunk("biome/resolver") {
+            "biome/resolver"
+        } else {
+            return Ok(None);
+        };
+        let json_str = self.reader.read_chunk_str(chunk_id)?;
+        let resolver = mtk_material::BiomeResolver::from_json(&json_str)?;
+        Ok(Some(resolver))
+    }
+
+    /// Checks whether custom CTM rules are carried in this package.
+    pub fn has_ctm_rules(&self) -> bool {
+        self.reader.has_chunk("ctm/rules")
+    }
+
+    /// Reads raw CTM rules JSON from this package if present.
+    pub fn read_ctm_rules_json(&self) -> Result<Option<String>, MtkError> {
+        if !self.has_ctm_rules() {
+            return Ok(None);
+        }
+        let json = self.reader.read_chunk_str("ctm/rules")?;
+        Ok(Some(json))
+    }
+
+    /// Reads and constructs an indexed CtmSolver from the packaged rules if present.
+    pub fn read_ctm_solver(&self) -> Result<Option<mtk_resource::CtmSolver>, MtkError> {
+        if let Some(json) = self.read_ctm_rules_json()? {
+            let solver = mtk_resource::CtmSolver::from_json(&json).map_err(MtkError::Json)?;
+            Ok(Some(solver))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+/// Installs resource-pack colormap overrides carried by a scene package.
+///
+/// Missing channels fall back to embedded vanilla; a package without colormap
+/// chunks clears any previously active overrides.
+fn install_scene_colormaps(reader: &MtkPackageReader) {
+    let read = |name: &str| {
+        reader
+            .read_chunk_decompressed(&format!("biome/colormap/{name}"))
+            .ok()
+    };
+    let grass = read("grass");
+    let foliage = read("foliage");
+    let dry_foliage = read("dry_foliage");
+
+    if grass.is_none() && foliage.is_none() && dry_foliage.is_none() {
+        mtk_material::biome::clear_cached_colormaps();
+        return;
+    }
+
+    if let Err(error) = mtk_material::biome::set_cached_colormaps(
+        grass.as_deref(),
+        foliage.as_deref(),
+        dry_foliage.as_deref(),
+    ) {
+        eprintln!("Warning: failed to install scene package colormaps: {error}");
+        mtk_material::biome::clear_cached_colormaps();
+    }
 }
 
 /// Helper options for authoring `.mtkscene` packages.
@@ -169,6 +255,9 @@ pub fn write_scene_package(
     models: Option<&BakedModelDatabase>,
     atlas_mapping: Option<&AtlasAddressMap>,
     atlas_textures: &[(String, Vec<u8>)],
+    colormaps: Option<&[(String, Vec<u8>)]>,
+    biome_resolver_json: Option<&str>,
+    ctm_rules_json: Option<&str>,
     options: Option<&ScenePackageWriteOptions>,
 ) -> Result<(), MtkError> {
     let fp = options.and_then(|o| o.fingerprint).unwrap_or([0u8; 16]);
@@ -222,6 +311,29 @@ pub fn write_scene_package(
             format!("atlas/textures/{}", name)
         };
         writer.add_chunk(*b"ATLS", chunk_id, bytes, &ChunkWriteOptions::raw())?;
+    }
+
+    // 6. Colormaps (optional)
+    if let Some(cms) = colormaps {
+        for (name, bytes) in cms {
+            let chunk_id = format!("biome/colormap/{name}");
+            writer.add_chunk(*b"BIOM", chunk_id, bytes, &ChunkWriteOptions::zstd_fast())?;
+        }
+    }
+
+    // 7. Biome Resolver (optional)
+    if let Some(json) = biome_resolver_json {
+        writer.add_str_chunk(
+            *b"BIOM",
+            "biome/mapping",
+            json,
+            &ChunkWriteOptions::zstd_fast(),
+        )?;
+    }
+
+    // 8. CTM Rules (optional)
+    if let Some(json) = ctm_rules_json {
+        writer.add_str_chunk(*b"CTMR", "ctm/rules", json, &ChunkWriteOptions::zstd_fast())?;
     }
 
     writer.finish()?;
@@ -298,12 +410,17 @@ mod tests {
             None,
             &textures,
             None,
+            None,
+            None,
+            None,
         )
         .expect("Write scene package");
 
         let reader = ScenePackageReader::open_file(&temp_path).expect("Open scene package");
         assert_eq!(reader.metadata().voxel_count, 2);
         assert_eq!(reader.metadata().bounds, [0, 0, 0, 16, 16, 16]);
+        assert!(!reader.has_ctm_rules());
+        assert!(reader.read_ctm_solver().unwrap().is_none());
 
         let read_models = reader
             .read_models()

@@ -15,12 +15,15 @@ pub struct NeededSceneAssets {
     pub needed_textures: BTreeSet<String>,
     /// Unique blockstates referenced in the sparse voxel grid.
     pub needed_blockstates: BTreeSet<String>,
+    /// Relevant tree-shaken CTM rules for this scene.
+    pub shaken_ctm_rules: Vec<mtk_resource::CtmRule>,
 }
 
 /// Collects all unique blockstate strings and texture paths required to render the voxels.
 pub fn collect_needed_assets(
     voxels: &SparseVoxelPayload,
     source_models: &BakedModelDatabase,
+    source_ctm_rules: Option<&[mtk_resource::CtmRule]>,
 ) -> NeededSceneAssets {
     let mut needed_textures = BTreeSet::new();
     let mut needed_blockstates = BTreeSet::new();
@@ -138,8 +141,22 @@ pub fn collect_needed_assets(
         }
     }
 
+    // 5. CTM Tree-shaking: collect rules matching needed blockstates or base textures
+    let mut shaken_ctm_rules = Vec::new();
+    if let Some(rules) = source_ctm_rules {
+        for rule in rules {
+            if rule.applies_to_scene(&needed_blockstates, &needed_textures) {
+                for tile_loc in rule.tiles.iter().flatten() {
+                    needed_textures.insert(tile_loc.to_string());
+                }
+                shaken_ctm_rules.push(rule.clone());
+            }
+        }
+    }
+
     NeededSceneAssets {
         needed_textures,
         needed_blockstates,
+        shaken_ctm_rules,
     }
 }

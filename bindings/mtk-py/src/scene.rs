@@ -7,7 +7,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyMemoryView};
 
 use libmtk::scene::{
-    export_scene_package as libmtk_export_scene, SceneExporterConfig, SceneMetadata,
+    export_scene_package_with_ctm as libmtk_export_scene, SceneExporterConfig, SceneMetadata,
     ScenePackageReader,
 };
 use mtk_voxel::{CoordinateSystem, MesherConfig, SparseVoxelPayload};
@@ -201,6 +201,55 @@ impl PyScenePackageReader {
         Ok(Some(json))
     }
 
+    /// Checks whether custom colormaps are carried in this package.
+    pub fn has_colormaps(&self) -> bool {
+        self.inner.has_colormaps()
+    }
+
+    /// Reads raw PNG bytes of a packaged colormap if present.
+    pub fn read_colormap<'py>(&self, py: Python<'py>, name: &str) -> Option<Bound<'py, PyBytes>> {
+        self.inner
+            .read_colormap(name)
+            .map(|bytes| PyBytes::new(py, &bytes))
+    }
+
+    /// Re-installs or updates the resident colormaps from this package into the active palette cache.
+    pub fn install_colormaps(&self) {
+        self.inner.install_colormaps();
+    }
+
+    /// Reads the packaged BiomeResolver if present in the package.
+    pub fn read_biome_resolver(&self) -> PyResult<Option<crate::material::PyBiomeResolver>> {
+        let resolver = self
+            .inner
+            .read_biome_resolver()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        Ok(resolver.map(|r| crate::material::PyBiomeResolver { inner: r }))
+    }
+
+    /// Checks whether custom CTM rules are carried in this package.
+    pub fn has_ctm_rules(&self) -> bool {
+        self.inner.has_ctm_rules()
+    }
+
+    /// Reads raw CTM rules JSON from this package if present.
+    pub fn read_ctm_rules_json(&self) -> PyResult<Option<String>> {
+        self.inner
+            .read_ctm_rules_json()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+    }
+
+    /// Reads packaged CTM rules and constructs an indexed CtmSolver.
+    pub fn read_ctm_solver(&self) -> PyResult<Option<crate::ctm::PyCtmSolver>> {
+        let solver = self
+            .inner
+            .read_ctm_solver()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        Ok(solver.map(|s| crate::ctm::PyCtmSolver {
+            inner: std::sync::Arc::new(s),
+        }))
+    }
+
     /// Returns list of all texture chunk identifiers stored in the package.
     pub fn get_atlas_texture_names(&self) -> Vec<String> {
         self.inner
@@ -267,7 +316,7 @@ impl PyScenePackageReader {
 
 /// End-to-end exporter: builds Scene Mini-Atlas, remaps UVs, tree-shakes models, and writes `.mtkscene`.
 #[pyfunction]
-#[pyo3(signature = (output_path, point_cloud, asset_cache, max_atlas_size=2048, mip_level=0, dynamic_entity_atlases=None))]
+#[pyo3(signature = (output_path, point_cloud, asset_cache, max_atlas_size=2048, mip_level=0, dynamic_entity_atlases=None, ctm_solver=None))]
 pub fn export_scene_package(
     output_path: &str,
     point_cloud: &PyVoxelPointCloud,
@@ -275,6 +324,7 @@ pub fn export_scene_package(
     max_atlas_size: Option<u32>,
     mip_level: Option<u32>,
     dynamic_entity_atlases: Option<std::collections::HashMap<u16, Bound<'_, PyBytes>>>,
+    ctm_solver: Option<&crate::ctm::PyCtmSolver>,
 ) -> PyResult<PySceneMetadata> {
     let sparse_voxels = SparseVoxelPayload::from_point_cloud(&point_cloud.inner);
     let models = asset_cache
@@ -298,6 +348,8 @@ pub fn export_scene_package(
                 .collect()
         });
 
+    let explicit_ctm_rules = ctm_solver.map(|s| s.inner.rules.as_slice());
+
     let result = libmtk_export_scene(
         output_path,
         &sparse_voxels,
@@ -306,6 +358,7 @@ pub fn export_scene_package(
         &mut asset_cache.inner,
         &config,
         converted_dyn_atlases.as_ref(),
+        explicit_ctm_rules,
         None,
     )
     .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;

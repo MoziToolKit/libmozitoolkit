@@ -216,6 +216,18 @@ fn separate_static_and_anim_sprites(
                     let h = e.height.min(sp.frame_height);
                     e.crop(0, 0, e.width.min(sp.frame_width), h)
                 }),
+                normal_gl: sp.normal_gl.as_ref().map(|n| {
+                    let h = n.height.min(sp.frame_height);
+                    n.crop(0, 0, n.width.min(sp.frame_width), h)
+                }),
+                orm: sp.orm.as_ref().map(|o| {
+                    let h = o.height.min(sp.frame_height);
+                    o.crop(0, 0, o.width.min(sp.frame_width), h)
+                }),
+                aux: sp.aux.as_ref().map(|a| {
+                    let h = a.height.min(sp.frame_height);
+                    a.crop(0, 0, a.width.min(sp.frame_width), h)
+                }),
                 frame_width: sp.frame_width,
                 frame_height: sp.frame_height,
                 frame_count: 1,
@@ -232,4 +244,24 @@ fn separate_static_and_anim_sprites(
     }
 
     (static_sprites, anim_sprites)
+}
+
+/// Helper to blit and apply edge-clamping padding to an optional layer buffer.
+pub(crate) fn blit_and_pad_optional_layer(
+    dest: &mut Option<crate::image::buffer::RgbaBuffer>,
+    src: &Option<crate::image::buffer::RgbaBuffer>,
+    inner_x: u32,
+    inner_y: u32,
+    width: u32,
+    height: u32,
+    padding: u32,
+) {
+    if let (Some(dest_buf), Some(src_buf)) = (dest.as_mut(), src.as_ref()) {
+        dest_buf.blit(src_buf, 0, 0, inner_x, inner_y, width, height);
+        if padding > 0 {
+            crate::image::padding::apply_edge_clamping_padding(
+                dest_buf, inner_x, inner_y, width, height, padding,
+            );
+        }
+    }
 }

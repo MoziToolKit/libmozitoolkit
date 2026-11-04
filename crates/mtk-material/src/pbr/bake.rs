@@ -32,10 +32,29 @@ pub fn decode_baked_atlas(
         clean_transparent_albedo(&mut chunk.albedo);
 
         if chunk.normal_gl.is_some() || chunk.orm.is_some() || chunk.aux.is_some() {
+            let has_normal = chunk.normal_gl.is_some();
+            let has_orm = chunk.orm.is_some();
+            let has_aux = chunk.aux.is_some();
+            let is_empty = !has_normal && !has_orm && !has_aux;
+            if let Some(chunk_meta) = atlas
+                .address_map
+                .chunks
+                .iter_mut()
+                .find(|candidate| candidate.chunk_id == chunk.chunk_id)
+            {
+                chunk_meta.has_orm = has_orm;
+                chunk_meta.has_aux = has_aux;
+                chunk_meta.pbr = if is_empty {
+                    None
+                } else {
+                    Some(crate::pbr::PbrMeta::labpbr13())
+                };
+                chunk_meta.refresh_textures();
+            }
             summary.chunks += 1;
-            summary.with_normal += usize::from(chunk.normal_gl.is_some());
-            summary.with_orm += usize::from(chunk.orm.is_some());
-            summary.with_aux += usize::from(chunk.aux.is_some());
+            summary.with_normal += usize::from(has_normal);
+            summary.with_orm += usize::from(has_orm);
+            summary.with_aux += usize::from(has_aux);
             continue;
         }
 

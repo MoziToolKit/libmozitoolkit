@@ -42,6 +42,10 @@ pub struct SceneExportResult {
     pub mini_atlas_textures: Vec<(String, Vec<u8>)>,
     pub tree_shaken_models: BakedModelDatabase,
     pub sprite_count: usize,
+    pub colormaps: Vec<(String, Vec<u8>)>,
+    pub biome_resolver_json: Option<String>,
+    pub ctm_rules: Vec<mtk_resource::CtmRule>,
+    pub ctm_rules_json: Option<String>,
 }
 
 fn insert_sprite_aliases(map: &mut AtlasAddressMap, key: &str, loc: &AtlasSpriteLocation) {
@@ -85,6 +89,9 @@ pub fn build_scene_atlas_and_models(
     needed_blockstates: &BTreeSet<String>,
     voxels: &SparseVoxelPayload,
     config: &SceneExporterConfig,
+    colormaps: Vec<(String, Vec<u8>)>,
+    biome_resolver_json: Option<String>,
+    ctm_rules: Vec<mtk_resource::CtmRule>,
 ) -> Result<SceneExportResult, MtkError> {
     let sprite_count = crops.len();
 
@@ -201,11 +208,21 @@ pub fn build_scene_atlas_and_models(
     metadata.atlas_resolution = first_chunk_dims;
     metadata.has_animated_atlas = !mini_atlas_map.anim_sprites.is_empty();
 
+    let ctm_rules_json = if !ctm_rules.is_empty() {
+        serde_json::to_string(&ctm_rules).ok()
+    } else {
+        None
+    };
+
     Ok(SceneExportResult {
         metadata,
         mini_atlas_map,
         mini_atlas_textures,
         tree_shaken_models,
         sprite_count,
+        colormaps,
+        biome_resolver_json,
+        ctm_rules,
+        ctm_rules_json,
     })
 }

@@ -133,9 +133,20 @@ pub struct ChunkEntry {
   * `AssetCache`：存储全量预烘焙出的全局多通道图集切片与 `atlas_mapping.json`。
   * `SceneInterchange`：存储在内存中动态拼接的 **Scene Mini-Atlas**（自包含微型多通道 PBR 图集与局部 `mapping.json`），仅按需裁切并装箱当前场景方块实际引用的纹理，模型 UV 已对其对齐。
 
-### 5.6 `BIOM` - 生物群系调色板映射块
-* 存储原版及自定义生物群系色阶映射表与 Colormap 贴图（`grass.png`, `foliage.png`）。
-* 用于重构网格时在 Python / DCC 端即时计算双线性插值顶点色与 Shader 调色。
+### 5.6 `BIOM` - 生物群系调色板映射与色盘分块
+* **存储内容**：
+  * `biome/mapping` 或 `biome/resolver`：原版及材质包自定义生物群系映射表与 BiomeResolver 规则 JSON。
+  * `biome/colormap/*`：色盘纹理切片原始 PNG 缓冲（`biome/colormap/grass`、`biome/colormap/foliage`、`biome/colormap/dry_foliage`）。
+* **使用契约**：
+  * 场景包导出时自动提取资源包中的自定义 Colormap 与解析器一同打包。
+  * 读取器（`ScenePackageReader`）提供 `has_colormaps()`、`read_colormap(name)` 与 `read_biome_resolver()` 进行纯只读解析。若需要更新当前进程的全局色盘事实源，可通过显式方法 `install_colormaps()` 安全重载，严禁在构造时静默产生全局单例状态副作用。
+
+### 5.7 `CTMR` - CTM 连通纹理规则分块
+* **存储内容**：
+  * `ctm/rules`：携带经过 Tree-Shaking 剪枝后的 CTM 规则集（JSON 序列化后的 `Vec<CtmRule>`）。
+* **使用契约**：
+  * 仅剪枝打包当前场景实际方块状态或其关联贴图所命中的 CTM 规则（`CtmRule::applies_to_scene`），同时将规则展开引用的 CTM 变体子贴图（如 `optifine/ctm/.../0.png`）自动装箱进伴生的 Scene Mini-Atlas。
+  * 读取端可通过 `has_ctm_rules()`、`read_ctm_rules_json()` 与 `read_ctm_solver()` 零外部依赖现场复原带优先级倒序索引的 `CtmSolver`，使跨设备脱机场景在重构几何时保持 100% 精确的连通纹理外观。
 
 ---
 
@@ -145,9 +156,11 @@ pub struct ChunkEntry {
 | :--- | :--- | :--- |
 | **应用场景** | 全量材质包预编译缓存、本地资产库 | 用户工程分享、跨机器/跨 DCC 场景交换 |
 | **体素数据 (`VOXL`)** | ❌ 无 | ✅ 稀疏列存体素与方块实体 (`SparseVoxelPayload`) |
-| **贴图策略 (`ATLS`)** | ✅ 包含完整多通道全量 Atlas 与全局映射 | ✅ **自包含 Scene Mini-Atlas**（仅包含场景引用的裁剪图集） |
+| **贴图策略 (`ATLS`)** | ✅ 包含完整多通道全量 Atlas 与全局映射 | ✅ **自包含 Scene Mini-Atlas**（仅包含场景引用的裁剪图集与 CTM 子贴图） |
 | **模型策略 (`MODL`)** | ✅ 包含全局所有方块的完整模型数据库 | ✅ **Tree-Shaken 模型闭包**（模型 UV 已预映射至 Mini-Atlas） |
 | **网格模型数据** | ❌ 不存烘焙的世界大网格 | ❌ **不存全量网格**，现场根据体素+剪枝模型极速重构 |
+| **CTM 连通规则 (`CTMR`)** | ✅ 包含全局解析规则与完整子贴图集 | ✅ **Tree-Shaken 规则集**（仅保留场景引用的规则与子贴图） |
+| **生物群系色盘 (`BIOM`)** | ✅ 全量预提取解析器与原版/材质包色盘 | ✅ **自包含色盘与 Resolver**（支持显式无副作用重载） |
 | **典型文件体积** | 50 MB ~ 500 MB (取决于材质包分辨率) | **500 KB ~ 15 MB** (体积小 1~2 个数量级) |
 | **独立脱机能力** | 依赖本地全量资源环境 | **100% 自包含**（无需原版客户端或材质包即可直接渲染） |
 

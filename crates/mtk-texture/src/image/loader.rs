@@ -11,6 +11,9 @@ pub struct DecodedSprite {
     pub specular: Option<RgbaBuffer>,
     pub overlay: Option<RgbaBuffer>,
     pub emissive: Option<RgbaBuffer>,
+    pub normal_gl: Option<RgbaBuffer>,
+    pub orm: Option<RgbaBuffer>,
+    pub aux: Option<RgbaBuffer>,
     pub frame_width: u32,
     pub frame_height: u32,
     pub frame_count: u32,
@@ -119,11 +122,51 @@ impl DecodedSprite {
             specular,
             overlay,
             emissive,
+            normal_gl: None,
+            orm: None,
+            aux: None,
             frame_width,
             frame_height,
             frame_count,
             metadata: final_metadata,
         })
+    }
+
+    /// Convenience constructor for a basic single-frame sprite without PBR companions.
+    pub fn simple(
+        sprite_id: ResourceLocation,
+        albedo: RgbaBuffer,
+        frame_width: u32,
+        frame_height: u32,
+    ) -> Self {
+        Self {
+            sprite_id,
+            albedo,
+            normal: None,
+            specular: None,
+            overlay: None,
+            emissive: None,
+            normal_gl: None,
+            orm: None,
+            aux: None,
+            frame_width,
+            frame_height,
+            frame_count: 1,
+            metadata: None,
+        }
+    }
+
+    /// Attaches canonical pre-decoded PBR layers (`normal_gl`, `orm`, `aux`).
+    pub fn with_canonical_pbr(
+        mut self,
+        normal_gl: Option<RgbaBuffer>,
+        orm: Option<RgbaBuffer>,
+        aux: Option<RgbaBuffer>,
+    ) -> Self {
+        self.normal_gl = normal_gl;
+        self.orm = orm;
+        self.aux = aux;
+        self
     }
 
     /// Parallel or sequential batch decode of discovered sprites.

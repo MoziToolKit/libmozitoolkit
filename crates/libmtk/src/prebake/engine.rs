@@ -157,6 +157,20 @@ fn precompile_all_assets_inner(
                     )?;
                 }
             }
+
+            // Extract CTM rules from active stack and write to cache
+            let ctm_rules = stack.load_ctm_rules();
+            if !ctm_rules.is_empty() {
+                if let Ok(ctm_json) = serde_json::to_string(&ctm_rules) {
+                    writer.add_str_chunk(
+                        *b"CTMR",
+                        "ctm/rules",
+                        &ctm_json,
+                        &ChunkWriteOptions::zstd_fast(),
+                    )?;
+                }
+            }
+
             Ok(biome_resolver)
         })?;
 

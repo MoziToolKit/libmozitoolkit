@@ -348,6 +348,11 @@ impl DynamicAtlasChunk {
 
             for v in variants {
                 if let Ok(loc_key) = mtk_resource::ResourceLocation::parse(&v) {
+                    if let Some(existing) = address_map.sprites.get(&loc_key) {
+                        if existing.chunk_id < DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID {
+                            continue;
+                        }
+                    }
                     address_map.sprites.insert(loc_key, loc.clone());
                 }
             }

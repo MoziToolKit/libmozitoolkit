@@ -186,6 +186,16 @@ impl AssetCacheReader {
         Ok(resolver)
     }
 
+    /// Loads cached CTM rules if present in the package.
+    pub fn load_ctm_rules(&self) -> Result<Option<Vec<mtk_resource::CtmRule>>, MtkError> {
+        if !self.reader.has_chunk("ctm/rules") {
+            return Ok(None);
+        }
+        let json_str = self.reader.read_chunk_str("ctm/rules")?;
+        let rules: Vec<mtk_resource::CtmRule> = serde_json::from_str(&json_str)?;
+        Ok(Some(rules))
+    }
+
     /// Loads a pre-populated `BannerBaker` containing cached base cloth and pattern sprites.
     pub fn load_banner_baker(&self) -> Result<mtk_texture::BannerBaker, MtkError> {
         let mut baker = mtk_texture::BannerBaker::default();

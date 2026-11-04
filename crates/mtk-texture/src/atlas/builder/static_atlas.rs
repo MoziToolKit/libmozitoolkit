@@ -48,6 +48,9 @@ pub fn build_static_atlas_chunks(
         let mut has_normal = false;
         let mut has_specular = false;
         let mut has_overlay = false;
+        let mut has_normal_gl = false;
+        let mut has_orm = false;
+        let mut has_aux = false;
 
         for slot in &chunk.slots {
             if let Some(sp) = sprite_map.get(&slot.entry) {
@@ -59,6 +62,15 @@ pub fn build_static_atlas_chunks(
                 }
                 if sp.overlay.is_some() {
                     has_overlay = true;
+                }
+                if sp.normal_gl.is_some() {
+                    has_normal_gl = true;
+                }
+                if sp.orm.is_some() {
+                    has_orm = true;
+                }
+                if sp.aux.is_some() {
+                    has_aux = true;
                 }
             }
         }
@@ -86,6 +98,28 @@ pub fn build_static_atlas_chunks(
         } else {
             None
         };
+        let mut normal_gl_buf = if has_normal_gl {
+            Some(RgbaBuffer::solid(
+                chunk.width,
+                chunk.height,
+                128,
+                128,
+                255,
+                255,
+            ))
+        } else {
+            None
+        };
+        let mut orm_buf = if has_orm {
+            Some(RgbaBuffer::solid(chunk.width, chunk.height, 255, 255, 0, 0))
+        } else {
+            None
+        };
+        let mut aux_buf = if has_aux {
+            Some(RgbaBuffer::new(chunk.width, chunk.height))
+        } else {
+            None
+        };
 
         for slot in chunk.slots {
             if let Some(sp) = sprite_map.get(&slot.entry) {
@@ -107,50 +141,70 @@ pub fn build_static_atlas_chunks(
                 }
 
                 let slot_has_normal = sp.normal.is_some();
-                if let (Some(ref mut n_buf), Some(ref norm_src)) = (&mut normal_buf, &sp.normal) {
-                    n_buf.blit(norm_src, 0, 0, inner_x, inner_y, fw, fh);
-                    if config.padding > 0 {
-                        apply_edge_clamping_padding(
-                            n_buf,
-                            inner_x,
-                            inner_y,
-                            fw,
-                            fh,
-                            config.padding,
-                        );
-                    }
-                }
+                super::blit_and_pad_optional_layer(
+                    &mut normal_buf,
+                    &sp.normal,
+                    inner_x,
+                    inner_y,
+                    fw,
+                    fh,
+                    config.padding,
+                );
 
                 let slot_has_specular = sp.specular.is_some();
-                if let (Some(ref mut s_buf), Some(ref spec_src)) = (&mut specular_buf, &sp.specular)
-                {
-                    s_buf.blit(spec_src, 0, 0, inner_x, inner_y, fw, fh);
-                    if config.padding > 0 {
-                        apply_edge_clamping_padding(
-                            s_buf,
-                            inner_x,
-                            inner_y,
-                            fw,
-                            fh,
-                            config.padding,
-                        );
-                    }
-                }
+                super::blit_and_pad_optional_layer(
+                    &mut specular_buf,
+                    &sp.specular,
+                    inner_x,
+                    inner_y,
+                    fw,
+                    fh,
+                    config.padding,
+                );
 
                 let slot_has_overlay = sp.overlay.is_some();
-                if let (Some(ref mut o_buf), Some(ref over_src)) = (&mut overlay_buf, &sp.overlay) {
-                    o_buf.blit(over_src, 0, 0, inner_x, inner_y, fw, fh);
-                    if config.padding > 0 {
-                        apply_edge_clamping_padding(
-                            o_buf,
-                            inner_x,
-                            inner_y,
-                            fw,
-                            fh,
-                            config.padding,
-                        );
-                    }
-                }
+                super::blit_and_pad_optional_layer(
+                    &mut overlay_buf,
+                    &sp.overlay,
+                    inner_x,
+                    inner_y,
+                    fw,
+                    fh,
+                    config.padding,
+                );
+
+                let slot_has_normal_gl = sp.normal_gl.is_some();
+                super::blit_and_pad_optional_layer(
+                    &mut normal_gl_buf,
+                    &sp.normal_gl,
+                    inner_x,
+                    inner_y,
+                    fw,
+                    fh,
+                    config.padding,
+                );
+
+                let _slot_has_orm = sp.orm.is_some();
+                super::blit_and_pad_optional_layer(
+                    &mut orm_buf,
+                    &sp.orm,
+                    inner_x,
+                    inner_y,
+                    fw,
+                    fh,
+                    config.padding,
+                );
+
+                let _slot_has_aux = sp.aux.is_some();
+                super::blit_and_pad_optional_layer(
+                    &mut aux_buf,
+                    &sp.aux,
+                    inner_x,
+                    inner_y,
+                    fw,
+                    fh,
+                    config.padding,
+                );
 
                 let u_min = (inner_x as f32) / (chunk.width as f32);
                 let u_max = ((inner_x + fw) as f32) / (chunk.width as f32);
@@ -172,7 +226,7 @@ pub fn build_static_atlas_chunks(
                     frame_size: [fw, fh],
                     frame_count: 1,
                     animation: None,
-                    has_normal: slot_has_normal,
+                    has_normal: slot_has_normal || slot_has_normal_gl,
                     has_specular: slot_has_specular,
                     has_overlay: slot_has_overlay,
                     average_color: Some(sp.albedo.average_rgb_hex()),
@@ -205,13 +259,17 @@ pub fn build_static_atlas_chunks(
             category_chunk_index,
             width: chunk.width,
             height: chunk.height,
-            has_normal,
+            has_normal: has_normal || has_normal_gl,
             has_specular,
             has_overlay,
-            has_orm: false,
-            has_aux: false,
-            has_tint: category_name == "blocks",
-            pbr: None,
+            has_orm,
+            has_aux,
+            has_tint: category_name == "blocks" || category_name == "scene",
+            pbr: if has_normal_gl || has_orm || has_aux {
+                Some(crate::atlas::pbr::PbrMeta::labpbr13())
+            } else {
+                None
+            },
             textures: Vec::new(),
         };
         chunk_meta.refresh_textures();
@@ -228,9 +286,9 @@ pub fn build_static_atlas_chunks(
             normal: normal_buf,
             specular: specular_buf,
             overlay: overlay_buf,
-            normal_gl: None,
-            orm: None,
-            aux: None,
+            normal_gl: normal_gl_buf,
+            orm: orm_buf,
+            aux: aux_buf,
         });
     }
 
