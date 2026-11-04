@@ -13,7 +13,7 @@ pub use baker::{
     BakedFaceGeometry, BakedModel, BakedModelDatabase, BakedVariantGroup, ModelBaker,
     ModelMeshOptions,
 };
-pub use entity::BlockEntityData;
+pub use entity::{BlockEntityData, EntityCategory};
 pub use error::ModelError;
 pub use parser::{
     is_air_like, mesh_to_obj_string, normalize_canonical_blockstate, BakedObjFace, BlockModelJson,

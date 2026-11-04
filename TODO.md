@@ -27,7 +27,7 @@
 - [x] **消除 `no_std` 假象**：移除全部 crate 的无用 `std` feature 与条件编译，明确声明为 std-only（wasm32 目标同样使用 std）。
 
 ### 2. 预解码 PBR 材质现代化与旧实现物理清除 (✅ 全部完成)
-- [x] **预解码 PBR 图集通道 (`ASSET_CACHE_FORMAT_VERSION = 5`)**：
+- [x] **预解码 PBR 图集通道 (`ASSET_CACHE_FORMAT_VERSION = 6`)**：
   - 资产预编译期直接将 LabPBR 解码为规范图集通道（Albedo, Normal_GL, Roughness, Metallic, Aux/Emission），丢弃原始 `_n` / `_s`；
   - 提供 `lookup_static(loc)` 与 `lookup_animated(loc)` 权威双通道寻址。
 - [x] **物理清除旧材质属性注册表与逐面字段**：

@@ -277,16 +277,74 @@ impl BlockEntityData {
         }
     }
 
+    /// Normalizes sherds of a decorated pot to canonical pattern stems, turning invalid or brick patterns into `None`.
+    pub fn normalize_sherds(&mut self) {
+        if let Self::DecoratedPot { sherds } = self {
+            for sherd in sherds.iter_mut() {
+                *sherd = sherd
+                    .as_deref()
+                    .and_then(Self::normalize_sherd_pattern)
+                    .map(str::to_string);
+            }
+        }
+    }
+
+    /// Returns true if this entity is an intrinsic discrete voxel block entity
+    /// tied to an integer grid block (e.g. DecoratedPot, Banner, Skull, Sign).
+    #[inline]
+    pub fn is_voxel_block_entity(&self) -> bool {
+        matches!(
+            self,
+            Self::DecoratedPot { .. }
+                | Self::Banner { .. }
+                | Self::Skull { .. }
+                | Self::Sign { .. }
+                | Self::Generic { .. }
+                | Self::Raw { .. }
+        )
+    }
+
+    /// Returns true if this entity is a continuous-space entity (e.g. ItemFrame, Painting, EndCrystal)
+    /// that is decoupled from discrete voxel blocks.
+    #[inline]
+    pub fn is_continuous_space_entity(&self) -> bool {
+        matches!(
+            self,
+            Self::ItemFrame { .. } | Self::Painting { .. } | Self::EndCrystal { .. }
+        )
+    }
+
+    /// Returns the classification category of this entity.
+    #[inline]
+    pub fn entity_category(&self) -> EntityCategory {
+        if self.is_continuous_space_entity() {
+            EntityCategory::ContinuousSpaceEntity
+        } else {
+            EntityCategory::VoxelBlockEntity
+        }
+    }
+
     /// Serializes to a clean, canonical Visual NBT JSON string suitable for point clouds,
     /// `.mtkscene` files, and persistent state storage.
     pub fn to_visual_json(&self) -> String {
         serde_json::to_string(self).unwrap_or_default()
     }
 
-    /// Deserializes from a Visual NBT JSON string.
+    /// Deserializes from a Visual NBT JSON string and normalizes sherds into canonical representation.
     pub fn from_visual_json(json_str: &str) -> Option<Self> {
-        serde_json::from_str(json_str).ok()
+        let mut data: Self = serde_json::from_str(json_str).ok()?;
+        data.normalize_sherds();
+        Some(data)
     }
+}
+
+/// Classification of entities distinguishing discrete voxel block entities from continuous-space entities.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum EntityCategory {
+    /// Discrete voxel block entity tied to an integer grid block (e.g. DecoratedPot, Banner, Skull, Sign).
+    VoxelBlockEntity,
+    /// Continuous-space entity attached to blocks or free-floating (e.g. ItemFrame, Painting, EndCrystal).
+    ContinuousSpaceEntity,
 }
 
 #[cfg(test)]
@@ -403,5 +461,65 @@ mod tests {
         assert!(g_json.contains("\"custom:copper_statue\""));
         let g_parsed = BlockEntityData::from_visual_json(&g_json).expect("Parse generic");
         assert_eq!(generic, g_parsed);
+    }
+
+    #[test]
+    fn test_decorated_pot_normalization_alignment() {
+        // Deserializing unnormalized sherd names or empty/brick strings normalizes to canonical stems and null
+        let raw_json = r#"{"id":"minecraft:decorated_pot","sherds":["minecraft:angler_pottery_sherd","","minecraft:brick","archer_pottery_pattern"]}"#;
+        let pot = BlockEntityData::from_visual_json(raw_json).expect("Must parse");
+        assert_eq!(
+            pot,
+            BlockEntityData::DecoratedPot {
+                sherds: [
+                    Some("angler".to_string()),
+                    None,
+                    None,
+                    Some("archer".to_string()),
+                ],
+            }
+        );
+
+        let canonical_json = pot.to_visual_json();
+        assert_eq!(
+            canonical_json,
+            r#"{"id":"minecraft:decorated_pot","sherds":["angler",null,null,"archer"]}"#
+        );
+    }
+
+    #[test]
+    fn test_entity_category_decoupling() {
+        let pot = BlockEntityData::new_decorated_pot([Some("angler"), None, None, None]);
+        assert!(pot.is_voxel_block_entity());
+        assert!(!pot.is_continuous_space_entity());
+        assert_eq!(pot.entity_category(), EntityCategory::VoxelBlockEntity);
+
+        let banner = BlockEntityData::new_banner("red", Vec::<(&str, &str)>::new());
+        assert!(banner.is_voxel_block_entity());
+        assert!(!banner.is_continuous_space_entity());
+
+        let skull = BlockEntityData::new_skull(SkullKind::Skeleton, None, None);
+        assert!(skull.is_voxel_block_entity());
+        assert!(!skull.is_continuous_space_entity());
+
+        let sign = BlockEntityData::new_sign(vec!["hello".to_string()], None::<&str>, false);
+        assert!(sign.is_voxel_block_entity());
+        assert!(!sign.is_continuous_space_entity());
+
+        let item_frame = BlockEntityData::new_item_frame("minecraft:compass", 1, 0, false, false);
+        assert!(!item_frame.is_voxel_block_entity());
+        assert!(item_frame.is_continuous_space_entity());
+        assert_eq!(
+            item_frame.entity_category(),
+            EntityCategory::ContinuousSpaceEntity
+        );
+
+        let painting = BlockEntityData::new_painting("minecraft:alban", 1, 1);
+        assert!(!painting.is_voxel_block_entity());
+        assert!(painting.is_continuous_space_entity());
+
+        let crystal = BlockEntityData::new_end_crystal(true, None);
+        assert!(!crystal.is_voxel_block_entity());
+        assert!(crystal.is_continuous_space_entity());
     }
 }

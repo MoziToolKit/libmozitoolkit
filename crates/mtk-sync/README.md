@@ -18,6 +18,7 @@
 > **权威协议规范**：本文档描述 Crate 的 API 与历史设计。Live Sync 的帧格式、资源硬限、
 > `state_hash`、状态机、错误恢复与三端实现对齐矩阵，请以
 > **[RFC v3.1: MTK 2.0 Live Sync 协议与架构设计规范](https://github.com/mozi1924/MoziToolKit/blob/main/docs/live_sync/live_sync_protocol.md)** 为准。
+> 底层烘焙模型库统一对齐 `libmtk::ASSET_CACHE_FORMAT_VERSION = 6`。
 > 下文第 3 章中出现的旧版 `Packet` 枚举（`SelectionInfo` / `FullSnapshot` / `SectionSnapshot` 等）
 > 已被 `protocol::packet::Packet` 的 v3.1 定义取代，仅作演进记录保留。
 
@@ -206,7 +207,7 @@ pub struct LiveSyncSession {
 ```
 
 #### 关键方法
-- `new(config, culler, model_db) -> Self`：创建会话实例；世界网格始终为单一合并网格。
+- `new(config, culler, model_db) -> Self`：创建会话实例；世界网格始终为单一合并网格。`model_db` 消费由 `libmtk::prebake` 生成的资产预编译缓存（受 `ASSET_CACHE_FORMAT_VERSION = 6` 规范约束）。
 - `set_auth_token(token)`：设置随每个 HELLO 发送的共享密钥（RFC v3.1 §4.1，自动 `trim`）。
   非空时优先于宿主自建 HELLO 中的令牌；默认 HELLO 与缓存 HELLO 都会携带它。
 - `start(url, auto_reconnect, max_reconnect_attempts) -> Result<(), String>`：连接 Minecraft 服务端并启动后台 I/O 与网格化守护线程。

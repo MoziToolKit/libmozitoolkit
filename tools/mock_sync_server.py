@@ -31,7 +31,7 @@ import random
 import struct
 import sys
 import time
-import zlib
+import uuid
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 # Tests spawn this server with piped stdout. On Windows the default pipe encoding
@@ -41,33 +41,84 @@ for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+for candidate in [
+    os.path.join(PROJECT_ROOT, "dev", "lib"),
+    os.path.abspath(os.path.join(PROJECT_ROOT, "..", "MoziToolKit", "dev", "lib")),
+]:
+    if os.path.isdir(candidate) and candidate not in sys.path:
+        sys.path.insert(0, candidate)
+
+for candidate_root in [
+    PROJECT_ROOT,
+    os.path.abspath(os.path.join(PROJECT_ROOT, "..", "MoziToolKit")),
+]:
+    if candidate_root not in sys.path:
+        sys.path.insert(0, candidate_root)
+
+# Blender's bundled Python is used as sys.executable by the test suite. In CI the
+# abi3 wheel lives in the host interpreter's site-packages, which is injected into
+# the Blender test process via MTK_TEST_SITE_PACKAGES but is not inherited by
+# subprocesses through sys.path. Mirror that path here so the mock server can import
+# libmtk_py when the local dev/lib symlink is absent.
+_TEST_SITE_PACKAGES = os.environ.get("MTK_TEST_SITE_PACKAGES")
+if _TEST_SITE_PACKAGES and _TEST_SITE_PACKAGES not in sys.path:
+    sys.path.append(_TEST_SITE_PACKAGES)
+
+try:
+    import libmtk_py
+except ImportError:
+    try:
+        from MoziToolKit.bridge.engine import get_libmtk
+        libmtk_py = get_libmtk()
+    except Exception:
+        libmtk_py = None
+
 # ---------------------------------------------------------------------------
-# Protocol Constants (1:1 with mtk-sync/src/protocol/constants.rs)
+# Protocol Constants (RFC v3.1 & Legacy)
 # ---------------------------------------------------------------------------
 
-PROTOCOL_MAGIC = b"MC"
-PROTOCOL_VERSION = 0x02
-MIN_SUPPORTED_PROTOCOL_VERSION = 0x01
-MAX_SUPPORTED_PROTOCOL_VERSION = 0x02
+PROTOCOL_MAGIC = b"MT"
+PROTOCOL_VERSION = 0x03
 
-# S -> C Packet IDs
+# RFC v3.1 Opcodes
+OPCODE_HELLO = 0x01
+OPCODE_WELCOME = 0x02
+OPCODE_BASELINE_BEGIN = 0x03
+OPCODE_BASELINE_CHUNK = 0x04
+OPCODE_BASELINE_END = 0x05
+OPCODE_BASELINE_ACK = 0x06
+OPCODE_DELTA_OP = 0x07
+OPCODE_PALETTE_UPDATE = 0x08
+OPCODE_CANCEL = 0x0B
+OPCODE_RESYNC_REQUEST = 0x0D
+OPCODE_PING = 0x0E
+OPCODE_PONG = 0x0F
+
+# Legacy Packet Types (for test backward compatibility)
 PKT_SELECTION_INFO = 0x01
 PKT_FULL_SNAPSHOT = 0x02
 PKT_DELTA_UPDATE = 0x03
+PKT_BLOCK_PALETTE = 0x04
 PKT_SECTION_MANIFEST = 0x05
 PKT_SECTION_SNAPSHOT = 0x06
 PKT_HANDSHAKE_INFO = 0x07
 PKT_STREAM_BEGIN = 0x08
 PKT_STREAM_END = 0x09
-
-# C -> S Packet IDs
 PKT_REQ_FULL_SYNC = 0x80
+PKT_REQ_RESYNC = 0x81
 PKT_REQ_SECTION_SYNC = 0x81
+PKT_REQ_SYNC_CONFIG = 0x82
 PKT_SYNC_CONFIG = 0x82
 
+
 STREAM_STATUS_SUCCESS = 0
-STREAM_STATUS_CANCELLED = 1
-STREAM_STATUS_ERROR = 2
+STREAM_STATUS_ERROR = 1
+
+MIN_SUPPORTED_PROTOCOL_VERSION = 1
+MAX_SUPPORTED_PROTOCOL_VERSION = 3
+
 
 # ---------------------------------------------------------------------------
 # Binary Packet Encoders
@@ -478,6 +529,84 @@ def generate_terrain(
                 grid.set_block(x, h - 1, z, "minecraft:dirt")
                 grid.set_block(x, h, z, "minecraft:grass_block[snowy=false]")
 
+    elif preset in {"issues", "regression"}:
+        # Showcase arena for directional and complex models
+        for x in range(sx):
+            for z in range(sz):
+                grid.set_block(x, 0, z, "minecraft:bedrock")
+                grid.set_block(x, 1, z, "minecraft:polished_andesite")
+
+        # Row 1 (z=3): Chest orientations (North, South, East, West, single, left, right, trapped, ender)
+        grid.set_block(2, 2, 3, "minecraft:chest[facing=north,type=single,waterlogged=false]")
+        grid.set_block(4, 2, 3, "minecraft:chest[facing=south,type=single,waterlogged=false]")
+        grid.set_block(6, 2, 3, "minecraft:chest[facing=east,type=single,waterlogged=false]")
+        grid.set_block(8, 2, 3, "minecraft:chest[facing=west,type=single,waterlogged=false]")
+        grid.set_block(10, 2, 3, "minecraft:chest[facing=north,type=left,waterlogged=false]")
+        grid.set_block(11, 2, 3, "minecraft:chest[facing=north,type=right,waterlogged=false]")
+        grid.set_block(13, 2, 3, "minecraft:trapped_chest[facing=south,type=single,waterlogged=false]")
+        grid.set_block(15, 2, 3, "minecraft:ender_chest[facing=north,waterlogged=false]")
+
+        # Row 2 (z=6): Chiseled bookshelves with different occupied states
+        grid.set_block(2, 2, 6, "minecraft:chiseled_bookshelf[facing=north,slot_0_occupied=false,slot_1_occupied=false,slot_2_occupied=false,slot_3_occupied=false,slot_4_occupied=false,slot_5_occupied=false]")
+        grid.set_block(4, 2, 6, "minecraft:chiseled_bookshelf[facing=north,slot_0_occupied=true,slot_1_occupied=false,slot_2_occupied=false,slot_3_occupied=false,slot_4_occupied=false,slot_5_occupied=false]")
+        grid.set_block(6, 2, 6, "minecraft:chiseled_bookshelf[facing=north,slot_0_occupied=true,slot_1_occupied=true,slot_2_occupied=false,slot_3_occupied=false,slot_4_occupied=false,slot_5_occupied=false]")
+        grid.set_block(8, 2, 6, "minecraft:chiseled_bookshelf[facing=north,slot_0_occupied=true,slot_1_occupied=true,slot_2_occupied=true,slot_3_occupied=false,slot_4_occupied=false,slot_5_occupied=false]")
+        grid.set_block(10, 2, 6, "minecraft:chiseled_bookshelf[facing=south,slot_0_occupied=true,slot_1_occupied=true,slot_2_occupied=true,slot_3_occupied=true,slot_4_occupied=true,slot_5_occupied=true]")
+        grid.set_block(12, 2, 6, "minecraft:chiseled_bookshelf[facing=east,slot_0_occupied=false,slot_1_occupied=true,slot_2_occupied=false,slot_3_occupied=true,slot_4_occupied=false,slot_5_occupied=true]")
+
+        # Row 3 (z=9): Skulls and Heads (Floor with various rotations)
+        grid.set_block(2, 2, 9, "minecraft:player_head[rotation=0]")
+        grid.set_block(4, 2, 9, "minecraft:player_head[rotation=4]")
+        grid.set_block(6, 2, 9, "minecraft:player_head[rotation=8]")
+        grid.set_block(8, 2, 9, "minecraft:player_head[rotation=12]")
+        grid.set_block(10, 2, 9, "minecraft:skeleton_skull[rotation=0]")
+        grid.set_block(12, 2, 9, "minecraft:wither_skeleton_skull[rotation=4]")
+        grid.set_block(14, 2, 9, "minecraft:zombie_head[rotation=8]")
+        grid.set_block(16, 2, 9, "minecraft:creeper_head[rotation=12]")
+        grid.set_block(18, 2, 9, "minecraft:piglin_head[rotation=0]")
+        grid.set_block(20, 2, 9, "minecraft:piglin_head[rotation=8]")
+        grid.set_block(22, 2, 9, "minecraft:dragon_head[rotation=0]")
+        grid.set_block(24, 2, 9, "minecraft:dragon_head[rotation=8]")
+
+        # Row 4 (z=12): Wall Skulls and Heads (against a wall at z=13)
+        for x in range(2, 26):
+            grid.set_block(x, 2, 13, "minecraft:stone_bricks")
+        grid.set_block(2, 2, 12, "minecraft:player_wall_head[facing=north]")
+        grid.set_block(4, 2, 12, "minecraft:skeleton_wall_skull[facing=north]")
+        grid.set_block(6, 2, 12, "minecraft:wither_skeleton_wall_skull[facing=north]")
+        grid.set_block(8, 2, 12, "minecraft:zombie_wall_head[facing=north]")
+        grid.set_block(10, 2, 12, "minecraft:creeper_wall_head[facing=north]")
+        grid.set_block(12, 2, 12, "minecraft:piglin_wall_head[facing=north]")
+        grid.set_block(14, 2, 12, "minecraft:dragon_wall_head[facing=north]")
+
+        # Row 5 (z=16): Pink Petals and Wildflowers (amounts 1, 2, 3, 4)
+        grid.set_block(2, 2, 16, "minecraft:pink_petals[facing=north,flower_amount=1]")
+        grid.set_block(4, 2, 16, "minecraft:pink_petals[facing=north,flower_amount=2]")
+        grid.set_block(6, 2, 16, "minecraft:pink_petals[facing=north,flower_amount=3]")
+        grid.set_block(8, 2, 16, "minecraft:pink_petals[facing=north,flower_amount=4]")
+        grid.set_block(10, 2, 16, "minecraft:pink_petals[facing=east,flower_amount=1]")
+        grid.set_block(12, 2, 16, "minecraft:pink_petals[facing=south,flower_amount=2]")
+        grid.set_block(14, 2, 16, "minecraft:pink_petals[facing=west,flower_amount=3]")
+
+        # Row 6 (z=19): Chains (axis=y, axis=x, axis=z)
+        grid.set_block(2, 2, 19, "minecraft:iron_chain[axis=y,waterlogged=false]")
+        grid.set_block(4, 2, 19, "minecraft:iron_chain[axis=x,waterlogged=false]")
+        grid.set_block(6, 2, 19, "minecraft:iron_chain[axis=z,waterlogged=false]")
+        grid.set_block(8, 2, 19, "minecraft:chain[axis=y,waterlogged=false]")
+        grid.set_block(10, 2, 19, "minecraft:chain[axis=x,waterlogged=false]")
+        grid.set_block(12, 2, 19, "minecraft:chain[axis=z,waterlogged=false]")
+        grid.set_block(14, 2, 19, "minecraft:copper_chain[axis=y,waterlogged=false]")
+
+        # Row 7 (z=22): Bells and Beds
+        grid.set_block(2, 2, 22, "minecraft:bell[attachment=floor,facing=north]")
+        grid.set_block(4, 2, 22, "minecraft:bell[attachment=ceiling,facing=south]")
+        grid.set_block(6, 2, 22, "minecraft:bell[attachment=single_wall,facing=east]")
+        grid.set_block(8, 2, 22, "minecraft:bell[attachment=double_wall,facing=west]")
+        grid.set_block(10, 2, 22, "minecraft:red_bed[facing=north,occupied=false,part=foot]")
+        grid.set_block(10, 2, 23, "minecraft:red_bed[facing=north,occupied=false,part=head]")
+        grid.set_block(12, 2, 22, "minecraft:blue_bed[facing=east,occupied=false,part=foot]")
+        grid.set_block(13, 2, 22, "minecraft:blue_bed[facing=east,occupied=false,part=head]")
+
     return grid
 
 
@@ -573,18 +702,58 @@ class MockLiveSyncServer:
 
         self.grid = generate_terrain(preset, origin, size)
         self.clients: Set[MinimalWebSocketClient] = set()
+        self.server_uuid = uuid.uuid4()
+        self.server_uuid_bytes = self.server_uuid.bytes
+        self.epoch = int(time.time())
         self.seq_id = 1
+        self.snapshot_uuid = uuid.uuid4()
+        self.snapshot_uuid_bytes = self.snapshot_uuid.bytes
         self.stream_id = 1
+        self.palette_revision = 1
+        self.synced_palette_count = 0
         self.is_running = True
+        self.current_state_hash = 0
+        self.update_state_hash()
+
+    def get_canonical_blocks(self) -> List[str]:
+        """Traverses volume according to RFC Section 3.1: bottom-up horizontal slice scan (Y slowest, Z next, X fastest)."""
+        blocks = []
+        min_x, min_y, min_z = self.origin
+        size_x, size_y, size_z = self.size
+        for y in range(min_y, min_y + size_y):
+            for z in range(min_z, min_z + size_z):
+                for x in range(min_x, min_x + size_x):
+                    blocks.append(self.grid.get_block(x - min_x, y - min_y, z - min_z))
+        return blocks
+
+    def update_state_hash(self) -> int:
+        """Calculates authoritative xxHash64 canonical sparse state hash (RFC v3.2 0x02) using libmtk_py core."""
+        min_x, min_y, min_z = self.origin
+        size_x, size_y, size_z = self.size
+        storage = libmtk_py.VoxelStorage()
+        for y in range(min_y, min_y + size_y):
+            for z in range(min_z, min_z + size_z):
+                for x in range(min_x, min_x + size_x):
+                    block = self.grid.get_block(x - min_x, y - min_y, z - min_z)
+                    if block and block != "minecraft:air":
+                        storage.set_block(x, y, z, block)
+        self.current_state_hash = storage.compute_sparse_state_hash(
+            (min_x, min_y, min_z),
+            (size_x, size_y, size_z),
+            "minecraft:overworld",
+        )
+        return self.current_state_hash
 
     async def start(self) -> None:
         """Starts TCP listener."""
         server = await asyncio.start_server(self._handle_connection, self.host, self.port)
+        self._server_obj = server
         addr = f"ws://{self.host}:{self.port}"
         print("=" * 65)
-        print(f"🚀 [MockSyncServer] Live Sync WebSocket Server Started at: {addr}")
+        print(f"🚀 [MockSyncServer] Live Sync WebSocket Server (RFC v3.1) Started at: {addr}")
         print(f"📦 [Settings] Preset: '{self.preset}' | Mode: '{self.mode}' | Size: {self.size}")
         print(f"📍 [Bounds] Origin: {self.origin} | Total Blocks: {self.size[0] * self.size[1] * self.size[2]:,}")
+        print(f"🔑 [UUID] Server: {self.server_uuid.hex} | StateHash: 0x{self.current_state_hash:016x}")
         if self.delta_interval > 0:
             print(f"⚡ [Live Deltas] Automated mutations enabled every {self.delta_interval:.1f}s")
         print("=" * 65)
@@ -595,7 +764,10 @@ class MockLiveSyncServer:
             asyncio.create_task(self._delta_worker())
 
         async with server:
-            await server.serve_forever()
+            try:
+                await server.serve_forever()
+            except asyncio.CancelledError:
+                pass
 
     async def _handle_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """Performs WebSocket HTTP upgrade handshake then starts packet loop."""
@@ -637,24 +809,55 @@ class MockLiveSyncServer:
         print(f"🟢 [Client] DCC client connected from {writer.get_extra_info('peername')}")
 
         try:
-            # 1. Send SelectionInfo & HandshakeInfo
-            await self._send_initial_packets(client)
+            # 1. Read HELLO packet (0x01)
+            msg = await client.read_frame()
+            if not msg:
+                return
+            hello = libmtk_py.decode_packet(msg)
+            if hello.get("type") != "HELLO":
+                print(f"⚠️ [Protocol Error] Expected HELLO, got {hello.get('type')}")
+                return
 
-            # 2. Send Scene Data
-            if self.mode == "stream":
-                await self._stream_sections(client)
+            cached_uuid = hello.get("cached_world_uuid", b"")
+            cached_epoch = hello.get("cached_epoch", 0)
+            cached_seq = hello.get("cached_seq", 0)
+            cached_hash = hello.get("cached_state_hash", "")
+            state_hash_hex = f"0x{self.current_state_hash:016x}"
+
+            if (cached_uuid == self.server_uuid_bytes and
+                cached_epoch == self.epoch and
+                cached_seq == self.seq_id and
+                (cached_hash == state_hash_hex or cached_hash == str(self.current_state_hash))):
+                decision = 0  # VERIFIED_SKIP_REBUILD
+                print("⚡ [Handshake] Cached state verified -> 0ms VERIFIED_SKIP_REBUILD")
             else:
-                await self._send_full_snapshot(client)
+                decision = 2  # FULL_BASELINE_REQUIRED
+                print("📦 [Handshake] Cache mismatch or initial sync -> FULL_BASELINE_REQUIRED")
 
-            # 3. Send Section CRC Manifest
-            await self._send_manifest(client)
+            # 2. Send WELCOME packet (0x02)
+            welcome_bytes = libmtk_py.unstable.testing.encode_welcome(
+                server_uuid=self.server_uuid_bytes,
+                epoch=self.epoch,
+                sequence=self.seq_id,
+                decision=decision,
+                current_min=self.origin,
+                current_size=self.size,
+                current_state_hash=self.current_state_hash,
+                dimension="minecraft:overworld",
+                negotiated_version=3,
+            )
+            await client.send_binary(welcome_bytes)
+
+            # 3. If baseline required, stream baseline
+            if decision == 2:
+                await self._send_baseline(client)
 
             # 4. Inbound listener
             while client.is_open:
                 msg = await client.read_frame()
                 if msg is None:
                     break
-                decoded = decode_client_packet(msg)
+                decoded = libmtk_py.decode_packet(msg)
                 if decoded:
                     await self._handle_client_event(client, decoded)
 
@@ -665,150 +868,116 @@ class MockLiveSyncServer:
             writer.close()
             print("🔴 [Client] Client disconnected.")
 
-    async def _send_initial_packets(self, client: MinimalWebSocketClient) -> None:
-        """Sends SelectionInfo (0x01) and HandshakeInfo (0x07)."""
-        sel_pkt = encode_selection_info(self.origin, self.size)
-        await client.send_binary(sel_pkt)
+    async def _send_baseline(self, client: MinimalWebSocketClient) -> None:
+        """Sends BaselineBegin (0x03) -> BaselineChunk (0x04) -> BaselineEnd (0x05)."""
+        self.update_state_hash()
+        blocks = self.get_canonical_blocks()
+        palette = list(self.grid.palette)
+        self.synced_palette_count = len(palette)
+        self.palette_revision = 1
+        palette_lookup = dict(self.grid.palette_lookup)
+        indices = [palette_lookup[b] for b in blocks]
+        bits = 8 if len(palette) <= 256 else 16
+        payload = bytes(indices) if bits == 8 else struct.pack(f"<{len(indices)}H", *indices)
 
-        # Compute sections count
-        min_sec_x, max_sec_x = self.origin[0] >> 4, (self.origin[0] + self.size[0] - 1) >> 4
-        min_sec_y, max_sec_y = self.origin[1] >> 4, (self.origin[1] + self.size[1] - 1) >> 4
-        min_sec_z, max_sec_z = self.origin[2] >> 4, (self.origin[2] + self.size[2] - 1) >> 4
-        total_sections = (max_sec_x - min_sec_x + 1) * (max_sec_y - min_sec_y + 1) * (max_sec_z - min_sec_z + 1)
-
-        total_vol = self.size[0] * self.size[1] * self.size[2]
-        hs_pkt = encode_handshake_info(total_sections, total_sections, total_vol, "minecraft:overworld")
-        await client.send_binary(hs_pkt)
-
-    async def _send_full_snapshot(self, client: MinimalWebSocketClient) -> None:
-        """Encodes and sends single FullSnapshot (0x02)."""
-        print(f"📤 [Sync] Sending FullSnapshot ({len(self.grid.palette)} palette entries)...")
+        print(f"📤 [Baseline] Sending Baseline ({len(blocks):,} blocks, {len(palette)} palette entries)...")
         t0 = time.perf_counter()
-        pkt = encode_full_snapshot(
-            self.origin,
-            self.size,
-            self.grid.palette,
-            self.grid.indices,
-            ["minecraft:plains"],
-            [0] * len(self.grid.indices),
+
+        begin_pkt = libmtk_py.unstable.testing.encode_baseline_begin(
+            epoch=self.epoch,
+            snapshot_uuid=self.snapshot_uuid_bytes,
+            snapshot_seq=self.seq_id,
+            min_pos=self.origin,
+            size=self.size,
+            state_hash=self.current_state_hash,
+            palette_revision=1,
+            total_chunks=1,
+            total_encoded_bytes=len(payload),
+            total_decoded_bytes=len(payload),
+            compression_mode=0,
+            palette_bits_per_block=bits,
+            biome_bits_per_quart=0,
+            dimension="minecraft:overworld",
+            block_palette=palette,
+            biome_palette=["minecraft:plains"],
         )
-        await client.send_binary(pkt)
+        await client.send_binary(begin_pkt)
+
+        chunk_pkt = libmtk_py.unstable.testing.encode_baseline_chunk(
+            epoch=self.epoch,
+            snapshot_uuid=self.snapshot_uuid_bytes,
+            chunk_index=0,
+            total_chunks=1,
+            first_voxel_index=0,
+            voxel_count=len(blocks),
+            decoded_target_bytes=len(payload),
+            payload=payload,
+            chunk_xxhash64=0,
+        )
+        await client.send_binary(chunk_pkt)
+
+        end_pkt = libmtk_py.unstable.testing.encode_baseline_end(
+            epoch=self.epoch,
+            snapshot_uuid=self.snapshot_uuid_bytes,
+            snapshot_seq=self.seq_id,
+            total_chunks_sent=1,
+            final_state_hash=self.current_state_hash,
+            status=0,
+        )
+        await client.send_binary(end_pkt)
         t1 = time.perf_counter()
-        print(f"✅ [Sync] FullSnapshot sent ({len(pkt):,} bytes) in {(t1 - t0)*1000:.1f}ms")
-
-    async def _stream_sections(self, client: MinimalWebSocketClient) -> None:
-        """Streams chunk sections progressively (0x08 -> 0x06 -> 0x09)."""
-        min_sec_x, max_sec_x = self.origin[0] >> 4, (self.origin[0] + self.size[0] - 1) >> 4
-        min_sec_y, max_sec_y = self.origin[1] >> 4, (self.origin[1] + self.size[1] - 1) >> 4
-        min_sec_z, max_sec_z = self.origin[2] >> 4, (self.origin[2] + self.size[2] - 1) >> 4
-
-        sections = []
-        for sx in range(min_sec_x, max_sec_x + 1):
-            for sy in range(min_sec_y, max_sec_y + 1):
-                for sz in range(min_sec_z, max_sec_z + 1):
-                    sections.append((sx, sy, sz))
-
-        print(f"📤 [Stream] Streaming {len(sections)} chunk sections...")
-        stream_id = self.stream_id
-        self.stream_id += 1
-
-        await client.send_binary(encode_stream_begin(stream_id, len(sections)))
-
-        for i, (sx, sy, sz) in enumerate(sections):
-            start_x, start_y, start_z = sx * 16, sy * 16, sz * 16
-            size_x, size_y, size_z = 16, 16, 16
-
-            # Extract local section grid indices
-            sec_indices = []
-            for lx in range(16):
-                wx = start_x + lx
-                gx = wx - self.origin[0]
-                for ly in range(16):
-                    wy = start_y + ly
-                    gy = wy - self.origin[1]
-                    for lz in range(16):
-                        wz = start_z + lz
-                        gz = wz - self.origin[2]
-                        st = self.grid.get_block(gx, gy, gz)
-                        idx = self.grid.palette_lookup[st]
-                        sec_indices.append(idx)
-
-            pkt = encode_section_snapshot(
-                (sx, sy, sz),
-                (start_x, start_y, start_z),
-                (size_x, size_y, size_z),
-                self.grid.palette,
-                sec_indices,
-            )
-            await client.send_binary(pkt)
-            await asyncio.sleep(0.005)  # Slight yield for realism
-
-        await client.send_binary(encode_stream_end(stream_id, len(sections), STREAM_STATUS_SUCCESS))
-        print("✅ [Stream] Streaming completed.")
-
-    async def _send_manifest(self, client: MinimalWebSocketClient) -> None:
-        """Sends Section CRC Manifest (0x05)."""
-        min_sec_x, max_sec_x = self.origin[0] >> 4, (self.origin[0] + self.size[0] - 1) >> 4
-        min_sec_y, max_sec_y = self.origin[1] >> 4, (self.origin[1] + self.size[1] - 1) >> 4
-        min_sec_z, max_sec_z = self.origin[2] >> 4, (self.origin[2] + self.size[2] - 1) >> 4
-
-        entries = []
-        for sx in range(min_sec_x, max_sec_x + 1):
-            for sy in range(min_sec_y, max_sec_y + 1):
-                for sz in range(min_sec_z, max_sec_z + 1):
-                    crc = self.grid.compute_section_crc((sx, sy, sz))
-                    entries.append(((sx, sy, sz), crc))
-
-        pkt = encode_section_manifest(self.seq_id, entries)
-        await client.send_binary(pkt)
+        print(f"✅ [Baseline] Baseline sent ({len(payload):,} bytes) in {(t1 - t0)*1000:.1f}ms")
 
     async def _handle_client_event(self, client: MinimalWebSocketClient, event: Dict[str, Any]) -> None:
         """Handles client commands."""
         ev_type = event.get("type")
-        if ev_type == "REQ_FULL_SYNC":
-            print("📩 [Client Req] Full Sync Requested.")
-            await self._send_full_snapshot(client)
-        elif ev_type == "REQ_SECTION_SYNC":
-            sections = event.get("sections", [])
-            print(f"📩 [Client Req] Section Repair Requested for {len(sections)} sections: {sections}")
-            # Resend individual sections
-            for sx, sy, sz in sections:
-                start_x, start_y, start_z = sx * 16, sy * 16, sz * 16
-                sec_indices = []
-                for lx in range(16):
-                    wx = start_x + lx
-                    gx = wx - self.origin[0]
-                    for ly in range(16):
-                        wy = start_y + ly
-                        gy = wy - self.origin[1]
-                        for lz in range(16):
-                            wz = start_z + lz
-                            gz = wz - self.origin[2]
-                            st = self.grid.get_block(gx, gy, gz)
-                            sec_indices.append(self.grid.palette_lookup[st])
-
-                pkt = encode_section_snapshot(
-                    (sx, sy, sz),
-                    (start_x, start_y, start_z),
-                    (16, 16, 16),
-                    self.grid.palette,
-                    sec_indices,
-                )
-                await client.send_binary(pkt)
-        elif ev_type == "SYNC_CONFIG":
-            print(f"⚙️ [Client Config] Throttle={event.get('throttle_mode')}, FPS={event.get('target_fps')}, Active={event.get('is_active')}")
+        if ev_type in ("RESYNC_REQUEST", "REQ_FULL_SYNC"):
+            print("📩 [Client Req] Full Baseline Resync Requested.")
+            await self._send_baseline(client)
+        elif ev_type == "BASELINE_ACK":
+            print(f"✅ [Client Ack] Baseline committed sequence={event.get('committed_seq')}")
 
     async def broadcast_delta(self, changes: List[Tuple[Tuple[int, int, int], str]]) -> None:
-        """Broadcasts incremental DeltaUpdate (0x03) to all active clients."""
+        """Broadcasts incremental DELTA_OP to all active clients."""
         if not self.clients or not changes:
             return
 
+        new_palette_entries = []
+        entries = []
+        for (rx, ry, rz), state in changes:
+            if state not in self.grid.palette_lookup:
+                idx = self.grid.register_block(state)
+                new_palette_entries.append((idx, state))
+            else:
+                idx = self.grid.palette_lookup[state]
+            entries.append((rx, ry, rz, idx))
+
+        if new_palette_entries and hasattr(libmtk_py, "encode_palette_update"):
+            self.palette_revision += 1
+            pal_pkt = libmtk_py.unstable.testing.encode_palette_update(
+                epoch=self.epoch,
+                seq_id=self.seq_id,
+                base_revision=self.palette_revision - 1,
+                new_revision=self.palette_revision,
+                entries=new_palette_entries,
+            )
+            for client in list(self.clients):
+                try:
+                    await client.send_binary(pal_pkt)
+                except Exception:
+                    pass
+
         self.seq_id += 1
-        pkt = encode_delta_update(self.seq_id, self.origin, changes)
+        delta_pkt = libmtk_py.unstable.testing.encode_delta_op(
+            epoch=self.epoch,
+            seq_id=self.seq_id,
+            palette_revision=self.palette_revision,
+            entries=entries,
+        )
 
         for client in list(self.clients):
             try:
-                await client.send_binary(pkt)
+                await client.send_binary(delta_pkt)
             except Exception:
                 pass
 
@@ -842,6 +1011,53 @@ class MockLiveSyncServer:
 
             await self.broadcast_delta(changes)
 
+    async def broadcast_full_snapshot(self, preset: Optional[str] = None) -> None:
+        """Regenerates terrain (if preset provided) and broadcasts Baseline to all connected clients."""
+        if preset is not None:
+            self.preset = preset
+            self.grid = generate_terrain(self.preset, self.origin, self.size)
+        self.seq_id += 1
+        self.update_state_hash()
+        for client in list(self.clients):
+            try:
+                await self._send_baseline(client)
+            except Exception:
+                pass
+
+    async def broadcast_selection_resize(
+        self,
+        new_origin: Tuple[int, int, int],
+        new_size: Tuple[int, int, int],
+        preset: Optional[str] = None,
+    ) -> None:
+        """Resizes the selection bounding box, broadcasts Baseline."""
+        self.origin = new_origin
+        self.size = new_size
+        if preset is not None:
+            self.preset = preset
+        self.grid = generate_terrain(self.preset, self.origin, self.size)
+        self.seq_id += 1
+        self.update_state_hash()
+        for client in list(self.clients):
+            try:
+                await self._send_baseline(client)
+            except Exception:
+                pass
+
+    def stop(self) -> None:
+        """Stops the mock server and disconnects clients."""
+        self.is_running = False
+        if hasattr(self, "_server_obj") and self._server_obj:
+            try:
+                self._server_obj.close()
+            except Exception:
+                pass
+        for client in list(self.clients):
+            try:
+                client.writer.close()
+            except Exception:
+                pass
+
 
 # ---------------------------------------------------------------------------
 # CLI Argument Parser & Entry Point
@@ -853,7 +1069,7 @@ def parse_args():
     parser.add_argument("--port", type=int, default=8765, help="WebSocket bind port (default: 8765)")
     parser.add_argument(
         "--preset",
-        choices=["flat", "hills", "complex", "fluids", "benchmark"],
+        choices=["flat", "hills", "complex", "fluids", "benchmark", "issues", "regression"],
         default="complex",
         help="Terrain & block test preset (default: complex)",
     )
