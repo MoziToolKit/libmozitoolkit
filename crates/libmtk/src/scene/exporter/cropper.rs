@@ -206,7 +206,8 @@ impl SceneAtlasSource for crate::prebake::AssetCacheReader {
             has_biome_resolver: self.package_reader().has_chunk("biome/mapping")
                 || self.package_reader().has_chunk("biome/resolver"),
             has_ctm_rules: self.package_reader().has_chunk("ctm/rules"),
-            has_banner_baker: true,
+            has_banner_baker: self.package_reader().has_chunk("banner/base")
+                || self.package_reader().has_chunk("banner/patterns"),
         }
     }
 }
@@ -292,6 +293,7 @@ pub struct CroppedSprite {
     pub key: String,
     pub aliases: Vec<String>,
     pub sprite: DecodedSprite,
+    pub is_dynamic: bool,
 }
 
 fn parse_res_loc(key: &str) -> ResourceLocation {
@@ -408,6 +410,7 @@ pub fn crop_needed_sprites(
                                     key: tex_key.clone(),
                                     aliases: aliases.clone(),
                                     sprite: DecodedSprite::simple(sprite_id.clone(), albedo, w, h),
+                                    is_dynamic: true,
                                 });
                                 cropped_from_dynamic = true;
                             }
@@ -436,6 +439,7 @@ pub fn crop_needed_sprites(
                     key: tex_key.clone(),
                     aliases: aliases.clone(),
                     sprite: DecodedSprite::simple(sprite_id.clone(), (*baked).clone(), w, h),
+                    is_dynamic: true,
                 });
                 continue;
             } else {
@@ -490,6 +494,18 @@ pub fn crop_needed_sprites(
                                 .or_else(|| slots.get(base_name))
                                 .or_else(|| slots.get(&format!("minecraft:skin/{stripped}")))
                                 .or_else(|| slots.get(&format!("minecraft:skin/{base_name}")))
+                                .or_else(|| {
+                                    slots.iter().find_map(|(k, v)| {
+                                        if k.eq_ignore_ascii_case(tex_key)
+                                            || k.eq_ignore_ascii_case(stripped)
+                                            || k.eq_ignore_ascii_case(base_name)
+                                        {
+                                            Some(v)
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                })
                                 .copied()
                         })
                     })
@@ -525,6 +541,7 @@ pub fn crop_needed_sprites(
                                 key: tex_key.clone(),
                                 aliases: aliases.clone(),
                                 sprite: DecodedSprite::simple(sprite_id.clone(), albedo, 64, 64),
+                                is_dynamic: true,
                             });
                             continue;
                         } else {
@@ -628,6 +645,7 @@ pub fn crop_needed_sprites(
                             frame_count,
                             metadata: anim_loc.animation.clone(),
                         },
+                        is_dynamic: false,
                     });
                     continue;
                 }
@@ -688,6 +706,7 @@ pub fn crop_needed_sprites(
                 frame_count: 1,
                 metadata: None,
             },
+            is_dynamic: false,
         });
     }
 

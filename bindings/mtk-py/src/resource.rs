@@ -241,8 +241,10 @@ impl PyAssetCache {
     }
 
     /// Explicitly installs colormaps from this cache into the process-level active singletons.
-    pub fn install_colormaps(&self) {
-        self.inner.install_colormaps();
+    pub fn install_colormaps(&self) -> PyResult<()> {
+        self.inner
+            .install_colormaps()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 
     /// Extracts a single texture chunk to the specified destination path.

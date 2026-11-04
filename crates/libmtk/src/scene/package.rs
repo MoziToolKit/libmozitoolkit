@@ -202,9 +202,9 @@ impl ScenePackageReader {
         Ok(Some(Arc::new(colormaps)))
     }
 
-    /// Re-installs or updates the resident colormaps from this package.
-    pub fn install_colormaps(&self) {
-        install_scene_colormaps(&self.reader);
+    /// Re-installs or updates the resident colormaps from this package into the process-level cache.
+    pub fn install_colormaps(&self) -> Result<(), MtkError> {
+        install_scene_colormaps(&self.reader)
     }
 
     /// Reads the packaged BiomeResolver if present in the package.
@@ -262,27 +262,58 @@ impl ScenePackageReader {
         Ok(Some(map))
     }
 
+    /// Returns the effective capabilities of this scene package.
+    ///
+    /// If the package was generated with an older version where `capabilities` was omitted
+    /// (yielding all false defaults from serde), this method falls back to chunk presence probing.
+    pub fn effective_capabilities(&self) -> crate::scene::metadata::SceneCapabilities {
+        let mut caps = self.metadata.capabilities;
+        if !caps.has_colormaps && self.has_colormaps() {
+            caps.has_colormaps = true;
+        }
+        if !caps.has_ctm && self.has_ctm_rules() {
+            caps.has_ctm = true;
+        }
+        if !caps.has_dynamic_entities
+            && (self.has_dynamic_entity_slots()
+                || self.reader.has_chunk(&format!(
+                    "atlas/textures/atlas_{}.png",
+                    mtk_core::constants::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID
+                )))
+        {
+            caps.has_dynamic_entities = true;
+        }
+        if !caps.has_pbr {
+            let has_pbr_chunk = (0..=16).any(|i| {
+                self.reader
+                    .has_chunk(&format!("atlas/textures/atlas_{i}_n.png"))
+                    || self
+                        .reader
+                        .has_chunk(&format!("atlas/textures/atlas_{i}_orm.png"))
+                    || self
+                        .reader
+                        .has_chunk(&format!("atlas/textures/atlas_{i}_aux.png"))
+            });
+            if has_pbr_chunk {
+                caps.has_pbr = true;
+            }
+        }
+        caps
+    }
+
     /// Performs an integrity check on models, atlas textures, colormaps, and CTM rules.
     pub fn validate(&self) -> Result<ValidationReport, MtkError> {
         let mut report = ValidationReport::default();
 
-        // 1. Check colormaps PNG validity
-        for name in &["grass", "foliage", "dry_foliage"] {
-            match self.read_colormap(name) {
-                Ok(Some(bytes)) => {
-                    if bytes.len() < 8
-                        || bytes[0..8] != [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]
-                    {
-                        report.errors.push(format!(
-                            "Corrupted colormap '{name}': invalid PNG signature"
-                        ));
-                    }
-                }
+        // 1. Check colormaps PNG validity and decodability
+        if self.has_colormaps() {
+            match self.read_colormaps() {
+                Ok(Some(_)) => {}
                 Ok(None) => {}
                 Err(e) => {
                     report
                         .errors
-                        .push(format!("Failed reading colormap '{name}': {e}"));
+                        .push(format!("Corrupted colormap in package: {e}"));
                 }
             }
         }
@@ -296,11 +327,100 @@ impl ScenePackageReader {
             }
         }
 
-        // 3. Check CTM Rules
+        // 3. Read and check Atlas Mapping
+        let maybe_atlas_map = match self.read_atlas_mapping() {
+            Ok(Some(map)) => Some(map),
+            Ok(None) => {
+                report
+                    .errors
+                    .push("Scene package is missing 'atlas/mapping' chunk".to_string());
+                None
+            }
+            Err(e) => {
+                report
+                    .errors
+                    .push(format!("Corrupted 'atlas/mapping' chunk: {e}"));
+                None
+            }
+        };
+
+        // 4. Verify that each atlas texture slice referenced by chunk metadata actually exists
+        if let Some(ref map) = maybe_atlas_map {
+            for chunk in &map.chunks {
+                for slot in chunk.active_textures() {
+                    let chunk_path = format!("atlas/textures/{}", slot.file_name);
+                    if !self.reader.has_chunk(&chunk_path) {
+                        report.errors.push(format!(
+                            "Missing atlas texture slice '{chunk_path}' for chunk_id {}",
+                            chunk.chunk_id
+                        ));
+                    }
+                }
+            }
+        }
+
+        // 5. Read Models Database
+        let maybe_models = match self.read_models() {
+            Ok(Some(models)) => Some(models),
+            Ok(None) => {
+                report
+                    .errors
+                    .push("Scene package is missing 'models/database' chunk".to_string());
+                None
+            }
+            Err(e) => {
+                report
+                    .errors
+                    .push(format!("Corrupted 'models/database' chunk: {e}"));
+                None
+            }
+        };
+
+        // 6. Check Models (elements, faces, obj_faces, and variant groups) vs Atlas Mapping
+        if let (Some(models), Some(map)) = (maybe_models.as_ref(), maybe_atlas_map.as_ref()) {
+            let check_face = |face_tex: &str, source_desc: &str, rep: &mut ValidationReport| {
+                if !face_tex.is_empty() && map.lookup_str(face_tex).is_none() {
+                    rep.warnings.push(format!(
+                        "{source_desc} references texture '{face_tex}' not found in mini-atlas"
+                    ));
+                }
+            };
+
+            let check_model =
+                |model: &mtk_model::BakedModel, desc: &str, rep: &mut ValidationReport| {
+                    for element in &model.elements {
+                        for face in element.faces.values() {
+                            check_face(&face.texture, &format!("{desc} (element face)"), rep);
+                        }
+                    }
+                    for face in &model.faces {
+                        check_face(&face.texture, &format!("{desc} (directional face)"), rep);
+                    }
+                    for obj_face in &model.obj_faces {
+                        check_face(&obj_face.texture, &format!("{desc} (obj face)"), rep);
+                    }
+                };
+
+            for (state, model) in &models.models {
+                check_model(model, &format!("Model for state '{state}'"), &mut report);
+            }
+
+            for (state, group) in &models.variant_groups {
+                for (idx, model) in group.models.iter().enumerate() {
+                    check_model(
+                        model,
+                        &format!("Variant group '{state}' [variant {idx}]"),
+                        &mut report,
+                    );
+                }
+            }
+        }
+
+        // 7. Check CTM Rules vs Mini-Atlas
         if self.has_ctm_rules() {
             match self.read_ctm_solver() {
                 Ok(Some(solver)) => {
-                    if let Ok(Some(map)) = self.read_atlas_mapping() {
+                    if let Some(ref map) = maybe_atlas_map {
                         for rule in &solver.rules {
                             for tile in rule.tiles.iter().flatten() {
                                 if map.lookup(tile).is_none() {
@@ -322,18 +442,30 @@ impl ScenePackageReader {
             }
         }
 
-        // 4. Check Models vs Atlas Mapping
-        if let (Ok(Some(models)), Ok(Some(map))) = (self.read_models(), self.read_atlas_mapping()) {
-            for (state, model) in &models.models {
-                for element in &model.elements {
-                    for face in element.faces.values() {
-                        if map.lookup_str(&face.texture).is_none() {
-                            report.warnings.push(format!(
-                                "Model for state '{}' references texture '{}' not found in mini-atlas",
-                                state, face.texture
+        // 8. Check Dynamic Entity Slots vs Packaged Textures / Atlas Map
+        if self.has_dynamic_entity_slots() {
+            match self.read_dynamic_entity_slots() {
+                Ok(Some(slots)) => {
+                    for (key, (chunk_id, _slot_idx)) in &slots {
+                        let chunk_stem = format!("atlas_{chunk_id}");
+                        let chunk_path = format!("atlas/textures/{chunk_stem}.png");
+                        let has_texture = self.reader.has_chunk(&chunk_path);
+                        let has_in_map = maybe_atlas_map
+                            .as_ref()
+                            .map(|m| m.chunks.iter().any(|c| c.chunk_id == *chunk_id))
+                            .unwrap_or(false);
+                        if !has_texture && !has_in_map {
+                            report.errors.push(format!(
+                                "Dynamic entity slot '{key}' references missing dynamic atlas chunk {chunk_id}"
                             ));
                         }
                     }
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    report
+                        .errors
+                        .push(format!("Corrupted entity/slots in package: {e}"));
                 }
             }
         }
@@ -347,29 +479,33 @@ impl ScenePackageReader {
 ///
 /// Missing channels fall back to embedded vanilla; a package without colormap
 /// chunks clears any previously active overrides.
-fn install_scene_colormaps(reader: &MtkPackageReader) {
-    let read = |name: &str| {
-        reader
-            .read_chunk_decompressed(&format!("biome/colormap/{name}"))
-            .ok()
+fn install_scene_colormaps(reader: &MtkPackageReader) -> Result<(), MtkError> {
+    let read = |name: &str| -> Result<Option<Vec<u8>>, MtkError> {
+        let chunk_id = format!("biome/colormap/{name}");
+        if reader.has_chunk(&chunk_id) {
+            let bytes = reader.read_chunk_decompressed(&chunk_id)?;
+            Ok(Some(bytes))
+        } else {
+            Ok(None)
+        }
     };
-    let grass = read("grass");
-    let foliage = read("foliage");
-    let dry_foliage = read("dry_foliage");
+    let grass = read("grass")?;
+    let foliage = read("foliage")?;
+    let dry_foliage = read("dry_foliage")?;
 
     if grass.is_none() && foliage.is_none() && dry_foliage.is_none() {
         mtk_material::biome::clear_cached_colormaps();
-        return;
+        return Ok(());
     }
 
-    if let Err(error) = mtk_material::biome::set_cached_colormaps(
+    mtk_material::biome::set_cached_colormaps(
         grass.as_deref(),
         foliage.as_deref(),
         dry_foliage.as_deref(),
-    ) {
-        eprintln!("Warning: failed to install scene package colormaps: {error}");
-        mtk_material::biome::clear_cached_colormaps();
-    }
+    )
+    .map_err(|e| MtkError::Texture(mtk_texture::error::TextureError::Baking(e)))?;
+
+    Ok(())
 }
 
 /// Helper options for authoring `.mtkscene` packages.
@@ -712,6 +848,176 @@ mod tests {
         let validation = reader.validate().expect("validate report");
         assert!(!validation.is_valid);
         assert!(!validation.errors.is_empty());
+
+        let _ = std::fs::remove_file(&temp_path);
+    }
+
+    #[test]
+    fn test_validate_missing_atlas_mapping_and_models() {
+        let temp_path = std::env::temp_dir().join(format!(
+            "test_val_missing_{}.mtkscene",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let metadata = SceneMetadata::new([0, 0, 0, 1, 1, 1], 1);
+        let mut writer = mtk_package::MtkPackageFileWriter::create(
+            &temp_path,
+            PackageProfile::SceneInterchange,
+            [0u8; 16],
+        )
+        .unwrap();
+        writer
+            .add_json_chunk(*b"META", "manifest", &metadata, &ChunkWriteOptions::raw())
+            .unwrap();
+        writer.finish().unwrap();
+
+        let reader = ScenePackageReader::open_file(&temp_path).unwrap();
+        let report = reader.validate().unwrap();
+        assert!(!report.is_valid);
+        assert!(report.errors.iter().any(|e| e.contains("atlas/mapping")));
+        assert!(report.errors.iter().any(|e| e.contains("models/database")));
+
+        let _ = std::fs::remove_file(&temp_path);
+    }
+
+    #[test]
+    fn test_validate_missing_texture_slice_and_unmapped_model_texture() {
+        let temp_path = std::env::temp_dir().join(format!(
+            "test_val_textures_{}.mtkscene",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let metadata = SceneMetadata::new([0, 0, 0, 1, 1, 1], 1);
+        let mut writer = mtk_package::MtkPackageFileWriter::create(
+            &temp_path,
+            PackageProfile::SceneInterchange,
+            [0u8; 16],
+        )
+        .unwrap();
+        writer
+            .add_json_chunk(*b"META", "manifest", &metadata, &ChunkWriteOptions::raw())
+            .unwrap();
+
+        let mut atlas_map = AtlasAddressMap::new();
+        atlas_map.chunks.push(mtk_texture::AtlasChunkMeta {
+            chunk_id: 0,
+            category: "blocks".to_string(),
+            is_animated: false,
+            category_chunk_index: 0,
+            width: 512,
+            height: 512,
+            has_normal: false,
+            has_specular: false,
+            has_overlay: false,
+            has_orm: false,
+            has_aux: false,
+            has_tint: false,
+            pbr: None,
+            textures: vec![mtk_texture::AtlasTextureSlot {
+                role: "albedo".to_string(),
+                file_name: "atlas_0.png".to_string(),
+                colorspace: "sRGB".to_string(),
+            }],
+        });
+        writer
+            .add_json_chunk(
+                *b"MAPG",
+                "atlas/mapping",
+                &atlas_map,
+                &ChunkWriteOptions::raw(),
+            )
+            .unwrap();
+
+        let mut model_db = BakedModelDatabase::new();
+        let mut model = mtk_model::baker::baked_model::BakedModel {
+            block_state: "minecraft:stone".to_string(),
+            ..Default::default()
+        };
+        model.faces[0].texture = "minecraft:block/missing_stone".to_string();
+        model_db.insert("minecraft:stone".to_string(), model);
+
+        let model_bytes = model_db.to_binary().unwrap();
+        writer
+            .add_chunk(
+                *b"MODL",
+                "models/database",
+                &model_bytes,
+                &ChunkWriteOptions::raw(),
+            )
+            .unwrap();
+        writer.finish().unwrap();
+
+        let reader = ScenePackageReader::open_file(&temp_path).unwrap();
+        let report = reader.validate().unwrap();
+
+        // 1. Missing texture slice error (atlas_0.png was declared in map but not written to package)
+        assert!(!report.is_valid);
+        assert!(report.errors.iter().any(|e| e.contains("atlas_0.png")));
+
+        // 2. Unmapped texture warning (missing_stone is not in atlas map)
+        assert!(report.warnings.iter().any(|w| w.contains("missing_stone")));
+
+        let _ = std::fs::remove_file(&temp_path);
+    }
+
+    #[test]
+    fn test_validate_dynamic_entity_slots_missing_chunk() {
+        let temp_path = std::env::temp_dir().join(format!(
+            "test_val_dyn_slots_{}.mtkscene",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let metadata = SceneMetadata::new([0, 0, 0, 1, 1, 1], 1);
+        let mut writer = mtk_package::MtkPackageFileWriter::create(
+            &temp_path,
+            PackageProfile::SceneInterchange,
+            [0u8; 16],
+        )
+        .unwrap();
+        writer
+            .add_json_chunk(*b"META", "manifest", &metadata, &ChunkWriteOptions::raw())
+            .unwrap();
+
+        let atlas_map = AtlasAddressMap::new();
+        writer
+            .add_json_chunk(
+                *b"MAPG",
+                "atlas/mapping",
+                &atlas_map,
+                &ChunkWriteOptions::raw(),
+            )
+            .unwrap();
+        let model_db = BakedModelDatabase::new();
+        let model_bytes = model_db.to_binary().unwrap();
+        writer
+            .add_chunk(
+                *b"MODL",
+                "models/database",
+                &model_bytes,
+                &ChunkWriteOptions::raw(),
+            )
+            .unwrap();
+
+        let mut slots = HashMap::new();
+        slots.insert("custom_skin_steve".to_string(), (0xFFF0u16, 0u16));
+        writer
+            .add_json_chunk(*b"ESLT", "entity/slots", &slots, &ChunkWriteOptions::raw())
+            .unwrap();
+        writer.finish().unwrap();
+
+        let reader = ScenePackageReader::open_file(&temp_path).unwrap();
+        let report = reader.validate().unwrap();
+        assert!(!report.is_valid);
+        assert!(report
+            .errors
+            .iter()
+            .any(|e| e.contains("custom_skin_steve")));
 
         let _ = std::fs::remove_file(&temp_path);
     }

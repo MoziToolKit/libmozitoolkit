@@ -39,40 +39,27 @@ pub fn decode_baked_atlas(
         // bilinear filtering at cutout edges does not produce dark fringes.
         clean_transparent_albedo(&mut chunk.albedo);
 
-        if chunk.normal_gl.is_some() || chunk.orm.is_some() || chunk.aux.is_some() {
-            let has_normal = chunk.normal_gl.is_some();
-            let has_orm = chunk.orm.is_some();
-            let has_aux = chunk.aux.is_some();
-            if let Some(chunk_meta) = meta_by_id.get_mut(&chunk.chunk_id) {
-                sync_chunk_meta(
-                    chunk_meta,
-                    has_normal,
-                    has_orm,
-                    has_aux,
-                    Some(crate::pbr::PbrMeta::labpbr13()),
-                );
+        // If legacy layers exist, decode them to extract any missing canonical layers.
+        // Canonical layers take strict precedence; legacy complements missing channels.
+        if chunk.normal.is_some() || chunk.specular.is_some() {
+            let decoded = decode_labpbr13(chunk.normal.as_ref(), chunk.specular.as_ref())?;
+            if chunk.normal_gl.is_none() {
+                chunk.normal_gl = decoded.normal_gl;
             }
-            summary.chunks += 1;
-            summary.with_normal += usize::from(has_normal);
-            summary.with_orm += usize::from(has_orm);
-            summary.with_aux += usize::from(has_aux);
-            continue;
+            if chunk.orm.is_none() {
+                chunk.orm = decoded.orm;
+            }
+            if chunk.aux.is_none() {
+                chunk.aux = decoded.aux;
+            }
+            chunk.normal = None;
+            chunk.specular = None;
         }
 
-        let decoded = decode_labpbr13(chunk.normal.as_ref(), chunk.specular.as_ref())?;
-        let has_normal = decoded.normal_gl.is_some();
-        let has_orm = decoded.orm.is_some();
-        let has_aux = decoded.aux.is_some();
-        let is_empty = decoded.is_empty();
-        let meta = decoded.meta.clone();
-
-        chunk.normal_gl = decoded.normal_gl;
-        chunk.orm = decoded.orm;
-        chunk.aux = decoded.aux;
-
-        // Raw LabPBR companions are no longer needed after decoding.
-        chunk.normal = None;
-        chunk.specular = None;
+        let has_normal = chunk.normal_gl.is_some();
+        let has_orm = chunk.orm.is_some();
+        let has_aux = chunk.aux.is_some();
+        let is_empty = !has_normal && !has_orm && !has_aux;
 
         if let Some(chunk_meta) = meta_by_id.get_mut(&chunk.chunk_id) {
             sync_chunk_meta(
@@ -80,7 +67,11 @@ pub fn decode_baked_atlas(
                 has_normal,
                 has_orm,
                 has_aux,
-                if is_empty { None } else { Some(meta) },
+                if is_empty {
+                    None
+                } else {
+                    Some(crate::pbr::PbrMeta::labpbr13())
+                },
             );
         }
 

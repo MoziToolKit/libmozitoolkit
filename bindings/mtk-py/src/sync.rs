@@ -57,12 +57,13 @@ impl PyLiveSyncSession {
     pub fn get_world_mesh(&self) -> PyMeshData {
         let mesh = self.inner.get_world_mesh();
         let profile = self.inner.last_profile();
-        let dynamic_entity_atlases = self.inner.dynamic_entity_atlases_if_used();
+        let (dynamic_entity_atlases, dynamic_entity_slots) =
+            self.inner.dynamic_entity_atlases_and_slots_if_used();
         PyMeshData {
             inner: mesh,
             profile,
             dynamic_entity_atlases,
-            dynamic_entity_slots: None,
+            dynamic_entity_slots,
         }
     }
 
@@ -76,6 +77,11 @@ impl PyLiveSyncSession {
             let _ = dict.set_item(chunk_id, PyBytes::new(py, &buf));
         }
         dict
+    }
+
+    /// Returns dynamic entity slot allocations `key -> (chunk_id, slot_idx)`.
+    pub fn get_dynamic_entity_slots(&self) -> std::collections::HashMap<String, (u16, u16)> {
+        self.inner.dynamic_entity_slots()
     }
 
     /// Sets the on-disk cache directory for downloaded player skins.
@@ -219,16 +225,19 @@ impl PyLiveSyncSession {
                     profile,
                 } => {
                     dict.set_item("type", "WORLD_MESH_READY")?;
-                    let dyn_atlases = if mesh.has_dynamic_entity_chunks() {
-                        Some(self.inner.dynamic_entity_atlases())
+                    let (dyn_atlases, dyn_slots) = if mesh.has_dynamic_entity_chunks() {
+                        (
+                            Some(self.inner.dynamic_entity_atlases()),
+                            Some(self.inner.dynamic_entity_slots()),
+                        )
                     } else {
-                        None
+                        (None, None)
                     };
                     let py_mesh = PyMeshData {
                         inner: mesh,
                         profile,
                         dynamic_entity_atlases: dyn_atlases,
-                        dynamic_entity_slots: None,
+                        dynamic_entity_slots: dyn_slots,
                     };
                     dict.set_item("mesh", py_mesh)?;
                     dict.set_item("generation", generation)?;

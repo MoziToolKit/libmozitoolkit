@@ -16,11 +16,11 @@ pub const DYNAMIC_SLOTS_PER_ROW: u32 = 16;
 pub const DYNAMIC_TOTAL_SLOTS: usize = 256;
 
 /// Default reserved chunk ID for the dynamic entity atlas (skins, banners, etc.)
-pub const DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID: u16 = 0xFFF0;
+pub use mtk_core::constants::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
 
 /// Maximum number of dynamic chunks supported (0xFFF0..=0xFFFF, 16 chunks = 4,096 unique 64x64 skins).
 pub const MAX_DYNAMIC_CHUNKS: usize = 16;
-pub const DYNAMIC_CHUNK_START: u16 = 0xFFF0;
+pub const DYNAMIC_CHUNK_START: u16 = DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
 pub const DYNAMIC_CHUNK_END: u16 = 0xFFFF;
 
 /// Information about an allocated slot inside a dynamic atlas chunk.
@@ -321,25 +321,9 @@ impl DynamicAtlasChunk {
 
             let key_locs = mtk_resource::TextureKeyVariants::resource_locations_for_key(skin_key);
 
-            // Atomic collision check: if any alias of this skin already resolves to a static
-            // atlas chunk, skip all dynamic aliases for this skin to prevent dual-mapping
-            // to different chunks under different string aliases.
-            let collides_with_static = key_locs.iter().any(|loc_key| {
-                address_map
-                    .sprites
-                    .get(loc_key)
-                    .map(|existing| existing.chunk_id < DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID)
-                    .unwrap_or(false)
-            });
-
-            if collides_with_static {
-                eprintln!(
-                    "Warning: Dynamic entity skin '{}' collides with existing static atlas chunk; skipping dynamic registration to prevent dual-mapping",
-                    skin_key
-                );
-                continue;
-            }
-
+            // Register dynamic entity aliases. Static atlas entries take strict precedence;
+            // if any alias already resolves to a static chunk, insert_with_source retains the
+            // static sprite while registering all non-conflicting dynamic aliases.
             for loc_key in key_locs {
                 address_map.insert_with_source(
                     loc_key,

@@ -40,9 +40,13 @@ impl TextureKeyVariants {
             add(format!("banner/{spec}"));
             add(format!("minecraft:entity/banner/{spec}"));
             add(format!("entity/banner/{spec}"));
-            add(format!("minecraft:{spec}_banner"));
-            add(format!("{spec}_banner"));
-            add(spec.to_string());
+            // Composite banner pattern specs (e.g. "white+stripe_center:red") must not
+            // generate bare block names or bare tokens which would create invalid ResourceLocations.
+            if !spec.contains(':') && !spec.contains('+') {
+                add(format!("minecraft:{spec}_banner"));
+                add(format!("{spec}_banner"));
+                add(spec.to_string());
+            }
         }
 
         // 3. Player skin texture aliases
@@ -95,18 +99,21 @@ impl TextureKeyVariants {
     }
 
     /// Converts all key variants into valid `ResourceLocation`s, deduplicating the results.
+    ///
+    /// Validates that namespaces only contain valid identifier characters `[a-z0-9_.-]`,
+    /// discarding any malformed aliases.
     pub fn resource_locations_for_key(key: &str) -> Vec<ResourceLocation> {
         let mut locs = Vec::new();
         let mut seen = HashSet::new();
 
         for variant in Self::for_key(key) {
             if let Ok(loc) = ResourceLocation::parse_texture_path(&variant) {
-                if seen.insert(loc.clone()) {
+                if is_valid_namespace(&loc.namespace) && seen.insert(loc.clone()) {
                     locs.push(loc);
                 }
             }
             if let Ok(loc) = ResourceLocation::parse(&variant) {
-                if seen.insert(loc.clone()) {
+                if is_valid_namespace(&loc.namespace) && seen.insert(loc.clone()) {
                     locs.push(loc);
                 }
             }
@@ -114,6 +121,14 @@ impl TextureKeyVariants {
 
         locs
     }
+}
+
+#[inline]
+fn is_valid_namespace(ns: &str) -> bool {
+    !ns.is_empty()
+        && ns.chars().all(|c| {
+            c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '.' || c == '-'
+        })
 }
 
 #[cfg(test)]
@@ -133,9 +148,63 @@ mod tests {
     }
 
     #[test]
-    fn test_banner_key_variants() {
+    fn test_banner_key_variants_composite_pattern() {
         let variants = TextureKeyVariants::for_key("banner:white+stripe_center:red");
         assert!(variants.contains(&"minecraft:banner/white+stripe_center:red".to_string()));
         assert!(variants.contains(&"banner/white+stripe_center:red".to_string()));
+        // Ensure composite pattern does not produce invalid bare block tokens
+        assert!(!variants.contains(&"white+stripe_center:red".to_string()));
+        assert!(!variants.contains(&"minecraft:white+stripe_center:red_banner".to_string()));
+
+        let locs = TextureKeyVariants::resource_locations_for_key("banner:white+stripe_center:red");
+        // Ensure all produced ResourceLocations have valid namespaces (no bogus "white+stripe_center" namespace)
+        for loc in &locs {
+            assert!(
+                loc.namespace == "minecraft" || loc.namespace == "banner",
+                "Unexpected namespace '{}' in location {:?}",
+                loc.namespace,
+                loc
+            );
+        }
+    }
+
+    #[test]
+    fn test_player_alex_variants_and_locations() {
+        let variants = TextureKeyVariants::for_key("player_Alex");
+        assert!(variants.contains(&"minecraft:skin/player_Alex".to_string()));
+        assert!(variants.contains(&"skin/player_Alex".to_string()));
+
+        let locs = TextureKeyVariants::resource_locations_for_key("player_Alex");
+        assert!(locs
+            .iter()
+            .any(|l| l.namespace == "minecraft" && l.path == "skin/player_Alex"));
+    }
+
+    #[test]
+    fn test_64_char_hash_variants_and_locations() {
+        let hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let variants = TextureKeyVariants::for_key(hash);
+        assert!(variants.contains(&format!("minecraft:skin/{hash}")));
+        assert!(variants.contains(&format!("skin/{hash}")));
+
+        let locs = TextureKeyVariants::resource_locations_for_key(hash);
+        assert!(locs
+            .iter()
+            .any(|l| l.namespace == "minecraft" && l.path == format!("skin/{hash}")));
+    }
+
+    #[test]
+    fn test_standard_block_stone_variants_and_locations() {
+        let variants = TextureKeyVariants::for_key("minecraft:block/stone");
+        assert!(variants.contains(&"minecraft:block/stone".to_string()));
+        assert!(variants.contains(&"block/stone".to_string()));
+        // Regular blocks should never contain banner or skin aliases
+        assert!(!variants.iter().any(|v| v.contains("skin/")));
+        assert!(!variants.iter().any(|v| v.contains("banner")));
+
+        let locs = TextureKeyVariants::resource_locations_for_key("minecraft:block/stone");
+        assert!(locs
+            .iter()
+            .any(|l| l.namespace == "minecraft" && l.path == "block/stone"));
     }
 }

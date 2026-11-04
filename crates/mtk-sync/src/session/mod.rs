@@ -223,6 +223,23 @@ impl LiveSyncSession {
         }
     }
 
+    /// Returns dynamic entity slot allocations `key -> (chunk_id, slot_idx)`.
+    pub fn dynamic_entity_slots(&self) -> std::collections::HashMap<String, (u16, u16)> {
+        let w = self.world.read().unwrap_or_else(|e| e.into_inner());
+        w.dynamic_entity_slots()
+    }
+
+    /// Returns dynamic entity atlases and slot mapping if any dynamic entity chunk is referenced by world geometry.
+    pub fn dynamic_entity_atlases_and_slots_if_used(
+        &self,
+    ) -> (
+        Option<std::collections::HashMap<u16, Vec<u8>>>,
+        Option<std::collections::HashMap<String, (u16, u16)>>,
+    ) {
+        let w = self.world.read().unwrap_or_else(|e| e.into_inner());
+        w.dynamic_entity_atlases_if_used()
+    }
+
     /// Sets the on-disk cache directory for downloaded player skins.
     pub fn set_skin_cache_dir(&self, cache_dir: Option<std::path::PathBuf>) {
         let mut w = self.world.write().unwrap_or_else(|e| e.into_inner());

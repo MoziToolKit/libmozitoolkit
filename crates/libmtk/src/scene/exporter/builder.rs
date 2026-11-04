@@ -49,8 +49,26 @@ pub struct SceneExportResult {
 }
 
 fn insert_sprite_aliases(map: &mut AtlasAddressMap, key: &str, loc: &AtlasSpriteLocation) {
-    for res_loc in mtk_resource::TextureKeyVariants::resource_locations_for_key(key) {
-        map.sprites.insert(res_loc, loc.clone());
+    let is_entity_or_special = key.starts_with("banner:")
+        || key.starts_with("banner/")
+        || key.starts_with("minecraft:banner/")
+        || key.starts_with("skin/")
+        || key.starts_with("minecraft:skin/")
+        || key.starts_with("player/")
+        || key.starts_with("entity/player/")
+        || (key.len() == 64 && key.chars().all(|c| c.is_ascii_hexdigit()));
+
+    if is_entity_or_special {
+        for res_loc in mtk_resource::TextureKeyVariants::resource_locations_for_key(key) {
+            map.sprites.insert(res_loc, loc.clone());
+        }
+    } else {
+        if let Ok(res_loc) = ResourceLocation::parse_texture_path(key) {
+            map.sprites.insert(res_loc, loc.clone());
+        }
+        if let Ok(res_loc) = ResourceLocation::parse(key) {
+            map.sprites.insert(res_loc, loc.clone());
+        }
     }
 }
 
@@ -194,13 +212,27 @@ pub fn build_scene_atlas_and_models(
     metadata.unique_entities_count = voxels.entity_palette.len();
     metadata.atlas_resolution = first_chunk_dims;
     metadata.has_animated_atlas = !mini_atlas_map.anim_sprites.is_empty();
+    let has_pbr = mini_atlas_textures.iter().any(|(name, _)| {
+        name.ends_with("_n.png")
+            || name.ends_with("_normal.png")
+            || name.ends_with("_orm.png")
+            || name.ends_with("_aux.png")
+    });
+    let has_dynamic_entities = crops.iter().any(|c| {
+        c.is_dynamic
+            || c.key.starts_with("skin/")
+            || c.key.starts_with("minecraft:skin/")
+            || c.key.starts_with("player/")
+            || c.key.starts_with("banner:")
+            || c.key.starts_with("banner/")
+            || c.key.starts_with("minecraft:banner/")
+    });
+
     metadata.capabilities = crate::scene::metadata::SceneCapabilities {
         has_colormaps: !colormaps.is_empty(),
         has_ctm: !ctm_rules.is_empty(),
-        has_pbr: mini_atlas_textures
-            .iter()
-            .any(|(name, _)| name.ends_with("_orm.png") || name.ends_with("_aux.png")),
-        has_dynamic_entities: !voxels.entity_palette.is_empty(),
+        has_pbr,
+        has_dynamic_entities,
     };
 
     Ok(SceneExportResult {

@@ -6,7 +6,8 @@ use crate::atlas::dynamic::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
 use crate::atlas::pbr::PbrMeta;
 
 /// Source priority level for atlas address map keys.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum AtlasKeySource {
     /// Authoritative prebaked static asset from resource packs (higher priority).
     Static = 0,
@@ -250,6 +251,9 @@ pub struct AtlasAddressMap {
     /// Dedicated animated atlas sprites (full strips for multi-frame animated textures).
     #[serde(default)]
     pub anim_sprites: HashMap<ResourceLocation, AtlasSpriteLocation>,
+    /// Source priority records per sprite key (Static vs Dynamic).
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub sprite_sources: HashMap<ResourceLocation, AtlasKeySource>,
 }
 
 impl AtlasAddressMap {
@@ -258,6 +262,7 @@ impl AtlasAddressMap {
             chunks: Vec::new(),
             sprites: HashMap::new(),
             anim_sprites: HashMap::new(),
+            sprite_sources: HashMap::new(),
         }
     }
 
@@ -360,15 +365,21 @@ impl AtlasAddressMap {
         source: AtlasKeySource,
     ) -> bool {
         if let Some(existing) = self.sprites.get(&key) {
-            let existing_source = if existing.chunk_id < DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID {
+            let default_source = if existing.chunk_id < DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID {
                 AtlasKeySource::Static
             } else {
                 AtlasKeySource::Dynamic
             };
+            let existing_source = self
+                .sprite_sources
+                .get(&key)
+                .copied()
+                .unwrap_or(default_source);
             if source == AtlasKeySource::Dynamic && existing_source == AtlasKeySource::Static {
                 return false;
             }
         }
+        self.sprite_sources.insert(key.clone(), source);
         self.sprites.insert(key, loc);
         true
     }
@@ -378,6 +389,7 @@ impl AtlasAddressMap {
         self.chunks.extend(other.chunks);
         self.sprites.extend(other.sprites);
         self.anim_sprites.extend(other.anim_sprites);
+        self.sprite_sources.extend(other.sprite_sources);
     }
 
     /// Synchronizes texture slots across all chunks based on their active channel flags.

@@ -104,6 +104,7 @@ Python 模块名：`libmtk_py`
     两端令牌会各自 trim 后比较），启用 Yefira `authToken` 时必须传入。
   - `poll_events(coalesce_meshes=False)`：`True` 时只保留最新 `WORLD_MESH_READY` generation
   - `get_dynamic_entity_atlases()`：`{chunk_id: RGBA bytes}` 动态实体图集映射（无单数访问器）
+  - `get_dynamic_entity_slots()`：`{key: (chunk_id, slot_idx)}` 动态实体槽位索引映射
   - 持久化握手入口（`start_with_persisted_state` / `export_persisted_state_json` /
     `start()` 的 `cached_*` 参数）已物理删除：Blender 侧 `VoxelStorage` 无法持久化，
     该路径始终不可达。
@@ -131,7 +132,7 @@ Python 模块名：`libmtk_py`
   - `reroute_mesh_animation(uvs, face_loop_ranges, face_texture_keys, face_old_chunk_ids, atlas, aliases=None, enable_animated_textures=false)`
 - **`GridAtlasSpec` (`PyGridAtlasSpec`)**：网格图集元数据规范。
 - **缓存解析**：`resolve_active_cache_package(cache_dir, fingerprint=None)` 返回 active `.mtkcache` 路径。
-- **色彩数学与常量**：`compute_biome_tint_attributes`, `compute_mesh_biome_attributes_from_storage`, `sample_colormap_colors`, `blend_biome_colors`, `sample_colormap_pixel`, `srgb_to_linear`, `linear_to_srgb`, `TINT_TYPE_NONE..DRY_FOLIAGE`
+- **色彩数学与常量**：`compute_biome_tint_attributes`, `compute_mesh_biome_attributes_from_storage`, `sample_colormap_colors`, `clear_cached_colormaps`, `blend_biome_colors`, `sample_colormap_pixel`, `srgb_to_linear`, `linear_to_srgb`, `TINT_TYPE_NONE..DRY_FOLIAGE`
 
 ### 2.9 模型烘焙 (`model`)
 - **`BakedModelDatabase` (`PyBakedModelDatabase`)**：预编译方块几何模型库。
@@ -140,8 +141,9 @@ Python 模块名：`libmtk_py`
 ### 2.10 场景交换包与 Mini-Atlas (`scene`)
 - **`ScenePackageReader`**：`.mtkscene` 单文件中间交换容器读取器（只读无副作用设计，构造时不污染全局进程状态）。
   - `open(path)`：快速打开并校验场景元数据；
-  - `validate() -> ValidationReport`：执行场景包完整性与引用完整性校验（校验模型贴图是否已映射到 mini-atlas、CTM 规则纹理是否存在、色盘 PNG 是否合法等）；
+  - `validate() -> ValidationReport`：执行场景包完整性与引用完整性校验（校验模型贴图是否已映射到 mini-atlas、CTM 规则纹理是否存在、色盘 PNG 是否合法、动态实体槽位是否有效等），返回包含 `is_valid: bool`, `errors: list[str]`, `warnings: list[str]` 的报告对象；
   - `metadata -> SceneMetadata`：获取场景 AABB 范围、体素总量与图集分辨率等；
+  - `effective_capabilities() -> SceneCapabilities`：获取场景包有效能力（当旧包 `capabilities` 全为默认 false 时自动探测 chunk fallback）；
   - `read_point_cloud(origin_centered=True, z_up=True) -> VoxelPointCloud`：提取稀疏体素列存并构造点云；
   - `read_models() -> BakedModelDatabase | None`：读取已重映射至 Mini-Atlas 的 Tree-Shaken 方块模型库；
   - `read_atlas() -> BakedAtlas | None`：读取内嵌的自包含微型多通道 PBR 图集；
@@ -156,8 +158,11 @@ Python 模块名：`libmtk_py`
   - `has_ctm_rules() -> bool`：检查场景包内是否携带 CTM 连通纹理规则；
   - `read_ctm_rules_json() -> str | None`：读取原始 CTM 规则 JSON 字符串；
   - `read_ctm_solver() -> CtmSolver | None`：现场构造带优先级倒序索引的高速 CTM 解算器。
+- **`ValidationReport` (`PyValidationReport`)**：场景包校验报告对象。
+  - 属性：`is_valid: bool`, `errors: list[str]`, `warnings: list[str]`；
+  - `to_dict() -> dict`：转化为 Python 字典。
 - **`SceneMetadata`**：场景包元数据对象。
-  - 属性：`format_version`, `bounds`, `voxel_count`, `unique_states_count`, `unique_biomes_count`, `unique_entities_count`, `atlas_resolution`, `generator`, `created_at_epoch_secs`, `capabilities` (`SceneCapabilities`，包含 `has_colormaps`, `has_ctm`, `has_pbr`, `has_dynamic_entities`)；
+  - 属性：`format_version`, `bounds`, `voxel_count`, `unique_states_count`, `unique_biomes_count`, `unique_entities_count`, `atlas_resolution`, `generator`, `created_at_epoch_secs`, `capabilities` (`SceneCapabilities`，包含 `has_colormaps`, `has_ctm`, `has_pbr`, `has_dynamic_entities`，旧包默认全 false，建议消费端调用 reader 的 `effective_capabilities()` 获取权威探测值)；
   - `to_dict() -> dict`：快速转化为 Python 字典。
 - **`export_scene_package(path, point_cloud, cache, *, max_atlas_size=2048, mip_level=0, dynamic_entity_atlases=None, ctm_solver=None, enable_ctm=None, dynamic_entity_slots=None) -> SceneMetadata`**：
   端到端场景交换导出算子（所有可选参数均为 keyword-only）：自动扫描伴生体素点云、执行模型树剪枝、从激活缓存裁剪贴图、自适应缝合动态实体皮肤与旗帜纹理、剪枝并嵌入 CTM 规则与子贴图、自包含打包 Biome 色盘与 Resolver、拼接微型多通道图集、并行重映射模型 UV 并压缩打包为 `.mtkscene`。

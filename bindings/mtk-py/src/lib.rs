@@ -47,7 +47,7 @@ pub use resource::{
     resolve_active_cache_package, PyAssetCache, PyPrecompileResult, PyResourcePackStack,
 };
 pub use save::PyLevelData;
-pub use scene::{export_scene_package, PySceneMetadata, PyScenePackageReader};
+pub use scene::{export_scene_package, PySceneMetadata, PyScenePackageReader, PyValidationReport};
 pub use sync::PyLiveSyncSession;
 pub use texture::PyBakedAtlas;
 pub use voxel::{PyMesherConfig, PyVoxelStorage, PyVoxelWorld};
@@ -146,6 +146,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_biome_meta, m)?)?;
     m.add_function(wrap_pyfunction!(get_all_biomes, m)?)?;
     m.add_function(wrap_pyfunction!(material::sample_colormap_colors, m)?)?;
+    m.add_function(wrap_pyfunction!(material::clear_cached_colormaps, m)?)?;
     m.add("TINT_TYPE_NONE", mtk_material::TINT_TYPE_NONE)?;
     m.add("TINT_TYPE_GRASS", mtk_material::TINT_TYPE_GRASS)?;
     m.add("TINT_TYPE_FOLIAGE", mtk_material::TINT_TYPE_FOLIAGE)?;
@@ -178,6 +179,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // 11. Scene Interchange (.mtkscene)
     m.add_class::<scene::PySceneMetadata>()?;
     m.add_class::<scene::PyScenePackageReader>()?;
+    m.add_class::<scene::PyValidationReport>()?;
     m.add_function(wrap_pyfunction!(scene::export_scene_package, m)?)?;
 
     // 12. Metadata

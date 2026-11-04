@@ -93,8 +93,8 @@ impl PyVoxelPointCloud {
         self.inner.is_empty()
     }
 
-    /// Appends a single voxel point.
-    #[pyo3(signature = (pos, block_pos, state, biome=None, light=None))]
+    /// Appends a single voxel point with optional biome, light, and visual NBT entity JSON.
+    #[pyo3(signature = (pos, block_pos, state, biome=None, light=None, entity=None))]
     pub fn push(
         &mut self,
         pos: [f32; 3],
@@ -102,13 +102,15 @@ impl PyVoxelPointCloud {
         state: String,
         biome: Option<String>,
         light: Option<u8>,
+        entity: Option<String>,
     ) {
-        self.inner.push(
+        self.inner.push_with_entity(
             pos,
             block_pos,
             state,
             biome.unwrap_or_else(|| "minecraft:plains".to_string()),
             light.unwrap_or(0),
+            entity.as_deref(),
         );
     }
 

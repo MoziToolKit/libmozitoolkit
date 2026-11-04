@@ -579,7 +579,7 @@ fn test_scene_export_pbr_channels_and_colormaps_roundtrip() {
     assert!(reader.read_biome_resolver().unwrap().is_some());
 
     // Explicitly install colormaps and verify active resident colormaps sampled the custom grass color (10, 220, 30)
-    reader.install_colormaps();
+    reader.install_colormaps().unwrap();
     let active_cms = mtk_material::get_default_colormaps();
     let sampled_grass = active_cms.sample_grass_linear(0.8, 0.4);
     // Component R in [0..1] should be close to 10/255 ~ 0.039 (converted to linear space)

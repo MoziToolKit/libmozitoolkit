@@ -225,13 +225,13 @@ pub fn load_and_mesh_minecraft_save(
         }
     }
 
-    let (mesh, world_profile, dynamic_entity_atlases) = py
+    let (mesh, world_profile, dynamic_entity_atlases, dynamic_entity_slots) = py
         .detach(|| {
             world.ensure_dynamic_entities_resolved_sync_with_progress(progress_ref);
             let m = world.rebuild_all_with_progress(progress_ref)?.clone();
             let p = world.last_profile.clone();
-            let (dyn_atlases, _) = world.dynamic_entity_atlases_if_used();
-            Ok::<_, mtk_voxel::VoxelError>((m, p, dyn_atlases))
+            let (dyn_atlases, dyn_slots) = world.dynamic_entity_atlases_if_used();
+            Ok::<_, mtk_voxel::VoxelError>((m, p, dyn_atlases, dyn_slots))
         })
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
@@ -250,7 +250,7 @@ pub fn load_and_mesh_minecraft_save(
             inner: mesh,
             profile: Some(final_profile),
             dynamic_entity_atlases,
-            dynamic_entity_slots: None,
+            dynamic_entity_slots,
         },
         PyLevelData {
             inner: level_data,

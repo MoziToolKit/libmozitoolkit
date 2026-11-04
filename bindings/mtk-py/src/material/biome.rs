@@ -634,3 +634,9 @@ pub fn compute_mesh_biome_attributes_from_storage(
     dict.set_item("tint_colors", tint_colors)?;
     Ok(dict.into())
 }
+
+/// Clears any cached resource-pack colormap overrides, falling back to embedded vanilla.
+#[pyfunction]
+pub fn clear_cached_colormaps() {
+    mtk_material::biome::clear_cached_colormaps();
+}

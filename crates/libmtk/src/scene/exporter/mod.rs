@@ -97,46 +97,54 @@ pub fn build_scene_interchange<S: SceneAtlasSource>(
         req.dynamic_entity_slots,
     )?;
 
-    // 4. Extract resident colormaps and biome_resolver from atlas_source
+    // 4. Extract resident colormaps and biome_resolver from atlas_source using declared capabilities
+    let source_caps = req.atlas_source.capabilities();
     let mut colormaps = Vec::new();
-    for cm_name in &["grass", "foliage", "dry_foliage"] {
-        match req.atlas_source.get_colormap(cm_name) {
-            Ok(Some(bytes)) => {
-                if bytes.len() >= 8
-                    && bytes[0..8] == [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]
-                {
-                    colormaps.push((cm_name.to_string(), bytes));
-                } else {
+    if source_caps.has_colormaps {
+        for cm_name in &["grass", "foliage", "dry_foliage"] {
+            match req.atlas_source.get_colormap(cm_name) {
+                Ok(Some(bytes)) => {
+                    if bytes.len() >= 8
+                        && bytes[0..8] == [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]
+                    {
+                        colormaps.push((cm_name.to_string(), bytes));
+                    } else {
+                        return Err(MtkError::Resource(
+                            mtk_resource::error::ResourceError::NotFound(format!(
+                                "Corrupted colormap '{cm_name}': invalid PNG signature"
+                            )),
+                        ));
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => {
                     return Err(MtkError::Resource(
                         mtk_resource::error::ResourceError::NotFound(format!(
-                            "Corrupted colormap '{cm_name}': invalid PNG signature"
+                            "Failed reading colormap '{cm_name}' from asset source: {e}"
                         )),
                     ));
                 }
             }
-            Ok(None) => {}
+        }
+    }
+
+    let biome_resolver_json = if source_caps.has_biome_resolver {
+        match req.atlas_source.get_biome_resolver_json() {
+            Ok(Some(json)) => {
+                mtk_material::BiomeResolver::from_json(&json)?;
+                Some(json)
+            }
+            Ok(None) => None,
             Err(e) => {
                 return Err(MtkError::Resource(
                     mtk_resource::error::ResourceError::NotFound(format!(
-                        "Failed reading colormap '{cm_name}' from asset source: {e}"
+                        "Failed reading biome resolver from asset source: {e}"
                     )),
                 ));
             }
         }
-    }
-    let biome_resolver_json = match req.atlas_source.get_biome_resolver_json() {
-        Ok(Some(json)) => {
-            mtk_material::BiomeResolver::from_json(&json)?;
-            Some(json)
-        }
-        Ok(None) => None,
-        Err(e) => {
-            return Err(MtkError::Resource(
-                mtk_resource::error::ResourceError::NotFound(format!(
-                    "Failed reading biome resolver from asset source: {e}"
-                )),
-            ));
-        }
+    } else {
+        None
     };
 
     // 5. Delegate stitching, PBR decoding, and model tree-shaking to AtlasBuilder
@@ -160,7 +168,14 @@ pub fn export_scene_package<S: SceneAtlasSource>(
 ) -> Result<SceneExportResult, MtkError> {
     let voxels = req.voxels;
     let dynamic_entity_slots = req.dynamic_entity_slots.cloned();
-    let result = build_scene_interchange(req)?;
+    let mut result = build_scene_interchange(req)?;
+    if dynamic_entity_slots
+        .as_ref()
+        .map(|s| !s.is_empty())
+        .unwrap_or(false)
+    {
+        result.metadata.capabilities.has_dynamic_entities = true;
+    }
 
     let mut write_req =
         SceneWriteRequest::new(&result.metadata, voxels, &result.mini_atlas_textures);

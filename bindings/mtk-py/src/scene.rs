@@ -17,6 +17,55 @@ use crate::point_cloud::PyVoxelPointCloud;
 use crate::resource::PyAssetCache;
 use crate::texture::PyBakedAtlas;
 
+/// Capabilities declared by a scene package.
+#[pyclass(name = "SceneCapabilities")]
+#[derive(Debug, Clone)]
+pub struct PySceneCapabilities {
+    pub(crate) inner: libmtk::SceneCapabilities,
+}
+
+#[pymethods]
+impl PySceneCapabilities {
+    #[getter]
+    pub fn has_colormaps(&self) -> bool {
+        self.inner.has_colormaps
+    }
+
+    #[getter]
+    pub fn has_ctm(&self) -> bool {
+        self.inner.has_ctm
+    }
+
+    #[getter]
+    pub fn has_pbr(&self) -> bool {
+        self.inner.has_pbr
+    }
+
+    #[getter]
+    pub fn has_dynamic_entities(&self) -> bool {
+        self.inner.has_dynamic_entities
+    }
+
+    pub fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+        let dict = pyo3::types::PyDict::new(py);
+        dict.set_item("has_colormaps", self.inner.has_colormaps)?;
+        dict.set_item("has_ctm", self.inner.has_ctm)?;
+        dict.set_item("has_pbr", self.inner.has_pbr)?;
+        dict.set_item("has_dynamic_entities", self.inner.has_dynamic_entities)?;
+        Ok(dict)
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "SceneCapabilities(has_colormaps={}, has_ctm={}, has_pbr={}, has_dynamic_entities={})",
+            self.inner.has_colormaps,
+            self.inner.has_ctm,
+            self.inner.has_pbr,
+            self.inner.has_dynamic_entities
+        )
+    }
+}
+
 /// Python wrapper for Scene Interchange metadata (`META` chunk).
 #[pyclass(name = "SceneMetadata")]
 #[derive(Debug, Clone)]
@@ -123,6 +172,38 @@ impl PySceneMetadata {
             self.inner.unique_states_count,
             self.inner.atlas_resolution[0],
             self.inner.atlas_resolution[1]
+        )
+    }
+}
+
+/// Result of scene package integrity and capability validation.
+#[pyclass(name = "ValidationReport")]
+#[derive(Debug, Clone)]
+pub struct PyValidationReport {
+    #[pyo3(get)]
+    pub is_valid: bool,
+    #[pyo3(get)]
+    pub errors: Vec<String>,
+    #[pyo3(get)]
+    pub warnings: Vec<String>,
+}
+
+#[pymethods]
+impl PyValidationReport {
+    pub fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+        let dict = pyo3::types::PyDict::new(py);
+        dict.set_item("is_valid", self.is_valid)?;
+        dict.set_item("errors", self.errors.clone())?;
+        dict.set_item("warnings", self.warnings.clone())?;
+        Ok(dict)
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "ValidationReport(is_valid={}, errors={}, warnings={})",
+            self.is_valid,
+            self.errors.len(),
+            self.warnings.len()
         )
     }
 }
@@ -243,18 +324,16 @@ impl PyScenePackageReader {
     }
 
     /// Performs an integrity check on models, atlas, colormaps, and CTM rules.
-    pub fn validate(&self) -> PyResult<bool> {
+    pub fn validate(&self) -> PyResult<PyValidationReport> {
         let report = self
             .inner
             .validate()
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-        if !report.is_valid {
-            return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                "Scene package validation failed: {}",
-                report.errors.join("; ")
-            )));
-        }
-        Ok(true)
+        Ok(PyValidationReport {
+            is_valid: report.is_valid,
+            errors: report.errors,
+            warnings: report.warnings,
+        })
     }
 
     /// Reads packaged colormaps into a parsed VanillaColormaps structure.
@@ -267,8 +346,24 @@ impl PyScenePackageReader {
     }
 
     /// Re-installs or updates the resident colormaps from this package into the active palette cache.
-    pub fn install_colormaps(&self) {
-        self.inner.install_colormaps();
+    pub fn install_colormaps(&self) -> PyResult<()> {
+        self.inner
+            .install_colormaps()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+    }
+
+    /// Returns the effective capabilities of this package with chunk probing fallback for legacy packages.
+    pub fn effective_capabilities<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+        let caps = self.inner.effective_capabilities();
+        let dict = pyo3::types::PyDict::new(py);
+        dict.set_item("has_colormaps", caps.has_colormaps)?;
+        dict.set_item("has_ctm", caps.has_ctm)?;
+        dict.set_item("has_pbr", caps.has_pbr)?;
+        dict.set_item("has_dynamic_entities", caps.has_dynamic_entities)?;
+        Ok(dict)
     }
 
     /// Checks whether dynamic entity slots mapping is carried in this package.
