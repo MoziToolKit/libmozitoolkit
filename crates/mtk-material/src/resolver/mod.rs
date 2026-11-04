@@ -24,36 +24,15 @@ pub fn clean_identifier(raw: &str) -> String {
         }
     }
 
-    // 3. Strip standard namespace / path / exporter prefixes
+    // 3. Strip canonical Minecraft namespace and path prefixes
     let prefixes = [
+        "minecraft:",
         "tex/minecraft/",
         "textures/block/",
         "textures/entity/",
         "textures/item/",
         "textures/banner/",
         "textures/",
-        "minecraft_block-",
-        "minecraft_entity-",
-        "minecraft_item-",
-        "minecraft_banner-",
-        "minecraft_block_",
-        "minecraft_entity_",
-        "minecraft_item_",
-        "jmc2obj_block-",
-        "jmc2obj_block_",
-        "jmc2obj_entity-",
-        "jmc2obj_item-",
-        "jmc2obj_",
-        "minecraft:",
-        "minecraft-",
-        "mw_",
-        "mwo_",
-        "tile_",
-        "tile-",
-        "tile.",
-        "block_",
-        "block-",
-        "block.",
         "block/",
         "entity/",
         "item/",
@@ -63,23 +42,6 @@ pub fn clean_identifier(raw: &str) -> String {
         if s.starts_with(prefix) {
             s = s[prefix.len()..].to_string();
             break;
-        }
-    }
-
-    // 4. Strip exporter biome suffixes.
-    //
-    // Longest match wins: a naive `ends_with` loop would truncate
-    // `stone_dark_forest` to `stone_dark` because `_forest` is checked first.
-    if s.contains('-') || s.contains('_') {
-        let biome_suffixes = builtin_biome_suffixes();
-        let mut matched_len = 0usize;
-        for suffix in biome_suffixes {
-            if suffix.len() > matched_len && s.ends_with(suffix.as_str()) {
-                matched_len = suffix.len();
-            }
-        }
-        if matched_len > 0 {
-            s.truncate(s.len() - matched_len);
         }
     }
 
@@ -340,56 +302,6 @@ impl MaterialResolver {
                             return Some((res_loc, sprite_loc));
                         }
                     }
-                }
-            }
-        }
-
-        // 3.5. Built-in legacy redstone material alias fallbacks (Mineways / Jmc2Obj)
-        if cleaned.starts_with("redstone_dust") || cleaned.starts_with("redstone_wire") {
-            let base = cleaned
-                .strip_suffix("_on")
-                .or_else(|| cleaned.strip_suffix("_off"))
-                .unwrap_or(&cleaned);
-            let candidates: &[&str] = match base {
-                "redstone_dust_line0" | "redstone_wire_line0" => &[
-                    "block/redstone_dust_line0",
-                    "block/redstone_dust_overlay",
-                    "block/redstone_dust_dot",
-                ],
-                "redstone_dust_line1" | "redstone_wire_line1" => &[
-                    "block/redstone_dust_line1",
-                    "block/redstone_dust_overlay",
-                    "block/redstone_dust_dot",
-                ],
-                "redstone_dust_dot" | "redstone_wire_dot" => {
-                    &["block/redstone_dust_dot", "block/redstone_dust_overlay"]
-                }
-                "redstone_dust_angled" | "redstone_wire_angled" => &[
-                    "block/redstone_dust_line0",
-                    "block/redstone_dust_line1",
-                    "block/redstone_dust_overlay",
-                ],
-                "redstone_dust_three_way" | "redstone_wire_three_way" => &[
-                    "block/redstone_dust_line1",
-                    "block/redstone_dust_overlay",
-                    "block/redstone_dust_dot",
-                ],
-                "redstone_dust_four_way" | "redstone_dust_cross" | "redstone_wire_four_way" => &[
-                    "block/redstone_dust_dot",
-                    "block/redstone_dust_line1",
-                    "block/redstone_dust_overlay",
-                ],
-                "redstone_dust_overlay" | "redstone_wire_overlay" => {
-                    &["block/redstone_dust_overlay"]
-                }
-                _ => &[],
-            };
-
-            for &cand in candidates {
-                if let Some(sprite_loc) = address_map.lookup_str(cand) {
-                    let res_loc = ResourceLocation::parse(cand)
-                        .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand));
-                    return Some((res_loc, sprite_loc));
                 }
             }
         }

@@ -50,9 +50,8 @@ fn test_uv_remap_real_fabric_jar_and_spbr() {
     // =========================================================================
     // Scenario 1: Standard Static Block (e.g. Stone, Dirt, Oak Planks)
     // =========================================================================
-    let (stone_res, stone_sprite) =
-        MaterialResolver::resolve("minecraft_block-stone", None, address_map)
-            .expect("Failed to resolve jmc2obj stone");
+    let (stone_res, stone_sprite) = MaterialResolver::resolve("block/stone", None, address_map)
+        .expect("Failed to resolve canonical stone");
 
     assert_eq!(stone_res.path, "block/stone");
     assert!(!stone_sprite.is_animated);
@@ -77,8 +76,8 @@ fn test_uv_remap_real_fabric_jar_and_spbr() {
     );
 
     // Bedrock must resolve to block/bedrock, NOT red_bed!
-    let (bedrock_res, _) = MaterialResolver::resolve("minecraft_block-bedrock", None, address_map)
-        .expect("Failed to resolve jmc2obj bedrock");
+    let (bedrock_res, _) = MaterialResolver::resolve("block/bedrock", None, address_map)
+        .expect("Failed to resolve canonical bedrock");
     assert_eq!(bedrock_res.path, "block/bedrock");
     assert_ne!(bedrock_res.path, "block/red_bed");
 
@@ -89,7 +88,7 @@ fn test_uv_remap_real_fabric_jar_and_spbr() {
     let animated_names = ["water_still", "lava_still", "fire_0", "sea_lantern"];
     for anim_name in animated_names {
         if let Some((anim_res, _)) =
-            MaterialResolver::resolve(&format!("minecraft_block-{}", anim_name), None, address_map)
+            MaterialResolver::resolve(&format!("block/{}", anim_name), None, address_map)
         {
             if let Some(anim_sprite) = address_map.lookup_animated(&anim_res) {
                 println!(

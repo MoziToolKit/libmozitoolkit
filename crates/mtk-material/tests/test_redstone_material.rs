@@ -114,26 +114,75 @@ fn test_material_resolver_redstone_aliases() {
         make_sprite_loc(0, 13, [0.75, 0.0, 1.0, 0.25]),
     );
 
-    // Test on/off suffix stripping
-    let res_line0_on = MaterialResolver::resolve("redstone_dust_line0_on", None, &address_map);
+    // Test resolution via external custom aliases (provided by Python layer)
+    let mut custom_aliases = std::collections::HashMap::new();
+    custom_aliases.insert(
+        "redstone_dust_line0_on".to_string(),
+        vec!["block/redstone_dust_line0".to_string()],
+    );
+    custom_aliases.insert(
+        "redstone_dust_line1_off".to_string(),
+        vec!["block/redstone_dust_line1".to_string()],
+    );
+    custom_aliases.insert(
+        "redstone_dust_angled_on".to_string(),
+        vec!["block/redstone_dust_line0".to_string()],
+    );
+    custom_aliases.insert(
+        "redstone_dust_three_way_off".to_string(),
+        vec!["block/redstone_dust_line1".to_string()],
+    );
+    custom_aliases.insert(
+        "redstone_dust_four_way_on".to_string(),
+        vec!["block/redstone_dust_dot".to_string()],
+    );
+    custom_aliases.insert(
+        "redstone_dust_cross_off".to_string(),
+        vec!["block/redstone_dust_dot".to_string()],
+    );
+
+    let res_line0_on = MaterialResolver::resolve(
+        "redstone_dust_line0_on",
+        Some(&custom_aliases),
+        &address_map,
+    );
     assert!(res_line0_on.is_some());
     assert_eq!(res_line0_on.unwrap().0.path, "block/redstone_dust_line0");
 
-    let res_line1_off = MaterialResolver::resolve("redstone_dust_line1_off", None, &address_map);
+    let res_line1_off = MaterialResolver::resolve(
+        "redstone_dust_line1_off",
+        Some(&custom_aliases),
+        &address_map,
+    );
     assert!(res_line1_off.is_some());
     assert_eq!(res_line1_off.unwrap().0.path, "block/redstone_dust_line1");
 
     // Test angled, three_way, four_way, and cross aliases
-    let res_angled = MaterialResolver::resolve("redstone_dust_angled_on", None, &address_map);
+    let res_angled = MaterialResolver::resolve(
+        "redstone_dust_angled_on",
+        Some(&custom_aliases),
+        &address_map,
+    );
     assert_eq!(res_angled.unwrap().0.path, "block/redstone_dust_line0");
 
-    let res_three_way =
-        MaterialResolver::resolve("redstone_dust_three_way_off", None, &address_map);
+    let res_three_way = MaterialResolver::resolve(
+        "redstone_dust_three_way_off",
+        Some(&custom_aliases),
+        &address_map,
+    );
     assert_eq!(res_three_way.unwrap().0.path, "block/redstone_dust_line1");
 
-    let res_four_way = MaterialResolver::resolve("redstone_dust_four_way_on", None, &address_map);
+    let res_four_way = MaterialResolver::resolve(
+        "redstone_dust_four_way_on",
+        Some(&custom_aliases),
+        &address_map,
+    );
     assert_eq!(res_four_way.unwrap().0.path, "block/redstone_dust_dot");
 
-    let res_cross = MaterialResolver::resolve("redstone_dust_cross_off", None, &address_map);
+    let res_cross = MaterialResolver::resolve(
+        "redstone_dust_cross_off",
+        Some(&custom_aliases),
+        &address_map,
+    );
     assert_eq!(res_cross.unwrap().0.path, "block/redstone_dust_dot");
 }

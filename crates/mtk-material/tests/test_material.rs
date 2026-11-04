@@ -63,22 +63,6 @@ fn test_clean_identifier() {
 }
 
 #[test]
-fn test_clean_identifier_strips_longest_biome_suffix() {
-    // Short suffixes (`_forest`) must never win over longer ones (`_dark_forest`).
-    assert_eq!(clean_identifier("stone_dark_forest"), "stone");
-    assert_eq!(clean_identifier("stone-dark_forest"), "stone");
-    assert_eq!(clean_identifier("stone_birch_forest"), "stone");
-    assert_eq!(clean_identifier("stone_cherry_grove"), "stone");
-    assert_eq!(clean_identifier("stone_forest"), "stone");
-    assert_eq!(clean_identifier("stone_y"), "stone");
-    // Slash-qualified names keep their namespace, only the suffix is stripped.
-    assert_eq!(
-        clean_identifier("mod:block/stone_dark_forest"),
-        "mod:block/stone"
-    );
-}
-
-#[test]
 fn test_resolver_and_atlas_projection() {
     let mut address_map = AtlasAddressMap::new();
     let stone_loc = ResourceLocation::new("minecraft", "block/stone");
