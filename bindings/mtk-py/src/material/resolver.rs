@@ -444,9 +444,6 @@ impl PyBiomeResolver {
         dict.set_item("is_hardcoded", info.is_hardcoded)?;
         dict.set_item("hardcoded_color", info.hardcoded_color)?;
         dict.set_item("hardcoded_hex", info.hardcoded_hex)?;
-        dict.set_item("default_tint_weight", info.tint_weight)?;
-        dict.set_item("default_base_tint_weight", info.base_tint_weight)?;
-        dict.set_item("default_overlay_tint_weight", info.overlay_tint_weight)?;
         Ok(dict.into())
     }
 }

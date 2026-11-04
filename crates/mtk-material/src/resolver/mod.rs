@@ -413,21 +413,6 @@ impl MaterialResolver {
             }
         }
 
-        // 3.7 Built-in legacy/modded material fallbacks.
-        let fallback_rules = builtin_material_fallbacks();
-        for rule in fallback_rules {
-            let keyword = rule.keyword.to_lowercase();
-            if raw_material_name.to_lowercase().contains(&keyword) || cleaned.contains(&keyword) {
-                for cand in &rule.candidates {
-                    if let Some(sprite_loc) = address_map.lookup_str(cand) {
-                        let res_loc = ResourceLocation::parse(cand)
-                            .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand));
-                        return Some((res_loc, sprite_loc));
-                    }
-                }
-            }
-        }
-
         // 4. Default standard Minecraft category fallbacks
         let fallbacks = [
             format!("block/{}", cleaned),

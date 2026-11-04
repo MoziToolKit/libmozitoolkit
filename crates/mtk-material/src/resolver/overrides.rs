@@ -94,7 +94,6 @@ pub fn builtin_biome_suffixes() -> &'static [String] {
             "_cherry_grove",
             "_cold_ocean",
             "_warm_ocean",
-            "_y",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -104,36 +103,9 @@ pub fn builtin_biome_suffixes() -> &'static [String] {
     })
 }
 
-/// Built-in fallbacks for modded/legacy leaves and logs.
+/// Built-in fallbacks for legacy/modded materials (retired, now owned by Python layer).
 pub fn builtin_material_fallbacks() -> &'static [MaterialFallbackRule] {
-    static RULES: std::sync::OnceLock<Vec<MaterialFallbackRule>> = std::sync::OnceLock::new();
-    RULES.get_or_init(|| {
-        vec![
-            MaterialFallbackRule {
-                keyword: "leaves".to_string(),
-                candidates: vec![
-                    "block/oak_leaves".to_string(),
-                    "minecraft:block/oak_leaves".to_string(),
-                    "block/leaves".to_string(),
-                ],
-            },
-            MaterialFallbackRule {
-                keyword: "leaf".to_string(),
-                candidates: vec![
-                    "block/oak_leaves".to_string(),
-                    "minecraft:block/oak_leaves".to_string(),
-                    "block/leaves".to_string(),
-                ],
-            },
-            MaterialFallbackRule {
-                keyword: "log".to_string(),
-                candidates: vec![
-                    "block/oak_log".to_string(),
-                    "minecraft:block/oak_log".to_string(),
-                ],
-            },
-        ]
-    })
+    &[]
 }
 
 /// Parses a JSON compatibility profile.
@@ -195,10 +167,7 @@ mod tests {
         assert!(overrides
             .effective_biome_suffixes()
             .contains(&"_forest".to_string()));
-        assert!(overrides
-            .effective_material_fallbacks()
-            .iter()
-            .any(|rule| rule.keyword == "leaves"));
+        assert!(overrides.effective_material_fallbacks().is_empty());
     }
 
     #[test]
@@ -208,7 +177,7 @@ mod tests {
             suffixes.windows(2).all(|w| w[0].len() >= w[1].len()),
             "suffix list must be ordered longest-first"
         );
-        for required in ["_dark_forest", "-dark_forest", "_cherry_grove", "_y"] {
+        for required in ["_dark_forest", "-dark_forest", "_cherry_grove"] {
             assert!(
                 suffixes.iter().any(|suffix| suffix == required),
                 "missing built-in suffix {required}"

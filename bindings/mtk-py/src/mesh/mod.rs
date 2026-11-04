@@ -4,7 +4,6 @@
 //! buffer protocol and memoryview support for ultrafast Blender vertex injection.
 
 pub mod attributes;
-#[cfg(feature = "blender")]
 pub mod memoryview;
 pub mod topology;
 
@@ -17,7 +16,6 @@ use mtk_core::mesh::MeshData;
 use mtk_core::polygon::FlatPolygonMesh;
 
 pub use crate::attributes::PyAttributeDomain;
-#[cfg(feature = "blender")]
 
 /// Python-facing wrapper around contiguous `MeshData`.
 #[pyclass(name = "MeshData")]
