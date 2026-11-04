@@ -256,6 +256,7 @@ pub fn sample_colormap_colors(
     has_custom_foliage=false,
     has_custom_dry_foliage=false,
     face_biomes=None,
+    colormaps=None,
 ))]
 pub fn compute_biome_tint_attributes(
     py: Python<'_>,
@@ -273,9 +274,11 @@ pub fn compute_biome_tint_attributes(
     has_custom_foliage: bool,
     has_custom_dry_foliage: bool,
     face_biomes: Option<Vec<String>>,
+    colormaps: Option<&PyVanillaColormaps>,
 ) -> PyResult<Py<PyAny>> {
     let default_resolver = mtk_material::BiomeResolver::new();
     let res_ref = resolver.map(|r| &r.inner).unwrap_or(&default_resolver);
+    let cms_ref = colormaps.map(|c| c.inner.as_ref());
 
     let res = py.detach(|| {
         if let Some(ref biomes) = face_biomes {
@@ -302,17 +305,19 @@ pub fn compute_biome_tint_attributes(
                 has_custom_foliage,
                 has_custom_dry_foliage,
             };
-            mtk_material::compute_mesh_biome_attributes_custom(
+            mtk_material::compute_mesh_biome_attributes_custom_with_colormaps(
                 &face_texture_keys,
                 &settings,
                 res_ref,
+                cms_ref,
             )
         } else {
-            mtk_material::compute_mesh_biome_attributes(
+            mtk_material::compute_mesh_biome_attributes_with_colormaps(
                 &face_texture_keys,
                 biome_name,
                 multi_biomes.as_deref(),
                 res_ref,
+                cms_ref,
             )
         }
     });
@@ -340,6 +345,7 @@ pub fn compute_biome_tint_attributes(
     has_custom_grass=false,
     has_custom_foliage=false,
     has_custom_dry_foliage=false,
+    colormaps=None,
 ))]
 pub fn compute_biome_tint_attributes_paletted<'py>(
     py: Python<'py>,
@@ -357,10 +363,12 @@ pub fn compute_biome_tint_attributes_paletted<'py>(
     has_custom_grass: bool,
     has_custom_foliage: bool,
     has_custom_dry_foliage: bool,
+    colormaps: Option<&PyVanillaColormaps>,
 ) -> PyResult<(Bound<'py, PyMemoryView>, Bound<'py, PyMemoryView>)> {
     let indices = BorrowedU32Buffer::extract(face_indices)?;
     let default_resolver = mtk_material::BiomeResolver::new();
     let res_ref = resolver.map(|r| &r.inner).unwrap_or(&default_resolver);
+    let cms_ref = colormaps.map(|c| c.inner.as_ref());
 
     let custom = if biome_name.eq_ignore_ascii_case("custom")
         || custom_temp.is_some()
@@ -385,8 +393,12 @@ pub fn compute_biome_tint_attributes_paletted<'py>(
         None
     };
 
-    let (colors, cg, cf, cdf) =
-        mtk_material::resolve_biome_color_set(biome_name, multi_biomes.as_deref(), custom.as_ref());
+    let (colors, cg, cf, cdf) = mtk_material::resolve_biome_color_set_with_colormaps(
+        biome_name,
+        multi_biomes.as_deref(),
+        custom.as_ref(),
+        cms_ref,
+    );
     let result = py.detach(|| {
         mtk_material::compute_mesh_biome_attributes_paletted_flat(
             &palette,
@@ -493,6 +505,7 @@ pub fn reapply_uniform_biome_tint<'py>(
     storage,
     resolver=None,
     smooth=true,
+    colormaps=None,
 ))]
 pub fn compute_mesh_biome_attributes_from_storage(
     py: Python<'_>,
@@ -503,10 +516,13 @@ pub fn compute_mesh_biome_attributes_from_storage(
     storage: &PyVoxelStorage,
     resolver: Option<&PyBiomeResolver>,
     smooth: bool,
+    colormaps: Option<&PyVanillaColormaps>,
 ) -> PyResult<Py<PyAny>> {
     let face_count = face_texture_keys.len();
     let default_resolver = mtk_material::BiomeResolver::new();
     let res_ref = resolver.map(|r| &r.inner).unwrap_or(&default_resolver);
+    let default_cms = mtk_material::get_default_colormaps();
+    let effective_cms = colormaps.map(|c| c.inner.as_ref()).unwrap_or(&default_cms);
 
     let (packed_tint_data, tint_colors) = py.detach(|| {
         let mut packed = Vec::with_capacity(face_count);
@@ -545,9 +561,41 @@ pub fn compute_mesh_biome_attributes_from_storage(
             let tint_info = res_ref.get_tint_info(key, None, None);
             let tt = tint_info.tint_type;
             let (c, has_custom) = match tt {
-                mtk_material::TINT_TYPE_GRASS => (col.grass_color, has_cg),
-                mtk_material::TINT_TYPE_FOLIAGE => (col.foliage_color, has_cf),
-                mtk_material::TINT_TYPE_DRY_FOLIAGE => (col.dry_foliage_color, has_cdf),
+                mtk_material::TINT_TYPE_GRASS => {
+                    if has_cg {
+                        (col.grass_color, true)
+                    } else {
+                        (
+                            effective_cms
+                                .sample_grass_linear_uv(col.colormap_uv[0], col.colormap_uv[1]),
+                            false,
+                        )
+                    }
+                }
+                mtk_material::TINT_TYPE_FOLIAGE => {
+                    if has_cf {
+                        (col.foliage_color, true)
+                    } else {
+                        (
+                            effective_cms
+                                .sample_foliage_linear_uv(col.colormap_uv[0], col.colormap_uv[1]),
+                            false,
+                        )
+                    }
+                }
+                mtk_material::TINT_TYPE_DRY_FOLIAGE => {
+                    if has_cdf {
+                        (col.dry_foliage_color, true)
+                    } else {
+                        (
+                            effective_cms.sample_dry_foliage_linear_uv(
+                                col.colormap_uv[0],
+                                col.colormap_uv[1],
+                            ),
+                            false,
+                        )
+                    }
+                }
                 mtk_material::TINT_TYPE_WATER => (col.water_color, false),
                 mtk_material::TINT_TYPE_HARDCODED => (
                     tint_info.hardcoded_color.unwrap_or([1.0, 1.0, 1.0, 1.0]),

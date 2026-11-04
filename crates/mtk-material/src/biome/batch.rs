@@ -3,6 +3,7 @@
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
+use super::colormap::VanillaColormaps;
 use super::hardcoded::{
     TINT_TYPE_DRY_FOLIAGE, TINT_TYPE_FOLIAGE, TINT_TYPE_GRASS, TINT_TYPE_HARDCODED, TINT_TYPE_WATER,
 };
@@ -54,8 +55,19 @@ pub fn resolve_biome_color_set(
     multi_biomes: Option<&[(String, f32)]>,
     custom: Option<&CustomBiomeSettings>,
 ) -> (BiomeColorSet, bool, bool, bool) {
+    resolve_biome_color_set_with_colormaps(biome_name, multi_biomes, custom, None)
+}
+
+/// Resolves the four tint channels and custom flags for a biome preset using explicit colormaps.
+pub fn resolve_biome_color_set_with_colormaps(
+    biome_name: &str,
+    multi_biomes: Option<&[(String, f32)]>,
+    custom: Option<&CustomBiomeSettings>,
+    colormaps: Option<&VanillaColormaps>,
+) -> (BiomeColorSet, bool, bool, bool) {
     if let Some(settings) = custom {
-        let cms = super::colormap::get_default_colormaps();
+        let default_cms = super::colormap::get_default_colormaps();
+        let cms = colormaps.unwrap_or(&default_cms);
         let default_pal = get_biome_palette("plains");
         let sampled_grass = cms.sample_grass_linear(settings.temperature, settings.humidity);
         let sampled_foliage = cms.sample_foliage_linear(settings.temperature, settings.humidity);
@@ -92,11 +104,28 @@ pub fn resolve_biome_color_set(
     }
 
     let pal = get_biome_palette(biome_name);
+    let default_cms = super::colormap::get_default_colormaps();
+    let cms = colormaps.unwrap_or(&default_cms);
+    let grass = if !pal.has_custom_grass {
+        cms.sample_grass_linear(pal.temperature, pal.humidity)
+    } else {
+        pal.grass_linear()
+    };
+    let foliage = if !pal.has_custom_foliage {
+        cms.sample_foliage_linear(pal.temperature, pal.humidity)
+    } else {
+        pal.foliage_linear()
+    };
+    let dry_foliage = if !pal.has_custom_dry_foliage {
+        cms.sample_dry_foliage_linear(pal.temperature, pal.humidity)
+    } else {
+        pal.dry_foliage_linear()
+    };
     (
         BiomeColorSet {
-            grass: pal.grass_linear(),
-            foliage: pal.foliage_linear(),
-            dry_foliage: pal.dry_foliage_linear(),
+            grass,
+            foliage,
+            dry_foliage,
             water: pal.water_linear(),
         },
         pal.has_custom_grass,
@@ -120,6 +149,16 @@ pub fn compute_mesh_biome_attributes_custom(
     custom: &CustomBiomeSettings,
     resolver: &BiomeResolver,
 ) -> MeshBiomeAttributesResult {
+    compute_mesh_biome_attributes_custom_with_colormaps(face_texture_keys, custom, resolver, None)
+}
+
+/// Compute biome tinting attributes in parallel across all mesh faces with custom biome settings and explicit colormaps.
+pub fn compute_mesh_biome_attributes_custom_with_colormaps(
+    face_texture_keys: &[String],
+    custom: &CustomBiomeSettings,
+    resolver: &BiomeResolver,
+    colormaps: Option<&VanillaColormaps>,
+) -> MeshBiomeAttributesResult {
     let face_count = face_texture_keys.len();
     if face_count == 0 {
         return MeshBiomeAttributesResult {
@@ -128,7 +167,8 @@ pub fn compute_mesh_biome_attributes_custom(
         };
     }
 
-    let cms = super::colormap::get_default_colormaps();
+    let default_cms = super::colormap::get_default_colormaps();
+    let cms = colormaps.unwrap_or(&default_cms);
     let default_pal = get_biome_palette("plains");
     let sampled_grass = cms.sample_grass_linear(custom.temperature, custom.humidity);
     let sampled_foliage = cms.sample_foliage_linear(custom.temperature, custom.humidity);
@@ -214,6 +254,23 @@ pub fn compute_mesh_biome_attributes(
     multi_biomes: Option<&[(String, f32)]>,
     resolver: &BiomeResolver,
 ) -> MeshBiomeAttributesResult {
+    compute_mesh_biome_attributes_with_colormaps(
+        face_texture_keys,
+        biome_name,
+        multi_biomes,
+        resolver,
+        None,
+    )
+}
+
+/// Compute biome tinting attributes in parallel across all mesh faces using explicit colormaps.
+pub fn compute_mesh_biome_attributes_with_colormaps(
+    face_texture_keys: &[String],
+    biome_name: &str,
+    multi_biomes: Option<&[(String, f32)]>,
+    resolver: &BiomeResolver,
+    colormaps: Option<&VanillaColormaps>,
+) -> MeshBiomeAttributesResult {
     let face_count = face_texture_keys.len();
     if face_count == 0 {
         return MeshBiomeAttributesResult {
@@ -237,10 +294,27 @@ pub fn compute_mesh_biome_attributes(
             )
         } else {
             let pal = get_biome_palette(biome_name);
+            let default_cms = super::colormap::get_default_colormaps();
+            let cms = colormaps.unwrap_or(&default_cms);
+            let grass = if !pal.has_custom_grass {
+                cms.sample_grass_linear(pal.temperature, pal.humidity)
+            } else {
+                pal.grass_linear()
+            };
+            let foliage = if !pal.has_custom_foliage {
+                cms.sample_foliage_linear(pal.temperature, pal.humidity)
+            } else {
+                pal.foliage_linear()
+            };
+            let dry_foliage = if !pal.has_custom_dry_foliage {
+                cms.sample_dry_foliage_linear(pal.temperature, pal.humidity)
+            } else {
+                pal.dry_foliage_linear()
+            };
             (
-                pal.grass_linear(),
-                pal.foliage_linear(),
-                pal.dry_foliage_linear(),
+                grass,
+                foliage,
+                dry_foliage,
                 pal.water_linear(),
                 pal.has_custom_grass,
                 pal.has_custom_foliage,
