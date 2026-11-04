@@ -235,6 +235,32 @@ pub fn build_scene_atlas_and_models(
         has_dynamic_entities,
     };
 
+    let mut warnings = Vec::new();
+    for rule in &ctm_rules {
+        for tile in rule.tiles.iter().flatten() {
+            if mini_atlas_map.lookup(tile).is_none() {
+                warnings.push(format!(
+                    "CTM rule '{}' references tile '{}' not found in mini-atlas",
+                    rule.name, tile
+                ));
+            }
+        }
+    }
+    for (state, model) in &tree_shaken_models.models {
+        for element in &model.elements {
+            for face in element.faces.values() {
+                if !face.texture.is_empty()
+                    && mini_atlas_map.resolve_texture_key(&face.texture).is_none()
+                {
+                    warnings.push(format!(
+                        "Model state '{state}' references texture '{}' not found in mini-atlas",
+                        face.texture
+                    ));
+                }
+            }
+        }
+    }
+
     Ok(SceneExportResult {
         metadata,
         mini_atlas_map,
@@ -244,6 +270,6 @@ pub fn build_scene_atlas_and_models(
         colormaps,
         biome_resolver_json,
         ctm_rules,
-        warnings: Vec::new(),
+        warnings,
     })
 }

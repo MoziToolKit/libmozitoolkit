@@ -209,6 +209,9 @@ fn test_export_scene_package_file_roundtrip() {
         Some(15),
     );
 
+    let mut fake_slots = HashMap::new();
+    fake_slots.insert("unused_skin".to_string(), (65520u16, 2u16));
+
     let config = SceneExporterConfig::default();
     let export_res = export_scene_package(
         &temp_path,
@@ -219,7 +222,7 @@ fn test_export_scene_package_file_roundtrip() {
             atlas_source: &mut source_images,
             config: &config,
             dynamic_entity_atlases: None,
-            dynamic_entity_slots: None,
+            dynamic_entity_slots: Some(&fake_slots),
             ctm_mode: CtmMode::Disabled,
         },
         None,
@@ -227,12 +230,22 @@ fn test_export_scene_package_file_roundtrip() {
     .expect("Export scene package file");
 
     assert_eq!(export_res.sprite_count, 1);
+    assert!(!export_res.metadata.capabilities.has_dynamic_entities);
 
     // Read package back from disk
     let reader = crate::scene::ScenePackageReader::open_file(&temp_path)
         .expect("Open exported scene package");
     assert_eq!(reader.metadata().voxel_count, 1);
     assert_eq!(reader.metadata().bounds, [10, 60, 10, 5, 5, 5]);
+    assert!(!reader.has_dynamic_entity_slots());
+
+    let val_report = reader.validate().expect("Validate package");
+    assert!(
+        val_report.is_valid,
+        "Package must be valid even if unused dynamic slots were passed to exporter: {:?}",
+        val_report.errors
+    );
+    assert!(val_report.errors.is_empty());
 
     let read_voxels = reader.read_sparse_voxels().expect("Read voxels");
     assert_eq!(read_voxels.len(), 1);

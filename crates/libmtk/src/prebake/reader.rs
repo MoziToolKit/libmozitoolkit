@@ -199,10 +199,18 @@ impl AssetCacheReader {
     /// Loads a pre-populated `BannerBaker` containing cached base cloth and pattern sprites.
     pub fn load_banner_baker(&self) -> Result<mtk_texture::BannerBaker, MtkError> {
         let mut baker = mtk_texture::BannerBaker::default();
-        let base_png = self.reader.read_chunk_decompressed("banner/base").ok();
-        let patterns_raw = self.reader.read_chunk_decompressed("banner/patterns").ok();
-        let patterns: HashMap<String, Vec<u8>> = if let Some(ref bytes) = patterns_raw {
-            postcard::from_bytes(bytes).unwrap_or_default()
+        let base_png = if self.reader.has_chunk("banner/base") {
+            Some(self.reader.read_chunk_decompressed("banner/base")?)
+        } else {
+            None
+        };
+        let patterns: HashMap<String, Vec<u8>> = if self.reader.has_chunk("banner/patterns") {
+            let bytes = self.reader.read_chunk_decompressed("banner/patterns")?;
+            postcard::from_bytes(&bytes).map_err(|e| {
+                MtkError::Resource(mtk_resource::error::ResourceError::NotFound(format!(
+                    "Corrupted 'banner/patterns' chunk: {e}"
+                )))
+            })?
         } else {
             HashMap::new()
         };

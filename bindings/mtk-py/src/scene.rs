@@ -46,6 +46,16 @@ impl PySceneCapabilities {
         self.inner.has_dynamic_entities
     }
 
+    pub fn __getitem__(&self, key: &str) -> PyResult<bool> {
+        match key {
+            "has_colormaps" => Ok(self.inner.has_colormaps),
+            "has_ctm" => Ok(self.inner.has_ctm),
+            "has_pbr" => Ok(self.inner.has_pbr),
+            "has_dynamic_entities" => Ok(self.inner.has_dynamic_entities),
+            _ => Err(pyo3::exceptions::PyKeyError::new_err(key.to_string())),
+        }
+    }
+
     pub fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
         let dict = pyo3::types::PyDict::new(py);
         dict.set_item("has_colormaps", self.inner.has_colormaps)?;
@@ -126,16 +136,10 @@ impl PySceneMetadata {
     }
 
     #[getter]
-    pub fn capabilities<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let dict = PyDict::new(py);
-        dict.set_item("has_colormaps", self.inner.capabilities.has_colormaps)?;
-        dict.set_item("has_ctm", self.inner.capabilities.has_ctm)?;
-        dict.set_item("has_pbr", self.inner.capabilities.has_pbr)?;
-        dict.set_item(
-            "has_dynamic_entities",
-            self.inner.capabilities.has_dynamic_entities,
-        )?;
-        Ok(dict)
+    pub fn capabilities(&self) -> PySceneCapabilities {
+        PySceneCapabilities {
+            inner: self.inner.capabilities,
+        }
     }
 
     /// Converts metadata into a Python dictionary.
@@ -353,17 +357,10 @@ impl PyScenePackageReader {
     }
 
     /// Returns the effective capabilities of this package with chunk probing fallback for legacy packages.
-    pub fn effective_capabilities<'py>(
-        &self,
-        py: Python<'py>,
-    ) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
-        let caps = self.inner.effective_capabilities();
-        let dict = pyo3::types::PyDict::new(py);
-        dict.set_item("has_colormaps", caps.has_colormaps)?;
-        dict.set_item("has_ctm", caps.has_ctm)?;
-        dict.set_item("has_pbr", caps.has_pbr)?;
-        dict.set_item("has_dynamic_entities", caps.has_dynamic_entities)?;
-        Ok(dict)
+    pub fn effective_capabilities(&self) -> PySceneCapabilities {
+        PySceneCapabilities {
+            inner: self.inner.effective_capabilities(),
+        }
     }
 
     /// Checks whether dynamic entity slots mapping is carried in this package.

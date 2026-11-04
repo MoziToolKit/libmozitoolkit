@@ -367,7 +367,7 @@ pub fn crop_needed_sprites(
         if !visited_sprite_ids.insert(sprite_id.clone()) {
             continue;
         }
-        let aliases = sprite_id_to_keys
+        let mut aliases = sprite_id_to_keys
             .get(&sprite_id)
             .cloned()
             .unwrap_or_default();
@@ -472,6 +472,7 @@ pub fn crop_needed_sprites(
                         .or_else(|| source_atlas_map.lookup_str(base_name))
                 });
 
+                let mut matched_slot_key: Option<String> = None;
                 let resolved_slot: Option<(u16, u16)> = loc_opt
                     .and_then(|loc| {
                         if loc.chunk_id >= DYNAMIC_CHUNK_START {
@@ -488,25 +489,29 @@ pub fn crop_needed_sprites(
                     })
                     .or_else(|| {
                         dynamic_entity_slots.and_then(|slots| {
-                            slots
-                                .get(tex_key)
-                                .or_else(|| slots.get(stripped))
-                                .or_else(|| slots.get(base_name))
-                                .or_else(|| slots.get(&format!("minecraft:skin/{stripped}")))
-                                .or_else(|| slots.get(&format!("minecraft:skin/{base_name}")))
+                            let match_found = slots
+                                .get_key_value(tex_key)
+                                .or_else(|| slots.get_key_value(stripped))
+                                .or_else(|| slots.get_key_value(base_name))
                                 .or_else(|| {
-                                    slots.iter().find_map(|(k, v)| {
-                                        if k.eq_ignore_ascii_case(tex_key)
+                                    slots.get_key_value(&format!("minecraft:skin/{stripped}"))
+                                })
+                                .or_else(|| {
+                                    slots.get_key_value(&format!("minecraft:skin/{base_name}"))
+                                })
+                                .or_else(|| {
+                                    slots.iter().find(|(k, _)| {
+                                        k.eq_ignore_ascii_case(tex_key)
                                             || k.eq_ignore_ascii_case(stripped)
                                             || k.eq_ignore_ascii_case(base_name)
-                                        {
-                                            Some(v)
-                                        } else {
-                                            None
-                                        }
                                     })
-                                })
-                                .copied()
+                                });
+                            if let Some((k, v)) = match_found {
+                                matched_slot_key = Some(k.clone());
+                                Some(*v)
+                            } else {
+                                None
+                            }
                         })
                     })
                     .or_else(|| {
@@ -520,6 +525,11 @@ pub fn crop_needed_sprites(
                     });
 
                 if let Some((target_chunk_id, in_chunk_slot)) = resolved_slot {
+                    if let Some(slot_name) = matched_slot_key {
+                        if !aliases.contains(&slot_name) {
+                            aliases.push(slot_name);
+                        }
+                    }
                     let col = (in_chunk_slot as u32) % 16;
                     let row = (in_chunk_slot as u32) / 16;
                     let px = col * 64;

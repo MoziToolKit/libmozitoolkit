@@ -350,6 +350,17 @@ impl AtlasAddressMap {
                 return Some(loc);
             }
         }
+        let lower = key.to_ascii_lowercase();
+        if lower != key {
+            if let Some(loc) = self.lookup_str(&lower) {
+                return Some(loc);
+            }
+            for variant in TextureKeyVariants::for_key(&lower) {
+                if let Some(loc) = self.lookup_str(&variant) {
+                    return Some(loc);
+                }
+            }
+        }
         None
     }
 

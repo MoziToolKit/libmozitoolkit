@@ -240,6 +240,11 @@ impl PyAssetCache {
         Ok(cms.map(|c| crate::material::PyVanillaColormaps { inner: c }))
     }
 
+    /// Returns whether this asset cache carries packaged CTM rules.
+    pub fn has_ctm_rules(&self) -> bool {
+        self.inner.package_reader().has_chunk("ctm/rules")
+    }
+
     /// Explicitly installs colormaps from this cache into the process-level active singletons.
     pub fn install_colormaps(&self) -> PyResult<()> {
         self.inner

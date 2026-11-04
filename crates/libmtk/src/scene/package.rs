@@ -274,29 +274,42 @@ impl ScenePackageReader {
         if !caps.has_ctm && self.has_ctm_rules() {
             caps.has_ctm = true;
         }
-        if !caps.has_dynamic_entities
-            && (self.has_dynamic_entity_slots()
-                || self.reader.has_chunk(&format!(
-                    "atlas/textures/atlas_{}.png",
-                    mtk_core::constants::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID
-                )))
-        {
-            caps.has_dynamic_entities = true;
-        }
-        if !caps.has_pbr {
-            let has_pbr_chunk = (0..=16).any(|i| {
-                self.reader
-                    .has_chunk(&format!("atlas/textures/atlas_{i}_n.png"))
-                    || self
-                        .reader
-                        .has_chunk(&format!("atlas/textures/atlas_{i}_orm.png"))
-                    || self
-                        .reader
-                        .has_chunk(&format!("atlas/textures/atlas_{i}_aux.png"))
-            });
-            if has_pbr_chunk {
-                caps.has_pbr = true;
+        if let Ok(Some(map)) = self.read_atlas_mapping() {
+            if !caps.has_pbr {
+                caps.has_pbr = map.chunks.iter().any(|c| {
+                    c.has_normal
+                        || c.has_orm
+                        || c.has_aux
+                        || c.pbr.is_some()
+                        || self
+                            .reader
+                            .has_chunk(&format!("atlas/textures/{}_n.png", c.file_stem()))
+                        || self
+                            .reader
+                            .has_chunk(&format!("atlas/textures/{}_orm.png", c.file_stem()))
+                        || self
+                            .reader
+                            .has_chunk(&format!("atlas/textures/{}_aux.png", c.file_stem()))
+                });
             }
+            if !caps.has_dynamic_entities {
+                caps.has_dynamic_entities = (self.has_dynamic_entity_slots()
+                    && self
+                        .read_dynamic_entity_slots()
+                        .map(|opt| opt.map(|s| !s.is_empty()).unwrap_or(false))
+                        .unwrap_or(false))
+                    || map.sprites.keys().any(|k| {
+                        k.path.starts_with("skin/")
+                            || k.path.starts_with("banner/")
+                            || k.namespace == "skin"
+                            || k.namespace == "banner"
+                    });
+            }
+        } else if !caps.has_dynamic_entities && self.has_dynamic_entity_slots() {
+            caps.has_dynamic_entities = self
+                .read_dynamic_entity_slots()
+                .map(|opt| opt.map(|s| !s.is_empty()).unwrap_or(false))
+                .unwrap_or(false);
         }
         caps
     }
@@ -379,7 +392,7 @@ impl ScenePackageReader {
         // 6. Check Models (elements, faces, obj_faces, and variant groups) vs Atlas Mapping
         if let (Some(models), Some(map)) = (maybe_models.as_ref(), maybe_atlas_map.as_ref()) {
             let check_face = |face_tex: &str, source_desc: &str, rep: &mut ValidationReport| {
-                if !face_tex.is_empty() && map.lookup_str(face_tex).is_none() {
+                if !face_tex.is_empty() && map.resolve_texture_key(face_tex).is_none() {
                     rep.warnings.push(format!(
                         "{source_desc} references texture '{face_tex}' not found in mini-atlas"
                     ));
@@ -442,22 +455,17 @@ impl ScenePackageReader {
             }
         }
 
-        // 8. Check Dynamic Entity Slots vs Packaged Textures / Atlas Map
+        // 8. Check Dynamic Entity Slots vs Mini-Atlas Sprites
         if self.has_dynamic_entity_slots() {
             match self.read_dynamic_entity_slots() {
                 Ok(Some(slots)) => {
-                    for (key, (chunk_id, _slot_idx)) in &slots {
-                        let chunk_stem = format!("atlas_{chunk_id}");
-                        let chunk_path = format!("atlas/textures/{chunk_stem}.png");
-                        let has_texture = self.reader.has_chunk(&chunk_path);
-                        let has_in_map = maybe_atlas_map
-                            .as_ref()
-                            .map(|m| m.chunks.iter().any(|c| c.chunk_id == *chunk_id))
-                            .unwrap_or(false);
-                        if !has_texture && !has_in_map {
-                            report.errors.push(format!(
-                                "Dynamic entity slot '{key}' references missing dynamic atlas chunk {chunk_id}"
-                            ));
+                    if let Some(ref map) = maybe_atlas_map {
+                        for (key, (_chunk_id, _slot_idx)) in &slots {
+                            if map.resolve_texture_key(key).is_none() {
+                                report.errors.push(format!(
+                                    "Dynamic entity slot '{key}' cannot be resolved to any sprite in mini-atlas"
+                                ));
+                            }
                         }
                     }
                 }
@@ -643,12 +651,23 @@ pub fn write_scene_package(
 
     // 9. Dynamic Entity Slots (optional)
     if let Some(slots) = req.dynamic_entity_slots {
-        writer.add_json_chunk(
-            *b"ENTT",
-            "entity/slots",
-            slots,
-            &ChunkWriteOptions::zstd_fast(),
-        )?;
+        let active_slots: HashMap<String, (u16, u16)> = if let Some(map) = req.atlas_mapping {
+            slots
+                .iter()
+                .filter(|(k, _)| map.resolve_texture_key(k).is_some())
+                .map(|(k, v)| (k.clone(), *v))
+                .collect()
+        } else {
+            slots.clone()
+        };
+        if !active_slots.is_empty() {
+            writer.add_json_chunk(
+                *b"ENTT",
+                "entity/slots",
+                &active_slots,
+                &ChunkWriteOptions::zstd_fast(),
+            )?;
+        }
     }
 
     writer.finish()?;
@@ -1018,6 +1037,100 @@ mod tests {
             .errors
             .iter()
             .any(|e| e.contains("custom_skin_steve")));
+
+        let _ = std::fs::remove_file(&temp_path);
+    }
+
+    #[test]
+    fn test_validate_dynamic_entity_slots_valid() {
+        let temp_dir = std::env::temp_dir();
+        let temp_path = temp_dir.join(format!(
+            "test_validate_dyn_slots_valid_{}.mtkscene",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+
+        let metadata = SceneMetadata::new([0, 0, 0, 1, 1, 1], 1);
+        let mut writer = mtk_package::MtkPackageFileWriter::create(
+            &temp_path,
+            PackageProfile::SceneInterchange,
+            [0u8; 16],
+        )
+        .unwrap();
+        writer
+            .add_json_chunk(*b"META", "manifest", &metadata, &ChunkWriteOptions::raw())
+            .unwrap();
+
+        let mut map = AtlasAddressMap::new();
+        let chunk_meta = mtk_texture::AtlasChunkMeta {
+            chunk_id: 0,
+            category: "scene".to_string(),
+            is_animated: false,
+            category_chunk_index: 1,
+            width: 64,
+            height: 64,
+            has_normal: false,
+            has_specular: false,
+            has_overlay: false,
+            has_orm: false,
+            has_aux: false,
+            has_tint: false,
+            pbr: None,
+            textures: Vec::new(),
+        };
+        map.chunks.push(chunk_meta);
+
+        let sprite_loc = mtk_texture::AtlasSpriteLocation {
+            chunk_id: 0,
+            pixel_rect: [0, 0, 64, 64],
+            frame_0_uv_bounds: [0.0, 0.0, 1.0, 1.0],
+            ..Default::default()
+        };
+        map.sprites.insert(
+            mtk_resource::ResourceLocation::new("minecraft", "skin/player_hero"),
+            sprite_loc,
+        );
+
+        writer
+            .add_json_chunk(*b"MAPG", "atlas/mapping", &map, &ChunkWriteOptions::raw())
+            .unwrap();
+        writer
+            .add_chunk(
+                *b"TX2D",
+                "atlas/textures/scene_chunk_001.png",
+                &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A],
+                &ChunkWriteOptions::raw(),
+            )
+            .unwrap();
+
+        let model_db = BakedModelDatabase::new();
+        let model_bytes = model_db.to_binary().unwrap();
+        writer
+            .add_chunk(
+                *b"MODL",
+                "models/database",
+                &model_bytes,
+                &ChunkWriteOptions::raw(),
+            )
+            .unwrap();
+
+        let mut slots = HashMap::new();
+        slots.insert("player_Hero".to_string(), (0xFFF0u16, 0u16));
+        writer
+            .add_json_chunk(*b"ESLT", "entity/slots", &slots, &ChunkWriteOptions::raw())
+            .unwrap();
+        writer.finish().unwrap();
+
+        let reader = ScenePackageReader::open_file(&temp_path).unwrap();
+        let report = reader.validate().unwrap();
+        assert!(
+            report.is_valid,
+            "Expected valid report, but got errors: {:?}",
+            report.errors
+        );
+        assert!(report.errors.is_empty());
 
         let _ = std::fs::remove_file(&temp_path);
     }

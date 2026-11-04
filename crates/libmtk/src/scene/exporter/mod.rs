@@ -167,13 +167,26 @@ pub fn export_scene_package<S: SceneAtlasSource>(
     write_options: Option<&ScenePackageWriteOptions>,
 ) -> Result<SceneExportResult, MtkError> {
     let voxels = req.voxels;
-    let dynamic_entity_slots = req.dynamic_entity_slots.cloned();
+    let raw_dynamic_entity_slots = req.dynamic_entity_slots;
     let mut result = build_scene_interchange(req)?;
-    if dynamic_entity_slots
+
+    // Tree-shake dynamic entity slots: only retain slots whose texture key or alias
+    // actually resolved and was cropped into the Scene Mini-Atlas.
+    let filtered_dynamic_entity_slots: Option<HashMap<String, (u16, u16)>> =
+        raw_dynamic_entity_slots.map(|slots| {
+            slots
+                .iter()
+                .filter(|(key, _)| result.mini_atlas_map.resolve_texture_key(key).is_some())
+                .map(|(k, v)| (k.clone(), *v))
+                .collect()
+        });
+
+    let has_retained_slots = filtered_dynamic_entity_slots
         .as_ref()
         .map(|s| !s.is_empty())
-        .unwrap_or(false)
-    {
+        .unwrap_or(false);
+
+    if has_retained_slots {
         result.metadata.capabilities.has_dynamic_entities = true;
     }
 
@@ -192,7 +205,11 @@ pub fn export_scene_package<S: SceneAtlasSource>(
     } else {
         None
     };
-    write_req.dynamic_entity_slots = dynamic_entity_slots.as_ref();
+    write_req.dynamic_entity_slots = if has_retained_slots {
+        filtered_dynamic_entity_slots.as_ref()
+    } else {
+        None
+    };
     write_req.options = write_options;
 
     write_scene_package(path, write_req)?;

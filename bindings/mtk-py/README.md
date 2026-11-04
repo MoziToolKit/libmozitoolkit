@@ -161,6 +161,9 @@ Python 模块名：`libmtk_py`
 - **`ValidationReport` (`PyValidationReport`)**：场景包校验报告对象。
   - 属性：`is_valid: bool`, `errors: list[str]`, `warnings: list[str]`；
   - `to_dict() -> dict`：转化为 Python 字典。
+- **`SceneCapabilities`**：场景包能力清单对象。
+  - 属性：`has_colormaps: bool`, `has_ctm: bool`, `has_pbr: bool`, `has_dynamic_entities: bool`（支持属性访问及字典键访问如 `caps["has_pbr"]`）；
+  - `to_dict() -> dict`：转化为 Python 字典。
 - **`SceneMetadata`**：场景包元数据对象。
   - 属性：`format_version`, `bounds`, `voxel_count`, `unique_states_count`, `unique_biomes_count`, `unique_entities_count`, `atlas_resolution`, `generator`, `created_at_epoch_secs`, `capabilities` (`SceneCapabilities`，包含 `has_colormaps`, `has_ctm`, `has_pbr`, `has_dynamic_entities`，旧包默认全 false，建议消费端调用 reader 的 `effective_capabilities()` 获取权威探测值)；
   - `to_dict() -> dict`：快速转化为 Python 字典。
