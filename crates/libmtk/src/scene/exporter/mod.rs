@@ -9,6 +9,7 @@
 pub mod builder;
 pub mod collector;
 pub mod cropper;
+pub mod source;
 
 #[cfg(test)]
 mod tests;
@@ -17,13 +18,13 @@ use std::collections::HashMap;
 use std::path::Path;
 
 pub use builder::{SceneExportResult, SceneExporterConfig};
-pub use cropper::{
-    AtlasLayerSource, BiomeAssetSource, CtmAssetSource, EntityAssetSource, SceneAtlasSource,
-    SceneSourceCapabilities,
-};
 use mtk_model::BakedModelDatabase;
 use mtk_texture::atlas::AtlasAddressMap;
 use mtk_voxel::SparseVoxelPayload;
+pub use source::{
+    AtlasLayerSource, BiomeAssetSource, CtmAssetSource, EntityAssetSource, SceneAtlasSource,
+    SceneSourceCapabilities,
+};
 
 use super::package::{write_scene_package, ScenePackageWriteOptions, SceneWriteRequest};
 use crate::MtkError;
