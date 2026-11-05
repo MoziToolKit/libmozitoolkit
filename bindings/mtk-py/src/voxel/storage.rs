@@ -5,7 +5,6 @@
 //! Exposes `VoxelStorage` 3D world data containers and `MesherConfig` to Python.
 
 use pyo3::prelude::*;
-use pyo3::types::PyList;
 
 use mtk_voxel::storage::VoxelStorage;
 
@@ -95,44 +94,9 @@ impl PyVoxelStorage {
             .set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)
     }
 
-    /// Returns the active or calculated bounding box: `(min_x, min_y, min_z, size_x, size_y, size_z)`.
-    pub fn get_bounds(&self) -> (i32, i32, i32, i32, i32, i32) {
-        self.inner.get_bounds()
-    }
-
     /// Gets the blockstate identifier string at world coordinate `(x, y, z)`.
     pub fn get_block(&self, x: i32, y: i32, z: i32) -> &str {
         self.inner.get_block(x, y, z)
-    }
-
-    /// Gets the JSON representation of the block entity at world coordinate `(x, y, z)`, if any.
-    pub fn get_block_entity_json(&self, x: i32, y: i32, z: i32) -> Option<String> {
-        self.inner
-            .get_block_entity(x, y, z)
-            .and_then(|be| serde_json::to_string(be).ok())
-    }
-
-    /// Sets or removes the block entity at world coordinate `(x, y, z)` via JSON string.
-    pub fn set_block_entity_json(
-        &mut self,
-        x: i32,
-        y: i32,
-        z: i32,
-        json_str: Option<&str>,
-    ) -> PyResult<()> {
-        let entity = if let Some(s) = json_str {
-            let be: mtk_model::BlockEntityData = serde_json::from_str(s).map_err(|e| {
-                pyo3::exceptions::PyValueError::new_err(format!(
-                    "Invalid BlockEntityData JSON: {}",
-                    e
-                ))
-            })?;
-            Some(be)
-        } else {
-            None
-        };
-        self.inner.set_block_entity(x, y, z, entity);
-        Ok(())
     }
 
     /// Sets the blockstate at world coordinate `(x, y, z)` and marks dirty sections.
@@ -171,11 +135,6 @@ impl PyVoxelStorage {
         self.inner.size_z
     }
 
-    /// Clears all sections, biomes, and bounds.
-    pub fn clear(&mut self) {
-        self.inner.clear();
-    }
-
     /// Checks if world coordinate `(x, y, z)` falls within the active selection bounds.
     pub fn contains(&self, x: i32, y: i32, z: i32) -> bool {
         self.inner.contains(x, y, z)
@@ -184,16 +143,6 @@ impl PyVoxelStorage {
     /// Returns the biome registry identifier for block coordinate `(x, y, z)`.
     pub fn get_biome(&self, x: i32, y: i32, z: i32) -> &str {
         self.inner.get_biome(x, y, z)
-    }
-
-    /// Returns a list of all non-empty section coordinate tuples `(sx, sy, sz)`.
-    pub fn get_non_empty_sections<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
-        let list = PyList::empty(py);
-        for coord in self.inner.get_all_non_empty_sections() {
-            let tup = (coord.x, coord.y, coord.z);
-            let _ = list.append(tup);
-        }
-        list
     }
 
     /// Extracts an unculled point cloud containing every populated voxel point.

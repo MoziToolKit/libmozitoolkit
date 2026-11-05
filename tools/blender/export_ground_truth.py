@@ -52,7 +52,7 @@ def export_truth_data():
         "expected_crc": empty_crc,
     })
 
-    storage.clear()
+    storage = libmtk_py.VoxelStorage()
     storage.set_bounds(0, 0, 0, 16, 16, 16)
     storage.set_block(0, 0, 0, "minecraft:stone")
     stone_crc = storage.calculate_and_store_section_crc(0, 0, 0)
@@ -62,7 +62,7 @@ def export_truth_data():
         "expected_crc": stone_crc,
     })
 
-    storage.clear()
+    storage = libmtk_py.VoxelStorage()
     storage.set_bounds(0, 0, 0, 16, 16, 16)
     for x in range(16):
         storage.set_block(x, 0, x, "minecraft:oak_planks")

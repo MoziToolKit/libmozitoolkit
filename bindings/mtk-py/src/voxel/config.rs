@@ -62,21 +62,6 @@ impl PyMesherConfig {
         }
     }
 
-    /// Checks if an Atlas address map is configured.
-    pub fn has_atlas(&self) -> bool {
-        self.inner.atlas_address_map.is_some()
-    }
-
-    /// Checks if a BiomeResolver is configured.
-    pub fn has_biome_resolver(&self) -> bool {
-        self.inner.biome_resolver.is_some()
-    }
-
-    /// Checks if custom colormaps are configured.
-    pub fn has_colormaps(&self) -> bool {
-        self.inner.colormaps.is_some()
-    }
-
     /// Sets or clears colormaps.
     pub fn set_colormaps(&mut self, colormaps: Option<&PyVanillaColormaps>) {
         self.inner.colormaps = colormaps.map(|c| c.inner.clone());
@@ -110,19 +95,6 @@ impl PyMesherConfig {
     #[getter]
     pub fn enable_animated_textures(&self) -> bool {
         self.inner.enable_animated_textures
-    }
-
-    /// Sets explicit bounding box `(min_x, min_y, min_z, size_x, size_y, size_z)` for origin centering.
-    pub fn set_bounds(
-        &mut self,
-        min_x: i32,
-        min_y: i32,
-        min_z: i32,
-        size_x: i32,
-        size_y: i32,
-        size_z: i32,
-    ) {
-        self.inner.selection_bounds = Some(([min_x, min_y, min_z], [size_x, size_y, size_z]));
     }
 
     #[getter]

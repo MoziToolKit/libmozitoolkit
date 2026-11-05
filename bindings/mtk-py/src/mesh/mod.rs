@@ -141,11 +141,6 @@ impl PyMeshData {
         self.inner.clear();
     }
 
-    /// Appends another `MeshData` into this mesh buffer.
-    pub fn append_mesh(&mut self, other: &PyMeshData) {
-        self.inner.append_mesh(&other.inner);
-    }
-
     /// Constructs a shared-vertex polygon `MeshData` with per-loop UVs.
     ///
     /// Accepts NumPy arrays, typed memoryviews, or Python lists. Can be constructed
@@ -303,20 +298,6 @@ impl PyMeshData {
         memoryview::loop_uvs_memoryview(slf)
     }
 
-    /// Read-only memoryview of polygon loop start offsets (`int32` per polygon).
-    pub fn loop_starts_memoryview<'py>(
-        slf: &Bound<'py, Self>,
-    ) -> PyResult<Bound<'py, PyMemoryView>> {
-        memoryview::loop_starts_memoryview(slf)
-    }
-
-    /// Read-only memoryview of polygon loop totals (`int32` per polygon: 4 for quads, 3 for triangles).
-    pub fn loop_totals_memoryview<'py>(
-        slf: &Bound<'py, Self>,
-    ) -> PyResult<Bound<'py, PyMemoryView>> {
-        memoryview::loop_totals_memoryview(slf)
-    }
-
     /// Read-only memoryview of face material slots (`uint16` per face).
     pub fn face_materials_memoryview<'py>(
         slf: &Bound<'py, Self>,
@@ -329,16 +310,6 @@ impl PyMeshData {
         slf: &Bound<'py, Self>,
     ) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
         memoryview::colors_memoryview(slf)
-    }
-
-    /// Explicit UV layout: `"none"`, `"per_vertex"` or `"per_loop"`.
-    #[getter]
-    pub fn uv_layout(&self) -> &'static str {
-        match self.inner.uv_layout {
-            mtk_core::mesh::UvLayout::None => "none",
-            mtk_core::mesh::UvLayout::PerVertex => "per_vertex",
-            mtk_core::mesh::UvLayout::PerLoop => "per_loop",
-        }
     }
 
     /// Number of quad faces recorded.
@@ -396,46 +367,6 @@ impl PyMeshData {
         attributes::get_string_attribute(self, name)
     }
 
-    /// Build a compact `(palette, indices)` zero-copy view of the canonical provenance.
-    ///
-    /// Reads the canonical `mtk_source_textures` (Mesh string palette) +
-    /// `mtk_source_texture_idx` (Face Int32) pair. The returned memoryview is a
-    /// zero-copy, strongly typed view straight into the native index buffer
-    /// (`np.frombuffer(indices, dtype=np.int32)` in Python).
-    pub fn source_texture_palette_indices<'py>(
-        slf: &Bound<'py, Self>,
-        py: Python<'py>,
-    ) -> PyResult<(Vec<String>, Bound<'py, PyMemoryView>)> {
-        let inner = &slf.borrow().inner;
-        if let (Some(idx_attr), Some(pal_attr)) = (
-            inner.get_custom_attribute(mtk_core::attributes::constants::ATTR_SOURCE_TEXTURE_IDX),
-            inner
-                .get_custom_attribute(mtk_core::attributes::constants::ATTR_SOURCE_TEXTURE_PALETTE),
-        ) {
-            if let (
-                mtk_core::attributes::AttributeData::Int32(idx_vals),
-                mtk_core::attributes::AttributeData::String(pal_vals),
-            ) = (&idx_attr.data, &pal_attr.data)
-            {
-                let mv = crate::buffer::create_zerocopy_i32_memoryview(
-                    py,
-                    idx_vals.as_ptr(),
-                    idx_vals.len(),
-                    slf.as_any(),
-                )?;
-                return Ok((pal_vals.clone(), mv));
-            }
-        }
-
-        let memoryview = crate::buffer::create_owned_i32_memoryview(py, Vec::new())?;
-        Ok((Vec::new(), memoryview))
-    }
-
-    /// Check if a custom attribute exists.
-    pub fn has_attribute(&self, name: &str) -> bool {
-        attributes::has_attribute(self, name)
-    }
-
     /// List all custom attribute names.
     pub fn attribute_names(&self) -> Vec<String> {
         attributes::attribute_names(self)
@@ -469,8 +400,8 @@ impl PyMeshData {
             dict.set_item("quad_indices", quad_mv)?;
         }
         dict.set_item("loop_uvs", Self::loop_uvs_memoryview(slf)?)?;
-        dict.set_item("loop_starts", Self::loop_starts_memoryview(slf)?)?;
-        dict.set_item("loop_totals", Self::loop_totals_memoryview(slf)?)?;
+        dict.set_item("loop_starts", memoryview::loop_starts_memoryview(slf)?)?;
+        dict.set_item("loop_totals", memoryview::loop_totals_memoryview(slf)?)?;
         dict.set_item("face_materials", Self::face_materials_memoryview(slf)?)?;
         if let Some(col_mv) = Self::colors_memoryview(slf)? {
             dict.set_item("colors", col_mv)?;

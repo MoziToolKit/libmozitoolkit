@@ -317,7 +317,16 @@ PY
 ### Batch 1：Python 稳定面 P0/P1 删除
 
 - [x] 删除第 3.1 节全部符号。
-- [x] 将第 3.2 节协议/工具/测试专用符号移入 `unstable.testing` 或删除。
+- [x] 将第 3.2 节协议/工具/测试专用符号移入 `unstable.testing` 或删除：
+  - `decode_packet`, `mesh_attribute_schema`, `retired_mesh_attributes` 移入 `unstable.testing`；
+  - `clear_cached_colormaps` 删除；
+  - `AssetCache.extract_atlas_texture` 移入 `unstable.testing.extract_cache_atlas_texture`；
+  - `MeshData`: 删除 `append_mesh`, `has_attribute`, `loop_starts_memoryview`, `loop_totals_memoryview`, `source_texture_palette_indices`, `uv_layout`；保留 `to_buffers` 作为 Tier 3 契约；
+  - `MesherConfig`: 删除 `has_atlas`, `has_biome_resolver`, `has_colormaps`, `set_bounds`；
+  - `BakedModelDatabase`: 删除 `contains`；`get_states`, `remap_to_atlas` 移入 `unstable.testing`；
+  - `VoxelPointCloud`: 删除 `from_mesh_data`, `to_mesh_data`；保留 `to_buffers` 作为 Tier 3 契约；保留 `push` 供测试夹具使用；
+  - `VoxelStorage`: 删除 `clear`, `get_bounds`；`get_non_empty_sections`, `get/set_block_entity_json` 移入 `unstable.testing`；保留 `set_block`/`set_bounds` 供测试夹具装配；
+  - `VoxelWorld`: 删除 `clear`, `get_bounds`, `set_bounds`, `get_block`, `set_block`, `get/set_block_entity_json`；`ensure_dynamic_entities_resolved_sync` 移入 `unstable.testing`；
 - [x] `bridge/` 中对应 `hasattr` 分支同步删除；调用方直接调用唯一入口。
 - [x] 更新 Python 测试：能用生产 API 的改用生产 API；只能测内部算子的放 `unstable.testing`。
 - [x] 目标：稳定顶层不再存在“仅测试/工具使用”的方法。

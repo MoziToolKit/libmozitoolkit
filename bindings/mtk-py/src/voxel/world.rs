@@ -174,66 +174,6 @@ impl PyVoxelWorld {
         self.inner.used_chunk_ids().to_vec()
     }
 
-    /// Sets the active 3D selection bounding box.
-    pub fn set_bounds(
-        &mut self,
-        min_x: i32,
-        min_y: i32,
-        min_z: i32,
-        size_x: i32,
-        size_y: i32,
-        size_z: i32,
-    ) -> bool {
-        self.inner
-            .set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)
-    }
-
-    /// Returns the bounding box: (min_x, min_y, min_z, size_x, size_y, size_z).
-    pub fn get_bounds(&self) -> (i32, i32, i32, i32, i32, i32) {
-        self.inner.get_bounds()
-    }
-
-    /// Gets the blockstate identifier string at world coordinate (x, y, z).
-    pub fn get_block(&self, x: i32, y: i32, z: i32) -> &str {
-        self.inner.get_block(x, y, z)
-    }
-
-    /// Sets the blockstate at world coordinate (x, y, z).
-    #[pyo3(signature = (x, y, z, state, biome=None))]
-    pub fn set_block(&mut self, x: i32, y: i32, z: i32, state: &str, biome: Option<&str>) -> bool {
-        self.inner.set_block(x, y, z, state, biome)
-    }
-
-    /// Gets the JSON representation of the block entity at world coordinate (x, y, z), if any.
-    pub fn get_block_entity_json(&self, x: i32, y: i32, z: i32) -> Option<String> {
-        self.inner
-            .get_block_entity(x, y, z)
-            .and_then(|be| serde_json::to_string(be).ok())
-    }
-
-    /// Sets or removes the block entity at world coordinate (x, y, z) via JSON string.
-    pub fn set_block_entity_json(
-        &mut self,
-        x: i32,
-        y: i32,
-        z: i32,
-        json_str: Option<&str>,
-    ) -> PyResult<()> {
-        let entity = if let Some(s) = json_str {
-            let be: mtk_model::BlockEntityData = serde_json::from_str(s).map_err(|e| {
-                pyo3::exceptions::PyValueError::new_err(format!(
-                    "Invalid BlockEntityData JSON: {}",
-                    e
-                ))
-            })?;
-            Some(be)
-        } else {
-            None
-        };
-        self.inner.set_block_entity(x, y, z, entity);
-        Ok(())
-    }
-
     /// Updates mesher configuration.
     pub fn set_config(&mut self, config: &PyMesherConfig) {
         self.inner.set_config(config.inner.clone());
@@ -301,15 +241,5 @@ impl PyVoxelWorld {
     pub fn set_skin_cache_dir(&mut self, cache_dir: Option<String>) {
         self.inner
             .set_skin_cache_dir(cache_dir.map(std::path::PathBuf::from));
-    }
-
-    /// Resolves dynamic entities synchronously (primarily for unit tests and offline workflows).
-    pub fn ensure_dynamic_entities_resolved_sync(&mut self) -> bool {
-        self.inner.ensure_dynamic_entities_resolved_sync()
-    }
-
-    /// Clears world storage and meshes.
-    pub fn clear(&mut self) {
-        self.inner.clear();
     }
 }

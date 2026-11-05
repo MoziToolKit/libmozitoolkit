@@ -183,11 +183,6 @@ pub fn get_string_attribute(mesh: &PyMeshData, name: &str) -> Option<Vec<String>
     None
 }
 
-/// Check if a custom attribute exists.
-pub fn has_attribute(mesh: &PyMeshData, name: &str) -> bool {
-    mesh.inner.has_custom_attribute(name)
-}
-
 /// List all custom attribute names.
 pub fn attribute_names(mesh: &PyMeshData) -> Vec<String> {
     mesh.inner.custom_attribute_names()

@@ -239,13 +239,6 @@ impl PyAssetCache {
         self.inner.package_reader().has_chunk("ctm/rules")
     }
 
-    /// Extracts a single texture chunk to the specified destination path.
-    pub fn extract_atlas_texture(&self, filename: &str, output_path: &str) -> PyResult<()> {
-        self.inner
-            .extract_atlas_texture(filename, output_path)
-            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))
-    }
-
     /// Loads raw atlas mapping JSON string directly from package.
     pub fn load_atlas_mapping(&self) -> PyResult<String> {
         self.inner

@@ -56,8 +56,8 @@ class TestLibMtkPy(unittest.TestCase):
             "mtk_emission", "face", "float", bytes([0, 0, 128, 63])
         )
 
-        self.assertTrue(mesh.has_attribute("mtk_source_texture"))
-        self.assertTrue(mesh.has_attribute("mtk_emission"))
+        self.assertIn("mtk_source_texture", mesh.attribute_names())
+        self.assertIn("mtk_emission", mesh.attribute_names())
         self.assertEqual(
             mesh.get_string_attribute("mtk_source_texture"),
             ["minecraft:block/dirt"],
@@ -83,8 +83,9 @@ class TestLibMtkPy(unittest.TestCase):
         np.testing.assert_array_equal(
             loop_uv, [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
         )
-        self.assertEqual(len(mesh.loop_starts_memoryview()), 1)
-        self.assertEqual(len(mesh.loop_totals_memoryview()), 1)
+        bufs = mesh.to_buffers()
+        self.assertEqual(len(bufs["loop_starts"]), 1)
+        self.assertEqual(len(bufs["loop_totals"]), 1)
 
     def test_build_material_palette(self):
         import numpy as np
@@ -125,9 +126,6 @@ class TestLibMtkPy(unittest.TestCase):
             [0, 1, 0],
         )
 
-        restored = libmtk_py.VoxelPointCloud.from_mesh_data(cloud.to_mesh_data())
-        self.assertEqual(restored.get_state_palette(), cloud.get_state_palette())
-        self.assertEqual(restored.get_biome_palette(), cloud.get_biome_palette())
         self.assertFalse(cloud.has_entities())
         self.assertEqual(cloud.get_entity_palette(), [])
 
@@ -158,15 +156,6 @@ class TestLibMtkPy(unittest.TestCase):
         self.assertEqual(cloud.get_entity_palette(), ent_pal)
         np.testing.assert_array_equal(
             np.frombuffer(cloud.entity_indices_memoryview(), dtype=np.int32),
-            [-1, 0],
-        )
-
-        mesh = cloud.to_mesh_data()
-        restored = libmtk_py.VoxelPointCloud.from_mesh_data(mesh)
-        self.assertTrue(restored.has_entities())
-        self.assertEqual(restored.get_entity_palette(), ent_pal)
-        np.testing.assert_array_equal(
-            np.frombuffer(restored.entity_indices_memoryview(), dtype=np.int32),
             [-1, 0],
         )
 

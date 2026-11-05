@@ -5,8 +5,11 @@
 
 use pyo3::prelude::*;
 
-use crate::model::PyModelBaker;
+use crate::attributes;
+use crate::model::{PyBakedModelDatabase, PyModelBaker};
+use crate::resource::PyAssetCache;
 use crate::texture::atlas::PyAtlasBuilder;
+use crate::texture::PyBakedAtlas;
 use crate::voxel::PyVoxelStorage;
 use crate::{protocol, subdivide, texture, uv};
 
@@ -109,6 +112,106 @@ pub fn voxel_set_section_snapshot(
     )
 }
 
+/// Helper to extract atlas texture from asset cache.
+#[pyfunction]
+pub fn extract_cache_atlas_texture(
+    cache: &PyAssetCache,
+    filename: &str,
+    output_path: &str,
+) -> PyResult<()> {
+    cache
+        .inner
+        .extract_atlas_texture(filename, output_path)
+        .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))
+}
+
+/// Test helper to get all blockstate keys from model database.
+#[pyfunction]
+pub fn model_database_get_states(db: &PyBakedModelDatabase) -> Vec<String> {
+    db.inner.keys().cloned().collect()
+}
+
+/// Test helper to remap model database to atlas.
+#[pyfunction]
+pub fn model_database_remap_to_atlas(
+    py: Python<'_>,
+    db: &mut PyBakedModelDatabase,
+    atlas: &PyBakedAtlas,
+) {
+    let atlas_map = &atlas.inner.address_map;
+    py.detach(|| {
+        if let Some(inner) = std::sync::Arc::get_mut(&mut db.inner) {
+            inner.remap_to_atlas_with(|tex| {
+                mtk_material::MaterialResolver::resolve(tex, None, atlas_map)
+                    .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
+            });
+        } else {
+            let mut cloned = (*db.inner).clone();
+            cloned.remap_to_atlas_with(|tex| {
+                mtk_material::MaterialResolver::resolve(tex, None, atlas_map)
+                    .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
+            });
+            db.inner = std::sync::Arc::new(cloned);
+        }
+    });
+}
+
+/// Test helper to get all non-empty sections from voxel storage.
+#[pyfunction]
+pub fn voxel_storage_get_non_empty_sections<'py>(
+    py: Python<'py>,
+    storage: &PyVoxelStorage,
+) -> Bound<'py, pyo3::types::PyList> {
+    let list = pyo3::types::PyList::empty(py);
+    for coord in storage.inner.get_all_non_empty_sections() {
+        let _ = list.append((coord.x, coord.y, coord.z));
+    }
+    list
+}
+
+/// Test helper to get block entity JSON from voxel storage.
+#[pyfunction]
+pub fn voxel_storage_get_block_entity_json(
+    storage: &PyVoxelStorage,
+    x: i32,
+    y: i32,
+    z: i32,
+) -> Option<String> {
+    storage
+        .inner
+        .get_block_entity(x, y, z)
+        .and_then(|be| serde_json::to_string(be).ok())
+}
+
+/// Test helper to set block entity JSON on voxel storage.
+#[pyfunction]
+#[pyo3(signature = (storage, x, y, z, json_str=None))]
+pub fn voxel_storage_set_block_entity_json(
+    storage: &mut PyVoxelStorage,
+    x: i32,
+    y: i32,
+    z: i32,
+    json_str: Option<&str>,
+) -> PyResult<()> {
+    let entity = if let Some(s) = json_str {
+        let parsed: mtk_model::BlockEntityData = serde_json::from_str(s)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        Some(parsed)
+    } else {
+        None
+    };
+    storage.inner.set_block_entity(x, y, z, entity);
+    Ok(())
+}
+
+/// Test helper to synchronously ensure all dynamic entities in a VoxelWorld are resolved.
+#[pyfunction]
+pub fn voxel_world_ensure_dynamic_entities_resolved_sync(
+    world: &mut crate::voxel::world::PyVoxelWorld,
+) -> bool {
+    world.inner.ensure_dynamic_entities_resolved_sync()
+}
+
 /// Registers the `testing` module on `parent_module`.
 pub fn register_submodule(py: Python<'_>, parent_module: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(py, "testing")?;
@@ -142,7 +245,8 @@ pub fn register_submodule(py: Python<'_>, parent_module: &Bound<'_, PyModule>) -
     sub.add_function(wrap_pyfunction!(uv::repair_extruded_side_uv, &sub)?)?;
     sub.add_function(wrap_pyfunction!(texture::sample_uv_alpha_f32, &sub)?)?;
 
-    // Protocol encoders are server-side/test-only from the DCC client's view.
+    // Protocol / Packet
+    sub.add_function(wrap_pyfunction!(protocol::decode_packet, &sub)?)?;
     sub.add_function(wrap_pyfunction!(protocol::encode_welcome, &sub)?)?;
     sub.add_function(wrap_pyfunction!(protocol::encode_baseline_begin, &sub)?)?;
     sub.add_function(wrap_pyfunction!(protocol::encode_baseline_chunk, &sub)?)?;
@@ -150,9 +254,30 @@ pub fn register_submodule(py: Python<'_>, parent_module: &Bound<'_, PyModule>) -
     sub.add_function(wrap_pyfunction!(protocol::encode_delta_op, &sub)?)?;
     sub.add_function(wrap_pyfunction!(protocol::encode_palette_update, &sub)?)?;
 
-    // Voxel low-level testing helpers.
+    // Mesh attributes schema
+    sub.add_function(wrap_pyfunction!(attributes::mesh_attribute_schema, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(attributes::retired_mesh_attributes, &sub)?)?;
+
+    // Cache / Textures
+    sub.add_function(wrap_pyfunction!(extract_cache_atlas_texture, &sub)?)?;
+
+    // Model database helpers
+    sub.add_function(wrap_pyfunction!(model_database_get_states, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(model_database_remap_to_atlas, &sub)?)?;
+
+    // Voxel storage testing helpers
     sub.add_function(wrap_pyfunction!(voxel_dirty_section_count, &sub)?)?;
     sub.add_function(wrap_pyfunction!(voxel_set_section_snapshot, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(
+        voxel_storage_get_non_empty_sections,
+        &sub
+    )?)?;
+    sub.add_function(wrap_pyfunction!(voxel_storage_get_block_entity_json, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(voxel_storage_set_block_entity_json, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(
+        voxel_world_ensure_dynamic_entities_resolved_sync,
+        &sub
+    )?)?;
 
     parent_module.add_submodule(&sub)?;
     Ok(())

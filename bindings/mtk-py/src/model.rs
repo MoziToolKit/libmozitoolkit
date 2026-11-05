@@ -30,16 +30,6 @@ impl PyBakedModelDatabase {
         self.inner.len()
     }
 
-    /// Checks if a blockstate is contained in the database.
-    pub fn contains(&self, state_str: &str) -> bool {
-        self.inner.get(state_str).is_some()
-    }
-
-    /// Returns list of all canonical blockstate strings in the database.
-    pub fn get_states(&self) -> Vec<String> {
-        self.inner.keys().cloned().collect()
-    }
-
     /// Retrieves baked mesh geometry and texture list for a given canonical blockstate string.
     #[pyo3(signature = (state_str, clip_hidden=true))]
     pub fn get_mesh(
@@ -51,26 +41,6 @@ impl PyBakedModelDatabase {
             let (mesh, textures) = baked.to_mesh_with_textures(clip_hidden);
             (PyMeshData::from_mesh(mesh), textures)
         })
-    }
-
-    /// Remaps all models in the database to the specified atlas coordinates.
-    pub fn remap_to_atlas(&mut self, py: Python<'_>, atlas: &crate::texture::PyBakedAtlas) {
-        let atlas_map = &atlas.inner.address_map;
-        py.detach(|| {
-            if let Some(db) = Arc::get_mut(&mut self.inner) {
-                db.remap_to_atlas_with(|tex| {
-                    mtk_material::MaterialResolver::resolve(tex, None, atlas_map)
-                        .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
-                });
-            } else {
-                let mut db = (*self.inner).clone();
-                db.remap_to_atlas_with(|tex| {
-                    mtk_material::MaterialResolver::resolve(tex, None, atlas_map)
-                        .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
-                });
-                self.inner = Arc::new(db);
-            }
-        });
     }
 }
 

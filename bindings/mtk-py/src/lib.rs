@@ -41,7 +41,6 @@ pub use mesh::{PyAttributeDomain, PyMeshData};
 pub use model::PyBakedModelDatabase;
 pub use point_cloud::PyVoxelPointCloud;
 pub use profile::{PyExecutionProfile, PyStageSpan};
-pub use protocol::decode_packet;
 pub use resource::{
     get_cache_manifest, is_valid_cache_package, precompile_all_assets,
     resolve_active_cache_package, PyAssetCache, PyPrecompileResult, PyResourcePackStack,
@@ -92,8 +91,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // 2. Mesh & Core
     m.add_class::<PyAttributeDomain>()?;
     m.add_class::<PyMeshData>()?;
-    m.add_function(wrap_pyfunction!(attributes::mesh_attribute_schema, m)?)?;
-    m.add_function(wrap_pyfunction!(attributes::retired_mesh_attributes, m)?)?;
     m.add_function(wrap_pyfunction!(subdivide::adaptive_pixel_split_mesh, m)?)?;
     m.add_function(wrap_pyfunction!(mesh::analyze_mesh_hard_edges, m)?)?;
 
@@ -108,7 +105,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // 5. Live Sync & Protocol
     m.add_class::<PyLiveSyncSession>()?;
-    m.add_function(wrap_pyfunction!(decode_packet, m)?)?;
 
     // 6. Resource Pack & Textures
     m.add_class::<PyResourcePackStack>()?;
@@ -194,6 +190,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::decode_packet;
 
     #[test]
     fn test_python_mesh_data_inner() {

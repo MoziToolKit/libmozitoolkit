@@ -8,7 +8,6 @@ use pyo3::types::PyMemoryView;
 
 use mtk_voxel::storage::VoxelPointCloud;
 
-use crate::mesh::PyMeshData;
 use crate::voxel::PyVoxelStorage;
 
 /// Python wrapper for `VoxelPointCloud` flat 3D voxel point cloud container.
@@ -112,20 +111,6 @@ impl PyVoxelPointCloud {
             light.unwrap_or(0),
             entity.as_deref(),
         );
-    }
-
-    /// Converts this `VoxelPointCloud` into a pure-point `MeshData` with standard
-    /// attributes attached on the `Point` domain (without edges or polygons).
-    pub fn to_mesh_data(&self) -> PyMeshData {
-        PyMeshData::from_mesh(self.inner.to_mesh_data())
-    }
-
-    /// Reconstructs a `VoxelPointCloud` from a `MeshData` containing Point-domain attributes.
-    #[staticmethod]
-    pub fn from_mesh_data(mesh: &PyMeshData) -> PyResult<Self> {
-        let cloud = VoxelPointCloud::from_mesh_data(&mesh.inner)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-        Ok(Self { inner: cloud })
     }
 
     /// Reconstructs a `VoxelStorage` from this point cloud.
