@@ -132,7 +132,7 @@ Python 模块名：`libmtk_py`
   - `reroute_mesh_animation(uvs, face_loop_ranges, face_texture_keys, face_old_chunk_ids, atlas, aliases=None, enable_animated_textures=false)`
 - **`GridAtlasSpec` (`PyGridAtlasSpec`)**：网格图集元数据规范。
 - **缓存解析**：`resolve_active_cache_package(cache_dir, fingerprint=None)` 返回 active `.mtkcache` 路径。
-- **色彩数学与常量**：`compute_biome_tint_attributes`, `compute_mesh_biome_attributes_from_storage`, `sample_colormap_colors`, `clear_cached_colormaps`, `blend_biome_colors`, `sample_colormap_pixel`, `srgb_to_linear`, `linear_to_srgb`, `TINT_TYPE_NONE..DRY_FOLIAGE`
+- **色彩数学与常量**：`compute_biome_tint_attributes`, `compute_mesh_biome_attributes_from_storage`, `sample_colormap_colors`, `blend_biome_colors`, `sample_colormap_pixel`, `srgb_to_linear`, `linear_to_srgb`, `TINT_TYPE_NONE..DRY_FOLIAGE`
 
 ### 2.9 模型烘焙 (`model`)
 - **`BakedModelDatabase` (`PyBakedModelDatabase`)**：预编译方块几何模型库。
@@ -142,29 +142,14 @@ Python 模块名：`libmtk_py`
 - **`ScenePackageReader`**：`.mtkscene` 单文件中间交换容器读取器（只读无副作用设计，构造时不污染全局进程状态）。
   - `open(path)`：快速打开并校验场景元数据；
   - `unpack(origin_centered=True, z_up=True) -> dict`：**高阶解包门面**，单次调用原生解码并交付全部核心组件（`metadata`, `point_cloud`, `models`, `atlas`, `atlas_mapping_json`, `texture_names`, `biome_resolver`, `colormaps`, `dynamic_entity_slots`, `ctm_solver`）；
-  - `validate() -> ValidationReport`：执行场景包完整性与引用完整性校验（校验模型贴图是否已映射到 mini-atlas、CTM 规则纹理是否存在、色盘 PNG 是否合法、动态实体槽位是否有效等），返回包含 `is_valid: bool`, `errors: list[str]`, `warnings: list[str]` 的报告对象；
-  - `metadata -> SceneMetadata`：获取场景 AABB 范围、体素总量与图集分辨率等；
-  - `effective_capabilities() -> SceneCapabilities`：获取场景包有效能力（当旧包 `capabilities` 全为默认 false 时自动探测 chunk fallback）；
-  - `read_point_cloud(origin_centered=True, z_up=True) -> VoxelPointCloud`：提取稀疏体素列存并构造点云；
-  - `read_models() -> BakedModelDatabase | None`：读取已重映射至 Mini-Atlas 的 Tree-Shaken 方块模型库；
-  - `read_atlas() -> BakedAtlas | None`：读取内嵌的自包含微型多通道 PBR 图集；
-  - `read_atlas_mapping_json() -> str | None`：获取图集 UV 映射 JSON 字符串；
+  - `validate() -> dict`：执行场景包完整性与引用完整性校验（校验模型贴图是否已映射到 mini-atlas、CTM 规则纹理是否存在、色盘 PNG 是否合法、动态实体槽位是否有效等），返回包含 `{"is_valid": bool, "errors": list[str], "warnings": list[str]}` 的字典；
+  - `metadata -> SceneMetadata`：获取场景元数据对象；
   - `get_atlas_texture_names() -> list[str]`：获取所有内嵌图集切片文件名列表；
   - `read_texture_rgba(chunk_id, flip_v=False) -> (width, height, memoryview)`：直接解压缩并读取单张图集切片为连续 RGBA 内存视图；
-  - `read_texture_f32(chunk_id, flip_v=False) -> (width, height, memoryview)`：直接解压缩并读取单张图集切片为 [0.0, 1.0] 浮点连续缓冲；
-  - `has_colormaps() -> bool`：检查场景包内是否携带生物群系色盘切片；
-  - `read_colormap(name: str) -> bytes | None`：读取指定通道色盘 PNG 原始字节（`"grass"`, `"foliage"`, `"dry_foliage"`）；
-  - `install_colormaps()`：显式将场景包内的色盘重载至当前活跃进程的色盘缓存中；
-  - `read_biome_resolver() -> BiomeResolver | None`：反序列化场景包内嵌的权威生物群系解析器；
-  - `has_ctm_rules() -> bool`：检查场景包内是否携带 CTM 连通纹理规则；
-  - `read_ctm_rules_json() -> str | None`：读取原始 CTM 规则 JSON 字符串；
-  - `read_ctm_solver() -> CtmSolver | None`：现场构造带优先级倒序索引的高速 CTM 解算器。
-- **`ValidationReport` (`PyValidationReport`)**：场景包校验报告对象。
-  - 属性：`is_valid: bool`, `errors: list[str]`, `warnings: list[str]`；
-  - `to_dict() -> dict`：转化为 Python 字典。
+  - `read_texture_f32(chunk_id, flip_v=False) -> (width, height, memoryview)`：直接解压缩并读取单张图集切片为 [0.0, 1.0] 浮点连续缓冲。
 - **`SceneMetadata`**：场景包元数据对象。
-  - 属性：`format_version`, `bounds`, `voxel_count`, `unique_states_count`, `unique_biomes_count`, `unique_entities_count`, `atlas_resolution`, `generator`, `created_at_epoch_secs`, `capabilities` (标准 Python dict，包含 `has_colormaps`, `has_ctm`, `has_pbr`, `has_dynamic_entities`)；
-  - `to_dict() -> dict`：快速转化为 Python 字典。
+  - 属性：`format_version`, `bounds`, `voxel_count`, `unique_states_count`, `unique_biomes_count`, `unique_entities_count`, `atlas_resolution`, `has_animated_atlas`, `generator`, `created_at_epoch_secs`；
+  - `to_dict() -> dict`：快速转化为 Python 字典（包含嵌套的 `capabilities` 字典）。
 - **`export_scene_package(path, point_cloud, cache, options=None, **kwargs) -> SceneMetadata`**：
   端到端场景交换导出算子：支持传入结构化 `options` 字典或关键字参数（`max_atlas_size`, `mip_level`, `dynamic_entity_atlases`, `ctm_solver`, `enable_ctm`, `dynamic_entity_slots`）。自动扫描伴生体素点云、执行模型树剪枝、从激活缓存裁剪贴图、自适应缝合动态实体皮肤与旗帜纹理、剪枝并嵌入 CTM 规则与子贴图、自包含打包 Biome 色盘与 Resolver、拼接微型多通道图集、并行重映射模型 UV 并压缩打包为 `.mtkscene`。
 - **稀疏体素数据结构 (`mtk_voxel`)**：

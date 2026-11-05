@@ -2,9 +2,8 @@ use std::collections::HashMap;
 
 use glam::Vec3;
 use mtk_core::Direction;
-use mtk_model::{
-    BlockModelJson, BlockStateDefinition, ModObjLoader, ModelBaker, WavefrontObjParser,
-};
+use mtk_model::parser::obj::{ModObjLoader, WavefrontObjParser};
+use mtk_model::{BlockModelJson, BlockStateDefinition, ModelBaker};
 use mtk_testkit::{blockstate_json_path, model_json_path, require_assets};
 use std::path::Path;
 

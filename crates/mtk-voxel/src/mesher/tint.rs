@@ -43,16 +43,7 @@ pub fn compute_face_tint(
     let tt = info.tint_type;
     let is_hc = info.is_hardcoded;
 
-    let (cms_override, active_guard);
-    let effective_cms: Option<&mtk_material::VanillaColormaps> = if let Some(cms) = colormaps {
-        cms_override = cms;
-        Some(cms_override)
-    } else if mtk_material::has_active_colormaps_override() {
-        active_guard = mtk_material::get_default_colormaps();
-        Some(&active_guard)
-    } else {
-        None
-    };
+    let effective_cms: Option<&mtk_material::VanillaColormaps> = colormaps;
 
     let packed_data = [bw, ow, tw, tt as f32];
     let final_col = match tt {

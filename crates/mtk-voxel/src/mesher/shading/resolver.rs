@@ -269,16 +269,7 @@ pub fn sample_biome_tint(
     if tint_data[2] <= 0.0 {
         return (tint_data, default_tint_color);
     }
-    let (cms_override, active_guard);
-    let effective_cms: Option<&mtk_material::VanillaColormaps> = if let Some(cms) = colormaps {
-        cms_override = cms;
-        Some(cms_override)
-    } else if mtk_material::has_active_colormaps_override() {
-        active_guard = mtk_material::get_default_colormaps();
-        Some(&active_guard)
-    } else {
-        None
-    };
+    let effective_cms: Option<&mtk_material::VanillaColormaps> = colormaps;
 
     if let Some(biome_cols) = biome_data {
         let col_idx = if biome_cols.len() == 1024 {

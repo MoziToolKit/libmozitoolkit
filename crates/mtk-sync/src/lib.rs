@@ -12,11 +12,10 @@ pub mod events;
 pub mod protocol;
 pub mod session;
 
-pub use client::{ClientCommand, ClientMessage, SyncClient};
 pub use events::{normalize_stream_progress, SyncEvent};
 pub use protocol::{
     compute_canonical_state_hash, decode_packet, encode_packet, BaselineAckResult, CancelReason,
     DeltaChangeEntry, ErrorCode, Opcode, Packet, ProtocolError, ResyncReason, SyncDecision,
     PROTOCOL_MAGIC, PROTOCOL_VERSION,
 };
-pub use session::{BaselineAssembler, DeltaStagingBuffer, LiveSyncSession, SyncLifecycle};
+pub use session::{LiveSyncSession, SyncLifecycle};

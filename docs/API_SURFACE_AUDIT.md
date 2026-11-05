@@ -316,23 +316,23 @@ PY
 
 ### Batch 1：Python 稳定面 P0/P1 删除
 
-- [ ] 删除第 3.1 节全部符号。
-- [ ] 将第 3.2 节协议/工具/测试专用符号移入 `unstable.testing` 或删除。
-- [ ] `bridge/` 中对应 `hasattr` 分支同步删除；调用方直接调用唯一入口。
-- [ ] 更新 Python 测试：能用生产 API 的改用生产 API；只能测内部算子的放 `unstable.testing`。
-- [ ] 目标：稳定顶层不再存在“仅测试/工具使用”的方法。
+- [x] 删除第 3.1 节全部符号。
+- [x] 将第 3.2 节协议/工具/测试专用符号移入 `unstable.testing` 或删除。
+- [x] `bridge/` 中对应 `hasattr` 分支同步删除；调用方直接调用唯一入口。
+- [x] 更新 Python 测试：能用生产 API 的改用生产 API；只能测内部算子的放 `unstable.testing`。
+- [x] 目标：稳定顶层不再存在“仅测试/工具使用”的方法。
 
 ### Batch 2：场景交换 API 收敛
 
-- [ ] `bridge/scene.py` 删除 `if hasattr(reader, "unpack")` 及逐项 `read_*` 回退，唯一路径走 `unpack`。
-- [ ] `ScenePackageReader` 收敛为 `open` + `metadata`（dict）+ `unpack` + `read_texture_rgba/f32`。
-- [ ] 删除 `ValidationReport` / `effective_capabilities` / `capabilities` 包装；需要校验时返回普通 dict。
-- [ ] `libmtk::scene` 根导出只保留 `export_scene_package` / `ScenePackageReader` / `SceneMetadata` / `ValidationReport`（若仍需要）/ 版本常量；内部 `SceneExportResult` / `SceneWriteRequest` / `ScenePackageWriteOptions` / `SceneBundle` 降为 `pub(crate)`。
+- [x] `bridge/scene.py` 删除 `if hasattr(reader, "unpack")` 及逐项 `read_*` 回退，唯一路径走 `unpack`。
+- [x] `ScenePackageReader` 收敛为 `open` + `metadata`（dict）+ `unpack` + `read_texture_rgba/f32`。
+- [x] 删除 `ValidationReport` / `effective_capabilities` / `capabilities` 包装；需要校验时返回普通 dict。
+- [x] `libmtk::scene` 根导出只保留 `export_scene_package` / `ScenePackageReader` / `SceneMetadata` / `ValidationReport`（若仍需要）/ 版本常量；内部 `SceneExportResult` / `SceneWriteRequest` / `ScenePackageWriteOptions` / `SceneBundle` 降为 `pub(crate)`。
 
 ### Batch 3：生物群系 / colormap API 收敛
 
-- [ ] 删除进程级 colormap 缓存 API（`set_cached_colormaps` / `clear_cached_colormaps` / `has_active_colormaps_override`）。
-- [ ] colormap 作为显式参数传入；`VanillaColormaps` 只作为不透明句柄，删除未消费的 `sample_*` / `load_embedded`。
+- [x] 删除进程级 colormap 缓存 API（`set_cached_colormaps` / `clear_cached_colormaps` / `has_active_colormaps_override`）。
+- [x] colormap 作为显式参数传入；`VanillaColormaps` 只作为不透明句柄，删除未消费的 `sample_*` / `load_embedded`。
 - [ ] 合并 `compute_mesh_biome_attributes*` 变体：生产入口只保留 `compute_biome_tint_attributes_paletted` 与 `reapply_uniform_biome_tint`（名称可按最终设计调整，但只能一个）。
 - [ ] 将 20 参数函数收敛为强类型 `BiomeTintRequest` 或明确分组参数。
 
@@ -340,6 +340,10 @@ PY
 
 顺序：`mtk-core` → `mtk-voxel` → `mtk-material` → `mtk-model` → `mtk-sync` → `mtk-package` → `libmtk`。
 
+- [x] 清理 `mtk-core` 废弃的嵌套挤出修复与随机挤出算子（`process_mesh_extrude_repair`, `process_random_extrude_mesh`, `ExtrudeMeshInput/Output`, `RandomExtrudeMeshInput/Output`）。
+- [x] 收敛 `mtk-cull` 内部矩形差集切分算子可见性（`subtract_rect`, `is_empty_rect`, `is_full_rect`）。
+- [x] 收敛 `mtk-model` 内部 OBJ 解析器可见性（`WavefrontObjParser`, `ModObjLoader`）。
+- [x] 收敛 `mtk-sync` 内部协同客户端与暂存缓冲区可见性（`SyncClient`, `BaselineAssembler`, `DeltaStagingBuffer`）。
 - [ ] 内部 `pub mod` 改 `mod`；crate 根只 `pub use` 有跨 crate 消费者的 item。
 - [ ] 删除第 4.1 节中零外部消费者的根导出；仍被本 crate 其他模块使用的降为 `pub(crate)`。
 - [ ] 删除零消费者函数/类型；单实现 trait 与包装类型一并删除。

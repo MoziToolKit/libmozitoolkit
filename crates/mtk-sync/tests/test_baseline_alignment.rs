@@ -5,7 +5,8 @@ use glam::IVec3;
 use mtk_sync::protocol::constants::*;
 use mtk_sync::protocol::hasher::{compute_sparse_state_hash, SparseBlockEntry};
 use mtk_sync::protocol::packet::*;
-use mtk_sync::{BaselineAssembler, LiveSyncSession, SyncLifecycle};
+use mtk_sync::session::BaselineAssembler;
+use mtk_sync::{LiveSyncSession, SyncLifecycle};
 
 /// Builds a single-chunk baseline payload for `size` voxels plus optional biome indices.
 fn build_chunk(voxel_indices: &[u8], biome_indices: &[u8]) -> (Vec<u8>, u64) {

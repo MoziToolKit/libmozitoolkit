@@ -14,8 +14,8 @@ pub use engine::{
 };
 pub use geometry::{
     check_coplanar_overlap, clip_face_excluding_hidden_volume, extract_quad_face_occlusion_rect,
-    is_face_completely_occluded, subtract_rect, ClippedQuadPiece, CoplanarOverlap,
-    CoplanarRelation, FaceAlignment,
+    is_face_completely_occluded, ClippedQuadPiece, CoplanarOverlap, CoplanarRelation,
+    FaceAlignment,
 };
 pub use mesh_cull::{cull_mesh_faces, MeshCullConfig, MeshCullResult};
 pub use rules::fluid_cull::{
@@ -23,6 +23,5 @@ pub use rules::fluid_cull::{
 };
 pub use rules::should_skip_rendering;
 pub use types::{
-    is_empty_rect, is_full_rect, BlockCullMeta, CullCategory, GlassCullMode, LeavesCullMode,
-    EMPTY_FACE_RECT, FULL_FACE_RECT,
+    BlockCullMeta, CullCategory, GlassCullMode, LeavesCullMode, EMPTY_FACE_RECT, FULL_FACE_RECT,
 };

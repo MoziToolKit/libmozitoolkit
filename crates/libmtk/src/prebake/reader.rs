@@ -285,46 +285,8 @@ impl AssetCacheReader {
         Ok(Some(Arc::new(colormaps)))
     }
 
-    /// Explicitly installs resource-pack colormap overrides into the global process-level cache.
-    pub fn install_colormaps(&self) -> Result<(), MtkError> {
-        install_cached_colormaps(&self.reader)
-    }
-
     /// Raw package reader accessor.
     pub fn package_reader(&self) -> &MtkPackageReader {
         &self.reader
     }
-}
-
-/// Installs resource-pack colormap overrides carried by a cache package.
-///
-/// Missing channels fall back to embedded vanilla; a cache without colormap
-/// chunks clears any previously active overrides.
-fn install_cached_colormaps(reader: &MtkPackageReader) -> Result<(), MtkError> {
-    let read = |name: &str| -> Result<Option<Vec<u8>>, MtkError> {
-        let chunk_id = format!("biome/colormap/{name}");
-        if reader.has_chunk(&chunk_id) {
-            let bytes = reader.read_chunk_decompressed(&chunk_id)?;
-            Ok(Some(bytes))
-        } else {
-            Ok(None)
-        }
-    };
-    let grass = read("grass")?;
-    let foliage = read("foliage")?;
-    let dry_foliage = read("dry_foliage")?;
-
-    if grass.is_none() && foliage.is_none() && dry_foliage.is_none() {
-        mtk_material::biome::clear_cached_colormaps();
-        return Ok(());
-    }
-
-    mtk_material::biome::set_cached_colormaps(
-        grass.as_deref(),
-        foliage.as_deref(),
-        dry_foliage.as_deref(),
-    )
-    .map_err(|e| MtkError::Texture(mtk_texture::error::TextureError::Baking(e)))?;
-
-    Ok(())
 }

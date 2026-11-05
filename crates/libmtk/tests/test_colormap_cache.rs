@@ -56,14 +56,5 @@ fn cache_colormap_override_is_installed_on_open() {
         .expect("present colormaps");
     assert_eq!(loaded.sample_grass_linear(0.5, 0.5), [1.0, 0.0, 0.0, 1.0]);
 
-    // Verify explicit install_colormaps installs into the global cache
-    reader.install_colormaps().unwrap();
-    let colormaps = mtk_material::get_default_colormaps();
-    assert_eq!(
-        colormaps.sample_grass_linear(0.5, 0.5),
-        [1.0, 0.0, 0.0, 1.0]
-    );
-
-    mtk_material::clear_cached_colormaps();
     let _ = std::fs::remove_file(path);
 }

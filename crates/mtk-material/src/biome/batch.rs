@@ -143,15 +143,6 @@ pub struct MeshBiomeAttributesResult {
     pub tint_colors: Vec<[f32; 4]>,
 }
 
-/// Compute biome tinting attributes in parallel across all mesh faces with custom biome settings.
-pub fn compute_mesh_biome_attributes_custom(
-    face_texture_keys: &[String],
-    custom: &CustomBiomeSettings,
-    resolver: &BiomeResolver,
-) -> MeshBiomeAttributesResult {
-    compute_mesh_biome_attributes_custom_with_colormaps(face_texture_keys, custom, resolver, None)
-}
-
 /// Compute biome tinting attributes in parallel across all mesh faces with custom biome settings and explicit colormaps.
 pub fn compute_mesh_biome_attributes_custom_with_colormaps(
     face_texture_keys: &[String],
@@ -245,22 +236,6 @@ pub fn compute_mesh_biome_attributes_custom_with_colormaps(
         packed_tint_data,
         tint_colors,
     }
-}
-
-/// Compute biome tinting attributes in parallel across all mesh faces.
-pub fn compute_mesh_biome_attributes(
-    face_texture_keys: &[String],
-    biome_name: &str,
-    multi_biomes: Option<&[(String, f32)]>,
-    resolver: &BiomeResolver,
-) -> MeshBiomeAttributesResult {
-    compute_mesh_biome_attributes_with_colormaps(
-        face_texture_keys,
-        biome_name,
-        multi_biomes,
-        resolver,
-        None,
-    )
 }
 
 /// Compute biome tinting attributes in parallel across all mesh faces using explicit colormaps.

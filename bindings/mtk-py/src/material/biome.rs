@@ -145,14 +145,6 @@ pub struct PyVanillaColormaps {
 
 #[pymethods]
 impl PyVanillaColormaps {
-    /// Loads the embedded vanilla default colormaps.
-    #[staticmethod]
-    pub fn load_embedded() -> Self {
-        Self {
-            inner: Arc::new(mtk_material::VanillaColormaps::load_embedded()),
-        }
-    }
-
     /// Constructs colormaps with optional PNG byte overrides for grass, foliage, and dry_foliage.
     #[staticmethod]
     #[pyo3(signature = (grass=None, foliage=None, dry_foliage=None))]
@@ -166,21 +158,6 @@ impl PyVanillaColormaps {
         Ok(Self {
             inner: Arc::new(cms),
         })
-    }
-
-    /// Sample linear RGBA grass color at temperature and humidity.
-    pub fn sample_grass_linear(&self, temperature: f32, humidity: f32) -> [f32; 4] {
-        self.inner.sample_grass_linear(temperature, humidity)
-    }
-
-    /// Sample linear RGBA foliage color at temperature and humidity.
-    pub fn sample_foliage_linear(&self, temperature: f32, humidity: f32) -> [f32; 4] {
-        self.inner.sample_foliage_linear(temperature, humidity)
-    }
-
-    /// Sample linear RGBA dry foliage color at temperature and humidity.
-    pub fn sample_dry_foliage_linear(&self, temperature: f32, humidity: f32) -> [f32; 4] {
-        self.inner.sample_dry_foliage_linear(temperature, humidity)
     }
 
     fn __repr__(&self) -> String {
@@ -633,10 +610,4 @@ pub fn compute_mesh_biome_attributes_from_storage(
     dict.set_item("packed_tint_data", packed_tint_data)?;
     dict.set_item("tint_colors", tint_colors)?;
     Ok(dict.into())
-}
-
-/// Clears any cached resource-pack colormap overrides, falling back to embedded vanilla.
-#[pyfunction]
-pub fn clear_cached_colormaps() {
-    mtk_material::biome::clear_cached_colormaps();
 }

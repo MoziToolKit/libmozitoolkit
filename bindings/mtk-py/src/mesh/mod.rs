@@ -99,12 +99,6 @@ impl PyMeshData {
         dict
     }
 
-    /// Whether this mesh contains any faces referencing dynamic entity atlas chunks (>= 0xFFF0).
-    #[getter]
-    pub fn has_dynamic_entity_chunks(&self) -> bool {
-        self.inner.has_dynamic_entity_chunks()
-    }
-
     /// Returns dynamic entity slots mapping if present.
     #[getter]
     pub fn dynamic_entity_slots(&self) -> Option<std::collections::HashMap<String, (u16, u16)>> {

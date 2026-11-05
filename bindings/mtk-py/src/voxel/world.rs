@@ -239,11 +239,6 @@ impl PyVoxelWorld {
         self.inner.set_config(config.inner.clone());
     }
 
-    /// Updates or replaces the prebaked model database.
-    pub fn set_model_db(&mut self, model_db: Option<&crate::model::PyBakedModelDatabase>) {
-        self.inner.set_model_db(model_db.map(|db| db.inner.clone()));
-    }
-
     /// Returns a copy of the underlying VoxelStorage.
     pub fn get_storage(&self) -> PyVoxelStorage {
         PyVoxelStorage {

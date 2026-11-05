@@ -247,22 +247,12 @@ impl ScenePackageReader {
         Ok(Some(Arc::new(colormaps)))
     }
 
-    /// Re-installs or updates the resident colormaps from this package into the process-level cache.
-    pub fn install_colormaps(&self) -> Result<(), MtkError> {
-        install_scene_colormaps(&self.reader)
-    }
-
     /// Reads the packaged BiomeResolver if present in the package.
     pub fn read_biome_resolver(&self) -> Result<Option<mtk_material::BiomeResolver>, MtkError> {
-        let chunk_id = if self.reader.has_chunk("biome/mapping") {
-            "biome/mapping"
-        } else if self.reader.has_chunk("biome/resolver") {
-            // DEPRECATED: "biome/resolver" chunk ID is deprecated and will be removed in version 2.2. Use "biome/mapping".
-            "biome/resolver"
-        } else {
+        if !self.reader.has_chunk("biome/mapping") {
             return Ok(None);
-        };
-        let json_str = self.reader.read_chunk_str(chunk_id)?;
+        }
+        let json_str = self.reader.read_chunk_str("biome/mapping")?;
         let resolver = mtk_material::BiomeResolver::from_json(&json_str)?;
         Ok(Some(resolver))
     }
@@ -360,34 +350,4 @@ impl ScenePackageReader {
     pub fn validate(&self) -> Result<ValidationReport, MtkError> {
         validate_scene_package(self)
     }
-}
-
-/// Installs resource-pack colormap overrides carried by a scene package into global cache.
-pub(crate) fn install_scene_colormaps(reader: &MtkPackageReader) -> Result<(), MtkError> {
-    let read = |name: &str| -> Result<Option<Vec<u8>>, MtkError> {
-        let chunk_id = format!("biome/colormap/{name}");
-        if reader.has_chunk(&chunk_id) {
-            let bytes = reader.read_chunk_decompressed(&chunk_id)?;
-            Ok(Some(bytes))
-        } else {
-            Ok(None)
-        }
-    };
-    let grass = read("grass")?;
-    let foliage = read("foliage")?;
-    let dry_foliage = read("dry_foliage")?;
-
-    if grass.is_none() && foliage.is_none() && dry_foliage.is_none() {
-        mtk_material::biome::clear_cached_colormaps();
-        return Ok(());
-    }
-
-    mtk_material::biome::set_cached_colormaps(
-        grass.as_deref(),
-        foliage.as_deref(),
-        dry_foliage.as_deref(),
-    )
-    .map_err(|e| MtkError::Texture(mtk_texture::error::TextureError::Baking(e)))?;
-
-    Ok(())
 }

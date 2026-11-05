@@ -83,9 +83,7 @@ pub struct BiomePalette {
 - `mtk_material::get_swamp_grass_color(x, z) -> [f32; 4]`: 严格按照原版算法（频率 0.0225、阈值 -0.1）在双色（`#4C763C` / `#6A7039`）间进行权威采样。
 
 **常驻 Colormap 内存像素采样 (`biome/colormap.rs`)**：
-- `mtk_material::get_default_colormaps() -> Arc<VanillaColormaps>`: 获取当前生效的草地、树叶、干枯树叶 RGB 色图；优先使用资源包缓存覆盖，缺失时回退内置原版。
-- `mtk_material::set_cached_colormaps(grass, foliage, dry_foliage)`: 从 `.mtkcache` 的 `BIOM` 色盘通道安装资源包覆盖（按通道可选）。
-- `mtk_material::clear_cached_colormaps()`: 清除覆盖，回退内置原版色盘。
+- `mtk_material::get_default_colormaps() -> Arc<VanillaColormaps>`: 获取内置原版草地、树叶、干枯树叶 RGB 色图。
 - `cms.sample_grass_linear(t, h) -> [f32; 4]`: 根据温度/湿度最近邻采样并转换为 Linear RGBA。
 - `cms.sample_foliage_linear(t, h) -> [f32; 4]`: 树叶色图最近邻采样。
 - `cms.sample_dry_foliage_linear(t, h) -> [f32; 4]`: 干枯树叶色图最近邻采样。
@@ -173,7 +171,6 @@ pub struct MeshMultiUvRemapResult {
 | `get_redstone_wire_srgb(power: u8) -> [f32; 4]` | 获取红石引线对应信号强度（0..15）的标准 sRGB 浮点色彩。 |
 | `get_redstone_wire_hex(power: u8) -> &'static str` | 获取红石引线对应信号强度（0..15）的十六进制颜色代码。 |
 | `blend_biome_colors(weights: &[(&str, f32)], category: &str) -> [f32; 4]` | 多生物群系加权线性混合色彩。 |
-| `compute_mesh_biome_attributes(texture_keys, biome, multi_biomes, resolver)` | Rayon 并行计算全网格染色面属性数组。 |
 | `compute_mesh_biome_attributes_per_face(texture_keys, face_biomes, resolver)` | Rayon 并行按逐面生物群系数组计算染色面属性与特异群系路由。 |
 | `reapply_uniform_biome_tint_flat(base_tt, packed, old_colors, colors, flags)` | 即时统一群系重着色：并行输出扁平 tint data/color，不重新解析贴图键。 |
 | `compute_mesh_biome_attributes_paletted_flat(palette, indices, ...)` | palette-native 全量群系属性计算，避免逐面 `String`。 |

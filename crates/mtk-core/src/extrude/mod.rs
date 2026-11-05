@@ -5,17 +5,14 @@
 //! and batch whole-mesh topological analysis and feature edge crease tagging.
 
 pub mod noise;
-pub mod random;
 pub mod repair;
 pub mod types;
 pub mod uv;
 
 pub use noise::{cellular_noise_3d, generate_extrude_heights, hash_3d, perlin_noise_3d};
-pub use random::process_random_extrude_mesh;
-pub use repair::{process_flat_mesh_extrude_repair, process_mesh_extrude_repair};
+pub use repair::process_flat_mesh_extrude_repair;
 pub use types::{
-    ExtrudeMeshInput, ExtrudeMeshOutput, ExtrudeNoiseType, ExtrudeUvMode, FlatPolygonMesh,
-    MeshExtrudeRepairConfig, RandomExtrudeMeshInput, RandomExtrudeMeshOutput,
+    ExtrudeMeshOutput, ExtrudeNoiseType, ExtrudeUvMode, FlatPolygonMesh, MeshExtrudeRepairConfig,
 };
 pub use uv::{repair_extruded_side_uv, repair_extruded_side_uv_advanced};
 
@@ -53,65 +50,6 @@ mod tests {
         for h in heights {
             assert!(h == 0.0 || (h - 0.5).abs() < 1e-4 || (h - 1.0).abs() < 1e-4);
         }
-    }
-
-    #[test]
-    fn test_batch_extrude_repair_cube_top_protrusion() {
-        let positions = vec![
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [1.0, 1.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, 0.0, 1.0],
-            [1.0, 0.0, 1.0],
-            [1.0, 1.0, 1.0],
-            [0.0, 1.0, 1.0],
-            [0.0, 0.0, 2.0],
-            [1.0, 0.0, 2.0],
-            [1.0, 1.0, 2.0],
-            [0.0, 1.0, 2.0],
-        ];
-
-        let face_vertices = vec![
-            vec![8, 9, 10, 11],
-            vec![4, 5, 9, 8],
-            vec![5, 6, 10, 9],
-            vec![6, 7, 11, 10],
-            vec![7, 4, 8, 11],
-        ];
-
-        let top_uv = vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
-        let collapsed_uv = vec![[0.0, 0.0], [1.0, 0.0], [1.0, 0.0], [0.0, 0.0]];
-
-        let face_uvs = vec![
-            top_uv,
-            collapsed_uv.clone(),
-            collapsed_uv.clone(),
-            collapsed_uv.clone(),
-            collapsed_uv.clone(),
-        ];
-
-        let input = ExtrudeMeshInput {
-            positions,
-            face_vertices,
-            face_uvs,
-            face_materials: vec![0, 0, 0, 0, 0],
-            selected_faces: vec![0],
-            pixel_steps: vec![[1.0 / 16.0, 1.0 / 16.0]; 5],
-            smart_side_faces: None,
-            config: MeshExtrudeRepairConfig {
-                uv_mode: ExtrudeUvMode::Smart,
-                repair_uv: true,
-                add_crease: true,
-                crease_val: 1.0,
-                only_collapsed: true,
-            },
-        };
-
-        let output = process_mesh_extrude_repair(&input);
-        assert_eq!(output.repaired_count, 4);
-        assert_eq!(output.modified_face_uvs.len(), 4);
-        assert!(!output.modified_edge_creases.is_empty());
     }
 
     #[test]

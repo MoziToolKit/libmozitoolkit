@@ -24,11 +24,9 @@ pub use prebake::{
     ASSET_CACHE_FORMAT_VERSION,
 };
 pub use scene::{
-    build_scene_interchange, export_scene_package, write_scene_package, AtlasLayerSource,
-    BiomeAssetSource, CtmAssetSource, CtmMode, EntityAssetSource, SceneAtlasSource, SceneBundle,
-    SceneCapabilities, SceneExportRequest, SceneExportResult, SceneExporterConfig, SceneMetadata,
-    ScenePackageReader, ScenePackageWriteOptions, SceneSourceCapabilities, SceneWriteRequest,
-    ValidationReport, SCENE_PACKAGE_FORMAT_VERSION,
+    export_scene_package, CtmMode, SceneBundle, SceneCapabilities, SceneExportRequest,
+    SceneExporterConfig, SceneMetadata, ScenePackageReader, ValidationReport,
+    SCENE_PACKAGE_FORMAT_VERSION,
 };
 
 /// Unified error type for all `libmtk` application-layer operations.

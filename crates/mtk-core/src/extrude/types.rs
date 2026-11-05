@@ -58,20 +58,6 @@ impl Default for MeshExtrudeRepairConfig {
     }
 }
 
-/// Input mesh buffer payload for extrude UV repair.
-#[derive(Debug, Clone)]
-pub struct ExtrudeMeshInput {
-    pub positions: Vec<[f32; 3]>,
-    pub face_vertices: Vec<Vec<u32>>,
-    pub face_uvs: Vec<Vec<[f32; 2]>>,
-    pub face_materials: Vec<u32>,
-    pub selected_faces: Vec<u32>,
-    pub pixel_steps: Vec<[f32; 2]>,
-    /// Explicit target side faces to repair (host-agnostic alias for smart_side_faces)
-    pub smart_side_faces: Option<Vec<u32>>,
-    pub config: MeshExtrudeRepairConfig,
-}
-
 /// Output mesh updates from extrude UV repair.
 #[derive(Debug, Clone, Default)]
 pub struct ExtrudeMeshOutput {
@@ -84,37 +70,6 @@ pub struct ExtrudeMeshOutput {
     /// Pure geometric list of affected feature edges (v1, v2) where v1 < v2
     pub modified_edges: Vec<(u32, u32)>,
     /// Total number of side faces repaired
-    pub repaired_count: usize,
-}
-
-/// Input data for random discrete face extrusion.
-#[derive(Debug, Clone)]
-pub struct RandomExtrudeMeshInput {
-    pub positions: Vec<[f32; 3]>,
-    pub face_vertices: Vec<Vec<u32>>,
-    pub face_uvs: Vec<Vec<[f32; 2]>>,
-    pub face_materials: Vec<u32>,
-    pub selected_faces: Vec<u32>,
-    pub pixel_steps: Vec<[f32; 2]>,
-    pub min_height: f32,
-    pub max_height: f32,
-    pub seed: u32,
-    pub noise_type: ExtrudeNoiseType,
-    pub noise_scale: f32,
-    pub repair_uv: bool,
-    pub uv_mode: ExtrudeUvMode,
-    pub add_crease: bool,
-    pub crease_val: f32,
-}
-
-/// Output data containing full reconstructed mesh after random discrete extrusion.
-#[derive(Debug, Clone, Default)]
-pub struct RandomExtrudeMeshOutput {
-    pub new_positions: Vec<[f32; 3]>,
-    pub new_face_vertices: Vec<Vec<u32>>,
-    pub new_face_uvs: Vec<Vec<[f32; 2]>>,
-    pub new_face_materials: Vec<u32>,
-    pub extruded_face_indices: Vec<u32>,
     pub repaired_count: usize,
 }
 

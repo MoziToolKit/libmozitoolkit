@@ -359,37 +359,6 @@ impl VoxelStorage {
         true
     }
 
-    /// Returns a list of all populated non-air blocks as `(x, y, z, blockstate)`.
-    pub fn get_all_blocks(&self) -> Vec<(i32, i32, i32, String)> {
-        let mut result = Vec::new();
-        for (&coord, sec) in &self.sections {
-            if sec.non_air_count == 0 {
-                continue;
-            }
-            let base_x = coord.x << 4;
-            let base_y = coord.y << 4;
-            let base_z = coord.z << 4;
-            for x in 0..16 {
-                for y in 0..16 {
-                    for z in 0..16 {
-                        let idx = (x * 256 + y * 16 + z) as usize;
-                        let pal_id = sec.voxels[idx] as usize;
-                        if pal_id > 0 && pal_id < sec.palette.len() {
-                            let state = &sec.palette[pal_id];
-                            if !state.is_empty()
-                                && state != "minecraft:air"
-                                && !state.starts_with("minecraft:air")
-                            {
-                                result.push((base_x + x, base_y + y, base_z + z, state.clone()));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        result
-    }
-
     /// Gets the blockstate string at world coordinate `(x, y, z)`.
     pub fn get_block(&self, x: i32, y: i32, z: i32) -> &str {
         if self.has_explicit_bounds && !self.contains(x, y, z) {

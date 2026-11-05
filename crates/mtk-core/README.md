@@ -78,9 +78,7 @@
 | [`ExtrudeUvMode`](src/extrude.rs) | `Smart`（智能法线判定）、`Inward`（边缘内缩采样）、`Outward`（外推连续条带采样）。 |
 | [`ExtrudeNoiseType`](src/extrude.rs) | `UniformRandom`（伪随机）、`Perlin`（连续梯度噪声）、`Cellular`（Voronoi 细胞阶梯噪声）。 |
 | `repair_extruded_side_uv` | `(...) -> [[f32; 2]; 4]`：计算侧面重构的 4 角点 UV，并执行 Safe Padding Clamping 避免图集相邻纹理渗色。 |
-| `process_mesh_extrude_repair` | `(input: &ExtrudeMeshInput) -> ExtrudeMeshOutput`：全网格批量 Data-In Data-Out 挤出修复门面算子。 |
 | `process_flat_mesh_extrude_repair` | `(mesh: &FlatPolygonMesh, ...) -> ExtrudeMeshOutput`：基于扁平连续内存网格的高性能挤出修复。 |
-| `process_random_extrude_mesh` | `(input: &RandomExtrudeMeshInput) -> RandomExtrudeMeshOutput`：单批次完成离散面随机挤出、3D 噪声位移与侧面拓扑 UV 缝合。 |
 
 ### 2.5 确定性随机与植被偏移 (`random`)
 

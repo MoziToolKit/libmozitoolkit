@@ -72,12 +72,6 @@ impl PyBakedModelDatabase {
             }
         });
     }
-
-    /// Eliminates overlapping, duplicate, and interior contacting faces across all models in the database.
-    pub fn deduplicate_all(&mut self, py: Python<'_>) -> usize {
-        let db = Arc::make_mut(&mut self.inner);
-        py.detach(|| db.deduplicate_all())
-    }
 }
 
 /// Headless Minecraft Model Baker for BlockStates and custom models.

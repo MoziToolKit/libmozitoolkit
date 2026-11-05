@@ -302,54 +302,6 @@ pub fn decode_packet<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, P
     Ok(dict)
 }
 
-/// Computes the authoritative canonical state_hash across the 3D bounding volume.
-#[pyfunction]
-#[pyo3(signature = (min_x, min_y, min_z, size_x, size_y, size_z, dimension, block_states, biomes=None))]
-pub fn compute_canonical_state_hash(
-    min_x: i32,
-    min_y: i32,
-    min_z: i32,
-    size_x: i32,
-    size_y: i32,
-    size_z: i32,
-    dimension: &str,
-    block_states: Vec<String>,
-    biomes: Option<Vec<String>>,
-) -> u64 {
-    let min_pos = glam::IVec3::new(min_x, min_y, min_z);
-    let size = glam::IVec3::new(size_x, size_y, size_z);
-
-    let qw = (size_x + 3) / 4;
-    let qd = (size_z + 3) / 4;
-
-    mtk_sync::protocol::hasher::compute_canonical_state_hash(
-        min_pos,
-        size,
-        dimension,
-        |x, y, z| {
-            let lx = (x - min_x) as usize;
-            let ly = (y - min_y) as usize;
-            let lz = (z - min_z) as usize;
-            // X-fastest, Z-next, Y-slowest
-            let idx = ly * (size_x as usize * size_z as usize) + lz * (size_x as usize) + lx;
-            if idx < block_states.len() {
-                block_states[idx].clone()
-            } else {
-                "minecraft:air".to_string()
-            }
-        },
-        |qx, qy, qz| {
-            let idx = (qy * (qw * qd) + qz * qw + qx) as usize;
-            if let Some(b) = &biomes {
-                if idx < b.len() {
-                    return b[idx].clone();
-                }
-            }
-            "minecraft:plains".to_string()
-        },
-    )
-}
-
 /// Encodes a WELCOME packet (0x02) to bytes.
 #[pyfunction]
 #[pyo3(signature = (server_uuid, epoch, sequence, decision, current_min, current_size, current_state_hash, dimension="minecraft:overworld", negotiated_version=3))]

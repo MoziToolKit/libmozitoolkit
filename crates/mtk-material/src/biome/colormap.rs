@@ -7,7 +7,7 @@
 //! Embedded vanilla PNGs are the fallback. A precompiled asset cache may provide
 //! resource-pack overrides; opening such a cache installs them as the active set.
 
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, OnceLock};
 
 use super::palettes::{
     sample_colormap_hex, sample_colormap_pixel, sample_colormap_pixel_uv, srgb_to_linear,
@@ -290,61 +290,11 @@ impl VanillaColormaps {
 
 /// Embedded vanilla fallback, decoded once.
 static EMBEDDED_COLORMAPS: OnceLock<Arc<VanillaColormaps>> = OnceLock::new();
-/// Resource-pack overrides installed when an asset cache is opened.
-static ACTIVE_COLORMAPS: RwLock<Option<Arc<VanillaColormaps>>> = RwLock::new(None);
 
-/// Returns the active resident colormaps: cache overrides when installed,
-/// otherwise embedded vanilla.
+/// Returns the embedded vanilla colormaps.
 #[inline]
 pub fn get_default_colormaps() -> Arc<VanillaColormaps> {
-    if let Ok(guard) = ACTIVE_COLORMAPS.read() {
-        if let Some(colormaps) = guard.as_ref() {
-            return Arc::clone(colormaps);
-        }
-    }
     Arc::clone(EMBEDDED_COLORMAPS.get_or_init(|| Arc::new(VanillaColormaps::load_embedded())))
-}
-
-/// Checks whether an active resource-pack colormap override is currently installed.
-#[inline]
-pub fn has_active_colormaps_override() -> bool {
-    if let Ok(guard) = ACTIVE_COLORMAPS.read() {
-        guard.is_some()
-    } else {
-        false
-    }
-}
-
-/// Installs resource-pack colormap overrides from an opened asset cache.
-///
-/// Missing channels keep the embedded vanilla data. Passing all `None` clears
-/// any previous override and returns to embedded vanilla.
-pub fn set_cached_colormaps(
-    grass: Option<&[u8]>,
-    foliage: Option<&[u8]>,
-    dry_foliage: Option<&[u8]>,
-) -> Result<(), String> {
-    let active = if grass.is_none() && foliage.is_none() && dry_foliage.is_none() {
-        None
-    } else {
-        Some(Arc::new(VanillaColormaps::with_overrides(
-            grass,
-            foliage,
-            dry_foliage,
-        )?))
-    };
-    let mut guard = ACTIVE_COLORMAPS
-        .write()
-        .map_err(|_| "colormap cache lock poisoned".to_string())?;
-    *guard = active;
-    Ok(())
-}
-
-/// Clears resource-pack overrides, restoring embedded vanilla colormaps.
-pub fn clear_cached_colormaps() {
-    if let Ok(mut guard) = ACTIVE_COLORMAPS.write() {
-        *guard = None;
-    }
 }
 
 /// Applies the vanilla `GrassColorModifier.DARK_FOREST` to a base sRGB grass color:

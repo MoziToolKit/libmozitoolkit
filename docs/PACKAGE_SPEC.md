@@ -139,14 +139,14 @@ pub struct ChunkEntry {
   * `biome/colormap/*`：色盘纹理切片原始 PNG 缓冲（`biome/colormap/grass`、`biome/colormap/foliage`、`biome/colormap/dry_foliage`）。
 * **使用契约**：
   * 场景包导出时自动提取资源包中的自定义 Colormap 与解析器一同打包。
-  * 读取器（`ScenePackageReader`）提供 `has_colormaps()`、`read_colormap(name)` 与 `read_biome_resolver()` 进行纯只读解析。若需要更新当前进程的全局色盘事实源，可通过显式方法 `install_colormaps()` 安全重载，严禁在构造时静默产生全局单例状态副作用。
+  * 读取器（`ScenePackageReader`）通过 `unpack()` 提供包含 `colormaps` 与 `biome_resolver` 的纯只读解析，遵循纯粹 Data In, Data Out 原则，无全局单例状态副作用。
 
 ### 5.7 `CTMR` - CTM 连通纹理规则分块
 * **存储内容**：
   * `ctm/rules`：携带经过 Tree-Shaking 剪枝后的 CTM 规则集（JSON 序列化后的 `Vec<CtmRule>`）。
 * **使用契约**：
   * 仅剪枝打包当前场景实际方块状态或其关联贴图所命中的 CTM 规则（`CtmRule::applies_to_scene`），同时将规则展开引用的 CTM 变体子贴图（如 `optifine/ctm/.../0.png`）自动装箱进伴生的 Scene Mini-Atlas。
-  * 读取端可通过 `has_ctm_rules()`、`read_ctm_rules_json()` 与 `read_ctm_solver()` 零外部依赖现场复原带优先级倒序索引的 `CtmSolver`，使跨设备脱机场景在重构几何时保持 100% 精确的连通纹理外观。
+  * 读取端可通过 `unpack()` 零外部依赖现场复原带优先级倒序索引的 `CtmSolver`，使跨设备脱机场景在重构几何时保持 100% 精确的连通纹理外观。
 
 ---
 

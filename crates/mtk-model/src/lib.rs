@@ -18,7 +18,6 @@ pub use error::ModelError;
 pub use parser::{
     is_air_like, mesh_to_obj_string, normalize_canonical_blockstate, BakedObjFace, BlockModelJson,
     BlockState, BlockStateDefinition, BlockStateResolver, BuiltinTransform, ElementJson, FaceJson,
-    ModObjLoader, MultipartCondition, MultipartRule, ObjRawFace, ResolvedBlockModel,
-    ResolvedElement, ResolvedFace, RotationJson, TextureValue, VariantEntry, VariantMatch,
-    VariantModel, WavefrontObjParser,
+    MultipartCondition, MultipartRule, ObjRawFace, ResolvedBlockModel, ResolvedElement,
+    ResolvedFace, RotationJson, TextureValue, VariantEntry, VariantMatch, VariantModel,
 };

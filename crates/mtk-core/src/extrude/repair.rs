@@ -8,8 +8,7 @@ use alloc::vec::Vec;
 use glam::Vec2;
 
 use super::types::{
-    compute_face_normal, ExtrudeMeshInput, ExtrudeMeshOutput, ExtrudeUvMode, FlatPolygonMesh,
-    MeshExtrudeRepairConfig,
+    compute_face_normal, ExtrudeMeshOutput, ExtrudeUvMode, FlatPolygonMesh, MeshExtrudeRepairConfig,
 };
 use super::uv::repair_extruded_side_uv_advanced;
 use crate::geometry::Aabb2d;
@@ -385,22 +384,4 @@ pub fn process_flat_mesh_extrude_repair(
     output.modified_edge_creases = modified_creases.into_iter().collect();
 
     output
-}
-
-/// Convenience wrapper for standard nested vectors input buffer.
-pub fn process_mesh_extrude_repair(input: &ExtrudeMeshInput) -> ExtrudeMeshOutput {
-    let flat_mesh = FlatPolygonMesh::from_nested(
-        input.positions.clone(),
-        &input.face_vertices,
-        &input.face_uvs,
-        &input.face_materials,
-    );
-
-    process_flat_mesh_extrude_repair(
-        &flat_mesh,
-        &input.selected_faces,
-        &input.pixel_steps,
-        &input.config,
-        input.smart_side_faces.as_deref(),
-    )
 }

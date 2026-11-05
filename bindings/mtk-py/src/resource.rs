@@ -156,12 +156,6 @@ impl PyAssetCache {
         })
     }
 
-    /// Validates whether a file at `path` matches the specified fingerprint using only the 64-byte header.
-    #[staticmethod]
-    pub fn is_valid(path: &str, fingerprint: &str) -> bool {
-        libmtk::AssetCacheReader::is_valid_cache_file(path, fingerprint)
-    }
-
     /// Absolute path to the opened package file.
     #[getter]
     pub fn package_path(&self) -> &str {
@@ -243,13 +237,6 @@ impl PyAssetCache {
     /// Returns whether this asset cache carries packaged CTM rules.
     pub fn has_ctm_rules(&self) -> bool {
         self.inner.package_reader().has_chunk("ctm/rules")
-    }
-
-    /// Explicitly installs colormaps from this cache into the process-level active singletons.
-    pub fn install_colormaps(&self) -> PyResult<()> {
-        self.inner
-            .install_colormaps()
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 
     /// Extracts a single texture chunk to the specified destination path.

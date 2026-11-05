@@ -8,12 +8,11 @@ pub mod palettes;
 pub mod resolver;
 
 pub use colormap::{
-    apply_dark_forest_grass_modifier, clear_cached_colormaps, compute_resolved_tint_color,
-    get_default_colormaps, has_active_colormaps_override, set_cached_colormaps, VanillaColormaps,
+    apply_dark_forest_grass_modifier, compute_resolved_tint_color, get_default_colormaps,
+    VanillaColormaps,
 };
 
 pub use batch::{
-    compute_mesh_biome_attributes, compute_mesh_biome_attributes_custom,
     compute_mesh_biome_attributes_custom_with_colormaps,
     compute_mesh_biome_attributes_paletted_flat, compute_mesh_biome_attributes_per_face,
     compute_mesh_biome_attributes_with_colormaps, reapply_uniform_biome_tint,

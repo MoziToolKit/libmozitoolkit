@@ -1,9 +1,10 @@
 use glam::{IVec3, Vec3};
 use mtk_core::direction::Direction;
 use mtk_core::geometry::Aabb2d;
+use mtk_cull::geometry::subtract_rect;
 use mtk_cull::{
-    extract_quad_face_occlusion_rect, is_face_completely_occluded, subtract_rect, CullCategory,
-    FaceCuller, GlassCullMode, LeavesCullMode,
+    extract_quad_face_occlusion_rect, is_face_completely_occluded, CullCategory, FaceCuller,
+    GlassCullMode, LeavesCullMode,
 };
 
 #[test]

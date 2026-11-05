@@ -4,7 +4,6 @@
 //! production code must not depend on them.
 
 use pyo3::prelude::*;
-use pyo3::types::PyList;
 
 use crate::model::PyModelBaker;
 use crate::texture::atlas::PyAtlasBuilder;
@@ -110,16 +109,6 @@ pub fn voxel_set_section_snapshot(
     )
 }
 
-/// Returns all populated non-air blocks (test-only low-level accessor).
-#[pyfunction]
-pub fn voxel_get_all_blocks<'py>(py: Python<'py>, storage: &PyVoxelStorage) -> Bound<'py, PyList> {
-    let list = PyList::empty(py);
-    for (x, y, z, state) in storage.inner.get_all_blocks() {
-        let _ = list.append(((x, y, z), state));
-    }
-    list
-}
-
 /// Registers the `testing` module on `parent_module`.
 pub fn register_submodule(py: Python<'_>, parent_module: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(py, "testing")?;
@@ -152,7 +141,6 @@ pub fn register_submodule(py: Python<'_>, parent_module: &Bound<'_, PyModule>) -
     sub.add_function(wrap_pyfunction!(uv::batch_repair_fluid_uv, &sub)?)?;
     sub.add_function(wrap_pyfunction!(uv::repair_extruded_side_uv, &sub)?)?;
     sub.add_function(wrap_pyfunction!(texture::sample_uv_alpha_f32, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(texture::is_face_transparent_f32, &sub)?)?;
 
     // Protocol encoders are server-side/test-only from the DCC client's view.
     sub.add_function(wrap_pyfunction!(protocol::encode_welcome, &sub)?)?;
@@ -165,7 +153,6 @@ pub fn register_submodule(py: Python<'_>, parent_module: &Bound<'_, PyModule>) -
     // Voxel low-level testing helpers.
     sub.add_function(wrap_pyfunction!(voxel_dirty_section_count, &sub)?)?;
     sub.add_function(wrap_pyfunction!(voxel_set_section_snapshot, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(voxel_get_all_blocks, &sub)?)?;
 
     parent_module.add_submodule(&sub)?;
     Ok(())

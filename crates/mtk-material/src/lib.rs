@@ -19,21 +19,19 @@ pub use pbr::{
 
 pub use biome::{
     apply_dark_forest_grass_modifier, blend_biome_colors, classify_tint_category,
-    clear_cached_colormaps, compute_mesh_biome_attributes, compute_mesh_biome_attributes_custom,
     compute_mesh_biome_attributes_custom_with_colormaps,
     compute_mesh_biome_attributes_paletted_flat, compute_mesh_biome_attributes_per_face,
     compute_mesh_biome_attributes_with_colormaps, compute_resolved_tint_color,
     default_biome_palette, get_biome_palette, get_colormap_uv, get_default_colormaps,
     get_hardcoded_tint, get_hardcoded_tint_hex, get_swamp_grass_color, get_unit_cube_tint_index,
-    get_unit_cube_tint_indices, has_active_colormaps_override, hex_to_linear_rgba, hex_to_srgb,
-    linear_to_srgb, reapply_uniform_biome_tint, reapply_uniform_biome_tint_flat,
-    resolve_biome_color_set, resolve_biome_color_set_with_colormaps, sample_colormap_hex,
-    sample_colormap_pixel, sample_colormap_pixel_u8, sample_colormap_pixel_uv,
-    sample_colormap_pixel_uv_u8, set_cached_colormaps, srgb_to_linear, BiomeColorSet, BiomePalette,
-    BiomeResolver, BiomeTintFlatBuffers, CustomBiomeSettings, MeshBiomeAttributesResult, TintInfo,
-    VanillaColormaps, BLOCK_TINT_REGISTRY, CANONICAL_BIOMES, HARDCODED_BLOCK_TINTS,
-    TINT_TYPE_DRY_FOLIAGE, TINT_TYPE_FOLIAGE, TINT_TYPE_GRASS, TINT_TYPE_HARDCODED, TINT_TYPE_NONE,
-    TINT_TYPE_WATER,
+    get_unit_cube_tint_indices, hex_to_linear_rgba, hex_to_srgb, linear_to_srgb,
+    reapply_uniform_biome_tint, reapply_uniform_biome_tint_flat, resolve_biome_color_set,
+    resolve_biome_color_set_with_colormaps, sample_colormap_hex, sample_colormap_pixel,
+    sample_colormap_pixel_u8, sample_colormap_pixel_uv, sample_colormap_pixel_uv_u8,
+    srgb_to_linear, BiomeColorSet, BiomePalette, BiomeResolver, BiomeTintFlatBuffers,
+    CustomBiomeSettings, MeshBiomeAttributesResult, TintInfo, VanillaColormaps,
+    BLOCK_TINT_REGISTRY, CANONICAL_BIOMES, HARDCODED_BLOCK_TINTS, TINT_TYPE_DRY_FOLIAGE,
+    TINT_TYPE_FOLIAGE, TINT_TYPE_GRASS, TINT_TYPE_HARDCODED, TINT_TYPE_NONE, TINT_TYPE_WATER,
 };
 pub use error::MaterialError;
 pub use remap::batch::{

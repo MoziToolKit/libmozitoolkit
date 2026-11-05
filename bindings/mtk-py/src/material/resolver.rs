@@ -6,7 +6,7 @@ use crate::buffer::{
     create_owned_f32_memoryview, create_owned_i32_memoryview, create_owned_u32_memoryview,
 };
 use mtk_material::{
-    clean_identifier, remap_mesh_multi_uvs_paletted_with_options, reroute_mesh_animation,
+    remap_mesh_multi_uvs_paletted_with_options, reroute_mesh_animation,
     resolve_mesh_material_routes, BiomeResolver,
 };
 use pyo3::buffer::PyBuffer;
@@ -132,12 +132,6 @@ pub struct PyMaterialResolver;
 
 #[pymethods]
 impl PyMaterialResolver {
-    /// Clean a raw material or texture name into a normalized identifier stem.
-    #[staticmethod]
-    pub fn clean_name(name: &str) -> String {
-        clean_identifier(name)
-    }
-
     /// Resolve atlas routing (chunk/texture/animation metadata) for face texture keys.
     #[staticmethod]
     #[pyo3(signature = (face_texture_keys, atlas, aliases=None, enable_animated_textures=false))]

@@ -54,15 +54,9 @@ bindings/
   - `face_materials_memoryview(py)`: 逐面材质插槽 ID。
   - **宿主内存适配层隔离 (`adapters/mtk-host-memory` / `adapters/blender/mtk-blender-dna`)**：通用 raw slice → pointer 复制位于 `adapters/mtk-host-memory`，Blender 语义包装位于 `adapters/blender/mtk-blender-dna`。两者都不依赖核心 crate；独立 `libmtk_blender_dna` wheel 通过 Python Buffer Protocol 接收核心 `memoryview`，并写入 Blender 指针。核心 wheel 不包含也不要求该适配器。
   - `cull_faces(tolerance=1e-3, cull_opposite=True, cull_duplicates=True) -> PyMeshData`: 执行空间遮挡与叠面剔除，无缝保留所有自定义属性与 Quad 拓扑。
-- `PyBakedModelDatabase`:
-  - `deduplicate_all() -> int`: 批量对数据库中所有烘焙模型执行 Element 面去重与内部接触面剔除，返回消除的总面数。
 - **高阶 Data-In Data-Out 算子**：
   - `process_flat_mesh_extrude_repair(...)`:
     使用扁平连续 1D 缓冲区（`positions`, `loop_vertices`, `loop_uvs`, `face_loop_starts`, `face_loop_totals`, `face_materials`）进行极致性能的批量挤出修复，彻底消除 Python 列表嵌套开销，完美适配 Blender `foreach_get` 与 NumPy 数组。
-  - `process_flat_mesh_extrude_repair(...)`:
-    输入全网格位置、面顶点索引、循环 UV 与像素步长，由 Rust 核心并行分析面面积与法线朝向，输出修改后的稀疏 UV、同步材质与 Crease 锐边。
-  - `process_random_extrude_mesh(...)`:
-    单批次完成离散选区面随机挤出、3D 噪声位移（Uniform / Perlin / Cellular）、侧面拓扑缝合与自动 UV 修复。
   - `adaptive_pixel_split_mesh(...)`:
     自适应像素网格细分，基于贴图分辨率与 UV 物理跨度切分，保留 Quad 拓扑并双线性插值所有顶点属性。
   - `slice_face_by_pixel_grid(...)` / `calculate_face_target_grid(...)` / `calculate_pixel_grid_cut_factors(...)` 属于测试/开发 API，位于 `unstable.testing`。
