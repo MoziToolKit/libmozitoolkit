@@ -6,7 +6,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyMemoryView;
 
-use mtk_voxel::storage::VoxelPointCloud;
+use mtk_voxel::VoxelPointCloud;
 
 use crate::voxel::PyVoxelStorage;
 

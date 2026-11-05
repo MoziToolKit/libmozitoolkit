@@ -71,19 +71,11 @@
 
 | 模块路径 | 职责与功能 |
 | :--- | :--- |
-| **`storage::section`** | 16×16×16 单区块切片存储 (`SectionStorage`)，密集调色板映射与 non-air 数量追踪。 |
-| **`storage::world`** | 3D 稀疏区块世界容器 (`VoxelStorage`)、选区包围盒裁剪、CRC32 清单比对与原子版本控制。 |
-| **`storage::point_cloud`** | 全量无剔除体素点云存储 (`VoxelPointCloud`)，支持点网格 Attributes 双向重建与雕刻编辑源 (`PointCloudVoxelSource`)。 |
-| **`storage::crc`** | 快速 CRC32 计算器、规范 BlockState 字符串提取器与空区块 CRC 表。 |
-| **`source`** | 统一体素源抽象 Trait：`VoxelReader`、`VoxelWriter`、`VoxelSource` 及批量灌流管线 `ingest_from_source`。 |
-| **`mesher::section_mesher`**| 高性能区块网格化器 (`SectionMesher`)，集成遮挡判定、AO、着色元数据绑定、`GridVertexPool` 直接网格焊接发射与条件式后处理。 |
-| **`mesher::grid_pool`**     | 17×17×17 (4,913 格点) 紧凑角点顶点池 (`GridVertexPool`)，发射 Unit Cube 面时实现零堆分配的直接流形拓扑焊接。 |
-| **`mesher::delta_mesher`**  | 增量网格化器 (`DeltaMesher`)，脏区块识别与 3×3×3 邻域涟漪扩散重构。 |
-| **`mesher::ao`**            | 原版 4 顶点平滑环境光遮蔽算法与各向异性对角线翻转决策 (`should_flip_quad_diagonal`)。 |
-| **`mesher::shading`**       | 材质着色元数据解析、CTM 调度与 Palette 级别预解算缓存 (`PaletteMeshingData`)。 |
-| **`mesher::collector`**     | 逐面材质槽、图集 ID、Biome 染色与纹理键属性收集器 (`FaceAttributesCollector`)。 |
-| **`fluid`**                 | 物理流体表面高度解算、流向矢量 (`vx, vz`)、流体 Top/Side UV 映射与原地拓扑批量修复 (`repair_mesh_fluid_uv_inplace`)。 |
-| **`biome`**                 | 5×5 (R=2) 反距离权重核平滑生物群系柱计算 (`SmoothedBiomeColumn`) 与边界钳位防护。 |
+| **`storage`**               | 16×16×16 单区块切片存储 (`SectionStorage`)、3D 稀疏世界容器 (`VoxelStorage`)、全量无剔除体素点云 (`VoxelPointCloud`)、伴生点云源 (`PointCloudVoxelSource`)、场景交换载荷 (`SparseVoxelPayload`, `SparseVoxelColumns`) 与密集 3D Biome (`SectionBiomes`)。 |
+| **`source`**                | 统一体素源抽象 Trait：`VoxelReader`、`VoxelWriter`、`VoxelSource` 及批量灌流管线 `ingest_from_source`。 |
+| **`mesher`**                | 高性能区块网格化器 (`SectionMesher`)、增量网格化器 (`DeltaMesher`) 与模型数据源枚举 (`ModelSource`)。 |
+| **`fluid`**                 | 流体类型枚举 (`FluidType`) 与流体 UV 修复算子 (`repair_quad_fluid_uv`, `batch_repair_fluid_uv`, `repair_mesh_fluid_uv_inplace`, `get_fluid_top_uvs`, `get_fluid_side_uvs`)。 |
+| **`biome`**                 | 5×5 (R=2) 盒式平滑生物群系柱计算 (`SmoothedBiomeColumn`)、`get_smoothed_column_biome` 与 `get_point_column_biome`。 |
 | **`world`**                 | 统一 3D 场景引擎 (`VoxelWorld`)，封装存储管理、Rayon 并行重建、物理进度实时汇报 (`rebuild_all_with_progress`)、显式线程池配置 (`num_threads`)、单阶段流式跨区块缝合 (`merge_welded_sections`)、增量重建的 Section 边界缝合 (`merge_welded_sections_filtered`，保证 `rebuild_dirty` 与 `rebuild_all` 拓扑一致)、Section 增量网格缓存与清空 (`clear_cache`)、动态资产热重载 (`hot_reload_assets`)、使用图集 Chunk 追踪 (`used_chunk_ids`) 与多源摄取。 |
 | **`types`**                 | 配置参数 `MesherConfig`、坐标系枚举 `CoordinateSystem`、统计结果 `WorldMeshBuildResult` 与错误类型 `VoxelError`。 |
 
@@ -243,12 +235,12 @@ $$\text{AO} = \begin{cases} 0 & \text{若 side1 与 side2 均不透明（角被�
 
 遮挡等级线性映射为亮度乘子 $[0.2, 0.467, 0.733, 1.0]$。
 
-#### 各向异性折痕消除 (`should_flip_quad_diagonal`)
-四边形剖分为 2 个三角形时，若对角线剖分方向与光照梯度不匹配，会产生明显的斜向三角面光照撕裂。`mtk-voxel` 通过比较对角顶点 AO 之和进行动态拓扑翻转：
+#### 各向异性折痕消除（内部算子）
+四边形剖分为 2 个三角形时，若对角线剖分方向与光照梯度不匹配，会产生明显的斜向三角面光照撕裂。`mtk-voxel` 内部通过比较对角顶点 AO 之和进行动态拓扑翻转：
 ```rust
 #[inline]
-pub fn should_flip_quad_diagonal(ao: [u8; 4]) -> bool {
-    (ao[0] as i32 + ao[2] as i32) > (ao[1] as i32 + ao[3] as i32)
+pub(crate) fn should_flip_quad_diagonal(ao: [f32; 4]) -> bool {
+    (ao[0] + ao[2]) > (ao[1] + ao[3])
 }
 ```
 

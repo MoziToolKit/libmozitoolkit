@@ -4,16 +4,18 @@ use std::path::Path;
 
 use glam::IVec3;
 use mtk_cull::FaceCuller;
-use mtk_voxel::biome::{get_biome_meta, get_colormap_uv};
-use mtk_voxel::fluid::uv::{get_fluid_side_uvs, get_fluid_top_uvs};
-use mtk_voxel::fluid::{
-    calculate_fluid_corner_heights, calculate_fluid_flow_vector, get_fluid_base_height, FluidType,
-};
-use mtk_voxel::mesher::SectionMesher;
-use mtk_voxel::storage::SectionStorage;
-use mtk_voxel::storage::VoxelStorage;
-use mtk_voxel::types::MesherConfig;
+use mtk_material::{get_biome_palette, get_colormap_uv};
 use serde::Deserialize;
+
+use crate::fluid::height::{
+    calculate_fluid_corner_heights, calculate_fluid_flow_vector, get_fluid_base_height,
+};
+use crate::fluid::uv::{get_fluid_side_uvs, get_fluid_top_uvs};
+use crate::fluid::FluidType;
+use crate::mesher::shading::ModelSource;
+use crate::mesher::SectionMesher;
+use crate::storage::{SectionStorage, VoxelStorage};
+use crate::types::MesherConfig;
 
 #[derive(Debug, Deserialize)]
 struct CrcTestCase {
@@ -79,8 +81,6 @@ struct BlenderGroundTruth {
     fluid_uv_tests: Vec<FluidUvTestCase>,
     mesh_tests: Vec<MeshTestCase>,
 }
-
-use mtk_voxel::mesher::shading::ModelSource;
 
 #[test]
 fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
@@ -189,7 +189,7 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
 
         assert!(
             diff_vx < eps && diff_vz < eps,
-            "Flow vector mismatch in '{}': Rust [{}, {}] vs Blender [{}, {}]",
+            "Flow vector mismatch in '{}': Rust ({}, {}) vs Blender ({}, {})",
             tc.name,
             vx,
             vz,
@@ -211,12 +211,12 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
     // 3. Verify Biome Colormap UVs & Metadata
     println!("\n[3. Biome Colormap UV & Meta Verification (vs MoziToolKit biome.py)]");
     for tc in &truth.biome_tests {
-        let meta = get_biome_meta(&tc.biome);
-        let uv = get_colormap_uv(meta.temperature, meta.humidity);
+        let pal = get_biome_palette(&tc.biome);
+        let uv = get_colormap_uv(pal.temperature, pal.humidity);
         let diff_u = (uv[0] - tc.colormap_uv[0]).abs();
         let diff_v = (uv[1] - tc.colormap_uv[1]).abs();
-        let diff_temp = (meta.temperature - tc.temperature).abs();
-        let diff_hum = (meta.humidity - tc.humidity).abs();
+        let diff_temp = (pal.temperature - tc.temperature).abs();
+        let diff_hum = (pal.humidity - tc.humidity).abs();
 
         println!(
             " • {:<24} -> UV: [{:.4}, {:.4}] | Blender: [{:.4}, {:.4}] | Temp: {:.2} vs {:.2}",
@@ -225,7 +225,7 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
             uv[1],
             tc.colormap_uv[0],
             tc.colormap_uv[1],
-            meta.temperature,
+            pal.temperature,
             tc.temperature
         );
 

@@ -512,7 +512,7 @@ pub fn compute_mesh_biome_attributes_from_storage(
             let bz = block_zs.get(i).copied().unwrap_or(0);
 
             let (col, has_cg, has_cf, has_cdf) = if smooth {
-                let sm = mtk_voxel::biome::get_smoothed_column_biome(
+                let sm = mtk_voxel::get_smoothed_column_biome(
                     |x, y, z| storage.inner.get_biome(x, y, z),
                     bx,
                     by,
@@ -526,7 +526,7 @@ pub fn compute_mesh_biome_attributes_from_storage(
                 )
             } else {
                 let b_name = storage.inner.get_biome(bx, by, bz);
-                let sm = mtk_voxel::biome::get_point_column_biome(b_name, bx, bz);
+                let sm = mtk_voxel::get_point_column_biome(b_name, bx, bz);
                 (
                     sm,
                     sm.has_custom_grass,

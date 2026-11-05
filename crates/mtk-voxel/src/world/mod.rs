@@ -20,10 +20,10 @@ use crate::source::VoxelSource;
 use crate::storage::VoxelStorage;
 use crate::types::{MesherConfig, VoxelError};
 
-pub mod assembly;
-pub mod debug;
-pub mod rebuild;
-pub mod sync;
+mod assembly;
+mod debug;
+mod rebuild;
+mod sync;
 
 /// Wrapper for skin resolution callbacks that satisfies Debug and Clone.
 #[derive(Clone)]

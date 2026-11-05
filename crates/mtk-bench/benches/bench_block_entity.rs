@@ -6,9 +6,9 @@ use std::time::Instant;
 use glam::IVec3;
 use mtk_core::MeshData;
 use mtk_cull::FaceCuller;
-use mtk_voxel::mesher::shading::ModelSource;
-use mtk_voxel::storage::{block_index, SectionStorage};
-use mtk_voxel::{BlockEntityData, MesherConfig, SectionMesher};
+use mtk_voxel::{
+    block_index, BlockEntityData, MesherConfig, ModelSource, SectionMesher, SectionStorage,
+};
 
 /// FNV-1a checksum over all mesh buffers and attributes for bit-for-bit verification.
 pub fn mesh_checksum(m: &MeshData) -> u64 {

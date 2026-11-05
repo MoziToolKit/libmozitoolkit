@@ -2,11 +2,11 @@ use crate::error::SaveError;
 use crate::nbt::{Nbt, NbtCompound};
 use glam::IVec3;
 use mtk_core::constants::voxel::{block_index, SECTION_VOLUME};
-use mtk_voxel::storage::SectionStorage;
+use mtk_voxel::SectionStorage;
 use std::collections::HashMap;
 use std::io::Cursor;
 
-pub use mtk_voxel::storage::SectionBiomes;
+pub use mtk_voxel::SectionBiomes;
 
 /// Parsed chunk data containing populated sections and 3D section biomes.
 #[derive(Debug, Clone)]

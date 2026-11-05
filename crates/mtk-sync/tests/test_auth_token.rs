@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use mtk_sync::protocol::{decode_packet, Packet};
 use mtk_sync::LiveSyncSession;
-use mtk_voxel::types::MesherConfig;
+use mtk_voxel::MesherConfig;
 use tungstenite::Message;
 
 /// Serves exactly one WebSocket connection and returns the first HELLO it receives.

@@ -972,7 +972,7 @@ pub fn handle_packet(
                     let blx = (wx & 15) as usize;
                     let bly = (wy & 15) as usize;
                     let blz = (wz & 15) as usize;
-                    let local_idx = mtk_voxel::storage::block_index(blx, bly, blz) as u16;
+                    let local_idx = mtk_voxel::block_index(blx, bly, blz) as u16;
                     let ent = if let Some(mut ed) = entity.clone() {
                         if let mtk_model::BlockEntityData::Banner {
                             ref mut base_color, ..

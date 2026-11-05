@@ -7,8 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::storage::crc::{crc32_update, extract_canonical_state_str, EMPTY_SECTION_CRC};
 
 pub use mtk_core::constants::voxel::{
-    block_index, padded_index, PADDED_SIZE, PADDED_VOLUME, SECTION_AREA, SECTION_MASK,
-    SECTION_SHIFT, SECTION_SIZE, SECTION_VOLUME,
+    block_index, padded_index, PADDED_SIZE, PADDED_VOLUME, SECTION_SIZE, SECTION_VOLUME,
 };
 
 /// 16x16x16 Chunk Section with dense palette-indexed storage and non-air tracking.

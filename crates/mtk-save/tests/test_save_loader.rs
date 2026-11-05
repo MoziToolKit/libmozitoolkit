@@ -2,7 +2,7 @@ use glam::IVec3;
 use mtk_save::region::RegionFile;
 use mtk_save::SaveLoader;
 use mtk_testkit::save_world;
-use mtk_voxel::storage::VoxelStorage;
+use mtk_voxel::VoxelStorage;
 
 #[test]
 fn test_region_chunk_indexing() {

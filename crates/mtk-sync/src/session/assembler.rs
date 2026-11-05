@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::io::Read;
 
 use glam::IVec3;
-use mtk_voxel::storage::{SectionBiomes, SectionStorage, VoxelStorage};
+use mtk_voxel::{SectionBiomes, SectionStorage, VoxelStorage};
 
 use crate::protocol::constants::{CancelReason, ResyncReason, MAX_SELECTION_VOLUME};
 use crate::protocol::hasher::compute_sparse_state_hash_for_storage;
@@ -506,7 +506,7 @@ impl BaselineAssembler {
             let blx = (wx & 15) as usize;
             let bly = (wy & 15) as usize;
             let blz = (wz & 15) as usize;
-            let local_idx = mtk_voxel::storage::block_index(blx, bly, blz) as u16;
+            let local_idx = mtk_voxel::block_index(blx, bly, blz) as u16;
             let mut ent = entity.clone();
             if let mtk_model::BlockEntityData::Banner {
                 ref mut base_color, ..

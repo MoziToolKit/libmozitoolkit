@@ -1,39 +1,5 @@
 use glam::Vec3;
-use mtk_core::constants::lighting::AO_LEVEL_MULTIPLIERS;
 use mtk_core::Direction;
-
-/// Maps ambient occlusion discrete level `0..=3` to a linear brightness multiplier `[0.2..1.0]`.
-#[inline]
-pub fn ao_level_to_brightness(level: u8) -> f32 {
-    let idx = (level as usize).min(AO_LEVEL_MULTIPLIERS.len() - 1);
-    AO_LEVEL_MULTIPLIERS[idx]
-}
-
-/// Quantizes continuous AO float brightness `[0.2..=1.0]` into discrete level `0..=3`.
-#[inline]
-pub fn ao_brightness_to_level(brightness: f32) -> u8 {
-    if brightness >= 0.88 {
-        3
-    } else if brightness >= 0.6 {
-        2
-    } else if brightness >= 0.35 {
-        1
-    } else {
-        0
-    }
-}
-
-/// Computes the ambient occlusion level `0..=3` for a single vertex given its 2 adjacent side blocks and diagonal corner block.
-///
-/// Kept for backward compatibility and fast discrete approximations.
-#[inline]
-pub fn vertex_ao(side1_opaque: bool, side2_opaque: bool, corner_opaque: bool) -> u8 {
-    if side1_opaque && side2_opaque {
-        0
-    } else {
-        3 - (side1_opaque as u8 + side2_opaque as u8 + corner_opaque as u8)
-    }
-}
 
 /// Determines if a baked quad face is flush with the outer boundary of the unit cube in its direction.
 ///
@@ -45,7 +11,7 @@ pub fn vertex_ao(side1_opaque: bool, side2_opaque: bool, corner_opaque: bool) ->
 /// - WEST: minX == maxX && (minX < EPSILON || is_current_block_full_cube)
 /// - EAST: minX == maxX && (maxX > 1.0 - EPSILON || is_current_block_full_cube)
 #[inline]
-pub fn is_face_cubic(
+pub(crate) fn is_face_cubic(
     dir: Direction,
     vertices: &[Vec3; 4],
     is_current_block_full_cube: bool,
@@ -64,14 +30,6 @@ pub fn is_face_cubic(
     }
 }
 
-/// Determines if a baked quad face is inset from the outer boundary of its direction.
-///
-/// For example, dirt path top face has Y = 15/16 < 1.0, slab top face has Y = 0.5 < 1.0.
-#[inline]
-pub fn is_face_inset(dir: Direction, vertices: &[Vec3; 4]) -> bool {
-    !is_face_cubic(dir, vertices, false)
-}
-
 #[inline(always)]
 fn add3(a: (i32, i32, i32), b: (i32, i32, i32)) -> (i32, i32, i32) {
     (a.0 + b.0, a.1 + b.1, a.2 + b.2)
@@ -81,7 +39,7 @@ fn add3(a: (i32, i32, i32), b: (i32, i32, i32)) -> (i32, i32, i32) {
 /// matching Minecraft Java `BlockModelLighter` smooth lighting.
 ///
 /// Vertex ordering strictly matches `UNIT_CUBE_CORNERS` and `BakedFace.vertices` [v0, v1, v2, v3].
-pub fn calculate_face_ao_float<F>(
+pub(crate) fn calculate_face_ao_float<F>(
     dir: Direction,
     face_cubic: bool,
     mut is_solid_opaque: F,
@@ -243,22 +201,9 @@ where
     }
 }
 
-/// Convenience wrapper for calculating face AO with inset status.
-#[inline]
-pub fn calculate_face_ao_with_inset<F>(
-    dir: Direction,
-    is_inset: bool,
-    is_solid_opaque: F,
-) -> [f32; 4]
-where
-    F: FnMut(i32, i32, i32) -> bool,
-{
-    calculate_face_ao_float(dir, !is_inset, is_solid_opaque)
-}
-
 /// Convenience wrapper for calculating standard flush face AO.
 #[inline]
-pub fn calculate_face_ao<F>(dir: Direction, is_solid_opaque: F) -> [f32; 4]
+pub(crate) fn calculate_face_ao<F>(dir: Direction, is_solid_opaque: F) -> [f32; 4]
 where
     F: FnMut(i32, i32, i32) -> bool,
 {
@@ -270,7 +215,7 @@ where
 ///
 /// Returns `true` if triangulating as `(0-1-2, 0-2-3)` is optimal, or `false` if `(1-2-3, 0-1-3)` is optimal.
 #[inline]
-pub fn should_flip_quad_diagonal(ao: [f32; 4]) -> bool {
+pub(crate) fn should_flip_quad_diagonal(ao: [f32; 4]) -> bool {
     (ao[0] + ao[2]) > (ao[1] + ao[3])
 }
 
@@ -279,28 +224,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_vertex_ao_logic() {
-        assert_eq!(vertex_ao(false, false, false), 3);
-        assert_eq!(vertex_ao(true, false, false), 2);
-        assert_eq!(vertex_ao(true, true, false), 0); // Corner blocked
-        assert_eq!(vertex_ao(true, true, true), 0);
-    }
-
-    #[test]
     fn test_anisotropy_flip() {
         assert!(should_flip_quad_diagonal([1.0, 0.2, 1.0, 0.2]));
         assert!(!should_flip_quad_diagonal([0.2, 1.0, 0.2, 1.0]));
     }
 
     #[test]
-    fn test_is_face_inset() {
+    fn test_is_face_cubic() {
         let full_cube_up = [
             Vec3::new(0.0, 1.0, 0.0),
             Vec3::new(0.0, 1.0, 1.0),
             Vec3::new(1.0, 1.0, 1.0),
             Vec3::new(1.0, 1.0, 0.0),
         ];
-        assert!(!is_face_inset(Direction::Up, &full_cube_up));
+        assert!(is_face_cubic(Direction::Up, &full_cube_up, false));
 
         let dirt_path_up = [
             Vec3::new(0.0, 15.0 / 16.0, 0.0),
@@ -308,7 +245,7 @@ mod tests {
             Vec3::new(1.0, 15.0 / 16.0, 1.0),
             Vec3::new(1.0, 15.0 / 16.0, 0.0),
         ];
-        assert!(is_face_inset(Direction::Up, &dirt_path_up));
+        assert!(!is_face_cubic(Direction::Up, &dirt_path_up, false));
 
         let slab_up = [
             Vec3::new(0.0, 0.5, 0.0),
@@ -316,13 +253,13 @@ mod tests {
             Vec3::new(1.0, 0.5, 1.0),
             Vec3::new(1.0, 0.5, 0.0),
         ];
-        assert!(is_face_inset(Direction::Up, &slab_up));
+        assert!(!is_face_cubic(Direction::Up, &slab_up, false));
     }
 
     #[test]
     fn test_dirt_path_inset_ambient_occlusion() {
         // Dirt path top face: when isolated, all vertices have continuous brightness 1.0
-        let ao_isolated = calculate_face_ao_with_inset(Direction::Up, true, |_dx, _dy, _dz| false);
+        let ao_isolated = calculate_face_ao_float(Direction::Up, false, |_dx, _dy, _dz| false);
         assert_eq!(ao_isolated, [1.0, 1.0, 1.0, 1.0]);
 
         // When a solid block is placed on the East side (dx=1, dy=0, dz=0):
@@ -331,7 +268,7 @@ mod tests {
         // v1 (-X, +Z) -> (1.0 + 1.0 + 1.0 + 1.0) / 4 = 1.0
         // v2 (+X, +Z) -> (1.0 + 0.2 + 1.0 + 1.0) / 4 = 0.8
         // v3 (+X, -Z) -> (1.0 + 0.2 + 1.0 + 1.0) / 4 = 0.8
-        let ao_east_neighbor = calculate_face_ao_with_inset(Direction::Up, true, |dx, dy, dz| {
+        let ao_east_neighbor = calculate_face_ao_float(Direction::Up, false, |dx, dy, dz| {
             dx == 1 && dy == 0 && dz == 0
         });
         assert_eq!(ao_east_neighbor, [1.0, 1.0, 0.8, 0.8]);
@@ -341,7 +278,7 @@ mod tests {
         // v1 (-X, +Z) -> 0.8 (South neighbor)
         // v2 (+X, +Z) -> 0.6 (East 0.2 + South 0.2 + corner SE 1.0 + center 1.0 = 2.4 / 4 = 0.6)
         // v3 (+X, -Z) -> 0.8 (East neighbor)
-        let ao_east_south = calculate_face_ao_with_inset(Direction::Up, true, |dx, dy, dz| {
+        let ao_east_south = calculate_face_ao_float(Direction::Up, false, |dx, dy, dz| {
             (dx == 1 && dy == 0 && dz == 0) || (dx == 0 && dy == 0 && dz == 1)
         });
         assert_eq!(ao_east_south, [1.0, 0.8, 0.6, 0.8]);

@@ -12,8 +12,7 @@ use std::sync::{Arc, RwLock};
 use crossbeam_channel::unbounded;
 use mtk_sync::events::SyncEvent;
 use mtk_sync::session::{check_debounced_remesh, SessionState, SyncLifecycle};
-use mtk_voxel::types::MesherConfig;
-use mtk_voxel::VoxelWorld;
+use mtk_voxel::{MesherConfig, VoxelWorld};
 
 fn assert_no_duplicate_positions(mesh: &mtk_core::MeshData) {
     let mut seen = HashSet::new();

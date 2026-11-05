@@ -1,5 +1,4 @@
-use mtk_voxel::types::MesherConfig;
-use mtk_voxel::VoxelWorld;
+use mtk_voxel::{MesherConfig, VoxelWorld};
 
 #[test]
 fn test_voxel_world_lifecycle_and_used_chunks() {

@@ -5,7 +5,6 @@ use mtk_model::{BakedFace, BakedModel};
 
 use crate::mesher::heuristic::get_unit_cube_texture_candidates;
 use crate::mesher::tint::compute_face_tint;
-use crate::storage::PaddedVoxelArray;
 use crate::types::MesherConfig;
 
 use super::anim::{extract_anim_metrics, lookup_animated_from_cache};
@@ -551,20 +550,4 @@ pub fn resolve_palette_meshing_data_for_state<'a>(
             }
         }
     }
-}
-
-/// Pre-resolves palette meshing data (Atlas UVs, material slots, tint) outside the meshing hot loop.
-pub fn build_palette_meshing_data<'a>(
-    padded: &PaddedVoxelArray,
-    palette_sources: &[ModelSource<'a>],
-    config: &MesherConfig,
-) -> Vec<PaletteMeshingData> {
-    padded
-        .palette
-        .iter()
-        .zip(palette_sources.iter())
-        .map(|(state_str, source)| {
-            resolve_palette_meshing_data_for_state(state_str, source, config)
-        })
-        .collect()
 }

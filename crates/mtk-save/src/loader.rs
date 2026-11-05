@@ -1,7 +1,6 @@
 use glam::IVec3;
 use mtk_core::{ProgressCallback, ProgressReport, ProgressThrottler};
-use mtk_voxel::source::VoxelWriter;
-use mtk_voxel::storage::VoxelStorage;
+use mtk_voxel::{VoxelStorage, VoxelWriter};
 use std::path::{Path, PathBuf};
 
 use crate::chunk::ChunkParser;

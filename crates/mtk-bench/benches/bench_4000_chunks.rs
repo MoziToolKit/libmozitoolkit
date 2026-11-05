@@ -1,8 +1,7 @@
 #![forbid(unsafe_code)]
 use mtk_core::IVec3;
 use mtk_cull::FaceCuller;
-use mtk_voxel::mesher::shading::ModelSource;
-use mtk_voxel::{MesherConfig, PaddedVoxelArray, SectionMesher, SectionStorage};
+use mtk_voxel::{MesherConfig, ModelSource, PaddedVoxelArray, SectionMesher, SectionStorage};
 use std::time::Instant;
 
 fn main() {

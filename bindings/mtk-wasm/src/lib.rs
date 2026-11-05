@@ -14,10 +14,7 @@ use mtk_core::MeshData;
 use mtk_core::Quad;
 use mtk_cull::FaceCuller;
 use mtk_cull::{GlassCullMode, LeavesCullMode};
-use mtk_voxel::mesher::shading::ModelSource;
-use mtk_voxel::mesher::SectionMesher;
-use mtk_voxel::storage::VoxelStorage;
-use mtk_voxel::types::MesherConfig;
+use mtk_voxel::{CoordinateSystem, MesherConfig, ModelSource, SectionMesher, VoxelStorage};
 
 #[cfg(feature = "parallel")]
 pub use wasm_bindgen_rayon::init_thread_pool;
@@ -288,9 +285,9 @@ impl WasmMesherConfig {
             enable_ao,
             mesh_fluids,
             coordinate_system: if z_up_coordinates {
-                mtk_voxel::types::CoordinateSystem::ZUpRightHanded
+                CoordinateSystem::ZUpRightHanded
             } else {
-                mtk_voxel::types::CoordinateSystem::Minecraft
+                CoordinateSystem::Minecraft
             },
             ..Default::default()
         };

@@ -1,8 +1,7 @@
-pub use mtk_material::get_colormap_uv;
 use std::collections::HashMap;
 
 /// Precomputed sample offsets and weights for 2D horizontal kernel radius `R=2` (5x5 uniform box filter matching Vanilla).
-pub const BIOME_KERNEL_R2: &[(i32, i32, f32)] = &[
+pub(crate) const BIOME_KERNEL_R2: &[(i32, i32, f32)] = &[
     (-2, -2, 1.0),
     (-2, -1, 1.0),
     (-2, 0, 1.0),
@@ -29,35 +28,6 @@ pub const BIOME_KERNEL_R2: &[(i32, i32, f32)] = &[
     (2, 1, 1.0),
     (2, 2, 1.0),
 ];
-
-/// Metadata and color properties for a single Minecraft biome (delegated to authoritative mtk-material).
-#[derive(Debug, Clone, PartialEq)]
-pub struct BiomeMeta {
-    pub temperature: f32,
-    pub humidity: f32,
-    pub water_color_linear: [f32; 4],
-}
-
-impl Default for BiomeMeta {
-    fn default() -> Self {
-        let pal = mtk_material::get_biome_palette("plains");
-        Self {
-            temperature: pal.temperature,
-            humidity: pal.humidity,
-            water_color_linear: pal.water_linear(),
-        }
-    }
-}
-
-/// Retrieves the canonical temperature, humidity, and water color from authoritative mtk-material biome palettes.
-pub fn get_biome_meta(biome_id: &str) -> BiomeMeta {
-    let pal = mtk_material::get_biome_palette(biome_id);
-    BiomeMeta {
-        temperature: pal.temperature,
-        humidity: pal.humidity,
-        water_color_linear: pal.water_linear(),
-    }
-}
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -230,33 +200,14 @@ where
     }
 }
 
-/// Computes smooth biome blending over `(x ± 2, z ± 2)` horizontal neighborhood.
-/// Returns `(smoothed_colormap_uv, smoothed_water_linear_rgba)`.
-pub fn get_smoothed_biome_data<F, S>(get_biome: F, x: i32, y: i32, z: i32) -> ([f32; 2], [f32; 4])
-where
-    F: FnMut(i32, i32, i32) -> S,
-    S: AsRef<str>,
-{
-    let col = get_smoothed_column_biome(get_biome, x, y, z);
-    (col.colormap_uv, col.water_color)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_colormap_uv() {
-        let uv_plains = get_colormap_uv(0.8, 0.4);
-        assert!(uv_plains[0] >= 0.0 && uv_plains[0] <= 1.0);
-        assert!(uv_plains[1] >= 0.0 && uv_plains[1] <= 1.0);
-    }
-
-    #[test]
     fn test_smoothed_biome() {
-        let (uv, water_col) =
-            get_smoothed_biome_data(|_x, _y, _z| "minecraft:plains".to_string(), 0, 64, 0);
-        assert!(uv[0] > 0.0);
-        assert!(water_col[3] > 0.0);
+        let col = get_smoothed_column_biome(|_x, _y, _z| "minecraft:plains".to_string(), 0, 64, 0);
+        assert!(col.colormap_uv[0] > 0.0);
+        assert!(col.water_color[3] > 0.0);
     }
 }

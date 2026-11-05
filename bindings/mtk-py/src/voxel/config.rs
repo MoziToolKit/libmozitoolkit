@@ -2,7 +2,7 @@
 
 use crate::material::{PyBiomeResolver, PyVanillaColormaps};
 use crate::texture::PyBakedAtlas;
-use mtk_voxel::types::{CoordinateSystem, MesherConfig};
+use mtk_voxel::{CoordinateSystem, MesherConfig};
 use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;

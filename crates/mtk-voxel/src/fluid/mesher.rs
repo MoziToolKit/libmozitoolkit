@@ -9,10 +9,10 @@ use mtk_cull::FaceCuller;
 use crate::fluid::uv::{get_fluid_side_uvs, get_fluid_top_uvs};
 use crate::types::MesherConfig;
 
-pub use super::height::*;
+pub(crate) use super::height::*;
 
 /// Emits complete fluid geometry (top, bottom, and 4 sides) for a block into `MeshData`.
-pub fn emit_fluid_geometry<F>(
+pub(crate) fn emit_fluid_geometry<F>(
     mesh: &mut MeshData,
     x: i32,
     y: i32,

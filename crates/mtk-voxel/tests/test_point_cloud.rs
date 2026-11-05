@@ -1,11 +1,9 @@
 use glam::IVec3;
 use mtk_cull::FaceCuller;
-use mtk_voxel::mesher::SectionMesher;
-use mtk_voxel::source::ingest_from_source;
-use mtk_voxel::storage::{VoxelPointCloud, VoxelStorage};
-use mtk_voxel::types::{CoordinateSystem, MesherConfig};
-
-use mtk_voxel::mesher::shading::ModelSource;
+use mtk_voxel::{
+    ingest_from_source, CoordinateSystem, MesherConfig, ModelSource, SectionMesher,
+    VoxelPointCloud, VoxelStorage,
+};
 
 #[test]
 fn test_point_cloud_extraction_no_culling_and_roundtrip() {

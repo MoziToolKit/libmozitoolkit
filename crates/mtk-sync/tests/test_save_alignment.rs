@@ -21,10 +21,9 @@ use mtk_sync::protocol::constants::SyncDecision;
 use mtk_sync::protocol::hasher::compute_sparse_state_hash_for_storage;
 use mtk_sync::protocol::packet::*;
 use mtk_sync::{LiveSyncSession, SyncLifecycle};
-use mtk_voxel::mesher::shading::ModelSource;
-use mtk_voxel::mesher::SectionMesher;
-use mtk_voxel::storage::{SectionBiomes, SectionStorage, VoxelStorage};
-use mtk_voxel::types::MesherConfig;
+use mtk_voxel::{
+    MesherConfig, ModelSource, SectionBiomes, SectionMesher, SectionStorage, VoxelStorage,
+};
 
 const DIMENSION: &str = "minecraft:overworld";
 const CHUNK_SIZE: usize = 256 * 1024;

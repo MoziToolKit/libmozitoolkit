@@ -6,7 +6,7 @@ use mtk_sync::protocol::hasher::{
 };
 use mtk_sync::protocol::packet::*;
 use mtk_sync::{LiveSyncSession, SyncEvent, SyncLifecycle};
-use mtk_voxel::types::MesherConfig;
+use mtk_voxel::MesherConfig;
 use std::io::Write;
 
 #[test]
@@ -289,7 +289,7 @@ fn test_baseline_and_delta_entity_integration() {
             None,
         ],
     };
-    let mut expected_storage = mtk_voxel::storage::VoxelStorage::new();
+    let mut expected_storage = mtk_voxel::VoxelStorage::new();
     for y in 0..2 {
         for z in 0..2 {
             for x in 0..2 {

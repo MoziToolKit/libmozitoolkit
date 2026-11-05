@@ -143,13 +143,8 @@ pub fn repair_quad_fluid_uv(
     ];
     let norm = normal.map(|(x, y, z)| glam::Vec3::new(x, y, z));
 
-    let repaired = mtk_voxel::fluid::uv::repair_quad_fluid_uv(
-        &v_arr,
-        &mut uv_arr,
-        norm,
-        force,
-        min_slope_threshold,
-    );
+    let repaired =
+        mtk_voxel::repair_quad_fluid_uv(&v_arr, &mut uv_arr, norm, force, min_slope_threshold);
     let out_uvs = vec2_to_tuples(&uv_arr);
     Ok((repaired, out_uvs))
 }
@@ -244,7 +239,7 @@ pub fn batch_repair_fluid_uv<'py>(
             let uvs_mut: &mut [f32] = unsafe {
                 std::slice::from_raw_parts_mut(buf.buf_ptr() as *mut f32, buf.item_count())
             };
-            let count = mtk_voxel::fluid::uv::batch_repair_fluid_uv(
+            let count = mtk_voxel::batch_repair_fluid_uv(
                 verts_slice,
                 uvs_mut,
                 normals_slice,
@@ -263,7 +258,7 @@ pub fn batch_repair_fluid_uv<'py>(
         if !buf.readonly() && is_aligned && is_len_valid && buf.is_c_contiguous() {
             let uvs_mut: &mut [f32] =
                 unsafe { std::slice::from_raw_parts_mut(ptr as *mut f32, len_bytes / 4) };
-            let count = mtk_voxel::fluid::uv::batch_repair_fluid_uv(
+            let count = mtk_voxel::batch_repair_fluid_uv(
                 verts_slice,
                 uvs_mut,
                 normals_slice,
@@ -276,7 +271,7 @@ pub fn batch_repair_fluid_uv<'py>(
 
     // Fallback path: copy into Vec<f32> and construct PyList
     let mut uvs_vec: Vec<f32> = uvs_flat.extract()?;
-    let count = mtk_voxel::fluid::uv::batch_repair_fluid_uv(
+    let count = mtk_voxel::batch_repair_fluid_uv(
         verts_slice,
         &mut uvs_vec,
         normals_slice,
@@ -290,13 +285,13 @@ pub fn batch_repair_fluid_uv<'py>(
 #[pyfunction]
 #[pyo3(signature = (is_flowing=true, rotation=0.0))]
 pub fn get_fluid_top_uvs(is_flowing: bool, rotation: f32) -> Vec<(f32, f32)> {
-    let arr = mtk_voxel::fluid::uv::get_fluid_top_uvs_vec2(is_flowing, rotation);
+    let arr = mtk_voxel::get_fluid_top_uvs_vec2(is_flowing, rotation);
     vec2_to_tuples(&arr)
 }
 
 #[pyfunction]
 pub fn get_fluid_side_uvs(h_left_top: f32, h_right_top: f32) -> Vec<(f32, f32)> {
-    let arr = mtk_voxel::fluid::uv::get_fluid_side_uvs_vec2(h_left_top, h_right_top);
+    let arr = mtk_voxel::get_fluid_side_uvs_vec2(h_left_top, h_right_top);
     vec2_to_tuples(&arr)
 }
 
@@ -449,7 +444,7 @@ pub fn repair_mesh_fluid_uv_inplace<'py>(
                 std::slice::from_raw_parts_mut(buf.buf_ptr() as *mut f32, buf.item_count())
             };
             let count = py.detach(|| {
-                mtk_voxel::fluid::uv::repair_mesh_fluid_uv_inplace(
+                mtk_voxel::repair_mesh_fluid_uv_inplace(
                     &pos_slice,
                     &loop_slice,
                     &starts_slice,
@@ -473,7 +468,7 @@ pub fn repair_mesh_fluid_uv_inplace<'py>(
             let uvs_mut: &mut [f32] =
                 unsafe { std::slice::from_raw_parts_mut(ptr as *mut f32, len_bytes / 4) };
             let count = py.detach(|| {
-                mtk_voxel::fluid::uv::repair_mesh_fluid_uv_inplace(
+                mtk_voxel::repair_mesh_fluid_uv_inplace(
                     &pos_slice,
                     &loop_slice,
                     &starts_slice,

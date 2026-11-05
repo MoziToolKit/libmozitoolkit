@@ -10,8 +10,7 @@ use std::time::Instant;
 
 use mtk_core::MeshData;
 use mtk_cull::FaceCuller;
-use mtk_voxel::mesher::shading::ModelSource;
-use mtk_voxel::{MesherConfig, SectionMesher, VoxelStorage};
+use mtk_voxel::{MesherConfig, ModelSource, SectionMesher, VoxelStorage};
 
 struct RunStats {
     quads: usize,

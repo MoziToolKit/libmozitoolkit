@@ -3,8 +3,9 @@ use std::time::Instant;
 
 use mtk_core::MeshData;
 use mtk_cull::FaceCuller;
-use mtk_voxel::mesher::shading::ModelSource;
-use mtk_voxel::{MesherConfig, PaddedVoxelArray, SectionMesher, VoxelStorage, VoxelWorld};
+use mtk_voxel::{
+    MesherConfig, ModelSource, PaddedVoxelArray, SectionMesher, VoxelStorage, VoxelWorld,
+};
 
 fn main() {
     println!("============================================================");

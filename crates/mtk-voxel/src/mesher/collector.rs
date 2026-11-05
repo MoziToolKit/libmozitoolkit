@@ -9,7 +9,7 @@ use mtk_core::MeshData;
 use mtk_core::{AttributeData, AttributeDomain, MeshAttribute};
 
 #[derive(Debug, Clone, Default)]
-pub struct FaceAttributesCollector {
+pub(crate) struct FaceAttributesCollector {
     pub source_texture_palette: Vec<String>,
     pub source_texture_indices: Vec<u16>,
     pub atlas_chunk_ids: Vec<i32>,

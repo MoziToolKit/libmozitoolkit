@@ -6,7 +6,7 @@
 
 use pyo3::prelude::*;
 
-use mtk_voxel::storage::VoxelStorage;
+use mtk_voxel::VoxelStorage;
 
 use super::config::PyMesherConfig;
 use super::map_voxel_err;

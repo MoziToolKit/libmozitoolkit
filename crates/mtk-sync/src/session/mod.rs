@@ -11,9 +11,7 @@ use crossbeam_channel::{Receiver, Sender};
 use mtk_core::MeshData;
 use mtk_cull::FaceCuller;
 use mtk_model::BakedModelDatabase;
-use mtk_voxel::storage::VoxelStorage;
-use mtk_voxel::types::MesherConfig;
-use mtk_voxel::VoxelWorld;
+use mtk_voxel::{MesherConfig, VoxelStorage, VoxelWorld};
 
 use crate::client::{ClientCommand, ClientMessage, SyncClient};
 use crate::events::SyncEvent;

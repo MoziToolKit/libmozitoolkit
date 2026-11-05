@@ -1,7 +1,5 @@
 use glam::IVec3;
-use mtk_voxel::source::{VoxelReader, VoxelSource, VoxelWriter};
-use mtk_voxel::storage::{SectionStorage, VoxelStorage};
-use mtk_voxel::types::VoxelError;
+use mtk_voxel::{SectionStorage, VoxelError, VoxelReader, VoxelSource, VoxelStorage, VoxelWriter};
 
 /// Mock voxel source generating procedural test sections
 struct MockVoxelSource {

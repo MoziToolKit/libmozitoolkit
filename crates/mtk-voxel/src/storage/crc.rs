@@ -21,18 +21,12 @@ const CRC32_TABLE: [u32; 256] = {
 
 /// Updates a running IEEE 802.3 CRC32 checksum with a byte slice.
 #[inline]
-pub fn crc32_update(mut crc: u32, data: &[u8]) -> u32 {
+pub(crate) fn crc32_update(mut crc: u32, data: &[u8]) -> u32 {
     crc = !crc;
     for &b in data {
         crc = CRC32_TABLE[((crc ^ (b as u32)) & 0xFF) as usize] ^ (crc >> 8);
     }
     !crc
-}
-
-/// Computes the IEEE 802.3 CRC32 checksum of a byte slice.
-#[inline]
-pub fn crc32(data: &[u8]) -> u32 {
-    crc32_update(0, data)
 }
 
 /// Precomputed empty air section lookup table for 0..=4096 consecutive "minecraft:air" voxels.
@@ -60,7 +54,7 @@ static EMPTY_CRC_TABLE: [u32; 4097] = {
 
 /// Returns the canonical CRC32 for an empty chunk/section of air with `block_count` blocks.
 #[inline]
-pub fn get_empty_section_crc(block_count: usize) -> u32 {
+pub(crate) fn get_empty_section_crc(block_count: usize) -> u32 {
     if block_count <= 4096 {
         EMPTY_CRC_TABLE[block_count]
     } else {
@@ -74,12 +68,12 @@ pub fn get_empty_section_crc(block_count: usize) -> u32 {
 }
 
 /// Canonical CRC32 for a standard full 16x16x16 empty air section (4096 air voxels).
-pub const EMPTY_SECTION_CRC: u32 = EMPTY_CRC_TABLE[4096];
+pub(crate) const EMPTY_SECTION_CRC: u32 = EMPTY_CRC_TABLE[4096];
 
 /// Extracts canonical Minecraft blockstate identifier from raw state or JSON-wrapped string.
 /// Converts variants of air / structure_void / bubble_column to canonical "minecraft:air".
 #[inline]
-pub fn extract_canonical_state_str(raw_state: &str) -> &str {
+pub(crate) fn extract_canonical_state_str(raw_state: &str) -> &str {
     if raw_state.is_empty() || raw_state == "minecraft:air" {
         return "minecraft:air";
     }
@@ -116,8 +110,8 @@ mod tests {
 
     #[test]
     fn test_crc32_basic() {
-        assert_eq!(crc32(b""), 0);
-        let crc_air = crc32(b"minecraft:air");
+        assert_eq!(crc32_update(0, b""), 0);
+        let crc_air = crc32_update(0, b"minecraft:air");
         assert_ne!(crc_air, 0);
 
         let crc_two_air = crc32_update(crc_air, b"minecraft:air");

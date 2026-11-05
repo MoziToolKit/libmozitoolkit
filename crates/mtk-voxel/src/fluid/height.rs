@@ -82,7 +82,7 @@ impl FluidType {
 }
 
 /// Computes fluid height in `[0..1]` for a single fluid or waterlogged blockstate string.
-pub fn get_fluid_base_height(state_str: &str) -> f32 {
+pub(crate) fn get_fluid_base_height(state_str: &str) -> f32 {
     let (fluid, is_waterlogged, level_int) = parse_fluid_info(state_str);
     if is_waterlogged {
         return MAX_FLUID_HEIGHT;
@@ -105,7 +105,7 @@ pub fn get_fluid_base_height(state_str: &str) -> f32 {
 /// - Returns own height in `(0..1)` if same fluid or waterlogged.
 /// - Returns `-1.0` if solid opaque block (JMC2OBJ boundary preservation, excluded from averaging).
 /// - Returns `0.0` if air or non-solid / non-fluid block.
-pub fn sample_fluid_height<F>(
+pub(crate) fn sample_fluid_height<F>(
     mut get_state: F,
     x: i32,
     y: i32,
@@ -167,7 +167,7 @@ where
 
 /// Calculates the averaged fluid height for one corner between center, two adjacent neighbors,
 /// and the diagonal neighbor using canonical Minecraft fluid mechanics.
-pub fn calculate_corner_average(
+pub(crate) fn calculate_corner_average(
     h_center: f32,
     h_adj1: f32,
     h_adj2: f32,
@@ -249,7 +249,7 @@ pub fn calculate_corner_average(
 
 /// Computes 4 corner heights `(c_NW, c_NE, c_SE, c_SW)` in `[0..1]` for the fluid block at `(x, y, z)`.
 /// North is -Z, South is +Z, West is -X, East is +X.
-pub fn calculate_fluid_corner_heights<F>(
+pub(crate) fn calculate_fluid_corner_heights<F>(
     mut get_state: F,
     x: i32,
     y: i32,
@@ -292,7 +292,7 @@ where
 }
 
 /// Calculates horizontal flow direction vector `(vx, vz)` and UV rotation angle in radians.
-pub fn calculate_fluid_flow_vector<F>(
+pub(crate) fn calculate_fluid_flow_vector<F>(
     mut get_state: F,
     x: i32,
     y: i32,
@@ -355,4 +355,57 @@ where
 
     let flow_angle = vz.atan2(vx) - (PI / 2.0);
     (vx, vz, flow_angle)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fluid_base_heights() {
+        assert_eq!(get_fluid_base_height("minecraft:water"), MAX_FLUID_HEIGHT);
+        assert_eq!(
+            get_fluid_base_height("minecraft:water[level=0]"),
+            MAX_FLUID_HEIGHT
+        );
+        assert_eq!(
+            get_fluid_base_height("minecraft:flowing_water[level=1]"),
+            7.0 / 9.0
+        );
+        assert_eq!(
+            get_fluid_base_height("minecraft:flowing_water[level=7]"),
+            1.0 / 9.0
+        );
+        assert_eq!(
+            get_fluid_base_height("minecraft:oak_stairs[waterlogged=true]"),
+            MAX_FLUID_HEIGHT
+        );
+    }
+
+    #[test]
+    fn test_still_source_surface_tension() {
+        // A still source water surrounded by air should stay at MAX_FLUID_HEIGHT (8/9) without drooping
+        let corner_h = calculate_corner_average(MAX_FLUID_HEIGHT, 0.0, 0.0, 0.0, true);
+        assert_eq!(corner_h, MAX_FLUID_HEIGHT);
+    }
+
+    #[test]
+    fn test_fluid_corner_height_calculation() {
+        let get_state = |x: i32, y: i32, z: i32| -> String {
+            if x == 0 && y == 64 && z == 0 {
+                "minecraft:water".to_string()
+            } else {
+                "minecraft:air".to_string()
+            }
+        };
+
+        let (c_nw, c_ne, c_se, c_sw) =
+            calculate_fluid_corner_heights(get_state, 0, 64, 0, FluidType::Water);
+
+        let eps = 1e-4;
+        assert!((c_nw - MAX_FLUID_HEIGHT).abs() < eps);
+        assert!((c_ne - MAX_FLUID_HEIGHT).abs() < eps);
+        assert!((c_se - MAX_FLUID_HEIGHT).abs() < eps);
+        assert!((c_sw - MAX_FLUID_HEIGHT).abs() < eps);
+    }
 }

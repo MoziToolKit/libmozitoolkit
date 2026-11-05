@@ -2,10 +2,10 @@ mod common;
 
 use glam::IVec3;
 use mtk_cull::FaceCuller;
-use mtk_voxel::mesher::shading::ModelSource;
-use mtk_voxel::mesher::SectionMesher;
-use mtk_voxel::storage::VoxelStorage;
-use mtk_voxel::types::MesherConfig;
+use mtk_voxel::{
+    block_index, BlockEntityData, MesherConfig, ModelSource, SectionBiomes, SectionMesher,
+    SectionStorage, VoxelStorage, VoxelWorld,
+};
 
 #[test]
 fn test_solid_cube_culling_in_mesher() {
@@ -73,7 +73,7 @@ fn test_parallel_batch_mesher() {
     let results = SectionMesher::mesh_sections_parallel_with_source_and_progress(
         &[p0, p1],
         &culler,
-        |_| mtk_voxel::mesher::shading::ModelSource::None,
+        |_| ModelSource::None,
         &config,
         Some(2),
         None,
@@ -535,7 +535,6 @@ fn test_waterlogged_isolated_block_with_baked_model() {
 #[test]
 fn test_alternate_blocks_variant_sampling() {
     use mtk_model::{BakedElement, BakedFace, BakedModel, BakedVariantGroup};
-    use mtk_voxel::mesher::ModelSource;
     use std::sync::Arc;
 
     let mut world = VoxelStorage::new();
@@ -764,8 +763,8 @@ fn test_3d_caves_and_cliffs_biome_tinting() {
     let mut world = VoxelStorage::new();
     world.set_bounds(0, 0, 0, 16, 16, 16);
 
-    let mut sec = mtk_voxel::storage::SectionStorage::new(IVec3::new(0, 0, 0));
-    let mut biomes = mtk_voxel::storage::SectionBiomes::uniform("minecraft:lush_caves");
+    let mut sec = SectionStorage::new(IVec3::new(0, 0, 0));
+    let mut biomes = SectionBiomes::uniform("minecraft:lush_caves");
     for qx in 0..4 {
         for qz in 0..4 {
             for qy in 2..4 {
@@ -1319,8 +1318,8 @@ fn test_dirt_path_adjacent_no_occlusion() {
 
 #[test]
 fn test_decorated_pot_block_entity_meshing() {
-    let mut sec = mtk_voxel::storage::SectionStorage::new(IVec3::new(0, 0, 0));
-    let local_idx = mtk_voxel::storage::block_index(2, 2, 2) as u16;
+    let mut sec = SectionStorage::new(IVec3::new(0, 0, 0));
+    let local_idx = block_index(2, 2, 2) as u16;
 
     // Register decorated pot in palette
     let pal_idx = sec.palette.len() as u16;
@@ -1330,7 +1329,7 @@ fn test_decorated_pot_block_entity_meshing() {
     sec.non_air_count = 1;
 
     // Attach BlockEntityData
-    let pot_entity = mtk_voxel::BlockEntityData::DecoratedPot {
+    let pot_entity = BlockEntityData::DecoratedPot {
         sherds: [
             Some("minecraft:angler_pottery_sherd".to_string()),
             None,
@@ -1364,16 +1363,16 @@ fn test_decorated_pot_block_entity_meshing() {
 
 #[test]
 fn test_generic_block_entity_meshing_skull_and_pot() {
-    let mut sec = mtk_voxel::storage::SectionStorage::new(IVec3::new(0, 0, 0));
+    let mut sec = SectionStorage::new(IVec3::new(0, 0, 0));
 
     // 1. Decorated Pot at (2, 2, 2)
-    let pot_idx = mtk_voxel::storage::block_index(2, 2, 2) as u16;
+    let pot_idx = block_index(2, 2, 2) as u16;
     let pot_pal = sec.palette.len() as u16;
     sec.palette
         .push("minecraft:decorated_pot[facing=north]".to_string());
     sec.voxels[pot_idx as usize] = pot_pal;
 
-    let pot_entity = mtk_voxel::BlockEntityData::new_decorated_pot([
+    let pot_entity = BlockEntityData::new_decorated_pot([
         Some("minecraft:angler_pottery_sherd"),
         None,
         Some("miner"),
@@ -1382,7 +1381,7 @@ fn test_generic_block_entity_meshing_skull_and_pot() {
     sec.set_block_entity(pot_idx, Some(pot_entity));
 
     // 2. Player Skull at (5, 5, 5)
-    let skull_idx = mtk_voxel::storage::block_index(5, 5, 5) as u16;
+    let skull_idx = block_index(5, 5, 5) as u16;
     let skull_pal = sec.palette.len() as u16;
     sec.palette
         .push("minecraft:player_head[rotation=4]".to_string());
@@ -1421,7 +1420,7 @@ fn test_generic_block_entity_meshing_skull_and_pot() {
 
 #[test]
 fn test_player_skull_dynamic_atlas_meshing_and_uv_remapping() {
-    let mut world = mtk_voxel::world::VoxelWorld::new(None, None, None);
+    let mut world = VoxelWorld::new(None, None, None);
 
     let hash = "5813943ca53225ee0ee814321cba1e420ea21f7c55f2998f9306cfad6655f69e";
     let img = image::RgbaImage::from_pixel(64, 64, image::Rgba([128, 64, 32, 255]));
@@ -1446,7 +1445,7 @@ fn test_player_skull_dynamic_atlas_meshing_and_uv_remapping() {
     world.set_block(2, 2, 2, "minecraft:player_head[rotation=0]", None);
     let sec_coord = IVec3::new(0, 0, 0);
     let sec = world.storage.sections.get_mut(&sec_coord).unwrap();
-    let local_idx = mtk_voxel::storage::block_index(2, 2, 2) as u16;
+    let local_idx = block_index(2, 2, 2) as u16;
     sec.set_block_entity(local_idx, Some(skull_entity));
 
     let mesh = world.rebuild_all().expect("Rebuild should succeed").clone();
@@ -1610,21 +1609,21 @@ fn test_mesher_average_color_and_tint_injection() {
         },
     );
 
-    let mut sec = mtk_voxel::storage::SectionStorage::new(glam::IVec3::new(0, 0, 0));
+    let mut sec = SectionStorage::new(glam::IVec3::new(0, 0, 0));
     // Put stone at (1, 1, 1)
     let pal_stone = sec.palette.len() as u16;
     sec.palette.push("minecraft:stone".to_string());
-    sec.voxels[mtk_voxel::storage::block_index(1, 1, 1) as usize] = pal_stone;
+    sec.voxels[block_index(1, 1, 1)] = pal_stone;
 
     // Put cobblestone at (3, 1, 1)
     let pal_cobble = sec.palette.len() as u16;
     sec.palette.push("minecraft:cobblestone".to_string());
-    sec.voxels[mtk_voxel::storage::block_index(3, 1, 1) as usize] = pal_cobble;
+    sec.voxels[block_index(3, 1, 1)] = pal_cobble;
 
     // Put grass_block at (5, 1, 1)
     let pal_grass = sec.palette.len() as u16;
     sec.palette.push("minecraft:grass_block".to_string());
-    sec.voxels[mtk_voxel::storage::block_index(5, 1, 1) as usize] = pal_grass;
+    sec.voxels[block_index(5, 1, 1)] = pal_grass;
 
     sec.non_air_count = 3;
 
@@ -1743,10 +1742,10 @@ fn test_mesher_baked_model_atlas_uvs_average_color() {
     model.culled_faces[Direction::Up.to_index()].push(face);
     let model_arc = Arc::new(model);
 
-    let mut sec = mtk_voxel::storage::SectionStorage::new(glam::IVec3::new(0, 0, 0));
+    let mut sec = SectionStorage::new(glam::IVec3::new(0, 0, 0));
     let pal_dirt = sec.palette.len() as u16;
     sec.palette.push("minecraft:dirt".to_string());
-    sec.voxels[mtk_voxel::storage::block_index(1, 1, 1) as usize] = pal_dirt;
+    sec.voxels[block_index(1, 1, 1)] = pal_dirt;
     sec.non_air_count = 1;
 
     let padded = sec.build_padded_array(|_, _, _| "minecraft:air");
@@ -1791,7 +1790,7 @@ fn test_mesher_baked_model_atlas_uvs_average_color() {
 
 #[test]
 fn test_banner_dynamic_atlas_meshing_and_baking() {
-    let mut world = mtk_voxel::world::VoxelWorld::new(None, None, None);
+    let mut world = VoxelWorld::new(None, None, None);
 
     // Place standing red banner (plain, no patterns)
     world.set_block(2, 2, 2, "minecraft:red_banner[rotation=0]", None);
@@ -1804,7 +1803,7 @@ fn test_banner_dynamic_atlas_meshing_and_baking() {
     world.set_block(2, 2, 3, "minecraft:white_wall_banner[facing=north]", None);
     let sec_coord = IVec3::new(0, 0, 0);
     let sec = world.storage.sections.get_mut(&sec_coord).unwrap();
-    let local_idx = mtk_voxel::storage::block_index(2, 2, 3) as u16;
+    let local_idx = block_index(2, 2, 3) as u16;
     sec.set_block_entity(local_idx, Some(banner_entity.clone()));
 
     let mesh = world.rebuild_all().expect("Rebuild should succeed").clone();
@@ -1900,11 +1899,11 @@ fn test_plain_banner_without_block_entity_meshing() {
     };
     addr_map.sprites.insert(banner_base_id, banner_base_loc);
 
-    let config = mtk_voxel::MesherConfig {
+    let config = MesherConfig {
         atlas_address_map: Some(std::sync::Arc::new(addr_map)),
         ..Default::default()
     };
-    let mut world = mtk_voxel::world::VoxelWorld::new(Some(config), None, None);
+    let mut world = VoxelWorld::new(Some(config), None, None);
 
     // Verify 16 prewarmed banners exist in world.config.atlas_address_map immediately
     let map = world.config.atlas_address_map.as_ref().unwrap();

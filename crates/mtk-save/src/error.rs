@@ -34,5 +34,5 @@ pub enum SaveError {
     InvalidChunkData(String),
 
     #[error("Voxel storage error: {0}")]
-    Voxel(#[from] mtk_voxel::types::VoxelError),
+    Voxel(#[from] mtk_voxel::VoxelError),
 }

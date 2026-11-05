@@ -8,7 +8,7 @@ static DEFAULT_BIOME_RESOLVER: LazyLock<mtk_material::BiomeResolver> =
     LazyLock::new(mtk_material::BiomeResolver::default);
 
 /// Computes biome tint data and linear color for a face.
-pub fn compute_face_tint(
+pub(crate) fn compute_face_tint(
     texture_key: &str,
     block_name: &str,
     tint_index: i16,

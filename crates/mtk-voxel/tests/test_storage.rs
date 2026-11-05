@@ -1,17 +1,5 @@
 use glam::IVec3;
-use mtk_voxel::storage::SectionStorage;
-use mtk_voxel::storage::VoxelStorage;
-use mtk_voxel::{crc32, get_empty_section_crc, EMPTY_SECTION_CRC};
-
-#[test]
-fn test_crc_consistency() {
-    let empty_crc = get_empty_section_crc(4096);
-    assert_eq!(empty_crc, EMPTY_SECTION_CRC);
-
-    let crc_stone = crc32(b"minecraft:stone");
-    assert_ne!(crc_stone, 0);
-    assert_ne!(crc_stone, EMPTY_SECTION_CRC);
-}
+use mtk_voxel::{SectionStorage, VoxelStorage};
 
 #[test]
 fn test_section_palette_mutation() {
@@ -35,7 +23,10 @@ fn test_section_palette_mutation() {
     sec.set_local(1, 0, 0, "minecraft:air");
     sec.set_local(2, 0, 0, "minecraft:air");
     assert!(sec.is_empty());
-    assert_eq!(sec.compute_crc(), EMPTY_SECTION_CRC);
+    assert_eq!(
+        sec.compute_crc(),
+        SectionStorage::new(IVec3::ZERO).compute_crc()
+    );
 }
 
 #[test]
@@ -70,7 +61,8 @@ fn test_section_snapshot_and_manifest_validation() {
     assert_eq!(world.get_block(0, 0, 0), "minecraft:stone");
 
     let crc = world.calculate_and_store_section_crc(IVec3::new(0, 0, 0));
-    assert_ne!(crc, EMPTY_SECTION_CRC);
+    let empty_crc = SectionStorage::new(IVec3::ZERO).compute_crc();
+    assert_ne!(crc, empty_crc);
 
     // Matching manifest: returns empty mismatch
     let manifest = vec![(0, 0, 0, crc)];
@@ -195,7 +187,7 @@ fn test_section_snapshot_3d_biome_ingestion_and_meshing() {
 
 #[test]
 fn test_finalize_biome_metadata_derives_column_map_and_primary() {
-    use mtk_voxel::storage::{SectionBiomes, SectionStorage};
+    use mtk_voxel::SectionBiomes;
 
     let mut world = VoxelStorage::new();
     world.set_bounds(0, 0, 0, 32, 16, 16);

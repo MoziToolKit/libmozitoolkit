@@ -11,12 +11,12 @@ use crate::types::MesherConfig;
 
 /// Total number of unique discrete corner points in a 16x16x16 chunk section:
 /// (16 + 1) * (16 + 1) * (16 + 1) = 4,913.
-pub const GRID_POOL_SIZE: usize = 17 * 17 * 17;
+pub(crate) const GRID_POOL_SIZE: usize = 17 * 17 * 17;
 
 /// Canonical corner relative coordinate offsets `(dx, dy, dz)` for each of the 6 cardinal directions,
 /// matching `Direction::to_index()` order:
 /// [0: East(+X), 1: West(-X), 2: Up(+Y), 3: Down(-Y), 4: South(+Z), 5: North(-Z)].
-pub const UNIT_CUBE_CORNERS: [[[usize; 3]; 4]; 6] = [
+pub(crate) const UNIT_CUBE_CORNERS: [[[usize; 3]; 4]; 6] = [
     // 0: East (+X)
     [[1, 1, 1], [1, 0, 1], [1, 0, 0], [1, 1, 0]],
     // 1: West (-X)
@@ -32,7 +32,7 @@ pub const UNIT_CUBE_CORNERS: [[[usize; 3]; 4]; 6] = [
 ];
 
 /// Linear lookup pool for instant deduplication of unit cube vertices in a 16x16x16 Section.
-pub struct GridVertexPool {
+pub(crate) struct GridVertexPool {
     grid: Vec<u32>,
 }
 
@@ -43,18 +43,6 @@ impl GridVertexPool {
         Self {
             grid: vec![u32::MAX; GRID_POOL_SIZE],
         }
-    }
-
-    /// Resets all vertex slots to `u32::MAX` for reuse across sections without reallocation.
-    #[inline]
-    pub fn reset(&mut self) {
-        self.grid.fill(u32::MAX);
-    }
-
-    /// Checks if a discrete corner grid coordinate lies on any of the 6 boundary faces of the section.
-    #[inline(always)]
-    pub fn is_boundary(gx: usize, gy: usize, gz: usize) -> bool {
-        gx == 0 || gx == 16 || gy == 0 || gy == 16 || gz == 0 || gz == 16
     }
 
     /// Retrieves an existing vertex index or allocates a new vertex in `mesh.positions` and `mesh.normals`.
@@ -115,19 +103,5 @@ mod tests {
         let v3 = pool.get_or_create(&mut mesh, &config, origin, 2, 2, 3, [0.0, 1.0, 0.0]);
         assert_eq!(v3, 1);
         assert_eq!(mesh.vertex_count(), 2);
-    }
-
-    #[test]
-    fn test_is_boundary() {
-        assert!(GridVertexPool::is_boundary(0, 5, 5));
-        assert!(GridVertexPool::is_boundary(16, 5, 5));
-        assert!(GridVertexPool::is_boundary(5, 0, 5));
-        assert!(GridVertexPool::is_boundary(5, 16, 5));
-        assert!(GridVertexPool::is_boundary(5, 5, 0));
-        assert!(GridVertexPool::is_boundary(5, 5, 16));
-
-        assert!(!GridVertexPool::is_boundary(1, 1, 1));
-        assert!(!GridVertexPool::is_boundary(8, 8, 8));
-        assert!(!GridVertexPool::is_boundary(15, 15, 15));
     }
 }

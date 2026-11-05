@@ -8,8 +8,7 @@
 
 use mtk_core::MeshData;
 use mtk_cull::FaceCuller;
-use mtk_voxel::mesher::shading::ModelSource;
-use mtk_voxel::{MesherConfig, SectionMesher, VoxelStorage};
+use mtk_voxel::{MesherConfig, ModelSource, SectionMesher, VoxelStorage};
 
 /// Expected checksum of the pure-code fallback debug world (385 states / 2,310 quads).
 const EXPECTED_QUADS: usize = 2310;

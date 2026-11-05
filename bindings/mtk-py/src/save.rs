@@ -9,8 +9,7 @@ use pyo3::types::PyDict;
 use std::path::Path;
 
 use mtk_save::{LevelData, SaveLoader};
-use mtk_voxel::storage::VoxelStorage;
-use mtk_voxel::VoxelWorld;
+use mtk_voxel::{VoxelStorage, VoxelWorld};
 
 use crate::cull::PyFaceCuller;
 use crate::mesh::PyMeshData;
