@@ -1,8 +1,8 @@
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
-use mtk_core::direction::{DirMask, Direction};
-use mtk_core::geometry::Aabb2d;
+use mtk_core::Aabb2d;
+use mtk_core::{DirMask, Direction};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};

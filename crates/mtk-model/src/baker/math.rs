@@ -1,5 +1,5 @@
 use glam::{Mat3, Vec2, Vec3};
-use mtk_core::direction::Direction;
+use mtk_core::Direction;
 
 use crate::parser::model_json::{BuiltinTransform, RotationJson};
 

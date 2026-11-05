@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use glam::{Vec2, Vec3};
-use mtk_core::direction::Direction;
+use mtk_core::Direction;
 
 use super::emissive::is_block_emissive;
 use super::planar::should_skip_zero_thickness_face;

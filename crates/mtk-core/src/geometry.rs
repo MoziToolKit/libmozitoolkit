@@ -222,14 +222,6 @@ impl Quad {
     }
 }
 
-/// Transforms a canonical local Minecraft voxel corner vertex to a centered Z-up coordinate space (origin at block center: [-0.5..0.5]).
-/// Minecraft: +X East, +Y Up, +Z South
-/// Z-Up Right-Hand: +X East, +Y North (-Z_mc), +Z Up (+Y_mc)
-#[inline]
-pub fn mc_local_to_centered_z_up(lx: f32, ly: f32, lz: f32) -> Vec3 {
-    Vec3::new(lx - 0.5, -(lz - 0.5), ly - 0.5)
-}
-
 /// Transforms a 3D vertex from Minecraft world coordinates (+X East, +Y Up, +Z South)
 /// to standard Z-up right-hand coordinates (+X East, +Y North, +Z Up).
 #[inline]
@@ -321,8 +313,6 @@ mod tests {
 
     #[test]
     fn test_mc_to_z_up_transforms() {
-        let b = mc_local_to_centered_z_up(0.5, 0.5, 0.5);
-        assert_eq!(b, Vec3::ZERO);
         let w = mc_world_to_z_up(10.0, 64.0, -20.0);
         assert_eq!(w, Vec3::new(10.0, 20.0, 64.0));
     }

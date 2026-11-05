@@ -4,9 +4,9 @@
 //! materials, UV tiling transforms, and dynamic Biome Tinting.
 
 use glam::IVec3;
-use mtk_core::attributes::constants::*;
-use mtk_core::attributes::{AttributeData, AttributeDomain, MeshAttribute};
-use mtk_core::mesh::MeshData;
+use mtk_core::attribute_constants::*;
+use mtk_core::MeshData;
+use mtk_core::{AttributeData, AttributeDomain, MeshAttribute};
 
 #[derive(Debug, Clone, Default)]
 pub struct FaceAttributesCollector {
@@ -118,7 +118,7 @@ impl FaceAttributesCollector {
 
         // Provenance is emitted strictly as `palette + indices` (Golden Rule 8).
         // The legacy per-face `ATTR_SOURCE_TEXTURE_KEY` string layer is listed in
-        // `mtk_core::attributes::RETIRED_MESH_ATTRIBUTES` and must never be written
+        // `mtk_core::RETIRED_MESH_ATTRIBUTES` and must never be written
         // again: it cost one heap-allocated String per face and every host had to
         // purge it right after ingestion.
         let indices_i32: Vec<i32> = self
@@ -202,7 +202,7 @@ impl FaceAttributesCollector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mtk_core::attributes::constants::{
+    use mtk_core::attribute_constants::{
         ATTR_ANIM_FRAME_SIZE, ATTR_ANIM_TIMING, ATTR_BLOCK_X, ATTR_BLOCK_Y, ATTR_BLOCK_Z,
     };
 

@@ -5,7 +5,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use mtk_core::progress::{ProgressCallback, ProgressReport, ProgressThrottler};
+use mtk_core::{ProgressCallback, ProgressReport, ProgressThrottler};
 use mtk_material::BiomeResolver;
 use mtk_package::{ChunkWriteOptions, MtkPackageFileWriter, PackageProfile};
 use mtk_resource::{AtlasCategory, ResourcePackStack};
@@ -57,7 +57,7 @@ pub struct PrecompileResult {
     pub fingerprint: String,
     pub package_path: String,
     pub cache_dir: String,
-    pub profile: Option<mtk_core::profile::ExecutionProfile>,
+    pub profile: Option<mtk_core::ExecutionProfile>,
 }
 
 /// Executes unified end-to-end asset precompilation directly to `.mtkcache` with progress reporting.

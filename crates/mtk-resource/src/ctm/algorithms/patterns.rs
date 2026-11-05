@@ -1,7 +1,7 @@
 use crate::ctm::tables::OVERLAY_17_LOOKUP;
 use crate::ctm::types::{coordinate_random, extract_block_name, CtmSymmetry};
 use glam::IVec3;
-use mtk_core::direction::Direction;
+use mtk_core::Direction;
 
 /// Solves an NxM `repeat` CTM pattern using explicit 2D face tangents `(up, left)`.
 ///

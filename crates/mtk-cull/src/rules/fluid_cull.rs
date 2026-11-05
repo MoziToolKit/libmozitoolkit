@@ -19,8 +19,8 @@
 
 use mtk_core::constants::fluid::MAX_FLUID_HEIGHT;
 use mtk_core::constants::geometry::EPS;
-use mtk_core::direction::Direction;
-use mtk_core::geometry::Aabb2d;
+use mtk_core::Aabb2d;
+use mtk_core::Direction;
 
 use crate::geometry::rect_ops::is_face_completely_occluded;
 use crate::types::{BlockCullMeta, CullCategory, FULL_FACE_RECT};

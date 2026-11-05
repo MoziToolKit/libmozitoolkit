@@ -7,8 +7,8 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use mtk_core::direction::Direction;
-use mtk_core::geometry::Aabb2d;
+use mtk_core::Aabb2d;
+use mtk_core::Direction;
 
 use crate::types::FULL_FACE_RECT;
 

@@ -12,8 +12,8 @@ pub use topology::analyze_mesh_hard_edges;
 use pyo3::prelude::*;
 use pyo3::types::PyMemoryView;
 
-use mtk_core::mesh::MeshData;
-use mtk_core::polygon::FlatPolygonMesh;
+use mtk_core::FlatPolygonMesh;
+use mtk_core::MeshData;
 
 pub use crate::attributes::PyAttributeDomain;
 
@@ -22,7 +22,7 @@ pub use crate::attributes::PyAttributeDomain;
 #[derive(Debug, Clone, Default)]
 pub struct PyMeshData {
     pub inner: MeshData,
-    pub profile: Option<mtk_core::profile::ExecutionProfile>,
+    pub profile: Option<mtk_core::ExecutionProfile>,
     /// Dynamic entity atlas chunks keyed by chunk id (`{0xFFF0: RGBA bytes, ...}`).
     pub dynamic_entity_atlases: Option<std::collections::HashMap<u16, Vec<u8>>>,
     /// Dynamic entity slots keyed by skin/entity key (`{"player_Alex": (0xFFF0, 0), ...}`).
@@ -62,7 +62,7 @@ impl PyMeshData {
     }
 
     /// Constructs a `PyMeshData` with an execution profile.
-    pub fn with_profile(mut self, profile: mtk_core::profile::ExecutionProfile) -> Self {
+    pub fn with_profile(mut self, profile: mtk_core::ExecutionProfile) -> Self {
         self.profile = Some(profile);
         self
     }

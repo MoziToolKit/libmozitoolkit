@@ -5,7 +5,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 
-use mtk_core::attributes::{AttributeData, AttributeDomain};
+use mtk_core::{AttributeData, AttributeDomain};
 
 /// Supported attribute domains matching modern DCC & OpenUSD standards.
 #[pyclass(name = "AttributeDomain", eq, eq_int)]
@@ -128,7 +128,7 @@ pub fn attribute_data_to_py_list<'py>(
 /// their own attribute name/type tables.
 #[pyfunction]
 pub fn mesh_attribute_schema() -> Vec<(&'static str, &'static str, &'static str, &'static str)> {
-    mtk_core::attributes::MESH_ATTRIBUTE_SPECS
+    mtk_core::MESH_ATTRIBUTE_SPECS
         .iter()
         .map(|spec| {
             (
@@ -145,5 +145,5 @@ pub fn mesh_attribute_schema() -> Vec<(&'static str, &'static str, &'static str,
 /// from legacy mesh data.
 #[pyfunction]
 pub fn retired_mesh_attributes() -> Vec<&'static str> {
-    mtk_core::attributes::RETIRED_MESH_ATTRIBUTES.to_vec()
+    mtk_core::RETIRED_MESH_ATTRIBUTES.to_vec()
 }

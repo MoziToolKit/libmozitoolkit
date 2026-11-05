@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use glam::IVec3;
-use mtk_core::mesh::MeshData;
+use mtk_core::MeshData;
 use mtk_cull::FaceCuller;
 use mtk_model::baker::baked_model::BakedModelDatabase;
 

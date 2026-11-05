@@ -117,7 +117,7 @@ pub struct PyPrecompileResult {
     pub package_path: String,
     #[pyo3(get)]
     pub cache_dir: String,
-    pub profile: Option<mtk_core::profile::ExecutionProfile>,
+    pub profile: Option<mtk_core::ExecutionProfile>,
 }
 
 #[pymethods]
@@ -348,7 +348,7 @@ pub fn precompile_all_assets<'py>(
 
     let cb_opt = callback.as_ref();
     let on_progress = cb_opt.map(|cb| {
-        move |prog: mtk_core::progress::ProgressReport| {
+        move |prog: mtk_core::ProgressReport| {
             Python::attach(|py| {
                 let dict = PyDict::new(py);
                 let _ = dict.set_item("stage", prog.stage);
@@ -360,9 +360,9 @@ pub fn precompile_all_assets<'py>(
             });
         }
     });
-    let progress_ref: Option<mtk_core::progress::ProgressCallback<'_>> = on_progress
+    let progress_ref: Option<mtk_core::ProgressCallback<'_>> = on_progress
         .as_ref()
-        .map(|f| f as &(dyn Fn(mtk_core::progress::ProgressReport) + Send + Sync));
+        .map(|f| f as &(dyn Fn(mtk_core::ProgressReport) + Send + Sync));
 
     let res = py
         .detach(|| {

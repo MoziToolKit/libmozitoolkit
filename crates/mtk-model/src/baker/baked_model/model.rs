@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use glam::{Vec2, Vec3};
-use mtk_core::direction::Direction;
+use mtk_core::Direction;
 use serde::{Deserialize, Serialize};
 
 use crate::parser::obj::BakedObjFace;
@@ -186,7 +186,7 @@ impl BakedModel {
         let mut unculled = Vec::new();
 
         for el in &self.elements {
-            for dir in mtk_core::direction::Direction::ALL {
+            for dir in mtk_core::Direction::ALL {
                 if let Some(face) = el.faces.get(&dir) {
                     if face.texture.ends_with("_overlay")
                         || face.texture.ends_with("_OVERLAY")
@@ -332,7 +332,7 @@ impl BakedModel {
         let mut culled: [Vec<BakedFace>; 6] = Default::default();
         let mut unculled = Vec::new();
         for el in &self.elements {
-            for dir in mtk_core::direction::Direction::ALL {
+            for dir in mtk_core::Direction::ALL {
                 if let Some(face) = el.faces.get(&dir) {
                     if face.texture.ends_with("_overlay")
                         || face.texture.ends_with("_OVERLAY")

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
-use mtk_core::progress::{ProgressCallback, ProgressReport, ProgressThrottler};
+use mtk_core::{ProgressCallback, ProgressReport, ProgressThrottler};
 use mtk_material::MaterialResolver;
 use mtk_model::{BakedModelDatabase, BlockModelJson, BlockStateDefinition, ModelBaker};
 use mtk_resource::{ResourceLocation, ResourcePackStack};

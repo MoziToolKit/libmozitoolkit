@@ -1,5 +1,5 @@
 use glam::{IVec3, Vec2};
-use mtk_core::direction::Direction;
+use mtk_core::Direction;
 use std::borrow::Cow;
 
 use crate::biome::SmoothedBiomeColumn;

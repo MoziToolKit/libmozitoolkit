@@ -173,6 +173,11 @@ pub mod atlas {
     pub const DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID: u16 = 0xFFF0;
 }
 
+/// Canonical mesh attribute constants.
+pub mod attributes {
+    pub use crate::attributes::constants::*;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -8,7 +8,7 @@
 1. **纯数据流输入输出 (Data-in, Data-out)**：输入原始体素/网格/UV/流数据/PBR贴图，输出扁平化的连续内存网格流（Positions, Normals, UVs, Indices, Material Slots, Custom Attributes）与图集内存。
 2. **原子化与高内聚 (Atomic & Modular)**：每个子 crate 职责单一、边界清晰，可独立引用、独立编译。
 3. **多端目标与原生跨语言支持**：原生兼容 WebAssembly (WASM)、Python CPython 扩展模块 (Wheel)、以及通用 C-ABI 动态/静态库 (`.so` / `.dll` / `.dylib` / `.h`)。
-4. **零宿主耦合与标准 3D 几何规范**：核心层不依赖任何 DCC 软件（如 Blender、Maya）专有 API，标准化坐标系命名（`z_up_coordinates`, `mc_local_to_centered_z_up`, `mc_world_to_z_up`），只在宿主端做数据灌入。
+4. **零宿主耦合与标准 3D 几何规范**：核心层不依赖任何 DCC 软件（如 Blender、Maya）专有 API，标准化坐标系命名（`z_up_coordinates`, `mc_world_to_z_up`），只在宿主端做数据灌入。
 5. **生物群系与调色板单一事实源 (SSOT)**：所有 Biome / 颜色 / Tint 逻辑以 `mtk-material::biome` 为唯一权威事实源，避免多处碎片化定义。
 
 ---

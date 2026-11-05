@@ -4,25 +4,21 @@
 //! Atlas Safe Padding Clamping, 3D Perlin / Cellular noise generators for terrain extrusion,
 //! and batch whole-mesh topological analysis and feature edge crease tagging.
 
-pub mod noise;
-pub mod repair;
-pub mod types;
-pub mod uv;
+mod noise;
+mod repair;
+mod types;
+mod uv;
 
-pub use noise::{cellular_noise_3d, generate_extrude_heights, hash_3d, perlin_noise_3d};
+pub use noise::{generate_extrude_heights, perlin_noise_3d};
 pub use repair::process_flat_mesh_extrude_repair;
-pub use types::{
-    ExtrudeMeshOutput, ExtrudeNoiseType, ExtrudeUvMode, FlatPolygonMesh, MeshExtrudeRepairConfig,
-};
+pub use types::{ExtrudeMeshOutput, ExtrudeNoiseType, ExtrudeUvMode, MeshExtrudeRepairConfig};
 pub use uv::{repair_extruded_side_uv, repair_extruded_side_uv_advanced};
-
-pub use crate::uv::{
-    calculate_uv_area_2d as calculate_uv_area, is_uv_collapsed_2d as is_uv_collapsed,
-};
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::FlatPolygonMesh;
+    use noise::cellular_noise_3d;
 
     #[test]
     fn test_perlin_and_cellular_noise_bounds() {

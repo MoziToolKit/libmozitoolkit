@@ -37,7 +37,7 @@ fn test_voxel_world_lifecycle_and_used_chunks() {
 
 #[test]
 fn test_voxel_world_rebuild_with_progress() {
-    use mtk_core::progress::ProgressReport;
+    use mtk_core::ProgressReport;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
@@ -131,7 +131,7 @@ fn test_voxel_world_incremental_empty_section_removes_cache() {
     assert_eq!(unified.vertex_count(), 8);
 }
 
-fn canonical_vertex_positions(mesh: &mtk_core::mesh::MeshData) -> Vec<[u32; 3]> {
+fn canonical_vertex_positions(mesh: &mtk_core::MeshData) -> Vec<[u32; 3]> {
     let mut positions: Vec<[u32; 3]> = mesh
         .positions
         .iter()
@@ -141,7 +141,7 @@ fn canonical_vertex_positions(mesh: &mtk_core::mesh::MeshData) -> Vec<[u32; 3]> 
     positions
 }
 
-fn assert_no_duplicate_vertex_positions(mesh: &mtk_core::mesh::MeshData) {
+fn assert_no_duplicate_vertex_positions(mesh: &mtk_core::MeshData) {
     let mut seen = std::collections::HashSet::new();
     for p in &mesh.positions {
         let key = [p[0].to_bits(), p[1].to_bits(), p[2].to_bits()];

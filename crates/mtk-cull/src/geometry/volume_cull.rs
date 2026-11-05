@@ -7,8 +7,8 @@ use alloc::vec;
 use alloc::vec::Vec;
 use glam::{Vec2, Vec3};
 use mtk_core::constants::geometry::{EPS, STRICT_EPS, TOLERANCE};
-use mtk_core::direction::Direction;
-use mtk_core::geometry::Aabb2d;
+use mtk_core::Aabb2d;
+use mtk_core::Direction;
 
 use crate::geometry::rect_ops::subtract_rect;
 

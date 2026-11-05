@@ -347,15 +347,19 @@ PY
 
 ### Batch 4：Rust 可见性瘦身（按 crate 逐个）
 
-顺序：`mtk-core` → `mtk-voxel` → `mtk-material` → `mtk-model` → `mtk-sync` → `mtk-package` → `libmtk`。
+顺序：`mtk-core` → `mtk-cull` → `mtk-model` → `mtk-voxel` → `mtk-sync` → `mtk-package` → `libmtk`。
 
 - [x] 清理 `mtk-core` 废弃的嵌套挤出修复与随机挤出算子（`process_mesh_extrude_repair`, `process_random_extrude_mesh`, `ExtrudeMeshInput/Output`, `RandomExtrudeMeshInput/Output`）。
 - [x] 收敛 `mtk-cull` 内部矩形差集切分算子可见性（`subtract_rect`, `is_empty_rect`, `is_full_rect`）。
 - [x] 收敛 `mtk-model` 内部 OBJ 解析器可见性（`WavefrontObjParser`, `ModObjLoader`）。
 - [x] 收敛 `mtk-sync` 内部协同客户端与暂存缓冲区可见性（`SyncClient`, `BaselineAssembler`, `DeltaStagingBuffer`）。
-- [ ] 内部 `pub mod` 改 `mod`；crate 根只 `pub use` 有跨 crate 消费者的 item。
-- [ ] 删除第 4.1 节中零外部消费者的根导出；仍被本 crate 其他模块使用的降为 `pub(crate)`。
-- [ ] 删除零消费者函数/类型；单实现 trait 与包装类型一并删除。
+- [x] **`mtk-core` 根导出与模块私有化彻底完成**：
+  - 11 个内部模块（`attributes`, `direction`, `extrude`, `geometry`, `mesh`, `polygon`, `profile`, `progress`, `random`, `subdivide`, `uv`）全部收敛为私有 `mod`；常量命名空间统一收敛在 `pub mod constants;`；
+  - 废弃与零消费者符号清理：删除 `mc_local_to_centered_z_up`、`LightLevel`、`MaterialSlotId`、`TintIndex`、`Vec4`、`is_mesh_uv_collapsed`（保留标准 `is_uv_collapsed` / `is_uv_collapsed_2d`）；
+  - 内部算子降级：`interpolate_bilinear_2d/3d/4d`、`cellular_noise_3d` 降为 `pub(crate)`；
+  - 根导出补齐：导出 `process_flat_mesh_extrude_repair`、`calculate_pixel_grid_cut_factors`、`slice_face_by_pixel_grid`、`detect_uv_rotation` 等被生产 bindings/下游真实消费的算子；
+  - 83 个下游跨 crate 文件对 `mtk_core::submodule::*` 的穿透引用统一收敛为从 crate 根 `mtk_core::*` 引入。
+- [ ] 推进后续 crate（`mtk-cull` → `mtk-model` → `mtk-voxel` 等）内部 `pub mod` 改 `mod` 与根导出精简。
 - [ ] 每完成一个 crate 跑 `cargo test -p <crate>` 与 `cargo clippy -p <crate> --all-targets -- -D warnings`。
 
 ### Batch 5：绑定与适配器收敛

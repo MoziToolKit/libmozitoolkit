@@ -8,8 +8,8 @@ use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 use std::collections::HashMap;
 
-use mtk_core::attributes::{AttributeData, MeshAttribute};
-use mtk_core::mesh::MeshData;
+use mtk_core::MeshData;
+use mtk_core::{AttributeData, MeshAttribute};
 
 /// Configuration options for mesh face culling.
 #[derive(Debug, Clone)]
@@ -39,7 +39,7 @@ pub struct MeshCullResult {
     pub culled_faces: usize,
     pub remaining_faces: usize,
     pub mesh: MeshData,
-    pub profile: Option<mtk_core::profile::ExecutionProfile>,
+    pub profile: Option<mtk_core::ExecutionProfile>,
 }
 
 /// Copies a single element from src AttributeData to dst AttributeData at index.
@@ -318,7 +318,7 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
 
         // Copy Mesh-domain attributes directly
         for (name, attr) in &mesh.custom_attributes {
-            if attr.domain == mtk_core::attributes::AttributeDomain::Mesh {
+            if attr.domain == mtk_core::AttributeDomain::Mesh {
                 if let Some(out_attr) = out.custom_attributes.get_mut(name) {
                     out_attr.data = attr.data.clone();
                 }
@@ -393,11 +393,11 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
 
                     // Copy Point and Corner domain attributes
                     for (name, in_attr) in &mesh.custom_attributes {
-                        if in_attr.domain == mtk_core::attributes::AttributeDomain::Point {
+                        if in_attr.domain == mtk_core::AttributeDomain::Point {
                             if let Some(out_attr) = out.custom_attributes.get_mut(name) {
                                 copy_attribute_element(&in_attr.data, &mut out_attr.data, orig_idx);
                             }
-                        } else if in_attr.domain == mtk_core::attributes::AttributeDomain::Corner {
+                        } else if in_attr.domain == mtk_core::AttributeDomain::Corner {
                             if let Some(out_attr) = out.custom_attributes.get_mut(name) {
                                 let c_idx = if in_attr.data.len() == face_count * 4 {
                                     face_idx * 4 + step
@@ -466,11 +466,11 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
                     }
 
                     for (name, in_attr) in &mesh.custom_attributes {
-                        if in_attr.domain == mtk_core::attributes::AttributeDomain::Point {
+                        if in_attr.domain == mtk_core::AttributeDomain::Point {
                             if let Some(out_attr) = out.custom_attributes.get_mut(name) {
                                 copy_attribute_element(&in_attr.data, &mut out_attr.data, orig_idx);
                             }
-                        } else if in_attr.domain == mtk_core::attributes::AttributeDomain::Corner {
+                        } else if in_attr.domain == mtk_core::AttributeDomain::Corner {
                             if let Some(out_attr) = out.custom_attributes.get_mut(name) {
                                 copy_attribute_element(
                                     &in_attr.data,
@@ -494,7 +494,7 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
 
             // Copy Face domain attributes
             for (name, in_attr) in &mesh.custom_attributes {
-                if in_attr.domain == mtk_core::attributes::AttributeDomain::Face {
+                if in_attr.domain == mtk_core::AttributeDomain::Face {
                     if let Some(out_attr) = out.custom_attributes.get_mut(name) {
                         copy_attribute_element(&in_attr.data, &mut out_attr.data, face_idx);
                     }
@@ -636,7 +636,7 @@ mod tests {
 
         mesh.add_custom_attribute(MeshAttribute::new(
             "test_attr",
-            mtk_core::attributes::AttributeDomain::Face,
+            mtk_core::AttributeDomain::Face,
             AttributeData::String(vec!["face_0".to_string(), "face_1".to_string()]),
         ));
 

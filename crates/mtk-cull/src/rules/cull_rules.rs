@@ -1,5 +1,5 @@
 use glam::IVec3;
-use mtk_core::direction::Direction;
+use mtk_core::Direction;
 
 use crate::types::{BlockCullMeta, CullCategory, GlassCullMode, LeavesCullMode};
 

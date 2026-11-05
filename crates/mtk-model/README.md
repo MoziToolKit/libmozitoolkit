@@ -313,7 +313,7 @@ fn main() {
 ### 示例 4：烘焙内置红石引线并提取发光与染色属性
 ```rust
 use mtk_model::baker::ModelBaker;
-use mtk_core::attributes::constants::{ATTR_BIOME_TINT_COLOR, ATTR_UV_TRANSFORM};
+use mtk_core::attribute_constants::{ATTR_BIOME_TINT_COLOR, ATTR_UV_TRANSFORM};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut baker = ModelBaker::new();

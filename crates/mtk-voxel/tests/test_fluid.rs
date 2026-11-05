@@ -238,7 +238,7 @@ fn test_animated_texture_routing_dual_channel() {
         .get_custom_attribute("mtk_atlas_chunk_id")
         .expect("Must have atlas chunk IDs");
     let cids_anim = match &chunk_attr_anim.data {
-        mtk_core::attributes::AttributeData::Int32(c) => c,
+        mtk_core::AttributeData::Int32(c) => c,
         _ => panic!("Expected Int32 attribute"),
     };
     for &cid in cids_anim {
@@ -261,7 +261,7 @@ fn test_animated_texture_routing_dual_channel() {
         .get_custom_attribute("mtk_atlas_chunk_id")
         .expect("Must have atlas chunk IDs");
     let cids_static = match &chunk_attr_static.data {
-        mtk_core::attributes::AttributeData::Int32(c) => c,
+        mtk_core::AttributeData::Int32(c) => c,
         _ => panic!("Expected Int32 attribute"),
     };
     for &cid in cids_static {

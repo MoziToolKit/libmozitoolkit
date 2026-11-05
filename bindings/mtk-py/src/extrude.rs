@@ -46,12 +46,12 @@ pub fn process_flat_mesh_extrude_repair(
     usize,
 ) {
     let mode = match uv_mode.to_uppercase().as_str() {
-        "INWARD" => mtk_core::extrude::ExtrudeUvMode::Inward,
-        "OUTWARD" => mtk_core::extrude::ExtrudeUvMode::Outward,
-        _ => mtk_core::extrude::ExtrudeUvMode::Smart,
+        "INWARD" => mtk_core::ExtrudeUvMode::Inward,
+        "OUTWARD" => mtk_core::ExtrudeUvMode::Outward,
+        _ => mtk_core::ExtrudeUvMode::Smart,
     };
 
-    let flat_mesh = mtk_core::polygon::FlatPolygonMesh::from_flat_buffers(
+    let flat_mesh = mtk_core::FlatPolygonMesh::from_flat_buffers(
         &positions,
         loop_vertices,
         &loop_uvs,
@@ -60,7 +60,7 @@ pub fn process_flat_mesh_extrude_repair(
         face_materials,
     );
 
-    let config = mtk_core::extrude::MeshExtrudeRepairConfig {
+    let config = mtk_core::MeshExtrudeRepairConfig {
         uv_mode: mode,
         repair_uv,
         add_crease,
@@ -69,7 +69,7 @@ pub fn process_flat_mesh_extrude_repair(
     };
 
     let out = py.detach(|| {
-        mtk_core::extrude::process_flat_mesh_extrude_repair(
+        mtk_core::process_flat_mesh_extrude_repair(
             &flat_mesh,
             &selected_faces,
             &pixel_steps,

@@ -103,31 +103,28 @@ impl PyModelBaker {
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
         let (mesh, textures) = py
-            .detach(
-                || -> Result<(mtk_core::mesh::MeshData, Vec<String>), String> {
-                    let bs_def = {
-                        let bs_path =
-                            format!("assets/{}/blockstates/{}.json", bs.namespace, bs.name);
-                        stack.inner.open_asset_raw(&bs_path).and_then(|bytes| {
-                            serde_json::from_slice::<BlockStateDefinition>(&bytes).ok()
-                        })
-                    };
+            .detach(|| -> Result<(mtk_core::MeshData, Vec<String>), String> {
+                let bs_def = {
+                    let bs_path = format!("assets/{}/blockstates/{}.json", bs.namespace, bs.name);
+                    stack.inner.open_asset_raw(&bs_path).and_then(|bytes| {
+                        serde_json::from_slice::<BlockStateDefinition>(&bytes).ok()
+                    })
+                };
 
-                    let baked = self
-                        .inner
-                        .bake_blockstate(state_str, bs_def.as_ref(), |model_id| {
-                            if let Some(bytes) = stack.inner.open_model_raw(model_id) {
-                                serde_json::from_slice::<BlockModelJson>(&bytes).ok()
-                            } else {
-                                None
-                            }
-                        })
-                        .map_err(|e| e.to_string())?;
+                let baked = self
+                    .inner
+                    .bake_blockstate(state_str, bs_def.as_ref(), |model_id| {
+                        if let Some(bytes) = stack.inner.open_model_raw(model_id) {
+                            serde_json::from_slice::<BlockModelJson>(&bytes).ok()
+                        } else {
+                            None
+                        }
+                    })
+                    .map_err(|e| e.to_string())?;
 
-                    let (mesh, textures) = baked.to_mesh_with_textures(clip_hidden);
-                    Ok((mesh, textures))
-                },
-            )
+                let (mesh, textures) = baked.to_mesh_with_textures(clip_hidden);
+                Ok((mesh, textures))
+            })
             .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
 
         Ok((PyMeshData::from_mesh(mesh), textures))

@@ -364,7 +364,7 @@ fn test_baked_model_cull_meta_serialization() {
     assert!(baked.cull_meta.is_some());
     let meta = baked.cull_meta.as_ref().unwrap();
     assert_eq!(meta.category, mtk_cull::CullCategory::SolidOpaque);
-    assert_eq!(meta.full_face_mask, mtk_core::direction::DirMask::ALL);
+    assert_eq!(meta.full_face_mask, mtk_core::DirMask::ALL);
 
     // Test postcard roundtrip
     let bin = postcard::to_allocvec(&baked).unwrap();
@@ -373,7 +373,7 @@ fn test_baked_model_cull_meta_serialization() {
     assert!(deserialized.cull_meta.is_some());
     let des_meta = deserialized.cull_meta.unwrap();
     assert_eq!(des_meta.category, mtk_cull::CullCategory::SolidOpaque);
-    assert_eq!(des_meta.full_face_mask, mtk_core::direction::DirMask::ALL);
+    assert_eq!(des_meta.full_face_mask, mtk_core::DirMask::ALL);
 }
 
 #[test]
@@ -397,7 +397,7 @@ fn test_baked_model_atlas_uv_remapping() {
     // Before remapping: atlas_uvs is None
     let up_face = baked.elements[0]
         .faces
-        .get(&mtk_core::direction::Direction::Up)
+        .get(&mtk_core::Direction::Up)
         .unwrap();
     assert!(up_face.atlas_uvs.is_none());
 
@@ -412,7 +412,7 @@ fn test_baked_model_atlas_uv_remapping() {
 
     let remapped_face = baked.elements[0]
         .faces
-        .get(&mtk_core::direction::Direction::Up)
+        .get(&mtk_core::Direction::Up)
         .unwrap();
     assert!(remapped_face.atlas_uvs.is_some());
     assert_eq!(remapped_face.atlas_chunk_id, Some(1));
@@ -431,7 +431,7 @@ fn test_baked_model_atlas_uv_remapping() {
         postcard::from_bytes(&bin).unwrap();
     let des_face = deserialized.elements[0]
         .faces
-        .get(&mtk_core::direction::Direction::Up)
+        .get(&mtk_core::Direction::Up)
         .unwrap();
     assert_eq!(des_face.atlas_uvs, Some(uvs));
     assert_eq!(des_face.atlas_chunk_id, Some(1));
@@ -440,7 +440,7 @@ fn test_baked_model_atlas_uv_remapping() {
 
 #[test]
 fn test_baked_model_six_direction_bucketing() {
-    use mtk_core::direction::Direction;
+    use mtk_core::Direction;
     use mtk_model::baker::ModelBaker;
     use mtk_model::parser::BlockModelJson;
 
@@ -563,7 +563,7 @@ fn test_bedrock_culling_metadata_distinct_from_bed() {
     assert!(cull_meta.is_opaque, "Bedrock must be opaque in cull meta");
     assert_eq!(
         cull_meta.full_face_mask,
-        mtk_core::direction::DirMask::ALL,
+        mtk_core::DirMask::ALL,
         "Bedrock full_face_mask must cover all 6 faces"
     );
 
@@ -775,10 +775,10 @@ fn test_builtin_blockbench_json_models() {
 
     // Verify single_wall bell touches the wall in all 4 directions
     for (facing, expected_dir) in [
-        ("east", mtk_core::direction::Direction::East),
-        ("west", mtk_core::direction::Direction::West),
-        ("north", mtk_core::direction::Direction::North),
-        ("south", mtk_core::direction::Direction::South),
+        ("east", mtk_core::Direction::East),
+        ("west", mtk_core::Direction::West),
+        ("north", mtk_core::Direction::North),
+        ("south", mtk_core::Direction::South),
     ] {
         let state = format!("minecraft:bell[attachment=single_wall,facing={}]", facing);
         let bell = baker
@@ -789,22 +789,22 @@ fn test_builtin_blockbench_json_models() {
         let mut touches_wall = false;
         for v in &mesh.positions {
             match expected_dir {
-                mtk_core::direction::Direction::East => {
+                mtk_core::Direction::East => {
                     if (v[0] - 1.0).abs() < 1e-4 {
                         touches_wall = true;
                     }
                 }
-                mtk_core::direction::Direction::West => {
+                mtk_core::Direction::West => {
                     if v[0].abs() < 1e-4 {
                         touches_wall = true;
                     }
                 }
-                mtk_core::direction::Direction::South => {
+                mtk_core::Direction::South => {
                     if (v[2] - 1.0).abs() < 1e-4 {
                         touches_wall = true;
                     }
                 }
-                mtk_core::direction::Direction::North if v[2].abs() < 1e-4 => {
+                mtk_core::Direction::North if v[2].abs() < 1e-4 => {
                     touches_wall = true;
                 }
                 _ => {}
@@ -873,10 +873,10 @@ fn test_cross_plant_dcc_single_sided_baking() {
     );
     assert!(baked.elements[0]
         .faces
-        .contains_key(&mtk_core::direction::Direction::North));
+        .contains_key(&mtk_core::Direction::North));
     assert!(baked.elements[1]
         .faces
-        .contains_key(&mtk_core::direction::Direction::West));
+        .contains_key(&mtk_core::Direction::West));
 
     // Raw mesh has exactly 2 quads = 4 triangles (no duplicate overlapping faces!)
     let raw_mesh = baked.to_mesh(false);
@@ -943,10 +943,10 @@ fn test_sunflower_top_dual_texture_preserved() {
     );
     assert!(baked.elements[0]
         .faces
-        .contains_key(&mtk_core::direction::Direction::West));
+        .contains_key(&mtk_core::Direction::West));
     assert!(baked.elements[0]
         .faces
-        .contains_key(&mtk_core::direction::Direction::East));
+        .contains_key(&mtk_core::Direction::East));
 }
 
 #[test]
@@ -971,10 +971,10 @@ fn test_scaffolding_baking_and_deduplicate() {
     );
     assert!(baked.elements[0]
         .faces
-        .contains_key(&mtk_core::direction::Direction::Up));
+        .contains_key(&mtk_core::Direction::Up));
     assert!(baked.elements[0]
         .faces
-        .contains_key(&mtk_core::direction::Direction::Down));
+        .contains_key(&mtk_core::Direction::Down));
 
     let removed = baked.deduplicate_faces();
     assert_eq!(
@@ -984,10 +984,10 @@ fn test_scaffolding_baking_and_deduplicate() {
 
     assert!(baked.elements[0]
         .faces
-        .contains_key(&mtk_core::direction::Direction::Up));
+        .contains_key(&mtk_core::Direction::Up));
     assert!(baked.elements[0]
         .faces
-        .contains_key(&mtk_core::direction::Direction::Down));
+        .contains_key(&mtk_core::Direction::Down));
 
     let (mesh, textures) = baked.to_mesh_with_textures(false);
     assert_eq!(mesh.face_count(), 34);
@@ -1259,7 +1259,7 @@ fn test_end_portal_gateway_conduit_and_banner_builtins() {
 
     let north_face = pot_body
         .faces
-        .get(&mtk_core::direction::Direction::North)
+        .get(&mtk_core::Direction::North)
         .expect("North face exists");
     assert!(
         north_face.texture.contains("angler_pottery_pattern"),
@@ -1269,7 +1269,7 @@ fn test_end_portal_gateway_conduit_and_banner_builtins() {
 
     let south_face = pot_body
         .faces
-        .get(&mtk_core::direction::Direction::South)
+        .get(&mtk_core::Direction::South)
         .expect("South face exists");
     assert!(
         south_face.texture.contains("blade_pottery_pattern"),
@@ -1279,7 +1279,7 @@ fn test_end_portal_gateway_conduit_and_banner_builtins() {
 
     let west_face = pot_body
         .faces
-        .get(&mtk_core::direction::Direction::West)
+        .get(&mtk_core::Direction::West)
         .expect("West face exists");
     assert!(
         west_face.texture.contains("decorated_pot_side"),
@@ -1289,7 +1289,7 @@ fn test_end_portal_gateway_conduit_and_banner_builtins() {
 
     let east_face = pot_body
         .faces
-        .get(&mtk_core::direction::Direction::East)
+        .get(&mtk_core::Direction::East)
         .expect("East face exists");
     assert!(
         east_face.texture.contains("miner_pottery_pattern"),
@@ -1300,7 +1300,7 @@ fn test_end_portal_gateway_conduit_and_banner_builtins() {
     // Verify top and bottom UV assignment
     let top_face = pot_body
         .faces
-        .get(&mtk_core::direction::Direction::Up)
+        .get(&mtk_core::Direction::Up)
         .expect("Up face exists");
     // uvs: [North-West, South-West, South-East, North-East]
     assert!((top_face.uvs[0].x - 7.0 / 16.0).abs() < 1e-4);
@@ -1314,7 +1314,7 @@ fn test_end_portal_gateway_conduit_and_banner_builtins() {
 
     let down_face = pot_body
         .faces
-        .get(&mtk_core::direction::Direction::Down)
+        .get(&mtk_core::Direction::Down)
         .expect("Down face exists");
     assert!((down_face.uvs[0].x - 0.0 / 16.0).abs() < 1e-4);
     assert!((down_face.uvs[0].y - 6.5 / 16.0).abs() < 1e-4);
@@ -1393,7 +1393,7 @@ fn test_dragon_and_piglin_head_geometry() {
 #[test]
 fn test_cross_emissive_coplanar_deduplication() {
     use glam::{Vec2, Vec3};
-    use mtk_core::direction::Direction;
+    use mtk_core::Direction;
     use mtk_model::baker::baked_model::{BakedElement, BakedFace, BakedModel};
     use std::collections::HashMap;
 

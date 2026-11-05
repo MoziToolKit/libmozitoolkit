@@ -15,7 +15,7 @@ use mtk_sync::session::{check_debounced_remesh, SessionState, SyncLifecycle};
 use mtk_voxel::types::MesherConfig;
 use mtk_voxel::VoxelWorld;
 
-fn assert_no_duplicate_positions(mesh: &mtk_core::mesh::MeshData) {
+fn assert_no_duplicate_positions(mesh: &mtk_core::MeshData) {
     let mut seen = HashSet::new();
     for p in &mesh.positions {
         assert!(

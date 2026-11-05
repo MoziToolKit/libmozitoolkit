@@ -1,12 +1,12 @@
 //! High-performance mesh generator for individual and batch chunk sections.
 
 use glam::IVec3;
-use mtk_core::direction::Direction;
-use mtk_core::mesh::MeshData;
-use mtk_core::progress::{ProgressCallback, ProgressThrottler};
-use mtk_core::random::{
+use mtk_core::Direction;
+use mtk_core::MeshData;
+use mtk_core::{
     determine_block_offset_type, get_block_offset, mc_coordinate_seed, JavaRandom, OffsetType,
 };
+use mtk_core::{ProgressCallback, ProgressThrottler};
 use mtk_cull::types::BlockCullMeta;
 use mtk_cull::FaceCuller;
 use mtk_model::baker::is_block_emissive;

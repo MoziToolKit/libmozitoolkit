@@ -3,7 +3,7 @@
 //! Event types dispatched from the Rust background sync thread to host applications.
 
 use glam::IVec3;
-use mtk_core::mesh::MeshData;
+use mtk_core::MeshData;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -32,7 +32,7 @@ pub enum SyncEvent {
     WorldMeshReady {
         mesh: MeshData,
         generation: u64,
-        profile: Option<mtk_core::profile::ExecutionProfile>,
+        profile: Option<mtk_core::ExecutionProfile>,
     },
 
     /// Stream batch progress update.

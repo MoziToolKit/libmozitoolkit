@@ -1,44 +1,67 @@
 #![forbid(unsafe_code)]
 
 extern crate alloc;
-pub mod attributes;
-pub mod constants;
-pub mod direction;
-pub mod extrude;
-pub mod geometry;
-pub mod mesh;
-pub mod polygon;
-pub mod profile;
-pub mod progress;
-pub mod random;
-pub mod subdivide;
-pub mod uv;
 
+// Private internal modules
+mod attributes;
+pub mod constants;
+mod direction;
+mod extrude;
+mod geometry;
+mod mesh;
+mod polygon;
+mod profile;
+mod progress;
+mod random;
+mod subdivide;
+mod uv;
+
+// 1. Mesh Attributes & Schema
 pub use attributes::{
-    AttributeData, AttributeDomain, FaceAttributes, LightLevel, MaterialSlotId, MeshAttribute,
-    TintIndex,
+    constants as attribute_constants, AttributeData, AttributeDomain, FaceAttributes,
+    MeshAttribute, MESH_ATTRIBUTE_SPECS, RETIRED_MESH_ATTRIBUTES,
 };
-pub use constants::concurrency;
+
+// 2. Topology & Direction
 pub use direction::{DirMask, Direction};
+
+// 3. Extrusion & Side UV Repair
 pub use extrude::{
-    calculate_uv_area, cellular_noise_3d, generate_extrude_heights,
-    is_uv_collapsed as is_mesh_uv_collapsed, perlin_noise_3d, repair_extruded_side_uv,
-    ExtrudeMeshOutput, ExtrudeNoiseType, ExtrudeUvMode, MeshExtrudeRepairConfig,
+    generate_extrude_heights, perlin_noise_3d, process_flat_mesh_extrude_repair,
+    repair_extruded_side_uv, repair_extruded_side_uv_advanced, ExtrudeMeshOutput, ExtrudeNoiseType,
+    ExtrudeUvMode, MeshExtrudeRepairConfig,
 };
-pub use geometry::{
-    derive_quad_face_tangents, mc_local_to_centered_z_up, mc_world_to_z_up, Aabb2d, Quad,
-};
+
+// 4. Geometry & Math
+pub use geometry::{derive_quad_face_tangents, mc_world_to_z_up, Aabb2d, Quad};
+
+// 5. Mesh Data & Topology Analysis
 pub use mesh::{analyze_hard_edges, MeshData, UvLayout};
 pub use polygon::FlatPolygonMesh;
+
+// 6. Profiling & Diagnostics
 pub use profile::{ExecutionProfile, ExecutionProfiler, StageSpan};
+
+// 7. Progress Reporting
 pub use progress::{ProgressCallback, ProgressReport, ProgressThrottler};
+
+// 8. Minecraft Coordinate Seed & Random Offset
 pub use random::{
     determine_block_offset_type, get_block_offset, mc_coordinate_seed, JavaRandom, OffsetType,
 };
+
+// 9. Adaptive Pixel Subdivision & Splitting
 pub use subdivide::{
-    adaptive_pixel_split_mesh, calculate_face_target_grid, interpolate_bilinear_2d,
-    interpolate_bilinear_3d, interpolate_bilinear_4d,
+    adaptive_pixel_split_mesh, calculate_face_target_grid, calculate_pixel_grid_cut_factors,
+    slice_face_by_pixel_grid,
+};
+
+// 10. UV Geometry & Analysis
+pub use uv::{
+    calculate_uv_area, calculate_uv_area_2d, detect_uv_rotation, get_uv_bounds, get_uv_center,
+    is_orthogonal_angle, is_uv_collapsed, is_uv_collapsed_2d, normalize_uv_for_atlas_tiling,
+    restore_atlas_tiling_uv, scale_uv, straighten_uv, uv_requires_atlas_tiling,
 };
 
 // Re-export glam types for convenience
-pub use glam::{IVec3, Vec2, Vec3, Vec4};
+pub use glam::{IVec3, Vec2, Vec3};

@@ -3,7 +3,7 @@
 //! Encapsulates discrete collections of pre-baked `BakedModel` variants (e.g. 0°, 90°, 180°, 270°
 //! rotated rotations for dirt, stone, sand, lily pads) and provides 1:1 deterministic seed selection.
 
-use mtk_core::random::{mc_coordinate_seed, JavaRandom};
+use mtk_core::{mc_coordinate_seed, JavaRandom};
 use serde::{Deserialize, Serialize};
 
 use super::model::BakedModel;

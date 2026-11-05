@@ -30,7 +30,7 @@
 
 - **扁平连续几何缓冲 (`MeshData`)**：零堆碎片化的连续顶点、法线、UV、四边形索引 (`quad_indices`) 与通用层级自定义属性 (`MeshAttribute`) 容器，天然适配 GPU 缓冲区与 NumPy / DCC 零拷贝映射。
 - **高性能多边形拓扑容器 (`FlatPolygonMesh`)**：针对多边形网格（N-gon / Quad / Tri）提供展平的 1D 循环缓冲区（Loop Buffers），消除成千上万个嵌套 `Vec<Vec<T>>` 堆分配开销。
-- **Minecraft 6 向拓扑与坐标系转换**：标准 6 方向枚举 (`Direction`)、位掩码 (`DirMask`)，以及 Minecraft 局部坐标到标准化右手 Z-Up 坐标（`mc_local_to_centered_z_up`, `mc_world_to_z_up`）的精准转换。
+- **Minecraft 6 向拓扑与坐标系转换**：标准 6 方向枚举 (`Direction`)、位掩码 (`DirMask`)，以及 Minecraft 世界坐标到标准化右手 Z-Up 坐标（`mc_world_to_z_up`）的精准转换。
 - **自适应像素网格细分 (`subdivide`)**：基于纹理分辨率与 UV 物理边长智能计算细分网格，自动适应非正方形图集与长条动图安全截断，支持顶点属性的双线性插值 (`interpolate_bilinear_*`) 与微距流形焊接。
 - **智能挤出与侧面 UV 重构 (`extrude`)**：智能判断挤出法线朝向，自动修复因几何挤出产生的拉伸 UV，支持图集安全边距钳位（Atlas Safe Padding Clamping）以及 3D Perlin / Cellular 噪声随机挤出。
 
@@ -56,7 +56,6 @@
 | :--- | :--- |
 | [`Direction`](src/direction.rs) | `East` (0), `West` (1), `Up` (2), `Down` (3), `South` (4), `North` (5)。支持 `opposite()`, `normal()`, `offset()`, `mask()` 等。 |
 | [`DirMask`](src/direction.rs) | 6 方向位掩码（基于 `bitflags`），支持高效的相邻面快速位运算。 |
-| `mc_local_to_centered_z_up` | `(lx: f32, ly: f32, lz: f32) -> Vec3`：将 Minecraft 局部体素坐标转换为以方块中心为原点的右手 Z-Up 坐标。 |
 | `mc_world_to_z_up` | `(wx: f32, wy: f32, wz: f32) -> Vec3`：将 Minecraft 世界坐标 (+X East, +Y Up, +Z South) 转换为标准右手 Z-Up 坐标 (+X East, +Y North, +Z Up)。 |
 | `Direction::canonical_face_tangents` | `(self) -> (Direction, Direction)`：返回未旋转规范立方面在 Minecraft 空间中的 2D 贴图切线基底 `(up, left)` 作为 SSOT。 |
 | `derive_quad_face_tangents` | `(positions: &[Vec3; 4], uvs: &[Vec2; 4], fallback_dir: Direction, is_minecraft_uv: bool) -> (Direction, Direction)`：根据四边形 3D 几何向量与 2D UV 偏导数动态推导物理切线基底，自适应感知旋转方块与 UV 旋转。 |
@@ -170,14 +169,10 @@ fn main() {
 ### 示例 3：空间坐标系变换
 
 ```rust
-use mtk_core::geometry::{mc_local_to_centered_z_up, mc_world_to_z_up};
+use mtk_core::mc_world_to_z_up;
 use glam::Vec3;
 
 fn main() {
-    // 局部体素原点 (0.5, 0.5, 0.5) 变换到中心对齐 Z-Up 坐标系
-    let local_center = mc_local_to_centered_z_up(0.5, 0.5, 0.5);
-    assert_eq!(local_center, Vec3::ZERO);
-
     // Minecraft 世界坐标 (+X East, +Y Up, +Z South) -> 右手 Z-Up (+X East, +Y North, +Z Up)
     let world_pos = mc_world_to_z_up(10.0, 64.0, -20.0);
     assert_eq!(world_pos, Vec3::new(10.0, 20.0, 64.0));

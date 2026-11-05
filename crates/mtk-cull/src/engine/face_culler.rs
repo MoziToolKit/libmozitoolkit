@@ -3,8 +3,8 @@ use alloc::sync::Arc;
 use std::collections::HashMap;
 
 use mtk_core::constants::fluid::MAX_FLUID_HEIGHT;
-use mtk_core::direction::Direction;
-use mtk_core::geometry::Aabb2d;
+use mtk_core::Aabb2d;
+use mtk_core::Direction;
 use mtk_core::{IVec3, Vec3};
 
 use crate::geometry::rect_ops::is_face_completely_occluded;

@@ -1,11 +1,11 @@
-//! Conversion between `VoxelPointCloud` and `mtk_core::mesh::MeshData`.
+//! Conversion between `VoxelPointCloud` and `mtk_core::MeshData`.
 
-use mtk_core::attributes::constants::{
+use mtk_core::attribute_constants::{
     ATTR_BIOME_IDX, ATTR_BIOME_PALETTE, ATTR_BLOCK_X, ATTR_BLOCK_Y, ATTR_BLOCK_Z, ATTR_BOUNDS,
     ATTR_ENTITY_IDX, ATTR_ENTITY_PALETTE, ATTR_LIGHT, ATTR_PALETTE, ATTR_STATE_IDX,
 };
-use mtk_core::attributes::{AttributeData, AttributeDomain, MeshAttribute};
-use mtk_core::mesh::MeshData;
+use mtk_core::MeshData;
+use mtk_core::{AttributeData, AttributeDomain, MeshAttribute};
 
 use crate::types::VoxelError;
 
@@ -29,7 +29,7 @@ impl VoxelPointCloud {
             normals: Vec::new(),
             indices: Vec::new(),
             uvs: Vec::new(),
-            uv_layout: mtk_core::mesh::UvLayout::None,
+            uv_layout: mtk_core::UvLayout::None,
             secondary_uvs: None,
             colors: None,
             face_materials: Vec::new(),

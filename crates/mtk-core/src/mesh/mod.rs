@@ -12,10 +12,10 @@ use crate::attributes::{FaceAttributes, MaterialSlotId, MeshAttribute, TintIndex
 use crate::geometry::Quad;
 use crate::polygon::FlatPolygonMesh;
 
-pub mod attributes;
-pub mod merge;
-pub mod topology;
-pub mod weld;
+mod attributes;
+mod merge;
+mod topology;
+mod weld;
 
 pub use topology::analyze_hard_edges;
 

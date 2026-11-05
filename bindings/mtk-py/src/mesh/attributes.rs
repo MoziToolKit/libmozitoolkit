@@ -14,95 +14,73 @@ pub fn attribute_memoryview<'py>(
     let inner = &mesh.borrow().inner;
     if let Some(attr) = inner.get_custom_attribute(name) {
         let mv = match &attr.data {
-            mtk_core::attributes::AttributeData::Float(v) => {
-                crate::buffer::create_zerocopy_f32_memoryview(
-                    py,
-                    v.as_ptr(),
-                    v.len(),
-                    mesh.as_any(),
-                )?
-            }
-            mtk_core::attributes::AttributeData::Float2(v) => {
-                crate::buffer::create_zerocopy_f32_memoryview(
-                    py,
-                    v.as_ptr() as *const f32,
-                    v.len() * 2,
-                    mesh.as_any(),
-                )?
-            }
-            mtk_core::attributes::AttributeData::Float3(v) => {
-                crate::buffer::create_zerocopy_f32_memoryview(
-                    py,
-                    v.as_ptr() as *const f32,
-                    v.len() * 3,
-                    mesh.as_any(),
-                )?
-            }
-            mtk_core::attributes::AttributeData::Float4(v) => {
-                crate::buffer::create_zerocopy_f32_memoryview(
-                    py,
-                    v.as_ptr() as *const f32,
-                    v.len() * 4,
-                    mesh.as_any(),
-                )?
-            }
-            mtk_core::attributes::AttributeData::Int8(v) => {
-                crate::buffer::create_zerocopy_i8_memoryview(
-                    py,
-                    v.as_ptr(),
-                    v.len(),
-                    mesh.as_any(),
-                )?
-            }
-            mtk_core::attributes::AttributeData::Int16(v) => {
-                crate::buffer::create_zerocopy_i16_memoryview(
-                    py,
-                    v.as_ptr(),
-                    v.len(),
-                    mesh.as_any(),
-                )?
-            }
-            mtk_core::attributes::AttributeData::Int32(v) => {
-                crate::buffer::create_zerocopy_i32_memoryview(
-                    py,
-                    v.as_ptr(),
-                    v.len(),
-                    mesh.as_any(),
-                )?
-            }
-            mtk_core::attributes::AttributeData::UInt8(v) => {
-                crate::buffer::create_zerocopy_u8_memoryview(
-                    py,
-                    v.as_ptr(),
-                    v.len(),
-                    mesh.as_any(),
-                )?
-            }
-            mtk_core::attributes::AttributeData::UInt16(v) => {
-                crate::buffer::create_zerocopy_u16_memoryview(
-                    py,
-                    v.as_ptr(),
-                    v.len(),
-                    mesh.as_any(),
-                )?
-            }
-            mtk_core::attributes::AttributeData::UInt32(v) => {
-                crate::buffer::create_zerocopy_u32_memoryview(
-                    py,
-                    v.as_ptr(),
-                    v.len(),
-                    mesh.as_any(),
-                )?
-            }
-            mtk_core::attributes::AttributeData::Bool(v) => {
-                crate::buffer::create_zerocopy_u8_memoryview(
-                    py,
-                    v.as_ptr() as *const u8,
-                    v.len(),
-                    mesh.as_any(),
-                )?
-            }
-            mtk_core::attributes::AttributeData::String(_) => return Ok(None),
+            mtk_core::AttributeData::Float(v) => crate::buffer::create_zerocopy_f32_memoryview(
+                py,
+                v.as_ptr(),
+                v.len(),
+                mesh.as_any(),
+            )?,
+            mtk_core::AttributeData::Float2(v) => crate::buffer::create_zerocopy_f32_memoryview(
+                py,
+                v.as_ptr() as *const f32,
+                v.len() * 2,
+                mesh.as_any(),
+            )?,
+            mtk_core::AttributeData::Float3(v) => crate::buffer::create_zerocopy_f32_memoryview(
+                py,
+                v.as_ptr() as *const f32,
+                v.len() * 3,
+                mesh.as_any(),
+            )?,
+            mtk_core::AttributeData::Float4(v) => crate::buffer::create_zerocopy_f32_memoryview(
+                py,
+                v.as_ptr() as *const f32,
+                v.len() * 4,
+                mesh.as_any(),
+            )?,
+            mtk_core::AttributeData::Int8(v) => crate::buffer::create_zerocopy_i8_memoryview(
+                py,
+                v.as_ptr(),
+                v.len(),
+                mesh.as_any(),
+            )?,
+            mtk_core::AttributeData::Int16(v) => crate::buffer::create_zerocopy_i16_memoryview(
+                py,
+                v.as_ptr(),
+                v.len(),
+                mesh.as_any(),
+            )?,
+            mtk_core::AttributeData::Int32(v) => crate::buffer::create_zerocopy_i32_memoryview(
+                py,
+                v.as_ptr(),
+                v.len(),
+                mesh.as_any(),
+            )?,
+            mtk_core::AttributeData::UInt8(v) => crate::buffer::create_zerocopy_u8_memoryview(
+                py,
+                v.as_ptr(),
+                v.len(),
+                mesh.as_any(),
+            )?,
+            mtk_core::AttributeData::UInt16(v) => crate::buffer::create_zerocopy_u16_memoryview(
+                py,
+                v.as_ptr(),
+                v.len(),
+                mesh.as_any(),
+            )?,
+            mtk_core::AttributeData::UInt32(v) => crate::buffer::create_zerocopy_u32_memoryview(
+                py,
+                v.as_ptr(),
+                v.len(),
+                mesh.as_any(),
+            )?,
+            mtk_core::AttributeData::Bool(v) => crate::buffer::create_zerocopy_u8_memoryview(
+                py,
+                v.as_ptr() as *const u8,
+                v.len(),
+                mesh.as_any(),
+            )?,
+            mtk_core::AttributeData::String(_) => return Ok(None),
         };
         return Ok(Some(mv));
     }
@@ -144,12 +122,11 @@ pub fn add_attribute_from_buffer(
 
     let attr_data = crate::attributes::parse_attribute_buffer(dtype, raw_bytes)?;
 
-    mesh.inner
-        .add_custom_attribute(mtk_core::attributes::MeshAttribute {
-            name: name.to_string(),
-            domain: domain_enum,
-            data: attr_data,
-        });
+    mesh.inner.add_custom_attribute(mtk_core::MeshAttribute {
+        name: name.to_string(),
+        domain: domain_enum,
+        data: attr_data,
+    });
 
     Ok(())
 }
@@ -163,12 +140,11 @@ pub fn add_string_attribute(
 ) -> PyResult<()> {
     let domain_enum = crate::attributes::parse_domain_str(domain)?;
 
-    mesh.inner
-        .add_custom_attribute(mtk_core::attributes::MeshAttribute {
-            name: name.to_string(),
-            domain: domain_enum,
-            data: mtk_core::attributes::AttributeData::String(values),
-        });
+    mesh.inner.add_custom_attribute(mtk_core::MeshAttribute {
+        name: name.to_string(),
+        domain: domain_enum,
+        data: mtk_core::AttributeData::String(values),
+    });
 
     Ok(())
 }
@@ -176,7 +152,7 @@ pub fn add_string_attribute(
 /// Retrieve a string custom attribute's values.
 pub fn get_string_attribute(mesh: &PyMeshData, name: &str) -> Option<Vec<String>> {
     if let Some(attr) = mesh.inner.get_custom_attribute(name) {
-        if let mtk_core::attributes::AttributeData::String(ref vals) = attr.data {
+        if let mtk_core::AttributeData::String(ref vals) = attr.data {
             return Some(vals.clone());
         }
     }

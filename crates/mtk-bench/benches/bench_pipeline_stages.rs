@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 use std::time::Instant;
 
-use mtk_core::mesh::MeshData;
+use mtk_core::MeshData;
 use mtk_cull::FaceCuller;
 use mtk_voxel::mesher::shading::ModelSource;
 use mtk_voxel::{MesherConfig, PaddedVoxelArray, SectionMesher, VoxelStorage, VoxelWorld};

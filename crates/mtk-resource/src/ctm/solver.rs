@@ -11,7 +11,7 @@ use crate::ctm::algorithms::{
 use crate::ctm::types::{extract_block_name, ConnectLogic, CtmMethod, CtmRule};
 use crate::identifier::{ResourceLocation, DEFAULT_NAMESPACE};
 use glam::IVec3;
-use mtk_core::direction::Direction;
+use mtk_core::Direction;
 use std::collections::HashMap;
 
 impl CtmRule {

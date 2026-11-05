@@ -1,7 +1,7 @@
 //! Hardcoded Minecraft Block Tints, Canonical Block Tint Registry, and Classifier.
 
 use super::palettes::hex_to_linear_rgba;
-use mtk_core::direction::Direction;
+use mtk_core::Direction;
 
 pub const TINT_TYPE_NONE: u8 = 0;
 pub const TINT_TYPE_GRASS: u8 = 1;
@@ -69,7 +69,7 @@ pub static SWAMP_GRASS_HIGH_HEX: &str = "#6A7039";
 /// Follows Minecraft vanilla swamp variation: Perlin noise sampled at frequency 0.0225.
 /// When noise < -0.1, uses `#4C763C`, otherwise uses `#6A7039`.
 pub fn get_swamp_grass_color(x: f32, z: f32) -> [f32; 4] {
-    let n = mtk_core::extrude::perlin_noise_3d(x * 0.0225, 0.0, z * 0.0225, 2345);
+    let n = mtk_core::perlin_noise_3d(x * 0.0225, 0.0, z * 0.0225, 2345);
     if n < -0.1 {
         hex_to_linear_rgba(SWAMP_GRASS_LOW_HEX)
     } else {

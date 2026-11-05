@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use mtk_core::direction::Direction;
+use mtk_core::Direction;
 use mtk_core::Vec2;
 use mtk_model::baker::baked_model::{BakedElement, BakedFace, BakedModel};
 

@@ -83,7 +83,7 @@ glam = "0.29"
 
 ```rust
 use mtk_cull::{FaceCuller, GlassCullMode, LeavesCullMode, CullCategory};
-use mtk_core::direction::Direction;
+use mtk_core::Direction;
 
 fn main() {
     let culler = FaceCuller::new(LeavesCullMode::SingleFace, GlassCullMode::Group);
@@ -123,7 +123,7 @@ fn main() {
 
 ```rust
 use mtk_cull::FaceCuller;
-use mtk_core::direction::Direction;
+use mtk_core::Direction;
 
 let culler = FaceCuller::default();
 let water = culler.get_meta("minecraft:water[level=0]", None, None);
@@ -143,7 +143,7 @@ assert!(!culler.should_render_fluid_face(
 ### 示例 2：2D 矩形差集切分 (半砖/局部遮挡)
 
 ```rust
-use mtk_core::geometry::Aabb2d;
+use mtk_core::Aabb2d;
 use mtk_cull::geometry::subtract_rect;
 
 fn main() {

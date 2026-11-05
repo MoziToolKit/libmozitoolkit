@@ -138,7 +138,7 @@ fn test_mesher_custom_attributes() {
 
     // Regression gate: the mesher must never re-emit any attribute that the native
     // core declares retired (`mtk-core::attributes::RETIRED_MESH_ATTRIBUTES`).
-    for retired in mtk_core::attributes::RETIRED_MESH_ATTRIBUTES {
+    for retired in mtk_core::RETIRED_MESH_ATTRIBUTES {
         assert!(
             !mesh.has_custom_attribute(retired),
             "Mesher must never emit retired attribute: {}",
@@ -149,7 +149,7 @@ fn test_mesher_custom_attributes() {
 
 #[test]
 fn test_grass_block_meshing_no_duplicate_overlay_faces() {
-    use mtk_core::direction::Direction;
+    use mtk_core::Direction;
     use mtk_model::baker::{BakedElement, BakedFace, BakedModel};
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -262,7 +262,7 @@ fn test_grass_block_meshing_no_duplicate_overlay_faces() {
         .get_custom_attribute("mtk_biome_tint_data")
         .expect("Must have mtk_biome_tint_data");
     let tint_data = match &tint_data_attr.data {
-        mtk_core::attributes::AttributeData::Float4(v) => v,
+        mtk_core::AttributeData::Float4(v) => v,
         _ => panic!("Expected Float4"),
     };
     assert_eq!(tint_data.len(), 6);
@@ -345,7 +345,7 @@ fn test_biome_transition_smoothing() {
         .get_custom_attribute("mtk_biome_tint_color")
         .expect("Must have mtk_biome_tint_color");
     let colors = match &color_attr.data {
-        mtk_core::attributes::AttributeData::Float4(v) => v,
+        mtk_core::AttributeData::Float4(v) => v,
         _ => panic!("Expected Float4"),
     };
     assert!(!colors.is_empty());
@@ -664,7 +664,7 @@ fn test_plant_position_offsets() {
         SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config_enabled);
 
     // Poppy at (3, 5, 7) and (3, 6, 7):
-    let offset_3_7 = mtk_core::random::get_block_offset(mtk_core::random::OffsetType::XZ, 3, 5, 7);
+    let offset_3_7 = mtk_core::get_block_offset(mtk_core::OffsetType::XZ, 3, 5, 7);
     assert!(offset_3_7.x.abs() > 0.001 || offset_3_7.z.abs() > 0.001);
     assert!(offset_3_7.x >= -0.25 && offset_3_7.x <= 0.25);
     assert!(offset_3_7.z >= -0.25 && offset_3_7.z <= 0.25);
@@ -804,7 +804,7 @@ fn test_3d_caves_and_cliffs_biome_tinting() {
 
 #[test]
 fn test_cache_driven_animated_texture_routing_block_models() {
-    use mtk_core::direction::Direction;
+    use mtk_core::Direction;
     use mtk_model::baker::baked_model::{BakedFace, BakedModel};
     use mtk_texture::atlas::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation};
     use std::sync::Arc;
@@ -1040,7 +1040,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
         .get("mtk_atlas_chunk_id")
         .expect("mtk_atlas_chunk_id attr must exist");
     let chunk_ids = match &face_chunk_attr.data {
-        mtk_core::attributes::AttributeData::Int32(ids) => ids,
+        mtk_core::AttributeData::Int32(ids) => ids,
         _ => panic!("Expected Int32 attribute data"),
     };
 
@@ -1072,7 +1072,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
         .get("mtk_atlas_chunk_id")
         .expect("mtk_atlas_chunk_id attr must exist");
     let static_chunk_ids = match &static_chunk_attr.data {
-        mtk_core::attributes::AttributeData::Int32(ids) => ids,
+        mtk_core::AttributeData::Int32(ids) => ids,
         _ => panic!("Expected Int32 attribute data"),
     };
 
@@ -1088,7 +1088,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
 #[test]
 fn test_dirt_path_mesh_ao_neighbor_shading() {
     use glam::{Vec2, Vec3};
-    use mtk_core::direction::Direction;
+    use mtk_core::Direction;
     use mtk_model::baker::{BakedElement, BakedFace, BakedModel};
     use std::collections::HashMap;
 
@@ -1160,10 +1160,10 @@ fn test_dirt_path_mesh_ao_neighbor_shading() {
     );
 
     let ao_attr = mesh
-        .get_custom_attribute(mtk_core::attributes::constants::ATTR_AO)
+        .get_custom_attribute(mtk_core::attribute_constants::ATTR_AO)
         .expect("mtk_ao must be emitted when enable_ao is true");
     let ao_values = match &ao_attr.data {
-        mtk_core::attributes::AttributeData::Float(v) => v,
+        mtk_core::AttributeData::Float(v) => v,
         other => panic!("Expected Float for mtk_ao, got {:?}", other),
     };
     assert!(!mesh.positions.is_empty());
@@ -1228,7 +1228,7 @@ fn test_dirt_path_mesh_ao_neighbor_shading() {
 #[test]
 fn test_dirt_path_adjacent_no_occlusion() {
     use glam::{Vec2, Vec3};
-    use mtk_core::direction::Direction;
+    use mtk_core::Direction;
     use mtk_model::baker::{BakedElement, BakedFace, BakedModel};
     use std::collections::HashMap;
 
@@ -1299,10 +1299,10 @@ fn test_dirt_path_adjacent_no_occlusion() {
     );
 
     let ao_attr = mesh
-        .get_custom_attribute(mtk_core::attributes::constants::ATTR_AO)
+        .get_custom_attribute(mtk_core::attribute_constants::ATTR_AO)
         .expect("mtk_ao must be emitted when enable_ao is true");
     let ao_values = match &ao_attr.data {
-        mtk_core::attributes::AttributeData::Float(v) => v,
+        mtk_core::AttributeData::Float(v) => v,
         other => panic!("Expected Float for mtk_ao, got {:?}", other),
     };
 

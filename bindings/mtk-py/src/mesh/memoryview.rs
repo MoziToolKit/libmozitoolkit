@@ -3,7 +3,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyMemoryView;
 
-use mtk_core::mesh::UvLayout;
+use mtk_core::UvLayout;
 
 use super::PyMeshData;
 use crate::buffer::{

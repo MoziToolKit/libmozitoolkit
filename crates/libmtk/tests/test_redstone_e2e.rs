@@ -1,4 +1,4 @@
-use mtk_core::direction::Direction;
+use mtk_core::Direction;
 use mtk_material::BiomeResolver;
 use mtk_model::baker::baked_model::BakedModelDatabase;
 use mtk_model::baker::ModelBaker;
@@ -60,7 +60,7 @@ fn test_end_to_end_redstone_wire_baking_and_material_addressing() {
     let (mesh_off, _) = baked_off.to_mesh_with_textures(false);
 
     // Emission is baked-model metadata; retired face attributes must not be emitted.
-    for name in mtk_core::attributes::RETIRED_MESH_ATTRIBUTES {
+    for name in mtk_core::RETIRED_MESH_ATTRIBUTES {
         assert!(
             mesh_off.get_custom_attribute(name).is_none(),
             "retired attribute {name} must not be emitted"
@@ -78,7 +78,7 @@ fn test_end_to_end_redstone_wire_baking_and_material_addressing() {
 
     assert!(baked_on.is_emissive);
     let (mesh_on, _) = baked_on.to_mesh_with_textures(false);
-    for name in mtk_core::attributes::RETIRED_MESH_ATTRIBUTES {
+    for name in mtk_core::RETIRED_MESH_ATTRIBUTES {
         assert!(
             mesh_on.get_custom_attribute(name).is_none(),
             "retired attribute {name} must not be emitted"

@@ -3,16 +3,13 @@
 //! Provides pixel-density aware quad face subdivision with bilinear interpolation
 //! of all vertex and corner attributes (positions, normals, UVs, colors, custom layers, bone deform weights).
 
-pub mod clip;
-pub mod grid;
-pub mod mesh_split;
+mod clip;
+mod grid;
+mod mesh_split;
 pub(crate) mod quad;
 
-pub use clip::{slice_face_by_pixel_grid, SlicedFaceResult};
-pub use grid::{
-    calculate_face_target_grid, calculate_pixel_grid_cut_factors, interpolate_bilinear_2d,
-    interpolate_bilinear_3d, interpolate_bilinear_4d, invert_quad_bilinear,
-};
+pub use clip::slice_face_by_pixel_grid;
+pub use grid::{calculate_face_target_grid, calculate_pixel_grid_cut_factors};
 pub use mesh_split::adaptive_pixel_split_mesh;
 
 #[cfg(test)]

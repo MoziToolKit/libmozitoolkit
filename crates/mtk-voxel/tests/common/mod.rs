@@ -7,8 +7,8 @@
 
 #![allow(dead_code)]
 
-use mtk_core::attributes::AttributeData;
-use mtk_core::mesh::MeshData;
+use mtk_core::AttributeData;
+use mtk_core::MeshData;
 
 /// Palette of the canonical source-texture provenance, or `None` when absent.
 pub fn face_texture_palette(mesh: &MeshData) -> Option<&[String]> {

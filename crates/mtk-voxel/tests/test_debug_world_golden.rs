@@ -6,7 +6,7 @@
 //! Section enumeration order is normalized (`get_all_non_empty_sections` comes from a
 //! `HashMap`) so the vertex order is reproducible across processes.
 
-use mtk_core::mesh::MeshData;
+use mtk_core::MeshData;
 use mtk_cull::FaceCuller;
 use mtk_voxel::mesher::shading::ModelSource;
 use mtk_voxel::{MesherConfig, SectionMesher, VoxelStorage};

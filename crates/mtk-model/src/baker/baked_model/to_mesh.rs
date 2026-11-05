@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use glam::Vec3;
-use mtk_core::mesh::{MeshData, UvLayout};
+use mtk_core::{MeshData, UvLayout};
 
 use super::model::{BakedModel, ModelMeshOptions};
 use mtk_cull::clip_face_excluding_hidden_volume;
@@ -53,7 +53,7 @@ impl BakedModel {
             }
         }
 
-        let mut face_attributes_list: Vec<mtk_core::attributes::FaceAttributes> = Vec::new();
+        let mut face_attributes_list: Vec<mtk_core::FaceAttributes> = Vec::new();
 
         // 1. Process JSON elements
         for (el_idx, el) in self.elements.iter().enumerate() {
@@ -139,7 +139,7 @@ impl BakedModel {
 
                     let (tint_color, tint_data) = ([1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 0.0, 0.0]);
 
-                    face_attributes_list.push(mtk_core::attributes::FaceAttributes {
+                    face_attributes_list.push(mtk_core::FaceAttributes {
                         texture_key: face.texture.clone(),
                         material_slot: slot,
                         tint_index: face.tint_index,
@@ -176,7 +176,7 @@ impl BakedModel {
 
             let (tint_color, tint_data) = ([1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 0.0, 0.0]);
 
-            let face_attr = mtk_core::attributes::FaceAttributes {
+            let face_attr = mtk_core::FaceAttributes {
                 texture_key: obj_f.texture.clone(),
                 material_slot: slot,
                 tint_index: obj_f.tint_index,

@@ -1,5 +1,5 @@
 use glam::IVec3;
-use mtk_core::progress::{ProgressCallback, ProgressReport, ProgressThrottler};
+use mtk_core::{ProgressCallback, ProgressReport, ProgressThrottler};
 use mtk_voxel::source::VoxelWriter;
 use mtk_voxel::storage::VoxelStorage;
 use std::path::{Path, PathBuf};

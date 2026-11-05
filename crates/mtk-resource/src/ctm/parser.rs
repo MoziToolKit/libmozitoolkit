@@ -1,6 +1,6 @@
 use crate::ctm::types::{BlockMatch, ConnectLogic, CtmMethod, CtmRule, CtmSymmetry};
 use crate::identifier::{ResourceLocation, DEFAULT_NAMESPACE};
-use mtk_core::direction::DirMask;
+use mtk_core::DirMask;
 use std::collections::HashMap;
 
 pub fn parse_ctm_properties(source_path: &str, namespace: &str, content: &str) -> Option<CtmRule> {

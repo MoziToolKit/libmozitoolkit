@@ -14,7 +14,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use glam::IVec3;
-use mtk_core::attributes::AttributeData;
+use mtk_core::AttributeData;
 use mtk_cull::FaceCuller;
 use mtk_material::BiomeResolver;
 use mtk_sync::protocol::constants::SyncDecision;
@@ -425,7 +425,7 @@ fn assert_biome_metadata_equal(expected: &VoxelStorage, actual: &VoxelStorage) {
     );
 }
 
-fn tint_attributes(mesh: &mtk_core::mesh::MeshData) -> Vec<([i32; 3], [f32; 4])> {
+fn tint_attributes(mesh: &mtk_core::MeshData) -> Vec<([i32; 3], [f32; 4])> {
     let colors = match mesh
         .custom_attributes
         .get("mtk_biome_tint_color")

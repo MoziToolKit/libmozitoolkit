@@ -400,10 +400,10 @@ fn get_decorated_pot_template() -> &'static BlockModelJson {
 /// Slots: 0 = Back, 1 = Left, 2 = Right, 3 = Front
 #[inline]
 pub fn decorated_pot_sherd_slot(
-    facing: mtk_core::direction::Direction,
-    face_dir: mtk_core::direction::Direction,
+    facing: mtk_core::Direction,
+    face_dir: mtk_core::Direction,
 ) -> Option<usize> {
-    use mtk_core::direction::Direction;
+    use mtk_core::Direction;
     match facing {
         Direction::North => match face_dir {
             Direction::North => Some(0), // back
@@ -438,10 +438,8 @@ pub fn decorated_pot_sherd_slot(
 }
 
 /// Retrieves the pre-baked base geometric skeleton for a decorated pot under a horizontal facing.
-pub fn get_baked_decorated_pot_skeleton(
-    facing: mtk_core::direction::Direction,
-) -> &'static BakedModel {
-    use mtk_core::direction::Direction;
+pub fn get_baked_decorated_pot_skeleton(facing: mtk_core::Direction) -> &'static BakedModel {
+    use mtk_core::Direction;
     let skeletons = DECORATED_POT_SKELETONS.get_or_init(|| {
         let mut baker = ModelBaker::new();
         let north = baker
@@ -473,7 +471,7 @@ pub fn get_baked_decorated_pot_skeleton(
 ///
 /// Bypasses all runtime JSON parsing and 3D rotation calculations.
 pub fn create_decorated_pot_baked_model(
-    facing: mtk_core::direction::Direction,
+    facing: mtk_core::Direction,
     sherds: &[Option<String>; 4],
 ) -> BakedModel {
     let skeleton = get_baked_decorated_pot_skeleton(facing);
@@ -584,8 +582,8 @@ pub fn get_builtin_baked_model_for_state_and_entity(
             let facing = blockstate
                 .properties
                 .get("facing")
-                .and_then(|f| mtk_core::direction::Direction::parse_loose(f))
-                .unwrap_or(mtk_core::direction::Direction::North);
+                .and_then(|f| mtk_core::Direction::parse_loose(f))
+                .unwrap_or(mtk_core::Direction::North);
 
             return Some(create_decorated_pot_baked_model(facing, sherds));
         }

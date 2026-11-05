@@ -50,7 +50,7 @@ tiles=0 1 2 3
 
         // Query bookshelf face
         use glam::IVec3;
-        use mtk_core::direction::Direction;
+        use mtk_core::Direction;
         let pos = IVec3::new(0, 0, 0);
 
         // North face: looking in +Z direction.
@@ -112,7 +112,7 @@ tiles=0 1 2 3
         let solver = CtmSolver::new(vec![rule_repeat]);
 
         use glam::IVec3;
-        use mtk_core::direction::Direction;
+        use mtk_core::Direction;
         let dummy = |_: IVec3| None::<&str>;
 
         // (0, 0, 0) -> u=0, v=0 -> tile 0
@@ -200,7 +200,7 @@ tiles=0 1 2 3
         };
         let tile = solver.resolve_face(
             "create:cogwheel",
-            mtk_core::direction::Direction::North,
+            mtk_core::Direction::North,
             pos,
             None,
             None,
@@ -231,7 +231,7 @@ tiles=0 1 2 3
         let solver = CtmSolver::new(vec![rule]);
 
         use glam::IVec3;
-        use mtk_core::direction::Direction;
+        use mtk_core::Direction;
         let pos = IVec3::new(0, 0, 0);
 
         // Helper to resolve face with a single neighbor

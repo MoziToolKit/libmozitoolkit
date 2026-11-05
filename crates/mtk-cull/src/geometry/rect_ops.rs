@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use mtk_core::constants::geometry::EPS;
-use mtk_core::direction::Direction;
-use mtk_core::geometry::Aabb2d;
+use mtk_core::Aabb2d;
+use mtk_core::Direction;
 use mtk_core::Vec3;
 
 use crate::types::{is_empty_rect, is_full_rect};

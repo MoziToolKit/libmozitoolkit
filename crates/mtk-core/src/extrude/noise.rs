@@ -59,7 +59,8 @@ pub fn perlin_noise_3d(x: f32, y: f32, z: f32, seed: u32) -> f32 {
 }
 
 /// 3D Cellular / Voronoi F1 Noise in range [0.0, 1.0].
-pub fn cellular_noise_3d(x: f32, y: f32, z: f32, seed: u32) -> f32 {
+#[inline]
+pub(crate) fn cellular_noise_3d(x: f32, y: f32, z: f32, seed: u32) -> f32 {
     let x0 = x.floor() as i32;
     let y0 = y.floor() as i32;
     let z0 = z.floor() as i32;

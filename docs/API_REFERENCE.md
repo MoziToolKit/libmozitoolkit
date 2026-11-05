@@ -38,7 +38,6 @@
   - 世界体素坐标：整数三元组 $(X, Y, Z)$。
 - **标准化右手 Z-Up 坐标系 (Standard Right-Handed Z-Up)**：
   - $+X$ 轴向东 (East), $+Y$ 轴向北 (North), $+Z$ 轴向上 (Up)。
-  - `mc_local_to_centered_z_up(lx, ly, lz) -> Vec3`：将局部方块坐标转换为以方块几何中心为原点 $[-0.5, 0.5]$ 的右手 Z-Up 浮点坐标。
   - `mc_world_to_z_up(wx, wy, wz) -> Vec3`：将 Minecraft 世界坐标转换为标准右手 Z-Up 坐标。
 - **标准化右手 Y-Up 坐标系 (Standard Right-Handed Y-Up)**：
   - 适用于 Godot / glTF / Three.js / WebGPU 默认管线（+Z 前向，视线朝 $-Z$）；
@@ -92,7 +91,7 @@ pub struct FlatPolygonMesh {
 - **硬编码方块染色与红石信号强度 (Hardcoded Tints & Redstone Wire)**：
   - 云杉树叶、白桦树叶、睡莲与红石引线均为硬编码染色类别 (`TINT_TYPE_HARDCODED = 4`)；
   - 红石引线 (`redstone_wire`) 统一维护 0~15 级标准 sRGB Hex 表与 Linear RGBA 线性渐变色彩，发光强度按 `power / 15.0` 计算；
-  - 烘焙网格注入 `mtk_biome_tint_data` (`[1.0, 1.0, 1.0, 4.0]`) 等规范属性；属性契约见 `mtk_core::attributes::MESH_ATTRIBUTE_SPECS`。
+  - 烘焙网格注入 `mtk_biome_tint_data` (`[1.0, 1.0, 1.0, 4.0]`) 等规范属性；属性契约见 `mtk_core::MESH_ATTRIBUTE_SPECS`。
 - **色彩空间规范**：
   - 宿主与渲染器内部色彩混合**必须在标准线性空间（Linear RGBA, $[0.0, 1.0]$）中进行**；
   - 导出/展示贴图时使用权威转换公式双向映射：
@@ -101,7 +100,7 @@ pub struct FlatPolygonMesh {
 ---
 
 ### 2.4 网格属性契约单一事实源 (Mesh Attribute SSOT)
-- **唯一权威来源**：`mtk_core::attributes::MESH_ATTRIBUTE_SPECS`（名称、域、类型、`material` / `metadata` 角色）与 `RETIRED_MESH_ATTRIBUTES`（退役清单）。
+- **唯一权威来源**：`mtk_core::MESH_ATTRIBUTE_SPECS`（名称、域、类型、`material` / `metadata` 角色）与 `RETIRED_MESH_ATTRIBUTES`（退役清单）。
 - **宿主只消费、不复制**：Python / WASM 绑定通过 `mesh_attribute_schema()` 与 `retired_mesh_attributes()` 读取该契约；Blender 前端由 `tools/sync_attribute_schema.py` 生成镜像并在测试中做逐项校验。
 - **当前活跃属性**：
   - 材质节点消费：`mtk_uv_transform`、`mtk_uv_rotation`、`mtk_anim_timing`、`mtk_anim_frame_size`、`mtk_biome_tint_data`、`mtk_biome_tint_color`；
@@ -159,7 +158,7 @@ cache_output_dir/
   - `JavaRandom`: 48 位线性同余伪随机数生成器 (`java.util.Random` / `SingleThreadedRandomSource`)。
 - **预烘焙交替模型组** (`mtk_model::baker::baked_model::BakedVariantGroup`):
   - 针对自然方块（泥土、石头、沙子、草方块、睡莲等）的多旋转分支预烘焙为离散模型，支持按空间坐标种子快速抽样 (`select_by_pos`)。
-- **植物空间确定性抖动** (`mtk_core::random::OffsetType`):
+- **植物空间确定性抖动** (`mtk_core::OffsetType`):
   - 对花草、蕨类 (`OffsetType::XZ`) 及竹子 (`OffsetType::XYZ`) 依 `Mth.getSeed(x, 0, z)` 沿水平轴进行 $\pm 0.25$ 偏移，两格高植物上下层茎秆水平位移严格保持一致。
 - **网格化源抽象与配置** (`mtk_voxel`):
   - `ModelSource`: 统一表征单模型 (`Single`)、预烘焙变体组 (`Variant`) 或纯方块回退 (`None`)。

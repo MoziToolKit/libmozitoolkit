@@ -16,13 +16,7 @@ pub fn calculate_face_target_grid(
     pixels_per_face: f32,
     max_subdivisions: u32,
 ) -> (u32, u32) {
-    mtk_core::subdivide::calculate_face_target_grid(
-        &uvs,
-        tex_w,
-        tex_h,
-        pixels_per_face,
-        max_subdivisions,
-    )
+    mtk_core::calculate_face_target_grid(&uvs, tex_w, tex_h, pixels_per_face, max_subdivisions)
 }
 
 /// Calculates non-uniform [0, 1] parameter cut factors along U and V axes of a quad face,
@@ -36,7 +30,7 @@ pub fn calculate_pixel_grid_cut_factors(
     pixels_per_face: f32,
     max_subdivisions: u32,
 ) -> (Vec<f32>, Vec<f32>) {
-    mtk_core::subdivide::calculate_pixel_grid_cut_factors(
+    mtk_core::calculate_pixel_grid_cut_factors(
         &uvs,
         tex_w,
         tex_h,
@@ -60,7 +54,7 @@ pub fn slice_face_by_pixel_grid(
     max_subdivisions: u32,
 ) -> (Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<Vec<u32>>, Vec<[f32; 2]>) {
     let res = py.detach(|| {
-        mtk_core::subdivide::slice_face_by_pixel_grid(
+        mtk_core::slice_face_by_pixel_grid(
             &positions,
             &uvs,
             tex_w,
@@ -91,7 +85,7 @@ pub fn adaptive_pixel_split_mesh(
         let face_count = mesh.inner.indices.len() / 6;
         let mut split =
             profiler.measure_with_count("split_faces_to_pixel_grid", face_count, || {
-                mtk_core::subdivide::adaptive_pixel_split_mesh(
+                mtk_core::adaptive_pixel_split_mesh(
                     &mesh.inner,
                     res_slice,
                     default_resolution,
@@ -103,7 +97,7 @@ pub fn adaptive_pixel_split_mesh(
 
         if weld_dist > 0.0 {
             profiler.measure_with_count("weld_subdivided_vertices", split.positions.len(), || {
-                split.uv_layout = mtk_core::mesh::UvLayout::PerLoop;
+                split.uv_layout = mtk_core::UvLayout::PerLoop;
                 split.weld_vertices(weld_dist);
             });
         }

@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use glam::{Vec2, Vec3};
-use mtk_core::direction::Direction;
+use mtk_core::Direction;
 
 use crate::baker::baked_model::{BakedFace, BakedModel};
 use crate::error::ModelError;

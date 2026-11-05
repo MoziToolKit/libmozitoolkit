@@ -184,7 +184,7 @@ fn test_grass_block_dirt_untinted_and_negative_tint_index() {
 
 #[test]
 fn test_unit_cube_tint_index() {
-    use mtk_core::direction::Direction;
+    use mtk_core::Direction;
 
     // Grass block: Up is 0, Down (dirt) and sides are -1
     assert_eq!(
@@ -329,7 +329,7 @@ fn test_reapply_uniform_biome_tint_preserves_hardcoded_and_custom_override() {
 
 #[test]
 fn unit_cube_tint_indices_match_per_direction_api() {
-    use mtk_core::direction::Direction;
+    use mtk_core::Direction;
     use mtk_material::biome::{get_unit_cube_tint_index, get_unit_cube_tint_indices};
 
     let mut corpus: Vec<String> = Vec::new();

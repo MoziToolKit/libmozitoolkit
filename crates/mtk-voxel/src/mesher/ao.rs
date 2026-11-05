@@ -1,6 +1,6 @@
 use glam::Vec3;
 use mtk_core::constants::lighting::AO_LEVEL_MULTIPLIERS;
-use mtk_core::direction::Direction;
+use mtk_core::Direction;
 
 /// Maps ambient occlusion discrete level `0..=3` to a linear brightness multiplier `[0.2..1.0]`.
 #[inline]

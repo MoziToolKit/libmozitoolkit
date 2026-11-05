@@ -4,8 +4,8 @@
 //! delta rebuilding (`rebuild_dirty`, `rebuild_dirty_in_place`).
 
 use glam::IVec3;
-use mtk_core::mesh::MeshData;
-use mtk_core::progress::{ProgressCallback, ProgressReport};
+use mtk_core::MeshData;
+use mtk_core::{ProgressCallback, ProgressReport};
 use mtk_model::baker::baked_model::BakedModelDatabase;
 
 use crate::mesher::{DeltaMesher, SectionMesher};

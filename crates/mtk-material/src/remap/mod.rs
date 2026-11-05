@@ -45,10 +45,10 @@ pub fn remap_sprite_to_sprite(
 /// Returns 0.0 for unrotated or standard axis-aligned faces.
 /// Returns non-zero angle theta in radians only when ALL valid edges of the face are non-orthogonal.
 ///
-/// Delegates to [`mtk_core::uv::detect_uv_rotation`] so the UV angle math has a single source of truth.
+/// Delegates to [`mtk_core::detect_uv_rotation`] so the UV angle math has a single source of truth.
 pub fn detect_face_uv_rotation(uvs: &[[f32; 2]], tolerance: f32) -> f32 {
     let vecs: Vec<glam::Vec2> = uvs.iter().map(|p| glam::Vec2::new(p[0], p[1])).collect();
-    mtk_core::uv::detect_uv_rotation(&vecs, tolerance)
+    mtk_core::detect_uv_rotation(&vecs, tolerance)
 }
 
 /// Straighten a rotated polygon's loop UVs back to standard axis-aligned coordinates.

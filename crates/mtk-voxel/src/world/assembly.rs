@@ -3,7 +3,7 @@
 //! Provides manifold mesh assembly from cached chunk sections, incremental
 //! seam welding along 16-block interfaces, and static animation attribute pruning.
 
-use mtk_core::mesh::MeshData;
+use mtk_core::MeshData;
 
 use super::VoxelWorld;
 
@@ -94,17 +94,17 @@ impl VoxelWorld {
 /// optional attribute pruning.
 pub(crate) fn prune_static_animation_attributes(mesh: &mut MeshData) {
     let static_only = mesh
-        .get_custom_attribute(mtk_core::attributes::constants::ATTR_ANIM_TIMING)
+        .get_custom_attribute(mtk_core::attribute_constants::ATTR_ANIM_TIMING)
         .and_then(|attr| match &attr.data {
-            mtk_core::attributes::AttributeData::Float3(values) => {
+            mtk_core::AttributeData::Float3(values) => {
                 Some(values.iter().all(|timing| timing[0] <= 1.0))
             }
             _ => None,
         })
         .unwrap_or(false);
     if static_only {
-        mesh.remove_custom_attribute(mtk_core::attributes::constants::ATTR_ANIM_TIMING);
-        mesh.remove_custom_attribute(mtk_core::attributes::constants::ATTR_ANIM_FRAME_SIZE);
+        mesh.remove_custom_attribute(mtk_core::attribute_constants::ATTR_ANIM_TIMING);
+        mesh.remove_custom_attribute(mtk_core::attribute_constants::ATTR_ANIM_FRAME_SIZE);
     }
 }
 
@@ -112,7 +112,7 @@ pub(crate) fn prune_static_animation_attributes(mesh: &mut MeshData) {
 mod tests {
     use super::*;
     use crate::mesher::collector::FaceAttributesCollector;
-    use mtk_core::attributes::constants::{ATTR_ANIM_FRAME_SIZE, ATTR_ANIM_TIMING};
+    use mtk_core::attribute_constants::{ATTR_ANIM_FRAME_SIZE, ATTR_ANIM_TIMING};
 
     fn mesh_with_timing(timing: [f32; 3]) -> MeshData {
         let mut collector = FaceAttributesCollector::with_capacity(1);

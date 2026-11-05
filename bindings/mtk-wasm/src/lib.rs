@@ -7,11 +7,11 @@
 use js_sys::{Float32Array, Uint16Array, Uint32Array};
 use wasm_bindgen::prelude::*;
 
-use mtk_core::attributes::FaceAttributes;
 use mtk_core::constants::concurrency;
-use mtk_core::direction::Direction;
-use mtk_core::geometry::Quad;
-use mtk_core::mesh::MeshData;
+use mtk_core::Direction;
+use mtk_core::FaceAttributes;
+use mtk_core::MeshData;
+use mtk_core::Quad;
 use mtk_cull::types::{GlassCullMode, LeavesCullMode};
 use mtk_cull::FaceCuller;
 use mtk_voxel::mesher::shading::ModelSource;

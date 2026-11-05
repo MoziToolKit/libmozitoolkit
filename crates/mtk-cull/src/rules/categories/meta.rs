@@ -7,9 +7,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use mtk_core::constants::geometry::EPS;
-use mtk_core::direction::{DirMask, Direction};
-use mtk_core::geometry::Aabb2d;
+use mtk_core::Aabb2d;
 use mtk_core::Vec3;
+use mtk_core::{DirMask, Direction};
 
 use super::catalog::{
     is_non_full_or_partial_block, is_non_occluding_block, AIR_NAMES, FLUID_NAMES, GLASS_NAMES,

@@ -1,7 +1,7 @@
 //! Python bindings for UV geometric algorithms.
 
 use glam::Vec2;
-use mtk_core::uv;
+use mtk_core as uv;
 use pyo3::prelude::*;
 
 #[inline]
@@ -325,9 +325,9 @@ pub fn repair_extruded_side_uv(
     adjacent_uv_strip: Option<Vec<(f32, f32)>>,
 ) -> Vec<(f32, f32)> {
     let m = match mode.to_uppercase().as_str() {
-        "INWARD" => mtk_core::extrude::ExtrudeUvMode::Inward,
-        "OUTWARD" => mtk_core::extrude::ExtrudeUvMode::Outward,
-        _ => mtk_core::extrude::ExtrudeUvMode::Smart,
+        "INWARD" => mtk_core::ExtrudeUvMode::Inward,
+        "OUTWARD" => mtk_core::ExtrudeUvMode::Outward,
+        _ => mtk_core::ExtrudeUvMode::Smart,
     };
 
     let bounds = if let Some((min_u, min_v, max_u, max_v)) = top_uv_bounds {
@@ -352,7 +352,7 @@ pub fn repair_extruded_side_uv(
         }
     });
 
-    let res = mtk_core::extrude::repair_extruded_side_uv(
+    let res = mtk_core::repair_extruded_side_uv(
         [uv_base_a.0, uv_base_a.1],
         [uv_base_b.0, uv_base_b.1],
         [top_normal.0, top_normal.1, top_normal.2],
@@ -393,14 +393,14 @@ pub fn generate_random_extrude_heights(
     discrete_steps: Option<u32>,
 ) -> Vec<f32> {
     let n_type = match noise_type.to_uppercase().as_str() {
-        "PERLIN" => mtk_core::extrude::ExtrudeNoiseType::Perlin,
-        "CELL" | "CELLULAR" | "VORONOI" => mtk_core::extrude::ExtrudeNoiseType::Cellular,
-        _ => mtk_core::extrude::ExtrudeNoiseType::UniformRandom,
+        "PERLIN" => mtk_core::ExtrudeNoiseType::Perlin,
+        "CELL" | "CELLULAR" | "VORONOI" => mtk_core::ExtrudeNoiseType::Cellular,
+        _ => mtk_core::ExtrudeNoiseType::UniformRandom,
     };
 
     let pts: Vec<[f32; 3]> = centers.iter().map(|&(x, y, z)| [x, y, z]).collect();
 
-    mtk_core::extrude::generate_extrude_heights(
+    mtk_core::generate_extrude_heights(
         &pts,
         n_type,
         min_height,

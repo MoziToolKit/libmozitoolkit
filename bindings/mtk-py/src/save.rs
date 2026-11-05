@@ -163,7 +163,7 @@ pub fn load_and_mesh_minecraft_save(
 
     let cb_opt = callback.as_ref();
     let on_progress = cb_opt.map(|cb| {
-        move |prog: mtk_core::progress::ProgressReport| {
+        move |prog: mtk_core::ProgressReport| {
             Python::attach(|py| {
                 let dict = PyDict::new(py);
                 let _ = dict.set_item("stage", prog.stage);
@@ -175,9 +175,9 @@ pub fn load_and_mesh_minecraft_save(
             });
         }
     });
-    let progress_ref: Option<mtk_core::progress::ProgressCallback<'_>> = on_progress
+    let progress_ref: Option<mtk_core::ProgressCallback<'_>> = on_progress
         .as_ref()
-        .map(|f| f as &(dyn Fn(mtk_core::progress::ProgressReport) + Send + Sync));
+        .map(|f| f as &(dyn Fn(mtk_core::ProgressReport) + Send + Sync));
 
     let mut storage = VoxelStorage::new();
     let loaded_sections = profiler.measure("load_region_chunks", || {

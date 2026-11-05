@@ -202,7 +202,7 @@ pub fn calculate_pixel_grid_cut_factors(
 
 /// Bilinear interpolation helper for scalar / vector types.
 #[inline]
-pub fn interpolate_bilinear_2d(
+pub(crate) fn interpolate_bilinear_2d(
     c0: [f32; 2],
     c1: [f32; 2],
     c2: [f32; 2],
@@ -219,7 +219,7 @@ pub fn interpolate_bilinear_2d(
 }
 
 #[inline]
-pub fn interpolate_bilinear_3d(
+pub(crate) fn interpolate_bilinear_3d(
     c0: [f32; 3],
     c1: [f32; 3],
     c2: [f32; 3],
@@ -237,7 +237,7 @@ pub fn interpolate_bilinear_3d(
 }
 
 #[inline]
-pub fn interpolate_bilinear_4d(
+pub(crate) fn interpolate_bilinear_4d(
     c0: [f32; 4],
     c1: [f32; 4],
     c2: [f32; 4],

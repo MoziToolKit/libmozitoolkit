@@ -1,5 +1,5 @@
 use glam::IVec3;
-use mtk_core::mesh::MeshData;
+use mtk_core::MeshData;
 use mtk_cull::FaceCuller;
 
 use crate::mesher::shading::ModelSource;

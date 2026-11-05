@@ -3,7 +3,7 @@
 //! Generates directional candidate texture identifiers for unit cube blocks
 //! (grass, logs, woods, dirt, etc.).
 
-use mtk_core::direction::Direction;
+use mtk_core::Direction;
 
 /// Generates directional candidate texture identifiers for unit cube blocks.
 pub fn get_unit_cube_texture_candidates(clean_block: &str, dir: Direction) -> Vec<String> {

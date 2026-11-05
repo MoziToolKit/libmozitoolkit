@@ -1,6 +1,6 @@
 use crate::identifier::{ResourceLocation, DEFAULT_NAMESPACE};
 use glam::IVec3;
-use mtk_core::direction::{DirMask, Direction};
+use mtk_core::{DirMask, Direction};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 

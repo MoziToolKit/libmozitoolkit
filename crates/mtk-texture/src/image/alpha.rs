@@ -1,7 +1,7 @@
 //! High-throughput UV alpha sampling and transparent face analysis.
 
 use glam::Vec2;
-use mtk_core::uv::get_uv_center;
+use mtk_core::get_uv_center;
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;

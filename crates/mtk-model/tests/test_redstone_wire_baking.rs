@@ -1,4 +1,4 @@
-use mtk_core::direction::Direction;
+use mtk_core::Direction;
 use mtk_model::baker::baked_model::BakedModelDatabase;
 use mtk_model::baker::ModelBaker;
 use mtk_model::{BlockModelJson, BlockStateDefinition};
@@ -62,7 +62,7 @@ fn test_bake_redstone_wire_vanilla_resolution() {
     assert!(textures.iter().any(|t| t.contains("redstone_dust_dot")));
 
     // Emission is baked-model metadata; retired face attributes must not be emitted.
-    use mtk_core::attributes::RETIRED_MESH_ATTRIBUTES;
+    use mtk_core::RETIRED_MESH_ATTRIBUTES;
     for name in RETIRED_MESH_ATTRIBUTES {
         assert!(
             mesh.get_custom_attribute(name).is_none(),

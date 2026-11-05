@@ -5,7 +5,7 @@
 //! giving exactly 17 * 17 * 17 = 4,913 possible spatial vertex slots.
 
 use glam::Vec3;
-use mtk_core::mesh::MeshData;
+use mtk_core::MeshData;
 
 use crate::types::MesherConfig;
 

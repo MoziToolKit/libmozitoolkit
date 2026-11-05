@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::thread::JoinHandle;
 
 use crossbeam_channel::{Receiver, Sender};
-use mtk_core::mesh::MeshData;
+use mtk_core::MeshData;
 use mtk_cull::FaceCuller;
 use mtk_model::baker::baked_model::BakedModelDatabase;
 use mtk_voxel::storage::VoxelStorage;
@@ -200,7 +200,7 @@ impl LiveSyncSession {
     }
 
     /// Execution profile of the most recent rebuild operation, if any.
-    pub fn last_profile(&self) -> Option<mtk_core::profile::ExecutionProfile> {
+    pub fn last_profile(&self) -> Option<mtk_core::ExecutionProfile> {
         let w = self.world.read().unwrap_or_else(|e| e.into_inner());
         w.last_profile.clone()
     }
@@ -462,8 +462,7 @@ impl LiveSyncSession {
     /// Non-mesh events keep their arrival order; the newest mesh is appended last.
     pub fn poll_events_coalesced(&self) -> Vec<SyncEvent> {
         let events = self.poll_events();
-        let mut latest_mesh: Option<(u64, MeshData, Option<mtk_core::profile::ExecutionProfile>)> =
-            None;
+        let mut latest_mesh: Option<(u64, MeshData, Option<mtk_core::ExecutionProfile>)> = None;
         let mut out = Vec::with_capacity(events.len());
         for event in events {
             match event {

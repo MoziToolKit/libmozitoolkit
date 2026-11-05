@@ -1,8 +1,8 @@
 //! Fluid mesh geometry emission (top, bottom, and 4 sides).
 
 use glam::Vec3;
-use mtk_core::direction::Direction;
-use mtk_core::mesh::MeshData;
+use mtk_core::Direction;
+use mtk_core::MeshData;
 use mtk_cull::engine::parse_block_name_and_props;
 use mtk_cull::FaceCuller;
 

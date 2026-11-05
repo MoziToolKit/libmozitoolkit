@@ -293,7 +293,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### 示例 3：解析 CTM 规则并执行邻域连接解算
 ```rust
 use glam::IVec3;
-use mtk_core::direction::Direction;
+use mtk_core::Direction;
 use mtk_resource::{CtmRule, CtmSolver};
 
 fn main() {
