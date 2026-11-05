@@ -254,16 +254,9 @@ pub fn extract_block_name(state: &str) -> &str {
     }
 }
 
-/// Computes the canonical tangent `(up, left)` directions for a standard cardinal cube face.
-/// Re-exports and delegates to `mtk_core::Direction::canonical_face_tangents` as SSOT.
-#[inline]
-pub const fn get_face_tangents(face: Direction) -> (Direction, Direction) {
-    face.canonical_face_tangents()
-}
-
 /// Deterministic 3D spatial pseudorandom number generator matching standard Minecraft / OptiFine.
 #[inline]
-pub fn coordinate_random(x: i32, y: i32, z: i32) -> f32 {
+pub(crate) fn coordinate_random(x: i32, y: i32, z: i32) -> f32 {
     let mut l = (x as i64).wrapping_mul(3129871) ^ (z as i64).wrapping_mul(116129781) ^ (y as i64);
     l = l
         .wrapping_mul(l)

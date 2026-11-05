@@ -386,7 +386,15 @@ PY
   - 测试隔离：内部测试 `test_baseline_alignment.rs` 与 `test_delta_seam_welding.rs` 移入 `src/` 作为内部 `#[cfg(test)]` 单元测试，直接访问内部调度器与基线组装器，杜绝因测试而泄露内部算子；
   - 下游（`mtk-py/voxel/storage.rs`, `mtk-py/point_cloud.rs`, `mtk-py/protocol.rs`）穿透引用统一收敛为根规范导出；
   - 同步重写 `crates/mtk-sync/README.md`，彻底移除旧版 v2 废弃协议描述。
-- [ ] 推进后续 crate（`mtk-resource` → `mtk-texture` → `mtk-material` → `mtk-save` → `mtk-package` → `libmtk`）内部 `pub mod` 改 `mod` 与根导出精简。
+- [x] **`mtk-resource` 根导出与模块私有化彻底完成 (Batch 4.6)**：
+  - 内部模块收敛：`atlas`, `ctm`, `error`, `identifier`, `meta`, `pack`, `texture_key` 全部收敛为私有 `mod`；保留 `banner` 与 `skin` 作为规范业务子领域暴露（`pub mod banner;`, `pub mod skin;`）；
+  - 内部子模块全部收敛为私有 `mod`：`ctm/{algorithms, parser, solver, tables, types}` 与 `skin/{circuit, index, mirror, mod_api, resolver}` 以及 `pack/{source, stack}` 均转为内部私有 `mod`；
+  - 废弃与零消费者符号清理：物理删除死代码 `get_face_tangents`；
+  - 内部实现细节降级为 `pub(crate)`：`coordinate_random`, `parse_ctm_properties`, `tables` 内部查找表与构建函数, `SkinCircuitBreaker` 及其内部辅助方法, `SkinIndex`, `SkinRecord`, `compute_sha256_hex`, `is_mirror_fallback_hash`, `is_mojang_online_uuid`, `current_unix_timestamp`, `DEFAULT_NAMESPACE`, `TextureMetadata`；
+  - 根导出收敛：移除冗余根重导出 `DEFAULT_NAMESPACE`, `TextureMetadata`, `coordinate_random`, `get_face_tangents`, `CTM_47_LOOKUP`, `OVERLAY_17_LOOKUP`, `is_companion_asset_path` 以及根目录重复的 `banner::*` 导出；
+  - 下游穿透引用收敛：`libmtk` 中的 `mtk_resource::error::ResourceError` 统一收敛为根命名空间 `mtk_resource::ResourceError`；
+  - 同步更新 `crates/mtk-resource/README.md` 与 API 契约文档。
+- [ ] 推进后续 crate（`mtk-texture` → `mtk-material` → `mtk-save` → `mtk-package` → `libmtk`）内部 `pub mod` 改 `mod` 与根导出精简。
 - [ ] 每完成一个 crate 跑 `cargo test -p <crate>` 与 `cargo clippy -p <crate> --all-targets -- -D warnings`。
 
 ### Batch 5：绑定与适配器收敛

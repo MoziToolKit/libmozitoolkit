@@ -16,7 +16,7 @@ use super::mod_api::derive_skin_key;
 
 /// Checks PNG magic signature (89 50 4E 47 0D 0A 1A 0A).
 #[inline]
-pub fn is_valid_png_header(bytes: &[u8]) -> bool {
+pub(crate) fn is_valid_png_header(bytes: &[u8]) -> bool {
     bytes.len() >= 8 && &bytes[0..8] == b"\x89PNG\r\n\x1a\n"
 }
 
@@ -24,9 +24,9 @@ pub fn is_valid_png_header(bytes: &[u8]) -> bool {
 #[derive(Clone)]
 pub struct SkinResolver {
     cache_dir: Option<PathBuf>,
-    pub index: Arc<RwLock<SkinIndex>>,
+    pub(crate) index: Arc<RwLock<SkinIndex>>,
     #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
-    pub circuit: SkinCircuitBreaker,
+    pub(crate) circuit: SkinCircuitBreaker,
     memory_cache: Arc<RwLock<HashMap<String, Vec<u8>>>>,
     in_flight: Arc<RwLock<HashSet<String>>>,
     failed_keys: Arc<RwLock<HashMap<String, u64>>>,

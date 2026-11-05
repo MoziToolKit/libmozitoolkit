@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 /// Fast-failing network circuit breaker.
 #[derive(Debug, Clone)]
-pub struct SkinCircuitBreaker {
+pub(crate) struct SkinCircuitBreaker {
     /// Number of consecutive transport failures.
     consecutive_transport_failures: Arc<AtomicU32>,
     /// Unix timestamp until which the circuit is OPEN (tripped / fast-failing).
@@ -29,7 +29,7 @@ impl Default for SkinCircuitBreaker {
 
 impl SkinCircuitBreaker {
     /// Creates a new circuit breaker with the given failure threshold and cooldown period in seconds.
-    pub fn new(failure_threshold: u32, cooldown_secs: u64) -> Self {
+    pub(crate) fn new(failure_threshold: u32, cooldown_secs: u64) -> Self {
         Self {
             consecutive_transport_failures: Arc::new(AtomicU32::new(0)),
             tripped_until: Arc::new(AtomicU64::new(0)),
@@ -40,7 +40,7 @@ impl SkinCircuitBreaker {
 
     /// Returns true if the circuit is currently open (fast-fail mode).
     #[inline]
-    pub fn is_tripped(&self) -> bool {
+    pub(crate) fn is_tripped(&self) -> bool {
         let until = self.tripped_until.load(Ordering::Relaxed);
         if until == 0 {
             return false;
@@ -52,7 +52,7 @@ impl SkinCircuitBreaker {
     /// Records a successful network interaction (status 200 or server reached).
     /// Resets consecutive transport failures and closes the circuit.
     #[inline]
-    pub fn record_success(&self) {
+    pub(crate) fn record_success(&self) {
         self.consecutive_transport_failures
             .store(0, Ordering::Relaxed);
         self.tripped_until.store(0, Ordering::Relaxed);
@@ -60,7 +60,7 @@ impl SkinCircuitBreaker {
 
     /// Records a transport / DNS / connection failure.
     /// If consecutive failures reach the threshold, trips the circuit.
-    pub fn record_transport_failure(&self) {
+    pub(crate) fn record_transport_failure(&self) {
         let count = self
             .consecutive_transport_failures
             .fetch_add(1, Ordering::Relaxed)
@@ -73,21 +73,24 @@ impl SkinCircuitBreaker {
     }
 
     /// Manually trips the circuit breaker for testing or forced offline mode.
-    pub fn trip(&self) {
+    #[cfg(test)]
+    pub(crate) fn trip(&self) {
         let now = current_unix_timestamp();
         self.tripped_until
             .store(now.saturating_add(self.cooldown_secs), Ordering::Relaxed);
     }
 
     /// Manually resets the circuit breaker.
-    pub fn reset(&self) {
+    #[cfg(test)]
+    pub(crate) fn reset(&self) {
         self.consecutive_transport_failures
             .store(0, Ordering::Relaxed);
         self.tripped_until.store(0, Ordering::Relaxed);
     }
 
     /// Returns the current consecutive failure count.
-    pub fn failure_count(&self) -> u32 {
+    #[cfg(test)]
+    pub(crate) fn failure_count(&self) -> u32 {
         self.consecutive_transport_failures.load(Ordering::Relaxed)
     }
 }

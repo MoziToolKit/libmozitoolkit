@@ -4,28 +4,24 @@
 //! negative caching for 404/invalid URLs, non-blocking disk/memory checks,
 //! background HTTP fetching, and 0-second indexed local cache hits.
 
-pub mod circuit;
-pub mod index;
+mod circuit;
+mod index;
 #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
-pub mod mirror;
-pub mod mod_api;
-pub mod resolver;
+mod mirror;
+mod mod_api;
+mod resolver;
 
-pub use circuit::SkinCircuitBreaker;
-pub use index::{
-    clean_player_name, clean_uuid, compute_sha256_hex, current_unix_timestamp,
-    is_mirror_fallback_hash, is_mojang_online_uuid, SkinIndex, SkinRecord, CRAFTHEAD_ALEX_HASH,
-    CRAFTHEAD_STEVE_HASH, MINOTAR_FALLBACK_HASH,
-};
+pub use index::{clean_player_name, clean_uuid};
 pub use mod_api::{
     default_player_skin_texture, derive_skin_key, VANILLA_ALEX_TEXTURE, VANILLA_STEVE_TEXTURE,
 };
-pub use resolver::{
-    decode_base64, extract_skin_url_from_property_base64, is_valid_png_header, SkinResolver,
-};
+pub use resolver::{decode_base64, extract_skin_url_from_property_base64, SkinResolver};
 
 #[cfg(test)]
 mod tests {
+    use super::circuit::*;
+    use super::index::*;
+    use super::resolver::*;
     use super::*;
     use mtk_testkit::require_online;
     use std::fs;

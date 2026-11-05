@@ -71,7 +71,7 @@ pub enum MtkError {
     Model(mtk_model::ModelError),
     Voxel(mtk_voxel::VoxelError),
     Texture(mtk_texture::error::TextureError),
-    Resource(mtk_resource::error::ResourceError),
+    Resource(mtk_resource::ResourceError),
     Material(mtk_material::MaterialError),
     Io(std::io::Error),
     Json(serde_json::Error),

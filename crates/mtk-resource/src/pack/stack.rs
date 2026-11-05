@@ -47,7 +47,7 @@ impl Default for ResourcePackStack {
 
 /// Returns true if the given texture asset path is a companion texture (_n, _s, _overlay)
 /// that must not become an independent standalone sprite in the atlas.
-pub fn is_companion_asset_path(file: &str) -> bool {
+fn is_companion_asset_path(file: &str) -> bool {
     let lower = file.to_ascii_lowercase();
     lower.ends_with("_n.png")
         || lower.ends_with("_s.png")
@@ -368,11 +368,11 @@ impl ResourcePackStack {
                         let namespace = if parts.len() > 1 {
                             parts[1]
                         } else {
-                            crate::DEFAULT_NAMESPACE
+                            crate::identifier::DEFAULT_NAMESPACE
                         };
                         let rel_path = parts[2..].join("/");
                         if let Some(rule) =
-                            crate::ctm::CtmRule::parse_properties(&rel_path, namespace, content)
+                            crate::CtmRule::parse_properties(&rel_path, namespace, content)
                         {
                             rules.push(rule);
                         }

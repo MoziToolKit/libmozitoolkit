@@ -3,7 +3,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::str::FromStr;
 
-pub const DEFAULT_NAMESPACE: &str = "minecraft";
+pub(crate) const DEFAULT_NAMESPACE: &str = "minecraft";
 
 /// A standardized Minecraft Resource Location (Identifier), such as `minecraft:block/stone`.
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]

@@ -1,4 +1,9 @@
-pub mod compact;
-pub mod directional;
-pub mod full;
-pub mod patterns;
+mod compact;
+mod directional;
+mod full;
+mod patterns;
+
+pub(crate) use compact::*;
+pub(crate) use directional::*;
+pub(crate) use full::*;
+pub(crate) use patterns::*;

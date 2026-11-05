@@ -3,7 +3,11 @@ use crate::identifier::{ResourceLocation, DEFAULT_NAMESPACE};
 use mtk_core::DirMask;
 use std::collections::HashMap;
 
-pub fn parse_ctm_properties(source_path: &str, namespace: &str, content: &str) -> Option<CtmRule> {
+pub(crate) fn parse_ctm_properties(
+    source_path: &str,
+    namespace: &str,
+    content: &str,
+) -> Option<CtmRule> {
     let mut props: HashMap<String, String> = HashMap::new();
 
     for line in content.lines() {

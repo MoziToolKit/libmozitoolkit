@@ -207,7 +207,7 @@ impl AssetCacheReader {
         let patterns: HashMap<String, Vec<u8>> = if self.reader.has_chunk("banner/patterns") {
             let bytes = self.reader.read_chunk_decompressed("banner/patterns")?;
             postcard::from_bytes(&bytes).map_err(|e| {
-                MtkError::Resource(mtk_resource::error::ResourceError::NotFound(format!(
+                MtkError::Resource(mtk_resource::ResourceError::NotFound(format!(
                     "Corrupted 'banner/patterns' chunk: {e}"
                 )))
             })?

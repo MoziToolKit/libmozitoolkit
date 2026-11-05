@@ -90,7 +90,7 @@ fn precompile_all_assets_inner(
     progress_callback: Option<ProgressCallback>,
 ) -> Result<PrecompileResult, MtkError> {
     if stack.is_empty() || !stack.has_vanilla_client_base() {
-        return Err(MtkError::Resource(mtk_resource::error::ResourceError::MissingVanillaBasePack(
+        return Err(MtkError::Resource(mtk_resource::ResourceError::MissingVanillaBasePack(
             "Cannot precompile: resource pack stack must contain a valid Minecraft Vanilla Client base pack".into(),
         )));
     }

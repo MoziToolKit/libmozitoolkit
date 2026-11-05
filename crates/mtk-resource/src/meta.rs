@@ -70,13 +70,33 @@ impl Default for AnimationMetadata {
 
 /// Root container for `.png.mcmeta` texture metadata.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-pub struct TextureMetadata {
+pub(crate) struct TextureMetadata {
     #[serde(default)]
-    pub animation: Option<AnimationMetadata>,
+    pub(crate) animation: Option<AnimationMetadata>,
 }
 
 impl TextureMetadata {
-    pub fn parse_json(json_str: &str) -> Result<Self, serde_json::Error> {
+    pub(crate) fn parse_json(json_str: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(json_str)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_texture_metadata_parse_animation() {
+        let json_data = r#"{
+            "animation": {
+                "frametime": 2,
+                "interpolate": true
+            }
+        }"#;
+        let meta = TextureMetadata::parse_json(json_data).unwrap();
+        assert!(meta.animation.is_some());
+        let anim = meta.animation.unwrap();
+        assert_eq!(anim.frametime, 2);
+        assert!(anim.interpolate);
     }
 }

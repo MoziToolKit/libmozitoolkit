@@ -1,5 +1,5 @@
 /// 47 Full CTM tile index to connection bit pattern.
-pub const TILE_TO_CONNECTION_DATA: [u8; 47] = [
+pub(crate) const TILE_TO_CONNECTION_DATA: [u8; 47] = [
     0b00000000, 0b00010000, 0b00010001, 0b00000001, 0b00010100, 0b00000101, 0b01010100, 0b00010101,
     0b01110101, 0b01011101, 0b11010111, 0b11110101, 0b00000100, 0b00011100, 0b00011111, 0b00000111,
     0b01010000, 0b01000001, 0b01010001, 0b01000101, 0b11010101, 0b01010111, 0b01011111, 0b01111101,
@@ -9,7 +9,7 @@ pub const TILE_TO_CONNECTION_DATA: [u8; 47] = [
 ];
 
 /// Precomputed 256-entry lookup table for Full 47-tile CTM.
-pub const fn build_ctm_47_lookup() -> [u8; 256] {
+pub(crate) const fn build_ctm_47_lookup() -> [u8; 256] {
     let mut table = [0u8; 256];
     let mut mapped = [false; 256];
 
@@ -51,17 +51,17 @@ pub const fn build_ctm_47_lookup() -> [u8; 256] {
     table
 }
 
-pub const CTM_47_LOOKUP: [u8; 256] = build_ctm_47_lookup();
+pub(crate) const CTM_47_LOOKUP: [u8; 256] = build_ctm_47_lookup();
 
 /// 17 Overlay tile index to connection bit pattern.
-pub const TILE_TO_OVERLAY_DATA: [u8; 17] = [
+pub(crate) const TILE_TO_OVERLAY_DATA: [u8; 17] = [
     0b00001000, 0b00001110, 0b00000010, 0b00111110, 0b10001111, 0b10111111, 0b11101111, 0b00111000,
     0b11111111, 0b10000011, 0b11111000, 0b11100011, 0b11111110, 0b11111011, 0b00100000, 0b11100000,
     0b10000000,
 ];
 
 /// Precomputed 256-entry lookup table for Overlay CTM.
-pub const fn build_overlay_17_lookup() -> [i8; 256] {
+pub(crate) const fn build_overlay_17_lookup() -> [i8; 256] {
     let mut table = [-2i8; 256];
     table[0b00000000] = -1;
 
@@ -106,4 +106,4 @@ pub const fn build_overlay_17_lookup() -> [i8; 256] {
     table
 }
 
-pub const OVERLAY_17_LOOKUP: [i8; 256] = build_overlay_17_lookup();
+pub(crate) const OVERLAY_17_LOOKUP: [i8; 256] = build_overlay_17_lookup();

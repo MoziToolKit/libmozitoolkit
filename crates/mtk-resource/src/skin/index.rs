@@ -11,21 +11,21 @@ use std::path::Path;
 
 /// Individual skin record stored in `index.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SkinRecord {
+pub(crate) struct SkinRecord {
     /// 64-hex SHA256 content hash of the PNG file (or custom CDN hash).
-    pub hash: String,
+    pub(crate) hash: String,
     /// Texture URL if known.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub skin_url: Option<String>,
+    pub(crate) skin_url: Option<String>,
     /// Associated player username (e.g. "jaxlocke").
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub player_name: Option<String>,
+    pub(crate) player_name: Option<String>,
     /// Associated online/canonical UUID (32-hex lowercase).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub uuid: Option<String>,
+    pub(crate) uuid: Option<String>,
     /// Unix timestamp in seconds when this skin was last verified/downloaded.
     #[serde(default)]
-    pub last_checked: u64,
+    pub(crate) last_checked: u64,
 }
 
 fn default_index_version() -> u32 {
@@ -34,18 +34,18 @@ fn default_index_version() -> u32 {
 
 /// Disk and in-memory index mapping player usernames, UUIDs, and URLs to skin content hashes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SkinIndex {
+pub(crate) struct SkinIndex {
     #[serde(default = "default_index_version")]
-    pub version: u32,
+    pub(crate) version: u32,
     /// Metadata for each unique skin keyed by content hash.
     #[serde(default)]
-    pub skins: HashMap<String, SkinRecord>,
+    pub(crate) skins: HashMap<String, SkinRecord>,
     /// Lookup from lowercase player username (e.g. "jaxlocke") to 64-hex content hash.
     #[serde(default)]
-    pub players: HashMap<String, String>,
+    pub(crate) players: HashMap<String, String>,
     /// Lookup from clean 32-hex lowercase UUID (no dashes, no prefix) to 64-hex content hash.
     #[serde(default)]
-    pub uuids: HashMap<String, String>,
+    pub(crate) uuids: HashMap<String, String>,
 }
 
 impl Default for SkinIndex {
@@ -78,7 +78,7 @@ pub fn clean_player_name(raw_name: &str) -> String {
 }
 
 /// Computes the standard lowercase 64-hex SHA256 string for arbitrary bytes.
-pub fn compute_sha256_hex(bytes: &[u8]) -> String {
+pub(crate) fn compute_sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     format!("{:x}", hasher.finalize())
@@ -86,15 +86,15 @@ pub fn compute_sha256_hex(bytes: &[u8]) -> String {
 
 /// Known SHA-256 content hashes of default fallback skins returned by mirror services
 /// when a player or UUID is not found.
-pub const CRAFTHEAD_ALEX_HASH: &str =
+pub(crate) const CRAFTHEAD_ALEX_HASH: &str =
     "c5b845b5a11c0bbd4c3ed65107cf3ed363fe85b17358abfa2b19a9e1350d8a86";
-pub const CRAFTHEAD_STEVE_HASH: &str =
+pub(crate) const CRAFTHEAD_STEVE_HASH: &str =
     "e9aba3cc087f29abca87f8ca4d85783f72e86b55a57efec7f100ea4998d1309a";
-pub const MINOTAR_FALLBACK_HASH: &str =
+pub(crate) const MINOTAR_FALLBACK_HASH: &str =
     "d67aeb25ab7ae83f56d7e8cda1308c21cf30a9390b3d1178c2217cf688bcdfa3";
 
 /// Returns true if the given hash is a known mirror fallback skin.
-pub fn is_mirror_fallback_hash(hash: &str) -> bool {
+pub(crate) fn is_mirror_fallback_hash(hash: &str) -> bool {
     matches!(
         hash,
         CRAFTHEAD_ALEX_HASH | CRAFTHEAD_STEVE_HASH | MINOTAR_FALLBACK_HASH
@@ -103,12 +103,12 @@ pub fn is_mirror_fallback_hash(hash: &str) -> bool {
 
 /// Returns true if a 32-hex UUID is formatted as a Mojang online Version 4 UUID.
 /// (13th hex character is '4').
-pub fn is_mojang_online_uuid(clean_uuid: &str) -> bool {
+pub(crate) fn is_mojang_online_uuid(clean_uuid: &str) -> bool {
     clean_uuid.len() == 32 && clean_uuid.as_bytes().get(12) == Some(&b'4')
 }
 
 /// Returns current Unix epoch timestamp in seconds.
-pub fn current_unix_timestamp() -> u64 {
+pub(crate) fn current_unix_timestamp() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -117,7 +117,7 @@ pub fn current_unix_timestamp() -> u64 {
 
 impl SkinIndex {
     /// Attempts to locate an existing skin content hash given URL, UUID, or player name.
-    pub fn find_hash(
+    pub(crate) fn find_hash(
         &self,
         skin_url: Option<&str>,
         uuid: Option<&str>,
@@ -164,7 +164,7 @@ impl SkinIndex {
     }
 
     /// Records or updates a skin mapping in the index.
-    pub fn record_mapping(
+    pub(crate) fn record_mapping(
         &mut self,
         hash: &str,
         skin_url: Option<&str>,
@@ -207,7 +207,7 @@ impl SkinIndex {
 
     /// Loads `index.json` from `dir`, scans for legacy files, migrates duplicates to `<hash>.png`,
     /// and persists changes if any migration occurred.
-    pub fn load_and_migrate(dir: &Path) -> Self {
+    pub(crate) fn load_and_migrate(dir: &Path) -> Self {
         let index_path = dir.join("index.json");
         let mut index = if let Ok(bytes) = fs::read(&index_path) {
             serde_json::from_slice::<SkinIndex>(&bytes).unwrap_or_default()
@@ -325,7 +325,7 @@ impl SkinIndex {
     }
 
     /// Persists index data to `<dir>/index.json`.
-    pub fn save_to_disk(&self, dir: &Path) -> Result<(), std::io::Error> {
+    pub(crate) fn save_to_disk(&self, dir: &Path) -> Result<(), std::io::Error> {
         let index_path = dir.join("index.json");
         let json_str = serde_json::to_string_pretty(self).map_err(std::io::Error::other)?;
         fs::write(index_path, json_str)

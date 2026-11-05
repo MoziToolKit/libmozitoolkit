@@ -64,7 +64,7 @@ pub fn build_scene_interchange<S: SceneAtlasSource>(
             Ok(Some(json)) => {
                 let rules: Vec<mtk_resource::CtmRule> =
                     serde_json::from_str(&json).map_err(|e| {
-                        MtkError::Resource(mtk_resource::error::ResourceError::NotFound(format!(
+                        MtkError::Resource(mtk_resource::ResourceError::NotFound(format!(
                             "Corrupted CTM rules JSON in asset source: {e}"
                         )))
                     })?;
@@ -72,11 +72,9 @@ pub fn build_scene_interchange<S: SceneAtlasSource>(
             }
             Ok(None) => None,
             Err(e) => {
-                return Err(MtkError::Resource(
-                    mtk_resource::error::ResourceError::NotFound(format!(
-                        "Failed reading CTM rules from asset source: {e}"
-                    )),
-                ))
+                return Err(MtkError::Resource(mtk_resource::ResourceError::NotFound(
+                    format!("Failed reading CTM rules from asset source: {e}"),
+                )))
             }
         },
         CtmMode::Explicit(rules) => Some(rules.to_vec()),
@@ -110,20 +108,16 @@ pub fn build_scene_interchange<S: SceneAtlasSource>(
                     {
                         colormaps.push((cm_name.to_string(), bytes));
                     } else {
-                        return Err(MtkError::Resource(
-                            mtk_resource::error::ResourceError::NotFound(format!(
-                                "Corrupted colormap '{cm_name}': invalid PNG signature"
-                            )),
-                        ));
+                        return Err(MtkError::Resource(mtk_resource::ResourceError::NotFound(
+                            format!("Corrupted colormap '{cm_name}': invalid PNG signature"),
+                        )));
                     }
                 }
                 Ok(None) => {}
                 Err(e) => {
-                    return Err(MtkError::Resource(
-                        mtk_resource::error::ResourceError::NotFound(format!(
-                            "Failed reading colormap '{cm_name}' from asset source: {e}"
-                        )),
-                    ));
+                    return Err(MtkError::Resource(mtk_resource::ResourceError::NotFound(
+                        format!("Failed reading colormap '{cm_name}' from asset source: {e}"),
+                    )));
                 }
             }
         }
@@ -137,11 +131,9 @@ pub fn build_scene_interchange<S: SceneAtlasSource>(
             }
             Ok(None) => None,
             Err(e) => {
-                return Err(MtkError::Resource(
-                    mtk_resource::error::ResourceError::NotFound(format!(
-                        "Failed reading biome resolver from asset source: {e}"
-                    )),
-                ));
+                return Err(MtkError::Resource(mtk_resource::ResourceError::NotFound(
+                    format!("Failed reading biome resolver from asset source: {e}"),
+                )));
             }
         }
     } else {

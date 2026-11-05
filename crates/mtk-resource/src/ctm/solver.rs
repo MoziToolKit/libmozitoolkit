@@ -1,12 +1,8 @@
 use crate::ctm::algorithms::{
-    compact::solve_compact_ctm_with_tangents,
-    directional::{
-        solve_horizontal_vertical_with_tangents, solve_horizontal_with_tangents,
-        solve_top_with_tangents, solve_vertical_horizontal_with_tangents,
-        solve_vertical_with_tangents,
-    },
-    full::solve_full_ctm_with_tangents,
-    patterns::{solve_overlay_with_tangents, solve_random, solve_repeat_with_tangents},
+    solve_compact_ctm_with_tangents, solve_full_ctm_with_tangents,
+    solve_horizontal_vertical_with_tangents, solve_horizontal_with_tangents,
+    solve_overlay_with_tangents, solve_random, solve_repeat_with_tangents, solve_top_with_tangents,
+    solve_vertical_horizontal_with_tangents, solve_vertical_with_tangents,
 };
 use crate::ctm::types::{extract_block_name, ConnectLogic, CtmMethod, CtmRule};
 use crate::identifier::{ResourceLocation, DEFAULT_NAMESPACE};

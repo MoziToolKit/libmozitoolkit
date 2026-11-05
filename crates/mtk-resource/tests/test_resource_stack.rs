@@ -1,6 +1,6 @@
 use mtk_resource::{
-    AnimationFrame, AtlasDefinition, MemoryPack, ResourceLocation, ResourcePackStack,
-    TextureMetadata,
+    AnimationFrame, AnimationMetadata, AtlasDefinition, MemoryPack, ResourceLocation,
+    ResourcePackStack,
 };
 
 #[test]
@@ -42,8 +42,8 @@ fn test_mcmeta_parsing() {
             ]
         }
     }"#;
-    let meta = TextureMetadata::parse_json(json_data).unwrap();
-    let anim = meta.animation.unwrap();
+    let v: serde_json::Value = serde_json::from_str(json_data).unwrap();
+    let anim: AnimationMetadata = serde_json::from_value(v["animation"].clone()).unwrap();
     assert_eq!(anim.frametime, 2);
     assert!(anim.interpolate);
     let frames = anim.frames.unwrap();

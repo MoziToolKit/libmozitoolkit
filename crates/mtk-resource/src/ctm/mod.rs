@@ -1,19 +1,13 @@
-pub mod algorithms;
-pub mod parser;
-pub mod solver;
-pub mod tables;
-pub mod types;
+mod algorithms;
+mod parser;
+mod solver;
+mod tables;
+mod types;
 
-pub use parser::parse_ctm_properties;
+use parser::parse_ctm_properties;
+
 pub use solver::CtmSolver;
-pub use tables::{
-    build_ctm_47_lookup, build_overlay_17_lookup, CTM_47_LOOKUP, OVERLAY_17_LOOKUP,
-    TILE_TO_CONNECTION_DATA, TILE_TO_OVERLAY_DATA,
-};
-pub use types::{
-    coordinate_random, extract_block_name, get_face_tangents, BlockMatch, ConnectLogic, CtmMethod,
-    CtmRule, CtmSymmetry,
-};
+pub use types::{extract_block_name, BlockMatch, ConnectLogic, CtmMethod, CtmRule, CtmSymmetry};
 
 impl CtmRule {
     /// Parse an OptiFine / Continuity `.properties` file into a `CtmRule`.
@@ -25,6 +19,7 @@ impl CtmRule {
 
 #[cfg(test)]
 mod tests {
+    use super::tables::CTM_47_LOOKUP;
     use super::*;
 
     #[test]

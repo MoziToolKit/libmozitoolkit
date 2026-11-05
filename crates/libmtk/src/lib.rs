@@ -45,7 +45,7 @@ pub enum MtkError {
     Texture(#[from] mtk_texture::error::TextureError),
 
     #[error("Resource error: {0}")]
-    Resource(#[from] mtk_resource::error::ResourceError),
+    Resource(#[from] mtk_resource::ResourceError),
 
     #[error("Material error: {0}")]
     Material(#[from] mtk_material::MaterialError),

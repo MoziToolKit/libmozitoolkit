@@ -172,7 +172,7 @@ pub fn crop_needed_sprites(
                 continue;
             } else {
                 return Err(MtkError::Resource(
-                    mtk_resource::error::ResourceError::NotFound(format!(
+                    mtk_resource::ResourceError::NotFound(format!(
                         "Banner texture '{tex_key}' referenced but no BannerBaker pattern assets are available in cache"
                     )),
                 ));
@@ -284,7 +284,7 @@ pub fn crop_needed_sprites(
                             continue;
                         } else {
                             return Err(MtkError::Resource(
-                                mtk_resource::error::ResourceError::NotFound(format!(
+                                mtk_resource::ResourceError::NotFound(format!(
                                     "Dynamic entity atlas buffer for chunk {} is invalid or too small for slot {} (texture '{}')",
                                     target_chunk_id, in_chunk_slot, tex_key
                                 )),
@@ -292,7 +292,7 @@ pub fn crop_needed_sprites(
                         }
                     } else {
                         return Err(MtkError::Resource(
-                            mtk_resource::error::ResourceError::NotFound(format!(
+                            mtk_resource::ResourceError::NotFound(format!(
                                 "Dynamic entity chunk {} not found in dynamic entity atlases for texture '{}'",
                                 target_chunk_id, tex_key
                             )),
@@ -300,7 +300,7 @@ pub fn crop_needed_sprites(
                     }
                 } else {
                     return Err(MtkError::Resource(
-                        mtk_resource::error::ResourceError::NotFound(format!(
+                        mtk_resource::ResourceError::NotFound(format!(
                             "Unresolved slot for dynamic entity texture '{}': not found in atlas address map or dynamic entity slots",
                             tex_key
                         )),
@@ -308,7 +308,7 @@ pub fn crop_needed_sprites(
                 }
             } else {
                 return Err(MtkError::Resource(
-                    mtk_resource::error::ResourceError::NotFound(format!(
+                    mtk_resource::ResourceError::NotFound(format!(
                         "Dynamic entity texture '{}' requires dynamic entity atlases, but none were provided",
                         tex_key
                     )),
