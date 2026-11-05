@@ -16,11 +16,11 @@
 
 ## 2. 核心类型与公共 API
 
-- [`PackageHeader`](src/header.rs)：64 字节头部结构体，包含 Magic `b"MTKP"`、Profile、Flags、CRC32 校验码与 16 字节 Fingerprint。
-- [`ChunkEntry`](src/toc.rs)：分块元数据描述符（64 字节对齐物理偏移、压缩前/后大小、校验和、标识符）。
-- [`TableOfContents`](src/toc.rs)：目录索引表，支持标识符高速 Hash 索引与类型过滤。
-- [`MtkPackageWriter`](src/writer.rs)：流式包写入器，自动处理 64 字节边界填充与分块 CRC32 计算。
-- [`MtkPackageReader`](src/reader.rs)：内存映射包解析器，支持 `read_header_only` 微秒级头部校验与按需解压提取。
+- [`PackageHeader`](src/header.rs)：64 字节头部结构体，包含 Magic `b"MTKP"`、Profile、版本与 16 字节 Fingerprint。
+- [`PackageProfile`](src/header.rs)：包用途配置枚举（`AssetCache`, `SceneInterchange`）。
+- [`MtkPackageWriter`](src/writer.rs) / [`MtkPackageFileWriter`](src/writer.rs)：流式与文件原子包写入器，自动处理 64 字节边界对齐、分块压缩与 CRC32 计算。
+- [`MtkPackageReader`](src/reader.rs)：内存映射与缓冲包解析器，支持 `read_header_only` 微秒级头部校验、按块分类枚举 (`iter_chunk_identifiers`) 与按需解压提取。
+- [`ChunkWriteOptions`](src/writer.rs)：分块写入压缩配置（`raw()`, `zstd_fast()`）。
 
 ---
 
@@ -29,9 +29,9 @@
 ### 写入包文件 (`.mtkcache`)
 
 ```rust
-use mtk_package::{MtkPackageWriter, PackageProfile, ChunkWriteOptions};
+use mtk_package::{MtkPackageFileWriter, PackageProfile, ChunkWriteOptions};
 
-let mut writer = MtkPackageWriter::create("test.mtkcache", PackageProfile::AssetCache, [0u8; 16])?;
+let mut writer = MtkPackageFileWriter::create("test.mtkcache", PackageProfile::AssetCache, [0u8; 16])?;
 
 // 1. 写入模型数据（Zstd 压缩）
 writer.add_chunk(*b"MODL", "models/database", &model_bytes, &ChunkWriteOptions::zstd_fast())?;

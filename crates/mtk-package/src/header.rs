@@ -3,16 +3,16 @@
 use crate::error::{PackageError, PackageResult};
 
 /// Fixed size of MTK package header in bytes.
-pub const HEADER_SIZE: usize = 64;
+pub(crate) const HEADER_SIZE: usize = 64;
 
 /// Magic bytes for MTK package files: `b"MTKP"`.
-pub const MAGIC_MTKP: [u8; 4] = [0x4D, 0x54, 0x4B, 0x50];
+pub(crate) const MAGIC_MTKP: [u8; 4] = [0x4D, 0x54, 0x4B, 0x50];
 
 /// Current major version of MTK package format.
 pub const CURRENT_VERSION_MAJOR: u16 = 1;
 
 /// Current minor version of MTK package format.
-pub const CURRENT_VERSION_MINOR: u16 = 0;
+pub(crate) const CURRENT_VERSION_MINOR: u16 = 0;
 
 /// Package profile representing the purpose and layout rules.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,13 +37,13 @@ impl PackageProfile {
 /// Default or per-chunk compression algorithm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
-pub enum CompressionType {
+pub(crate) enum CompressionType {
     None = 0,
     Zstd = 1,
 }
 
 impl CompressionType {
-    pub fn from_u8(val: u8) -> Option<Self> {
+    pub(crate) fn from_u8(val: u8) -> Option<Self> {
         match val {
             0 => Some(Self::None),
             1 => Some(Self::Zstd),
@@ -55,12 +55,12 @@ impl CompressionType {
 /// Checksum algorithm for header and chunk data integrity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
-pub enum ChecksumType {
+pub(crate) enum ChecksumType {
     Crc32 = 0,
 }
 
 impl ChecksumType {
-    pub fn from_u8(val: u8) -> Option<Self> {
+    pub(crate) fn from_u8(val: u8) -> Option<Self> {
         match val {
             0 => Some(Self::Crc32),
             _ => None,
@@ -70,22 +70,22 @@ impl ChecksumType {
 
 /// Flags bitfield in package header.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct HeaderFlags(pub u16);
+pub(crate) struct HeaderFlags(pub(crate) u16);
 
 impl HeaderFlags {
     pub const FLAG_LITTLE_ENDIAN: u16 = 1 << 0;
     pub const FLAG_TOC_ZSTD: u16 = 1 << 1;
     pub const FLAG_SELF_CONTAINED: u16 = 1 << 2;
 
-    pub fn default_asset_cache() -> Self {
+    pub(crate) fn default_asset_cache() -> Self {
         Self(Self::FLAG_LITTLE_ENDIAN | Self::FLAG_TOC_ZSTD | Self::FLAG_SELF_CONTAINED)
     }
 
-    pub fn default_scene_interchange() -> Self {
+    pub(crate) fn default_scene_interchange() -> Self {
         Self(Self::FLAG_LITTLE_ENDIAN | Self::FLAG_TOC_ZSTD | Self::FLAG_SELF_CONTAINED)
     }
 
-    pub fn is_toc_zstd(&self) -> bool {
+    pub(crate) fn is_toc_zstd(&self) -> bool {
         (self.0 & Self::FLAG_TOC_ZSTD) != 0
     }
 }
@@ -93,20 +93,20 @@ impl HeaderFlags {
 /// 64-byte fixed package header.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackageHeader {
-    pub magic: [u8; 4],
+    pub(crate) magic: [u8; 4],
     pub version_major: u16,
     pub version_minor: u16,
     pub profile: PackageProfile,
-    pub flags: HeaderFlags,
-    pub compression: CompressionType,
-    pub checksum_type: ChecksumType,
-    pub reserved: [u8; 2],
+    pub(crate) flags: HeaderFlags,
+    pub(crate) compression: CompressionType,
+    pub(crate) checksum_type: ChecksumType,
+    pub(crate) reserved: [u8; 2],
     pub created_at: u64,
     pub fingerprint: [u8; 16],
-    pub toc_offset: u64,
-    pub toc_length: u64,
+    pub(crate) toc_offset: u64,
+    pub(crate) toc_length: u64,
     pub chunk_count: u32,
-    pub header_crc32: u32,
+    pub(crate) header_crc32: u32,
 }
 
 impl PackageHeader {

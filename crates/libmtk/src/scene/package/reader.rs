@@ -54,10 +54,9 @@ impl ScenePackageReader {
         };
         let texture_names = self
             .reader
-            .toc()
-            .iter_by_type(*b"ATLS")
-            .filter(|e| e.identifier.starts_with("atlas/textures/"))
-            .map(|e| e.identifier.clone())
+            .iter_chunk_identifiers(*b"ATLS")
+            .filter(|id| id.starts_with("atlas/textures/"))
+            .map(|id| id.to_string())
             .collect();
         let biome_resolver = self.read_biome_resolver()?;
         let colormaps = self.read_colormaps()?;
@@ -142,10 +141,10 @@ impl ScenePackageReader {
     /// Reads all mini-atlas textures (`atlas/textures/*.png`) present in the package.
     pub fn read_atlas_textures(&self) -> Result<HashMap<String, Vec<u8>>, MtkError> {
         let mut textures = HashMap::new();
-        for entry in self.reader.toc().iter_by_type(*b"ATLS") {
-            if entry.identifier.starts_with("atlas/textures/") {
-                let bytes = self.reader.get_chunk_raw(&entry.identifier)?;
-                textures.insert(entry.identifier.clone(), bytes.to_vec());
+        for id in self.reader.iter_chunk_identifiers(*b"ATLS") {
+            if id.starts_with("atlas/textures/") {
+                let bytes = self.reader.get_chunk_raw(id)?;
+                textures.insert(id.to_string(), bytes.to_vec());
             }
         }
         Ok(textures)

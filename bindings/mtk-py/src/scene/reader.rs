@@ -133,10 +133,9 @@ impl PyScenePackageReader {
     pub fn get_atlas_texture_names(&self) -> Vec<String> {
         self.inner
             .inner_reader()
-            .toc()
-            .iter_by_type(*b"ATLS")
-            .filter(|e| e.identifier.starts_with("atlas/textures/"))
-            .map(|e| e.identifier.clone())
+            .iter_chunk_identifiers(*b"ATLS")
+            .filter(|id| id.starts_with("atlas/textures/"))
+            .map(|id| id.to_string())
             .collect()
     }
 

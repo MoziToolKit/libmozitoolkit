@@ -13,7 +13,7 @@ use crate::toc::{ChunkEntry, TableOfContents};
 /// Chunk compression and serialization options.
 #[derive(Debug, Clone)]
 pub struct ChunkWriteOptions {
-    pub compression: CompressionType,
+    pub(crate) compression: CompressionType,
     pub zstd_level: i32,
 }
 
@@ -377,4 +377,46 @@ fn replace_file(temp_path: &Path, final_path: &Path) -> PackageResult<()> {
     Err(last_error
         .expect("rename loop always records an error on failure")
         .into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_chunk_and_toc_alignment() {
+        let mut cursor = Cursor::new(Vec::new());
+        let mut writer =
+            MtkPackageWriter::new(&mut cursor, PackageProfile::AssetCache, [0xAA; 16]).unwrap();
+
+        writer
+            .add_chunk(
+                *b"TEST",
+                "test/1",
+                b"hello world",
+                &ChunkWriteOptions::raw(),
+            )
+            .unwrap();
+        writer
+            .add_chunk(
+                *b"TEST",
+                "test/2",
+                b"another chunk with odd length: 12345",
+                &ChunkWriteOptions::zstd_fast(),
+            )
+            .unwrap();
+
+        for entry in &writer.toc.entries {
+            assert_eq!(
+                entry.offset % 64,
+                0,
+                "Entry {} offset {} not 64-byte aligned",
+                entry.identifier,
+                entry.offset
+            );
+        }
+
+        let header = writer.finish().unwrap();
+        assert_eq!(header.toc_offset % 64, 0);
+    }
 }

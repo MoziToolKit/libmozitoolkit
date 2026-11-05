@@ -240,11 +240,10 @@ impl AssetCacheReader {
         fs::create_dir_all(out_dir)?;
         let mut extracted = Vec::new();
 
-        for entry in self.reader.toc().iter_by_type(*b"ATLS") {
-            if let Some(filename) = entry.identifier.strip_prefix("atlas/textures/") {
+        for id in self.reader.iter_chunk_identifiers(*b"ATLS") {
+            if let Some(filename) = id.strip_prefix("atlas/textures/") {
                 let target = out_dir.join(filename);
-                self.reader
-                    .extract_chunk_to_file(&entry.identifier, &target)?;
+                self.reader.extract_chunk_to_file(id, &target)?;
                 extracted.push(target);
             }
         }

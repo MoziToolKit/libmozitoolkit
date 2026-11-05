@@ -1,6 +1,5 @@
 use mtk_package::{
-    ChunkWriteOptions, MtkPackageFileWriter, MtkPackageReader, MtkPackageWriter, PackageError,
-    PackageHeader, PackageProfile, TableOfContents, HEADER_SIZE,
+    ChunkWriteOptions, MtkPackageFileWriter, MtkPackageReader, MtkPackageWriter, PackageProfile,
 };
 use std::io::Cursor;
 
@@ -57,30 +56,16 @@ fn test_package_roundtrip_memory() {
     assert_eq!(header.fingerprint, fingerprint);
 
     let bytes = cursor.into_inner();
-    assert!(bytes.len() > HEADER_SIZE);
+    assert!(bytes.len() > 64);
 
     // Read back
     let reader = MtkPackageReader::from_bytes(bytes).unwrap();
     assert_eq!(reader.header().profile, PackageProfile::AssetCache);
     assert_eq!(reader.fingerprint(), &fingerprint);
-    assert_eq!(reader.toc().entries.len(), 3);
-
-    // Verify 64-byte alignment of all entries
-    for entry in &reader.toc().entries {
-        assert_eq!(
-            entry.offset % 64,
-            0,
-            "Chunk '{}' offset {} is not 64-byte aligned",
-            entry.identifier,
-            entry.offset
-        );
-    }
-    assert_eq!(
-        reader.header().toc_offset % 64,
-        0,
-        "TOC offset {} is not 64-byte aligned",
-        reader.header().toc_offset
-    );
+    assert_eq!(reader.header().chunk_count, 3);
+    assert_eq!(reader.iter_chunk_identifiers(*b"MODL").count(), 1);
+    assert_eq!(reader.iter_chunk_identifiers(*b"ATLS").count(), 1);
+    assert_eq!(reader.iter_chunk_identifiers(*b"META").count(), 1);
 
     // Verify data integrity
     let read_models = reader.read_chunk_decompressed("models/database").unwrap();
@@ -131,33 +116,6 @@ fn test_package_file_and_header_only() {
     assert!(buffered_reader.has_chunk("biome/mapping"));
     let str_val_buf = buffered_reader.read_chunk_str("biome/mapping").unwrap();
     assert_eq!(str_val_buf, r#"{"biomes":["plains","forest"]}"#);
-}
-
-#[test]
-fn test_toc_forged_count_rejected() {
-    // A forged chunk count must not trigger a huge pre-allocation; it is rejected
-    // because the payload cannot possibly hold that many entries.
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(&u32::MAX.to_le_bytes());
-    bytes.extend_from_slice(&[0u8; 8]);
-
-    match TableOfContents::decode_bytes(&bytes) {
-        Err(PackageError::InvalidToc(_)) => {}
-        other => panic!("Expected InvalidToc, got {:?}", other.is_ok()),
-    }
-}
-
-#[test]
-fn test_forged_toc_offsets_rejected() {
-    let mut header = PackageHeader::new_asset_cache([0x11; 16], 0);
-    header.toc_offset = u64::MAX;
-    header.toc_length = 2;
-
-    let bytes = header.to_bytes().to_vec();
-    match MtkPackageReader::from_bytes(bytes) {
-        Err(PackageError::OutOfBounds { .. }) => {}
-        other => panic!("Expected OutOfBounds, got {:?}", other.is_ok()),
-    }
 }
 
 fn temp_package_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {

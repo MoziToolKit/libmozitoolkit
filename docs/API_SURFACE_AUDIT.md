@@ -421,7 +421,16 @@ PY
   - 测试隔离：将 `test_region_chunk_indexing` 与 `test_region_file_reads_gzip_chunk` 迁入 `src/region.rs` 内部 `#[cfg(test)]` 单元测试，不再为了测试暴露内部扇区寻址结构；
   - 下游穿透引用收敛：`crates/mtk-sync/src/protocol/codec.rs` 中对 `mtk_save::block_entity::decode_block_entity_payload` 的穿透统一收敛为根命名空间 `mtk_save::decode_block_entity_payload`；
   - 同步更新 `crates/mtk-save/README.md`。
-- [ ] 推进后续 crate（`mtk-package` → `libmtk`）内部 `pub mod` 改 `mod` 与根导出精简。
+- [x] **`mtk-package` 根导出与模块私有化彻底完成 (Batch 4.10)**：
+  - 5 个内部模块（`error`, `header`, `reader`, `toc`, `writer`）全部收敛为私有 `mod`；
+  - 废弃与零消费者符号清理：删除 `reader.toc()`，内部目录索引完全封装；
+  - 内部实现细节降级为 `pub(crate)`：`TableOfContents`、`ChunkEntry`、`CompressionType`、`ChecksumType`、`HeaderFlags`、`HEADER_SIZE`、`MAGIC_MTKP`、`CURRENT_VERSION_MINOR`、`PackageHeader` 内部字段与 `ChunkWriteOptions.compression`；
+  - 根导出收敛：暴露精简规范的 8 个核心契约（`CURRENT_VERSION_MAJOR`, `ChunkWriteOptions`, `MtkPackageFileWriter`, `MtkPackageReader`, `MtkPackageWriter`, `PackageError`, `PackageHeader`, `PackageProfile`）；
+  - 目录抽象升级：`MtkPackageReader` 新增 `iter_chunk_identifiers(chunk_type)` 高层只读迭代器，避免下游越级操作底层 TOC 数据结构；
+  - 测试隔离：将 `test_toc_forged_count_rejected`、`test_forged_toc_offsets_rejected` 与对齐检查下沉为各模块内 `#[cfg(test)]` 单元测试；
+  - 下游穿透引用收敛：`libmtk`, `bindings/mtk-py` 统一采用 `iter_chunk_identifiers` 访问图集分块；
+  - 同步更新 `crates/mtk-package/README.md`。
+- [ ] 推进后续 crate（`libmtk`）内部 `pub mod` 改 `mod` 与根导出精简。
 - [ ] 每完成一个 crate 跑 `cargo test -p <crate>` 与 `cargo clippy -p <crate> --all-targets -- -D warnings`。
 
 ### Batch 5：绑定与适配器收敛

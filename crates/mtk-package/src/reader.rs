@@ -122,9 +122,14 @@ impl MtkPackageReader {
         &self.header.fingerprint
     }
 
-    /// Returns reference to Table of Contents.
-    pub fn toc(&self) -> &TableOfContents {
-        &self.toc
+    /// Returns an iterator over identifiers of chunks matching the given 4-byte chunk type.
+    pub fn iter_chunk_identifiers<'a>(
+        &'a self,
+        chunk_type: [u8; 4],
+    ) -> impl Iterator<Item = &'a str> + 'a {
+        self.toc
+            .iter_by_type(chunk_type)
+            .map(|e| e.identifier.as_str())
     }
 
     /// Returns true if a chunk with the given identifier exists.
@@ -224,5 +229,23 @@ impl MtkPackageReader {
         }
         std::fs::write(target_path, data)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_forged_toc_offsets_rejected() {
+        let mut header = PackageHeader::new_asset_cache([0x11; 16], 0);
+        header.toc_offset = u64::MAX;
+        header.toc_length = 2;
+
+        let bytes = header.to_bytes().to_vec();
+        match MtkPackageReader::from_bytes(bytes) {
+            Err(PackageError::OutOfBounds { .. }) => {}
+            other => panic!("Expected OutOfBounds, got {:?}", other.is_ok()),
+        }
     }
 }
