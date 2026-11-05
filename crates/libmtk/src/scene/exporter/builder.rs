@@ -7,9 +7,8 @@ use std::collections::BTreeSet;
 
 use mtk_model::BakedModelDatabase;
 use mtk_resource::ResourceLocation;
-use mtk_texture::atlas::builder::{AtlasBuilder, AtlasBuilderConfig};
-use mtk_texture::atlas::{AtlasAddressMap, AtlasSpriteLocation};
 use mtk_texture::DecodedSprite;
+use mtk_texture::{AtlasAddressMap, AtlasBuilder, AtlasBuilderConfig, AtlasSpriteLocation};
 use mtk_voxel::SparseVoxelPayload;
 
 use super::cropper::CroppedSprite;

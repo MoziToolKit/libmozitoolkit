@@ -9,7 +9,7 @@ use mtk_core::{ProgressCallback, ProgressReport, ProgressThrottler};
 use mtk_material::MaterialResolver;
 use mtk_model::{BakedModelDatabase, BlockModelJson, BlockStateDefinition, ModelBaker};
 use mtk_resource::{ResourceLocation, ResourcePackStack};
-use mtk_texture::atlas::AtlasAddressMap;
+use mtk_texture::AtlasAddressMap;
 
 use crate::MtkError;
 

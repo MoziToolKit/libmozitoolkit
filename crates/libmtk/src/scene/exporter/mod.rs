@@ -19,7 +19,7 @@ use std::path::Path;
 
 pub use builder::{SceneExportResult, SceneExporterConfig};
 use mtk_model::BakedModelDatabase;
-use mtk_texture::atlas::AtlasAddressMap;
+use mtk_texture::AtlasAddressMap;
 use mtk_voxel::SparseVoxelPayload;
 pub use source::{
     AtlasLayerSource, BiomeAssetSource, CtmAssetSource, EntityAssetSource, SceneAtlasSource,

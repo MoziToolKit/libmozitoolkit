@@ -1,5 +1,4 @@
-use crate::atlas::address_map::AtlasAddressMap;
-use crate::image::buffer::RgbaBuffer;
+use crate::{AtlasAddressMap, RgbaBuffer};
 
 /// Configuration parameters for atlas generation.
 #[derive(Debug, Clone)]
@@ -95,9 +94,6 @@ pub const NORMAL_DEFAULT_RGBA: [u8; 4] = [128, 128, 255, 255];
 /// Default ORM buffer fill color: AO=1.0, Roughness=1.0, Metallic=0.0, Emission=0.0.
 pub const ORM_DEFAULT_RGBA: [u8; 4] = [255, 255, 0, 0];
 
-/// Default AUX buffer fill color: IOR=1.0, Porosity=0.0, SSS=0.0, Transmission=0.0.
-pub const AUX_DEFAULT_RGBA: [u8; 4] = [0, 0, 0, 0];
-
 /// Unified container for companion PBR layers during atlas chunk assembly.
 #[derive(Debug, Default)]
 pub struct PbrLayerBuffers {
@@ -180,7 +176,7 @@ impl PbrLayerBuffers {
     /// Blits all active PBR companion layers of a sprite with padding.
     pub fn blit_sprite_layers(
         &mut self,
-        sp: &crate::image::loader::DecodedSprite,
+        sp: &crate::DecodedSprite,
         inner_x: u32,
         inner_y: u32,
         width: u32,

@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use mtk_model::BakedModelDatabase;
 use mtk_package::{MtkPackageReader, PackageProfile};
-use mtk_texture::atlas::AtlasAddressMap;
+use mtk_texture::AtlasAddressMap;
 use mtk_voxel::SparseVoxelPayload;
 
 use super::validator::{validate_scene_package, ValidationReport};
@@ -242,7 +242,7 @@ impl ScenePackageReader {
             foliage.as_deref(),
             dry_foliage.as_deref(),
         )
-        .map_err(|e| MtkError::Texture(mtk_texture::error::TextureError::Baking(e)))?;
+        .map_err(|e| MtkError::Texture(mtk_texture::TextureError::Baking(e)))?;
 
         Ok(Some(Arc::new(colormaps)))
     }

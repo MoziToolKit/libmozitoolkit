@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use mtk_texture::banner::BannerBaker;
+use mtk_texture::BannerBaker;
 use mtk_texture::RgbaBuffer;
 
 use crate::MtkError;

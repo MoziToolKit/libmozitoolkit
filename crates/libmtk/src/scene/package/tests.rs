@@ -3,7 +3,7 @@ use crate::scene::metadata::SceneMetadata;
 use crate::MtkError;
 use mtk_model::{BakedModelDatabase, BlockEntityData};
 use mtk_package::{ChunkWriteOptions, PackageProfile};
-use mtk_texture::atlas::AtlasAddressMap;
+use mtk_texture::AtlasAddressMap;
 use mtk_voxel::SparseVoxelPayload;
 use std::collections::HashMap;
 

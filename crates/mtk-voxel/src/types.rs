@@ -1,6 +1,6 @@
 use glam::Vec3;
 use mtk_resource::CtmSolver;
-use mtk_texture::atlas::AtlasAddressMap;
+use mtk_texture::AtlasAddressMap;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

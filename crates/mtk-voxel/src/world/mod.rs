@@ -58,7 +58,7 @@ pub struct VoxelWorld {
     /// Unique Atlas Chunk IDs actually present on the active world mesh geometry.
     pub(crate) used_chunk_ids: Vec<u32>,
     /// Dedicated multi-chunk dynamic entity atlas manager for player skulls, custom heads, and banners.
-    pub dynamic_entities: mtk_texture::atlas::DynamicAtlasManager,
+    pub dynamic_entities: mtk_texture::DynamicAtlasManager,
     /// Multi-tier skin resolver for player heads.
     pub skin_resolver: mtk_resource::skin::SkinResolver,
     /// Procedural banner baker for multi-layer composite banners.
@@ -68,8 +68,8 @@ pub struct VoxelWorld {
 }
 
 #[inline]
-fn create_default_dynamic_atlas() -> mtk_texture::atlas::DynamicAtlasManager {
-    let mut mgr = mtk_texture::atlas::DynamicAtlasManager::default();
+fn create_default_dynamic_atlas() -> mtk_texture::DynamicAtlasManager {
+    let mut mgr = mtk_texture::DynamicAtlasManager::default();
     let _ = mgr.prewarm_vanilla_banners(None);
     mgr
 }
@@ -81,7 +81,7 @@ impl VoxelWorld {
             .atlas_address_map
             .as_ref()
             .and_then(|m| m.resolve_texture_key(key))
-            .map(|loc| loc.chunk_id < mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID)
+            .map(|loc| loc.chunk_id < mtk_texture::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID)
             .unwrap_or(false)
     }
 
@@ -435,7 +435,7 @@ impl VoxelWorld {
     pub fn hot_reload_assets(
         &mut self,
         model_db: Option<Arc<BakedModelDatabase>>,
-        atlas_map: Option<Arc<mtk_texture::atlas::AtlasAddressMap>>,
+        atlas_map: Option<Arc<mtk_texture::AtlasAddressMap>>,
         biome_resolver: Option<Arc<mtk_material::BiomeResolver>>,
     ) {
         self.model_db = model_db;
@@ -494,7 +494,7 @@ impl VoxelWorld {
     pub fn has_dynamic_entity_chunks(&self) -> bool {
         self.used_chunk_ids()
             .iter()
-            .any(|&c| c >= mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID as u32)
+            .any(|&c| c >= mtk_texture::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID as u32)
     }
 
     /// Returns dynamic entity atlases and slot mapping if any dynamic entity chunk is referenced by the world geometry.
@@ -524,13 +524,13 @@ impl VoxelWorld {
         &mut self,
         key: &str,
         png: &[u8],
-    ) -> Result<(), mtk_texture::error::TextureError> {
+    ) -> Result<(), mtk_texture::TextureError> {
         self.skin_resolver.register_memory_skin(key, png.to_vec());
         self.dynamic_entities.add_skin_png(key, png)?;
         let mut new_map = if let Some(ref current_map) = self.config.atlas_address_map {
             (**current_map).clone()
         } else {
-            mtk_texture::atlas::AtlasAddressMap::new()
+            mtk_texture::AtlasAddressMap::new()
         };
         self.dynamic_entities.register_to_address_map(&mut new_map);
         self.config.atlas_address_map = Some(Arc::new(new_map));
@@ -691,7 +691,7 @@ impl VoxelWorld {
             let mut new_map = if let Some(ref current_map) = self.config.atlas_address_map {
                 (**current_map).clone()
             } else {
-                mtk_texture::atlas::AtlasAddressMap::new()
+                mtk_texture::AtlasAddressMap::new()
             };
             self.dynamic_entities.register_to_address_map(&mut new_map);
             self.config.atlas_address_map = Some(Arc::new(new_map));
@@ -930,7 +930,7 @@ impl VoxelWorld {
             let mut new_map = if let Some(ref current_map) = self.config.atlas_address_map {
                 (**current_map).clone()
             } else {
-                mtk_texture::atlas::AtlasAddressMap::new()
+                mtk_texture::AtlasAddressMap::new()
             };
             self.dynamic_entities.register_to_address_map(&mut new_map);
             self.config.atlas_address_map = Some(Arc::new(new_map));

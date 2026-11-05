@@ -1,7 +1,7 @@
 use crate::image::buffer::RgbaBuffer;
 
 /// Apply edge clamping padding around a sprite slot to prevent Mipmap / Bilinear texture bleeding.
-pub fn apply_edge_clamping_padding(
+pub(crate) fn apply_edge_clamping_padding(
     atlas_buffer: &mut RgbaBuffer,
     x: u32,
     y: u32,

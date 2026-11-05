@@ -1,11 +1,9 @@
 use mtk_resource::{AtlasSource, ResourceLocation, ResourcePackStack};
 
-use crate::image::buffer::RgbaBuffer;
-use crate::image::loader::DecodedSprite;
-use crate::image::palette::bake_paletted_permutation;
+use crate::{bake_paletted_permutation, DecodedSprite, RgbaBuffer};
 
 /// Decodes and bakes PalettedPermutations sources into decoded sprites.
-pub fn process_paletted_permutations(
+pub(crate) fn process_paletted_permutations(
     sources: &[AtlasSource],
     stack: &ResourcePackStack,
     decoded: &mut Vec<DecodedSprite>,

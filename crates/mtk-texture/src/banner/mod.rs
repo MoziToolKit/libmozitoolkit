@@ -3,9 +3,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::atlas::dynamic::{dye_color_to_rgb, normalize_pattern_stem, DynamicAtlasChunk};
+use mtk_resource::banner::{dye_color_to_rgb, normalize_banner_pattern as normalize_pattern_stem};
+
 use crate::error::TextureError;
-use crate::image::buffer::RgbaBuffer;
+use crate::{DynamicAtlasChunk, RgbaBuffer};
 
 /// Headless procedural banner compositing engine.
 ///

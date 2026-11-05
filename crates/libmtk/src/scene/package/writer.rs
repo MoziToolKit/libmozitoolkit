@@ -5,7 +5,7 @@ use std::path::Path;
 
 use mtk_model::BakedModelDatabase;
 use mtk_package::{ChunkWriteOptions, MtkPackageFileWriter, PackageProfile};
-use mtk_texture::atlas::AtlasAddressMap;
+use mtk_texture::AtlasAddressMap;
 use mtk_voxel::SparseVoxelPayload;
 
 use crate::scene::metadata::SceneMetadata;

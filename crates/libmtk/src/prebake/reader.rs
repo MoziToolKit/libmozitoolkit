@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use mtk_material::BiomeResolver;
 use mtk_model::BakedModelDatabase;
 use mtk_package::{MtkPackageReader, CURRENT_VERSION_MAJOR};
-use mtk_texture::atlas::AtlasAddressMap;
+use mtk_texture::AtlasAddressMap;
 
 use crate::MtkError;
 
@@ -280,7 +280,7 @@ impl AssetCacheReader {
             foliage.as_deref(),
             dry_foliage.as_deref(),
         )
-        .map_err(|e| MtkError::Texture(mtk_texture::error::TextureError::Baking(e)))?;
+        .map_err(|e| MtkError::Texture(mtk_texture::TextureError::Baking(e)))?;
 
         Ok(Some(Arc::new(colormaps)))
     }

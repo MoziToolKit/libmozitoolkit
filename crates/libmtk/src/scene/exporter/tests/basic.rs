@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use mtk_model::BakedModelDatabase;
 use mtk_resource::ResourceLocation;
-use mtk_texture::atlas::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation};
 use mtk_texture::RgbaBuffer;
+use mtk_texture::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation};
 use mtk_voxel::SparseVoxelPayload;
 
 use super::create_sample_cube;
@@ -345,7 +345,7 @@ use crate::scene::exporter::cropper::{
     SceneSourceCapabilities,
 };
 use crate::MtkError;
-use mtk_texture::banner::BannerBaker;
+use mtk_texture::BannerBaker;
 
 struct MockAtlasSource {
     textures: HashMap<String, RgbaBuffer>,
@@ -721,7 +721,7 @@ fn test_scene_export_banner_with_patterns_and_custom_baker() {
     use crate::scene::exporter::export_scene_package;
     use mtk_model::banner::BannerPatternLayer;
     use mtk_model::BlockEntityData;
-    use mtk_texture::banner::BannerBaker;
+    use mtk_texture::BannerBaker;
 
     struct BannerTestAtlasSource {
         baker: BannerBaker,

@@ -19,9 +19,8 @@ pub const DYNAMIC_TOTAL_SLOTS: usize = 256;
 pub use mtk_core::constants::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
 
 /// Maximum number of dynamic chunks supported (0xFFF0..=0xFFFF, 16 chunks = 4,096 unique 64x64 skins).
-pub const MAX_DYNAMIC_CHUNKS: usize = 16;
+pub(crate) const MAX_DYNAMIC_CHUNKS: usize = 16;
 pub const DYNAMIC_CHUNK_START: u16 = DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
-pub const DYNAMIC_CHUNK_END: u16 = 0xFFFF;
 
 /// Information about an allocated slot inside a dynamic atlas chunk.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -33,9 +32,7 @@ pub struct DynamicSlotInfo {
     pub uv_bounds: [f32; 4],
 }
 
-pub use mtk_resource::banner::{
-    dye_color_to_rgb, normalize_banner_pattern as normalize_pattern_stem, VANILLA_BANNER_DYES,
-};
+use mtk_resource::banner::VANILLA_BANNER_DYES;
 
 /// A fixed-size runtime dynamic atlas chunk that allocates 64x64 grid slots on demand.
 #[derive(Debug, Clone)]
@@ -71,8 +68,8 @@ impl DynamicAtlasChunk {
     }
 
     /// Creates a synthetic 64x64 banner cloth fallback buffer (neutral light-gray cloth).
-    pub fn create_fallback_banner_base() -> crate::image::buffer::RgbaBuffer {
-        let mut buf = crate::image::buffer::RgbaBuffer::new(64, 64);
+    pub fn create_fallback_banner_base() -> crate::RgbaBuffer {
+        let mut buf = crate::RgbaBuffer::new(64, 64);
         // Cloth front/back/sides in standard banner UV layout occupies (0, 0, 42, 41)
         for y in 0..41 {
             for x in 0..42 {
@@ -87,7 +84,7 @@ impl DynamicAtlasChunk {
     /// Prewarms slots 0..15 with the 16 vanilla dye colors of banner cloth, pinning them permanently.
     pub fn prewarm_vanilla_banners(
         &mut self,
-        base_cloth: Option<&crate::image::buffer::RgbaBuffer>,
+        base_cloth: Option<&crate::RgbaBuffer>,
     ) -> Result<(), TextureError> {
         let fallback;
         let cloth = match base_cloth {
@@ -399,7 +396,7 @@ impl DynamicAtlasManager {
     /// pinning slots 0..15 so they are permanently cached and immune to eviction.
     pub fn prewarm_vanilla_banners(
         &mut self,
-        base_cloth: Option<&crate::image::buffer::RgbaBuffer>,
+        base_cloth: Option<&crate::RgbaBuffer>,
     ) -> Result<(), TextureError> {
         if self.chunks.is_empty() {
             self.chunks.push(DynamicAtlasChunk::new(self.base_chunk_id));

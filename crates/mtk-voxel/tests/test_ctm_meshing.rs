@@ -1,7 +1,7 @@
 use glam::IVec3;
 use mtk_cull::FaceCuller;
 use mtk_resource::{CtmRule, CtmSolver, ResourceLocation};
-use mtk_texture::atlas::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation, SpriteKind};
+use mtk_texture::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation, SpriteKind};
 use mtk_voxel::{MesherConfig, ModelSource, SectionMesher, VoxelStorage};
 use std::sync::Arc;
 

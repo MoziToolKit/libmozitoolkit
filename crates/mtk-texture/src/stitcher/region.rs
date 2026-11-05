@@ -1,16 +1,16 @@
 /// A 2D rectangular space partitioning node inside the Stitcher.
 #[derive(Debug, Clone)]
-pub struct StitcherRegion<T> {
-    pub origin_x: u32,
-    pub origin_y: u32,
-    pub width: u32,
-    pub height: u32,
-    pub holder: Option<T>,
-    pub sub_slots: Option<Vec<StitcherRegion<T>>>,
+pub(crate) struct StitcherRegion<T> {
+    pub(crate) origin_x: u32,
+    pub(crate) origin_y: u32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) holder: Option<T>,
+    pub(crate) sub_slots: Option<Vec<StitcherRegion<T>>>,
 }
 
 impl<T> StitcherRegion<T> {
-    pub fn new(origin_x: u32, origin_y: u32, width: u32, height: u32) -> Self {
+    pub(crate) fn new(origin_x: u32, origin_y: u32, width: u32, height: u32) -> Self {
         Self {
             origin_x,
             origin_y,

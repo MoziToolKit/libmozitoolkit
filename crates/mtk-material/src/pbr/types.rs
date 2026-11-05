@@ -3,7 +3,7 @@
 //! `MtkSurface` 是宿主无关的 canonical PBR 通道模型；`MtkPackedV1` 是它在
 //! `.mtkcache` 中的紧凑贴图布局。详见 `MoziToolKit/docs/materials/pbr_channel_spec.md`。
 //!
-//! 布局/元数据类型定义在 `mtk_texture::atlas::pbr`，因为 `AtlasChunkMeta` 需要序列化
+//! 布局/元数据类型定义在 `mtk-texture`，因为 `AtlasChunkMeta` 需要序列化
 //! 它们；这里只保留解码结果与 re-export，避免 `mtk-texture -> mtk-material` 成环。
 
 use mtk_texture::RgbaBuffer;

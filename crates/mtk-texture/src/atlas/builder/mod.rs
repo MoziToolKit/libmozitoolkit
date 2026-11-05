@@ -3,19 +3,18 @@
 //! Provides multi-sheet packing, static/animated separation, PBR companion
 //! layer alignment, and paletted permutations baking.
 
-pub mod anim_atlas;
-pub mod paletted;
-pub mod static_atlas;
-pub mod types;
+mod anim_atlas;
+mod paletted;
+mod static_atlas;
+mod types;
 
-pub use anim_atlas::build_anim_atlas_chunks;
-pub use paletted::process_paletted_permutations;
-pub use static_atlas::build_static_atlas_chunks;
+pub(crate) use anim_atlas::build_anim_atlas_chunks;
+pub(crate) use paletted::process_paletted_permutations;
+pub(crate) use static_atlas::build_static_atlas_chunks;
 pub use types::*;
 
-use crate::atlas::address_map::AtlasAddressMap;
 use crate::error::TextureError;
-use crate::image::loader::DecodedSprite;
+use crate::{AtlasAddressMap, DecodedSprite};
 use mtk_resource::{AtlasDefinition, ResourcePackStack};
 
 impl AtlasBuilder {
@@ -248,8 +247,8 @@ fn separate_static_and_anim_sprites(
 
 /// Helper to blit and apply edge-clamping padding to an optional layer buffer.
 pub(crate) fn blit_and_pad_optional_layer(
-    dest: &mut Option<crate::image::buffer::RgbaBuffer>,
-    src: &Option<crate::image::buffer::RgbaBuffer>,
+    dest: &mut Option<crate::RgbaBuffer>,
+    src: &Option<crate::RgbaBuffer>,
     inner_x: u32,
     inner_y: u32,
     width: u32,
@@ -259,7 +258,7 @@ pub(crate) fn blit_and_pad_optional_layer(
     if let (Some(dest_buf), Some(src_buf)) = (dest.as_mut(), src.as_ref()) {
         dest_buf.blit(src_buf, 0, 0, inner_x, inner_y, width, height);
         if padding > 0 {
-            crate::image::padding::apply_edge_clamping_padding(
+            crate::image::apply_edge_clamping_padding(
                 dest_buf, inner_x, inner_y, width, height, padding,
             );
         }

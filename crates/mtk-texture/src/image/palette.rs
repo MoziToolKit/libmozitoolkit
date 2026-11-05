@@ -3,7 +3,7 @@ use crate::image::buffer::RgbaBuffer;
 use std::collections::HashMap;
 
 /// Extract ordered RGBA color palette from a 1xN or Nx1 palette texture.
-pub fn extract_palette_colors(palette_img: &RgbaBuffer) -> Vec<[u8; 4]> {
+fn extract_palette_colors(palette_img: &RgbaBuffer) -> Vec<[u8; 4]> {
     let mut colors = Vec::new();
     let w = palette_img.width;
     let h = palette_img.height;

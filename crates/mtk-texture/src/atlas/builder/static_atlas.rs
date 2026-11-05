@@ -5,13 +5,12 @@ use mtk_resource::ResourceLocation;
 use super::types::{AtlasBuilderConfig, BakedAtlasChunk};
 use crate::atlas::address_map::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation, SpriteKind};
 use crate::error::TextureError;
-use crate::image::buffer::RgbaBuffer;
-use crate::image::loader::DecodedSprite;
-use crate::image::padding::apply_edge_clamping_padding;
-use crate::stitcher::stitcher::Stitcher;
+use crate::image::apply_edge_clamping_padding;
+use crate::stitcher::Stitcher;
+use crate::{DecodedSprite, RgbaBuffer};
 
 /// Builds and bakes static atlas chunks with PBR multi-channel buffers.
-pub fn build_static_atlas_chunks(
+pub(crate) fn build_static_atlas_chunks(
     static_sprites: Vec<DecodedSprite>,
     config: &AtlasBuilderConfig,
     category_name: &str,

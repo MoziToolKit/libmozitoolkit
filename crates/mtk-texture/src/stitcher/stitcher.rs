@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 
 /// Helper: find smallest power of two greater than or equal to `val`.
 #[inline]
-pub fn smallest_encompassing_power_of_two(val: u32) -> u32 {
+pub(crate) fn smallest_encompassing_power_of_two(val: u32) -> u32 {
     if val == 0 {
         return 1;
     }
@@ -19,40 +19,40 @@ pub fn smallest_encompassing_power_of_two(val: u32) -> u32 {
 
 /// An entry registered into the Stitcher before layout.
 #[derive(Debug, Clone)]
-pub struct StitcherHolder<T> {
-    pub entry: T,
-    pub width: u32,
-    pub height: u32,
-    pub name: String,
+pub(crate) struct StitcherHolder<T> {
+    pub(crate) entry: T,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) name: String,
 }
 
 /// A placed sprite layout slot.
 #[derive(Debug, Clone)]
-pub struct StitchedSlot<T> {
-    pub entry: T,
-    pub x: u32,
-    pub y: u32,
-    pub width: u32,
-    pub height: u32,
-    pub chunk_id: u16,
+pub(crate) struct StitchedSlot<T> {
+    pub(crate) entry: T,
+    pub(crate) x: u32,
+    pub(crate) y: u32,
+    #[cfg(test)]
+    pub(crate) width: u32,
+    #[cfg(test)]
+    pub(crate) height: u32,
 }
 
 /// Result of stitching one or more atlas sheets (chunks).
 #[derive(Debug, Clone)]
-pub struct StitchedAtlas<T> {
-    pub chunks: Vec<StitchedChunk<T>>,
+pub(crate) struct StitchedAtlas<T> {
+    pub(crate) chunks: Vec<StitchedChunk<T>>,
 }
 
 #[derive(Debug, Clone)]
-pub struct StitchedChunk<T> {
-    pub chunk_id: u16,
-    pub width: u32,
-    pub height: u32,
-    pub slots: Vec<StitchedSlot<T>>,
+pub(crate) struct StitchedChunk<T> {
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) slots: Vec<StitchedSlot<T>>,
 }
 
 /// Vanilla-style binary partitioning 2D Texture Stitcher.
-pub struct Stitcher<T> {
+pub(crate) struct Stitcher<T> {
     max_width: u32,
     max_height: u32,
     mip_level: u32,
@@ -93,15 +93,6 @@ impl<T: Clone> Stitcher<T> {
         });
     }
 
-    /// Number of registered entries.
-    pub fn len(&self) -> usize {
-        self.holders.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.holders.is_empty()
-    }
-
     /// Execute the vanilla layout algorithm.
     /// Sorts entries by Height desc, Width desc, Name asc, then packs into binary partitioned regions.
     /// If entries exceed max dimensions, automatically allocates subsequent atlas chunks (pages).
@@ -126,13 +117,11 @@ impl<T: Clone> Stitcher<T> {
 
         let mut chunks = Vec::new();
         let mut unplaced = self.holders.clone();
-        let mut chunk_id = 0u16;
 
         while !unplaced.is_empty() {
-            let (chunk, remaining) = self.stitch_single_chunk(chunk_id, unplaced)?;
+            let (chunk, remaining) = self.stitch_single_chunk(unplaced)?;
             chunks.push(chunk);
             unplaced = remaining;
-            chunk_id += 1;
         }
 
         Ok(StitchedAtlas { chunks })
@@ -140,7 +129,6 @@ impl<T: Clone> Stitcher<T> {
 
     fn stitch_single_chunk(
         &self,
-        chunk_id: u16,
         candidates: Vec<StitcherHolder<T>>,
     ) -> Result<(StitchedChunk<T>, Vec<StitcherHolder<T>>), TextureError> {
         let mut storage: Vec<StitcherRegion<StitcherHolder<T>>> = Vec::new();
@@ -184,14 +172,15 @@ impl<T: Clone> Stitcher<T> {
         // Collect all placed slots
         let mut slots = Vec::new();
         for region in &storage {
-            region.walk(&mut |h, x, y, rw, rh| {
+            region.walk(&mut |h, x, y, _rw, _rh| {
                 slots.push(StitchedSlot {
                     entry: h.entry.clone(),
                     x,
                     y,
-                    width: rw,
-                    height: rh,
-                    chunk_id,
+                    #[cfg(test)]
+                    width: _rw,
+                    #[cfg(test)]
+                    height: _rh,
                 });
             });
         }
@@ -201,7 +190,6 @@ impl<T: Clone> Stitcher<T> {
 
         Ok((
             StitchedChunk {
-                chunk_id,
                 width: final_w,
                 height: final_h,
                 slots,
@@ -259,5 +247,60 @@ impl<T: Clone> Stitcher<T> {
         }
 
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_power_of_two_helper() {
+        assert_eq!(smallest_encompassing_power_of_two(0), 1);
+        assert_eq!(smallest_encompassing_power_of_two(1), 1);
+        assert_eq!(smallest_encompassing_power_of_two(15), 16);
+        assert_eq!(smallest_encompassing_power_of_two(16), 16);
+        assert_eq!(smallest_encompassing_power_of_two(17), 32);
+        assert_eq!(smallest_encompassing_power_of_two(1000), 1024);
+    }
+
+    #[test]
+    fn test_mixed_resolution_stitching() {
+        let mut stitcher = Stitcher::new(4096, 4096, 0);
+
+        // Register a mix of HD and vanilla resolution sprites
+        stitcher.register_sprite("stone", 16, 16, "minecraft:block/stone");
+        stitcher.register_sprite("dirt", 16, 16, "minecraft:block/dirt");
+        stitcher.register_sprite("hd_sword", 128, 128, "minecraft:item/diamond_sword");
+        stitcher.register_sprite("hd_water", 256, 256, "minecraft:block/water_still");
+        stitcher.register_sprite("huge_block", 512, 512, "minecraft:block/huge");
+        stitcher.register_sprite("tall_texture", 64, 128, "minecraft:block/door");
+
+        let result = stitcher.stitch().unwrap();
+        assert_eq!(result.chunks.len(), 1);
+
+        let chunk = &result.chunks[0];
+        assert!(chunk.width.is_power_of_two());
+        assert!(chunk.height.is_power_of_two());
+        assert_eq!(chunk.slots.len(), 6);
+
+        // Verify non-overlapping layout
+        for i in 0..chunk.slots.len() {
+            let a = &chunk.slots[i];
+            assert!(a.x + a.width <= chunk.width);
+            assert!(a.y + a.height <= chunk.height);
+
+            for j in (i + 1)..chunk.slots.len() {
+                let b = &chunk.slots[j];
+                let overlap_x = a.x < b.x + b.width && a.x + a.width > b.x;
+                let overlap_y = a.y < b.y + b.height && a.y + a.height > b.y;
+                assert!(
+                    !(overlap_x && overlap_y),
+                    "Slots '{}' and '{}' overlap!",
+                    a.entry,
+                    b.entry
+                );
+            }
+        }
     }
 }

@@ -140,7 +140,7 @@ impl AtlasAddressMap {
 
 ---
 
-### 2.3 图集构建器与装箱器 (`atlas/builder/` & `stitcher/`)
+### 2.3 图集构建器与配置 (`atlas/builder/`)
 ```rust
 pub struct AtlasBuilderConfig {
     pub max_width: u32,
@@ -155,14 +155,10 @@ pub struct AtlasBuilderConfig {
 ### 2.4 动态皮肤图集 (`atlas/dynamic.rs`)
 针对玩家头颅 (Player Skull) 与各类自定义第三方皮肤站动态装配打造的固定规格动态图集块：
 - **规格**：固定 1024×1024 尺寸，16×16 = 256 个 64×64 槽位；
-- **保留图集块 ID**：`DEFAULT_DYNAMIC_SKINS_CHUNK_ID = 0xFFF0` (65520)；
+- **保留图集块 ID**：`DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID = 0xFFF0` (65520)；
 - **去重与映射**：支持以皮肤键天然去重、直接通过 `register_to_address_map` 将槽位与别名无缝注入 `AtlasAddressMap`。
-    pub padding: u32,
-}
 
-// v6: 移除模型缓存中的 emissive_level；v5: 模型数据库使用 Postcard + Zstd（更小）；v4: PBR 伴生图在预编译期解码为 MtkPackedV1。
-// normal_gl = OpenGL 法线 RGB + 高度 A；orm = AO/roughness/metallic/emission；
-// aux = encoded IOR/porosity/SSS/transmission。normal/specular 仅保留为 legacy 内存字段。
+```rust
 pub struct BakedAtlasChunk {
     pub chunk_id: u16,
     pub category: String,
@@ -183,8 +179,6 @@ pub struct BakedAtlas {
     pub chunks: Vec<BakedAtlasChunk>,
     pub address_map: AtlasAddressMap,
 }
-
-pub struct Stitcher<T> { /* ... */ }
 ```
 
 ---
@@ -207,9 +201,8 @@ pub struct Stitcher<T> { /* ... */ }
 | 函数签名 | 描述 |
 | :--- | :--- |
 | `bake_paletted_permutation(base, key_pal, perm_pal) -> Result<RgbaBuffer, TextureError>` | 调色板颜色置换烘焙。 |
-| `apply_edge_clamping_padding(buf, x, y, w, h, padding)` | 对指定槽位执行边缘外推抗渗色填充。 |
-| `sample_alpha_u8(w, h, pixels, u, v, invert_y) -> f32` | 采样指定 UV 处的透明度 (0.0~1.0)。 |
-| `batch_analyze_transparent_faces_u8(faces_uvs, w, h, pixels, mode, threshold, invert_y) -> Vec<bool>` | Rayon 并行批量分析网格面透明度。 |
+| `sample_alpha_f32(w, h, pixels, u, v, invert_y) -> f32` | 采样指定 UV 处的透明度 (0.0~1.0)。 |
+| `batch_analyze_transparent_faces_f32(faces_uvs, w, h, pixels, mode, threshold, invert_y) -> Vec<bool>` | Rayon 并行批量分析网格面透明度。 |
 
 ---
 

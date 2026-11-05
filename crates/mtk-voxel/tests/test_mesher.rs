@@ -805,7 +805,7 @@ fn test_3d_caves_and_cliffs_biome_tinting() {
 fn test_cache_driven_animated_texture_routing_block_models() {
     use mtk_core::Direction;
     use mtk_model::{BakedFace, BakedModel};
-    use mtk_texture::atlas::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation};
+    use mtk_texture::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation, SpriteKind};
     use std::sync::Arc;
 
     // 1. Construct AtlasAddressMap with static chunk (0) and animated chunk (1)
@@ -860,7 +860,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
             loc.clone(),
             AtlasSpriteLocation {
                 category: "blocks".to_string(),
-                sprite_kind: mtk_texture::atlas::SpriteKind::StaticAtlas,
+                sprite_kind: SpriteKind::StaticAtlas,
                 chunk_id: 0,
                 texture_id: 10,
                 is_animated: false,
@@ -885,7 +885,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
             loc.clone(),
             AtlasSpriteLocation {
                 category: "blocks".to_string(),
-                sprite_kind: mtk_texture::atlas::SpriteKind::AnimatedAtlas,
+                sprite_kind: SpriteKind::AnimatedAtlas,
                 chunk_id: 1, // Animated Chunk ID
                 texture_id: 20,
                 is_animated: true,
@@ -913,7 +913,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
         stone_loc.clone(),
         AtlasSpriteLocation {
             category: "blocks".to_string(),
-            sprite_kind: mtk_texture::atlas::SpriteKind::StaticAtlas,
+            sprite_kind: SpriteKind::StaticAtlas,
             chunk_id: 0,
             texture_id: 30,
             is_animated: false,
@@ -1462,18 +1462,18 @@ fn test_player_skull_dynamic_atlas_meshing_and_uv_remapping() {
     // Verify skull face material slot is 0xFFF0
     assert!(
         mesh.face_materials
-            .contains(&mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID),
+            .contains(&mtk_texture::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID),
         "Mesh must contain dynamic entity material slot 0xFFF0"
     );
 
     // Verify skull UVs are remapped into allocated slot bounds (slot 16)
-    let dynamic_slot = mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
+    let dynamic_slot = mtk_texture::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
     let (_, slot_idx) = world
         .dynamic_entities
         .get_location(hash)
         .expect("Skull slot");
     assert_eq!(slot_idx, 16);
-    let expected = mtk_texture::atlas::DynamicAtlasChunk::slot_info(slot_idx).uv_bounds;
+    let expected = mtk_texture::DynamicAtlasChunk::slot_info(slot_idx).uv_bounds;
 
     let mut dynamic_face_found = false;
     for (f_idx, &mat) in mesh.face_materials.iter().enumerate() {
@@ -1559,7 +1559,7 @@ fn test_non_player_skull_textures_not_clobbered() {
 #[test]
 fn test_mesher_average_color_and_tint_injection() {
     use mtk_material::biome::hex_to_linear_rgba;
-    use mtk_texture::atlas::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};
+    use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};
 
     let mut address_map = AtlasAddressMap::new();
 
@@ -1686,7 +1686,7 @@ fn test_mesher_baked_model_atlas_uvs_average_color() {
     use mtk_core::Direction;
     use mtk_material::biome::hex_to_linear_rgba;
     use mtk_model::{BakedFace, BakedModel};
-    use mtk_texture::atlas::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};
+    use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};
     use std::sync::Arc;
 
     let mut address_map = AtlasAddressMap::new();
@@ -1814,7 +1814,7 @@ fn test_banner_dynamic_atlas_meshing_and_baking() {
 
     // Red banner slot is 14
     let red_slot = 14;
-    let expected_red = mtk_texture::atlas::DynamicAtlasChunk::slot_info(red_slot).uv_bounds;
+    let expected_red = mtk_texture::DynamicAtlasChunk::slot_info(red_slot).uv_bounds;
 
     // Patterned banner slot is 16
     let pat_key = "minecraft:banner/white+stripe_top#blue+flower#red";
@@ -1824,9 +1824,9 @@ fn test_banner_dynamic_atlas_meshing_and_baking() {
         .expect("Patterned banner slot");
     assert_eq!(cid, 0xFFF0);
     assert_eq!(pat_slot, 16);
-    let expected_pat = mtk_texture::atlas::DynamicAtlasChunk::slot_info(pat_slot).uv_bounds;
+    let expected_pat = mtk_texture::DynamicAtlasChunk::slot_info(pat_slot).uv_bounds;
 
-    let dynamic_chunk_id = mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
+    let dynamic_chunk_id = mtk_texture::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
     let mut red_cloth_found = false;
     let mut pat_cloth_found = false;
 
@@ -1873,14 +1873,14 @@ fn test_banner_dynamic_atlas_meshing_and_baking() {
 
 #[test]
 fn test_plain_banner_without_block_entity_meshing() {
-    let mut addr_map = mtk_texture::atlas::AtlasAddressMap::new();
+    let mut addr_map = mtk_texture::AtlasAddressMap::new();
     let banner_base_id =
         mtk_resource::ResourceLocation::parse("minecraft:entity/banner/banner_base").unwrap();
-    let banner_base_loc = mtk_texture::atlas::AtlasSpriteLocation {
+    let banner_base_loc = mtk_texture::AtlasSpriteLocation {
         chunk_id: 0,
         category: "banner_patterns".to_string(),
         is_animated: false,
-        sprite_kind: mtk_texture::atlas::SpriteKind::StaticAtlas,
+        sprite_kind: mtk_texture::SpriteKind::StaticAtlas,
         texture_id: 0,
         uv_bounds: [0.0, 0.0, 0.5, 0.5],
         frame_0_uv_bounds: [0.0, 0.0, 0.5, 0.5],
@@ -1917,11 +1917,11 @@ fn test_plain_banner_without_block_entity_meshing() {
     let mesh = world.rebuild_all().expect("Rebuild should succeed").clone();
     assert!(mesh.face_count() > 0);
 
-    let dynamic_chunk_id = mtk_texture::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
+    let dynamic_chunk_id = mtk_texture::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
     let mut red_cloth_found = false;
     let mut blue_cloth_found = false;
-    let expected_red = mtk_texture::atlas::DynamicAtlasChunk::slot_info(14).uv_bounds;
-    let expected_blue = mtk_texture::atlas::DynamicAtlasChunk::slot_info(11).uv_bounds;
+    let expected_red = mtk_texture::DynamicAtlasChunk::slot_info(14).uv_bounds;
+    let expected_blue = mtk_texture::DynamicAtlasChunk::slot_info(11).uv_bounds;
 
     for f_idx in 0..mesh.face_count() {
         let mat = mesh.face_materials[f_idx];

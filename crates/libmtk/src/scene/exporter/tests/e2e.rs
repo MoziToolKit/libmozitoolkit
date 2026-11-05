@@ -2,11 +2,10 @@ use std::collections::HashMap;
 
 use mtk_model::{BakedModelDatabase, BlockEntityData};
 use mtk_resource::ResourceLocation;
-use mtk_texture::atlas::{
-    AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation, DYNAMIC_ATLAS_HEIGHT,
+use mtk_texture::{
+    AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation, RgbaBuffer, DYNAMIC_ATLAS_HEIGHT,
     DYNAMIC_ATLAS_WIDTH, DYNAMIC_CHUNK_START,
 };
-use mtk_texture::RgbaBuffer;
 use mtk_voxel::SparseVoxelPayload;
 
 use super::create_sample_cube;

@@ -42,7 +42,7 @@ pub enum MtkError {
     Voxel(#[from] mtk_voxel::VoxelError),
 
     #[error("Texture error: {0}")]
-    Texture(#[from] mtk_texture::error::TextureError),
+    Texture(#[from] mtk_texture::TextureError),
 
     #[error("Resource error: {0}")]
     Resource(#[from] mtk_resource::ResourceError),

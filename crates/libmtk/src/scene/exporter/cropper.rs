@@ -6,10 +6,10 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use mtk_resource::ResourceLocation;
-use mtk_texture::atlas::{
-    AtlasAddressMap, DYNAMIC_ATLAS_HEIGHT, DYNAMIC_ATLAS_WIDTH, DYNAMIC_CHUNK_START,
+use mtk_texture::{
+    AtlasAddressMap, DecodedSprite, RgbaBuffer, DYNAMIC_ATLAS_HEIGHT, DYNAMIC_ATLAS_WIDTH,
+    DYNAMIC_CHUNK_START,
 };
-use mtk_texture::{DecodedSprite, RgbaBuffer};
 
 use crate::MtkError;
 

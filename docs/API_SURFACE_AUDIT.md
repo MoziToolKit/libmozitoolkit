@@ -394,7 +394,16 @@ PY
   - 根导出收敛：移除冗余根重导出 `DEFAULT_NAMESPACE`, `TextureMetadata`, `coordinate_random`, `get_face_tangents`, `CTM_47_LOOKUP`, `OVERLAY_17_LOOKUP`, `is_companion_asset_path` 以及根目录重复的 `banner::*` 导出；
   - 下游穿透引用收敛：`libmtk` 中的 `mtk_resource::error::ResourceError` 统一收敛为根命名空间 `mtk_resource::ResourceError`；
   - 同步更新 `crates/mtk-resource/README.md` 与 API 契约文档。
-- [ ] 推进后续 crate（`mtk-texture` → `mtk-material` → `mtk-save` → `mtk-package` → `libmtk`）内部 `pub mod` 改 `mod` 与根导出精简。
+- [x] **`mtk-texture` 根导出与模块私有化彻底完成 (Batch 4.7)**：
+  - 5 个内部模块（`atlas`, `banner`, `error`, `image`, `stitcher`）全部收敛为私有 `mod`；
+  - 内部子模块全部收敛为私有 `mod`：`atlas/{address_map, builder, dynamic, pbr}`、`atlas/builder/{anim_atlas, paletted, static_atlas, types}`、`image/{alpha, buffer, loader, padding, palette}`、`stitcher/{region, stitcher}`；
+  - 废弃与零消费者符号清理：物理删除死代码 `batch_analyze_transparent_faces_u8`、`is_face_transparent_u8`、`sample_alpha_u8`、`StitchedSlot::len` 与 `is_empty`、常量 `AUX_DEFAULT_RGBA` 与 `DYNAMIC_CHUNK_END`；
+  - 内部实现细节降级为 `pub(crate)`：`Stitcher` 及其全部数据结构（`StitchedAtlas`, `StitchedChunk`, `StitchedSlot`, `StitcherHolder`, `StitcherRegion`, `smallest_encompassing_power_of_two`）、`apply_edge_clamping_padding`、`extract_palette_colors`、`uv_to_pixel_coord`、`is_face_transparent_f32`、`MAX_DYNAMIC_CHUNKS`、`atlas/builder` 各构建函数；
+  - 根导出收敛：彻底剔除全部 stitcher 内部类型、u8 alpha 函数与多余常量，仅暴露规范图集与图像核心契约（`AtlasAddressMap`, `AtlasBuilder`, `AtlasBuilderConfig`, `AtlasChunkMeta`, `AtlasKeySource`, `AtlasSpriteLocation`, `AtlasTextureSlot`, `BakedAtlas`, `BakedAtlasChunk`, `DynamicAtlasChunk`, `DynamicAtlasManager`, `DynamicSlotInfo`, `IorEncoding`, `NormalConvention`, `PbrLayout`, `PbrMeta`, `PbrSourceFormat`, `RoughnessSpace`, `SpriteKind`, `DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID`, `DYNAMIC_ATLAS_HEIGHT`, `DYNAMIC_ATLAS_WIDTH`, `DYNAMIC_CHUNK_START`, `DYNAMIC_SLOT_SIZE`, `BannerBaker`, `TextureError`, `bake_paletted_permutation`, `batch_analyze_transparent_faces_f32`, `sample_alpha_f32`, `DecodedSprite`, `RgbaBuffer`, `SampleMode`）；
+  - 测试隔离：将 `test_stitcher.rs` 移入 `stitcher/stitcher.rs` 作为内部 `#[cfg(test)]` 单元测试，不再对外暴露内部装箱细节；
+  - 下游穿透引用收敛：`libmtk`, `mtk-voxel`, `mtk-material` 中对 `mtk_texture::atlas::*`, `mtk_texture::banner::*`, `mtk_texture::error::*` 的穿透统一收敛为根命名空间 `mtk_texture::*`；
+  - 同步更新 `crates/mtk-texture/README.md`。
+- [ ] 推进后续 crate（`mtk-material` → `mtk-save` → `mtk-package` → `libmtk`）内部 `pub mod` 改 `mod` 与根导出精简。
 - [ ] 每完成一个 crate 跑 `cargo test -p <crate>` 与 `cargo clippy -p <crate> --all-targets -- -D warnings`。
 
 ### Batch 5：绑定与适配器收敛
