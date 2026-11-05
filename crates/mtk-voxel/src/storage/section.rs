@@ -4,11 +4,42 @@ use glam::IVec3;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::storage::crc::{crc32_update, extract_canonical_state_str, EMPTY_SECTION_CRC};
-
 pub use mtk_core::constants::voxel::{
     block_index, padded_index, PADDED_SIZE, PADDED_VOLUME, SECTION_SIZE, SECTION_VOLUME,
 };
+
+/// Extracts canonical Minecraft blockstate identifier from raw state or JSON-wrapped string.
+/// Converts variants of air / structure_void / bubble_column to canonical "minecraft:air".
+#[inline]
+pub(crate) fn extract_canonical_state_str(raw_state: &str) -> &str {
+    if raw_state.is_empty() || raw_state == "minecraft:air" {
+        return "minecraft:air";
+    }
+
+    let mut res = raw_state;
+    if let Some(stripped) = raw_state.strip_prefix("{\"state\":\"") {
+        if let Some(end_idx) = stripped.find('"') {
+            res = &stripped[..end_idx];
+        }
+    }
+
+    let base = res
+        .find('[')
+        .map_or(res, |property_start| &res[..property_start]);
+    match base {
+        "minecraft:air"
+        | "minecraft:cave_air"
+        | "minecraft:void_air"
+        | "air"
+        | "cave_air"
+        | "void_air"
+        | "structure_void"
+        | "minecraft:structure_void"
+        | "bubble_column"
+        | "minecraft:bubble_column" => "minecraft:air",
+        _ => res,
+    }
+}
 
 /// 16x16x16 Chunk Section with dense palette-indexed storage and non-air tracking.
 #[derive(Debug, Clone, PartialEq)]
@@ -23,8 +54,6 @@ pub struct SectionStorage {
     pub voxels: Box<[u16; SECTION_VOLUME]>,
     /// Number of non-air voxels currently in this section.
     pub non_air_count: u32,
-    /// Cached CRC32 checksum for this section.
-    pub cached_crc: Option<u32>,
     /// Optional 3D 4x4x4 quart paletted biomes for this section.
     #[cfg_attr(feature = "serde", serde(default))]
     pub biomes: Option<super::biome::SectionBiomes>,
@@ -81,7 +110,6 @@ impl SectionStorage {
             palette: vec!["minecraft:air".to_string()],
             voxels: Box::new([0u16; SECTION_VOLUME]),
             non_air_count: 0,
-            cached_crc: Some(EMPTY_SECTION_CRC),
             biomes: None,
             block_entities: HashMap::new(),
         }
@@ -92,7 +120,6 @@ impl SectionStorage {
         self.palette.truncate(1);
         self.voxels.fill(0);
         self.non_air_count = 0;
-        self.cached_crc = Some(EMPTY_SECTION_CRC);
         self.biomes = None;
         self.block_entities.clear();
     }
@@ -104,14 +131,28 @@ impl SectionStorage {
     }
 
     /// Sets or removes a block entity at a local voxel index (0..4095).
+    /// Automatically normalizes properties (e.g. banner base color from blockstate) if needed.
     #[inline]
     pub fn set_block_entity(&mut self, local_idx: u16, data: Option<mtk_model::BlockEntityData>) {
-        if let Some(d) = data {
+        if let Some(mut d) = data {
+            if let mtk_model::BlockEntityData::Banner {
+                ref mut base_color, ..
+            } = d
+            {
+                let lx = ((local_idx >> 8) & 15) as usize;
+                let ly = ((local_idx >> 4) & 15) as usize;
+                let lz = (local_idx & 15) as usize;
+                let state_str = self.get_local_state(lx, ly, lz);
+                if let Some(resolved_color) =
+                    mtk_model::banner::extract_banner_color_from_state(state_str)
+                {
+                    *base_color = resolved_color.to_string();
+                }
+            }
             self.block_entities.insert(local_idx, d);
         } else {
             self.block_entities.remove(&local_idx);
         }
-        self.cached_crc = None;
     }
 
     /// Creates a section pre-populated from a 4096-element blockstate slice.
@@ -137,7 +178,6 @@ impl SectionStorage {
                 section.non_air_count += 1;
             }
         }
-        section.cached_crc = None;
         section
     }
 
@@ -203,33 +243,7 @@ impl SectionStorage {
         if !self.block_entities.is_empty() {
             self.block_entities.remove(&(idx as u16));
         }
-        self.cached_crc = None;
         true
-    }
-
-    /// Computes or retrieves the canonical CRC32 checksum for this section.
-    pub fn compute_crc(&mut self) -> u32 {
-        if let Some(crc) = self.cached_crc {
-            return crc;
-        }
-
-        if self.is_empty() {
-            self.cached_crc = Some(EMPTY_SECTION_CRC);
-            return EMPTY_SECTION_CRC;
-        }
-
-        let mut crc_val = 0u32;
-        for x in 0..SECTION_SIZE {
-            for y in 0..SECTION_SIZE {
-                for z in 0..SECTION_SIZE {
-                    let st = self.get_local_state(x, y, z);
-                    crc_val = crc32_update(crc_val, st.as_bytes());
-                }
-            }
-        }
-
-        self.cached_crc = Some(crc_val);
-        crc_val
     }
 
     /// Builds a 18x18x18 padded array with a 1-voxel neighborhood apron.
@@ -400,16 +414,31 @@ mod tests {
     fn test_section_storage_basic() {
         let mut sec = SectionStorage::new(IVec3::new(0, 0, 0));
         assert!(sec.is_empty());
-        assert_eq!(sec.compute_crc(), EMPTY_SECTION_CRC);
 
         sec.set_local(0, 0, 0, "minecraft:stone");
         assert!(!sec.is_empty());
         assert_eq!(sec.get_local_state(0, 0, 0), "minecraft:stone");
-        assert_ne!(sec.compute_crc(), EMPTY_SECTION_CRC);
 
         sec.set_local(0, 0, 0, "minecraft:air");
         assert!(sec.is_empty());
-        assert_eq!(sec.compute_crc(), EMPTY_SECTION_CRC);
+        assert_eq!(sec.get_local_state(0, 0, 0), "minecraft:air");
+    }
+
+    #[test]
+    fn test_extract_canonical_state() {
+        assert_eq!(extract_canonical_state_str(""), "minecraft:air");
+        assert_eq!(
+            extract_canonical_state_str("minecraft:cave_air"),
+            "minecraft:air"
+        );
+        assert_eq!(
+            extract_canonical_state_str("minecraft:stone"),
+            "minecraft:stone"
+        );
+        assert_eq!(
+            extract_canonical_state_str("{\"state\":\"minecraft:dirt\"}"),
+            "minecraft:dirt"
+        );
     }
 
     #[test]

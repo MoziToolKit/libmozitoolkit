@@ -13,7 +13,6 @@ mtk-core = { workspace = true }
 mtk-cull = { workspace = true }
 mtk-model = { workspace = true }
 mtk-voxel = { workspace = true }
-mtk-save = { workspace = true }
 glam = { workspace = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }

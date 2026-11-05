@@ -939,5 +939,8 @@ pub fn decode_packet(buf: &[u8]) -> Result<Packet, ProtocolError> {
 
 #[inline]
 fn decode_entity_payload(bytes: &[u8]) -> Option<mtk_model::BlockEntityData> {
-    mtk_save::decode_block_entity_payload(bytes)
+    if bytes.is_empty() {
+        return None;
+    }
+    serde_json::from_slice::<mtk_model::BlockEntityData>(bytes).ok()
 }

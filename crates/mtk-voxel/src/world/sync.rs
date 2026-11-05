@@ -35,10 +35,7 @@ impl VoxelWorld {
         // 2. Check sections added or modified in new_storage
         for (&coord, new_sec) in &new_storage.sections {
             if let Some(old_sec) = self.storage.sections.get_mut(&coord) {
-                let old_crc = old_sec.compute_crc();
-                let mut new_sec_clone = new_sec.clone();
-                let new_crc = new_sec_clone.compute_crc();
-                if old_crc != new_crc {
+                if old_sec != new_sec {
                     dirty.insert(coord);
                     for offset in [
                         IVec3::new(1, 0, 0),
@@ -50,7 +47,7 @@ impl VoxelWorld {
                     ] {
                         dirty.insert(coord + offset);
                     }
-                    *old_sec = new_sec_clone;
+                    *old_sec = new_sec.clone();
                 }
             } else {
                 dirty.insert(coord);

@@ -102,7 +102,6 @@ impl ChunkParser {
             section.palette.push(single_state.clone());
             section.voxels.fill(pal_id);
             section.non_air_count = SECTION_VOLUME as u32;
-            section.cached_crc = None;
             return Ok(Some(section));
         }
 
@@ -152,7 +151,6 @@ impl ChunkParser {
         }
 
         section.non_air_count = non_air;
-        section.cached_crc = None;
 
         if non_air > 0 {
             Ok(Some(section))

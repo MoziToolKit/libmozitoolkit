@@ -224,9 +224,6 @@ fn test_voxel_world_manifest_export_import() {
     let mut world = VoxelWorld::new(None, None, None);
     world.set_bounds(0, 0, 0, 16, 16, 16);
     world.set_block(0, 0, 0, "minecraft:stone", None);
-    world
-        .storage
-        .calculate_and_store_section_crc(glam::IVec3::new(0, 0, 0));
     world.rebuild_all().unwrap();
 
     let meta = world.export_manifest_metadata();
@@ -237,5 +234,4 @@ fn test_voxel_world_manifest_export_import() {
     let (min_x, _, _, sz_x, _, _) = restored.storage.get_bounds();
     assert_eq!(min_x, 0);
     assert_eq!(sz_x, 16);
-    assert_eq!(restored.storage.section_crc_map.len(), 1);
 }

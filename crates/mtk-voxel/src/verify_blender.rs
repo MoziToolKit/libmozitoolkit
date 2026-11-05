@@ -14,15 +14,8 @@ use crate::fluid::uv::{get_fluid_side_uvs, get_fluid_top_uvs};
 use crate::fluid::FluidType;
 use crate::mesher::shading::ModelSource;
 use crate::mesher::SectionMesher;
-use crate::storage::{SectionStorage, VoxelStorage};
+use crate::storage::VoxelStorage;
 use crate::types::MesherConfig;
-
-#[derive(Debug, Deserialize)]
-struct CrcTestCase {
-    name: String,
-    blocks: HashMap<String, String>,
-    expected_crc: u32,
-}
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
@@ -75,7 +68,9 @@ struct MeshTestCase {
 
 #[derive(Debug, Deserialize)]
 struct BlenderGroundTruth {
-    crc_tests: Vec<CrcTestCase>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    crc_tests: Option<serde_json::Value>,
     fluid_tests: Vec<FluidTestCase>,
     biome_tests: Vec<BiomeTestCase>,
     fluid_uv_tests: Vec<FluidUvTestCase>,
@@ -103,28 +98,8 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
     println!(" 100% Verification Against MoziToolKit (Blender Python)");
     println!("============================================================");
 
-    // 1. Verify CRC32
-    println!("\n[1. CRC32 Checksum Verification (vs Python zlib.crc32)]");
-    for tc in &truth.crc_tests {
-        let mut sec = SectionStorage::new(IVec3::new(0, 0, 0));
-        for (coord_str, state) in &tc.blocks {
-            let parts: Vec<usize> = coord_str.split(',').map(|s| s.parse().unwrap()).collect();
-            sec.set_local(parts[0], parts[1], parts[2], state);
-        }
-        let rust_crc = sec.compute_crc();
-        println!(
-            " • {:<32} -> Rust CRC: 0x{:08X} | Blender CRC: 0x{:08X}",
-            tc.name, rust_crc, tc.expected_crc
-        );
-        assert_eq!(
-            rust_crc, tc.expected_crc,
-            "CRC mismatch in test '{}'",
-            tc.name
-        );
-    }
-
-    // 2. Verify Fluid Calculations
-    println!("\n[2. Fluid Physics & Corner Height Verification (vs MoziToolKit fluid.py)]");
+    // 1. Verify Fluid Calculations
+    println!("\n[1. Fluid Physics & Corner Height Verification (vs MoziToolKit fluid.py)]");
     for tc in &truth.fluid_tests {
         let ft = match tc.fluid_type.as_str() {
             "water" => FluidType::Water,

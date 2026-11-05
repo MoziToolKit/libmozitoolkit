@@ -23,10 +23,10 @@ fn test_section_palette_mutation() {
     sec.set_local(1, 0, 0, "minecraft:air");
     sec.set_local(2, 0, 0, "minecraft:air");
     assert!(sec.is_empty());
-    assert_eq!(
-        sec.compute_crc(),
-        SectionStorage::new(IVec3::ZERO).compute_crc()
-    );
+    assert_eq!(sec.non_air_count, 0);
+
+    sec.clear();
+    assert_eq!(sec, SectionStorage::new(IVec3::ZERO));
 }
 
 #[test]
@@ -49,7 +49,7 @@ fn test_world_bounds_and_pruning() {
 }
 
 #[test]
-fn test_section_snapshot_and_manifest_validation() {
+fn test_section_snapshot_ingestion() {
     let mut world = VoxelStorage::new();
     world.set_bounds(0, 0, 0, 16, 16, 16);
 
@@ -59,20 +59,7 @@ fn test_section_snapshot_and_manifest_validation() {
 
     world.set_section_snapshot(0, 0, 0, 0, 0, 0, 16, 16, 16, &palette, &grid, None, None);
     assert_eq!(world.get_block(0, 0, 0), "minecraft:stone");
-
-    let crc = world.calculate_and_store_section_crc(IVec3::new(0, 0, 0));
-    let empty_crc = SectionStorage::new(IVec3::ZERO).compute_crc();
-    assert_ne!(crc, empty_crc);
-
-    // Matching manifest: returns empty mismatch
-    let manifest = vec![(0, 0, 0, crc)];
-    let mismatches = world.validate_manifest(&manifest, None);
-    assert!(mismatches.is_empty());
-
-    // Mismatched CRC: returns coord
-    let bad_manifest = vec![(0, 0, 0, 0x12345678)];
-    let bad_mismatches = world.validate_manifest(&bad_manifest, None);
-    assert_eq!(bad_mismatches, vec![IVec3::new(0, 0, 0)]);
+    assert!(world.dirty_sections.contains(&IVec3::new(0, 0, 0)));
 }
 
 #[test]
@@ -80,7 +67,6 @@ fn test_manifest_metadata_export_import() {
     let mut world = VoxelStorage::new();
     world.set_bounds(0, 0, 0, 32, 16, 16);
     world.set_block(1, 2, 3, "minecraft:iron_block", None);
-    world.calculate_and_store_section_crc(IVec3::new(0, 0, 0));
 
     let json_meta = world.export_manifest_metadata();
     assert_eq!(json_meta["size_x"], 32);
@@ -89,10 +75,6 @@ fn test_manifest_metadata_export_import() {
     assert!(restored.import_manifest_metadata(&json_meta));
     assert_eq!(restored.min_x, 0);
     assert_eq!(restored.size_x, 32);
-    assert_eq!(
-        restored.section_crc_map.get(&IVec3::new(0, 0, 0)),
-        world.section_crc_map.get(&IVec3::new(0, 0, 0))
-    );
 }
 
 #[test]

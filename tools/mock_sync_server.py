@@ -101,7 +101,6 @@ PKT_SELECTION_INFO = 0x01
 PKT_FULL_SNAPSHOT = 0x02
 PKT_DELTA_UPDATE = 0x03
 PKT_BLOCK_PALETTE = 0x04
-PKT_SECTION_MANIFEST = 0x05
 PKT_SECTION_SNAPSHOT = 0x06
 PKT_HANDSHAKE_INFO = 0x07
 PKT_STREAM_BEGIN = 0x08
@@ -286,18 +285,6 @@ def encode_stream_end(stream_id: int, sent_sections: int, status: int = STREAM_S
     return encode_header(PKT_STREAM_END) + struct.pack("<IIH", stream_id, sent_sections, status)
 
 
-def encode_section_manifest(seq_id: int, entries: List[Tuple[Tuple[int, int, int], int]]) -> bytes:
-    """0x05: Chunk section CRC32 verification manifest."""
-    buf = bytearray()
-    buf.extend(encode_header(PKT_SECTION_MANIFEST))
-    buf.extend(struct.pack("<II", seq_id, len(entries)))
-
-    for (sec_x, sec_y, sec_z), crc in entries:
-        buf.extend(struct.pack("<3iI", sec_x, sec_y, sec_z, crc & 0xFFFFFFFF))
-
-    return bytes(buf)
-
-
 # ---------------------------------------------------------------------------
 # Client Packet Decoder
 # ---------------------------------------------------------------------------
@@ -401,27 +388,6 @@ class WorldGrid:
             idx = self.indices[self.get_index(lx, ly, lz)]
             return self.palette[idx]
         return "minecraft:air"
-
-    def compute_section_crc(self, sec_coord: Tuple[int, int, int]) -> int:
-        """Computes section CRC32 compatible with mtk-voxel."""
-        sx, sy, sz = sec_coord
-        sec_min_x = sx * 16
-        sec_min_y = sy * 16
-        sec_min_z = sz * 16
-
-        buf = bytearray()
-        for lx_sec in range(16):
-            wx = sec_min_x + lx_sec
-            lx = wx - self.min_pos[0]
-            for ly_sec in range(16):
-                wy = sec_min_y + ly_sec
-                ly = wy - self.min_pos[1]
-                for lz_sec in range(16):
-                    wz = sec_min_z + lz_sec
-                    lz = wz - self.min_pos[2]
-                    state = self.get_block(lx, ly, lz)
-                    buf.extend(state.encode("utf-8"))
-        return zlib.crc32(buf) & 0xFFFFFFFF
 
 
 def generate_terrain(
@@ -813,7 +779,7 @@ class MockLiveSyncServer:
             msg = await client.read_frame()
             if not msg:
                 return
-            hello = libmtk_py.decode_packet(msg)
+            hello = libmtk_py.unstable.testing.decode_packet(msg)
             if hello.get("type") != "HELLO":
                 print(f"⚠️ [Protocol Error] Expected HELLO, got {hello.get('type')}")
                 return
@@ -857,7 +823,7 @@ class MockLiveSyncServer:
                 msg = await client.read_frame()
                 if msg is None:
                     break
-                decoded = libmtk_py.decode_packet(msg)
+                decoded = libmtk_py.unstable.testing.decode_packet(msg)
                 if decoded:
                     await self._handle_client_event(client, decoded)
 

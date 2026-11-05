@@ -35,45 +35,13 @@ from utils.mc_baker import get_shared_state_baker
 
 def export_truth_data():
     truth = {
-        "crc_tests": [],
         "fluid_tests": [],
         "biome_tests": [],
         "fluid_uv_tests": [],
         "mesh_tests": [],
     }
 
-    # 1. CRC Tests
-    storage = VoxelStorage()
-    storage.set_bounds(0, 0, 0, 16, 16, 16)
-    empty_crc = storage.calculate_and_store_section_crc(0, 0, 0)
-    truth["crc_tests"].append({
-        "name": "empty_section_crc",
-        "blocks": {},
-        "expected_crc": empty_crc,
-    })
-
-    storage = libmtk_py.VoxelStorage()
-    storage.set_bounds(0, 0, 0, 16, 16, 16)
-    storage.set_block(0, 0, 0, "minecraft:stone")
-    stone_crc = storage.calculate_and_store_section_crc(0, 0, 0)
-    truth["crc_tests"].append({
-        "name": "single_stone_at_0_0_0",
-        "blocks": {"0,0,0": "minecraft:stone"},
-        "expected_crc": stone_crc,
-    })
-
-    storage = libmtk_py.VoxelStorage()
-    storage.set_bounds(0, 0, 0, 16, 16, 16)
-    for x in range(16):
-        storage.set_block(x, 0, x, "minecraft:oak_planks")
-    diagonal_crc = storage.calculate_and_store_section_crc(0, 0, 0)
-    truth["crc_tests"].append({
-        "name": "diagonal_oak_planks",
-        "blocks": {f"{x},0,{x}": "minecraft:oak_planks" for x in range(16)},
-        "expected_crc": diagonal_crc,
-    })
-
-    # 2. Fluid Height & Vector Tests
+    # 1. Fluid Height & Vector Tests
     fluid_scenes = [
         {
             "name": "single_source_water",
@@ -313,7 +281,7 @@ def export_truth_data():
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(truth, f, indent=2)
 
-    print(f"Exported ground truth to {out_path} ({len(truth['fluid_tests'])} fluid tests, {len(truth['crc_tests'])} CRC tests, {len(truth['mesh_tests'])} mesh tests)")
+    print(f"Exported ground truth to {out_path} ({len(truth['fluid_tests'])} fluid tests, {len(truth['mesh_tests'])} mesh tests)")
 
 if __name__ == "__main__":
     export_truth_data()

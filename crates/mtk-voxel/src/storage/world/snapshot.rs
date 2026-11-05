@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use glam::IVec3;
 
 use super::container::VoxelStorage;
-use crate::storage::crc::extract_canonical_state_str;
+use crate::storage::section::extract_canonical_state_str;
 use crate::storage::{SectionBiomes, SectionStorage};
 
 impl VoxelStorage {
@@ -325,9 +325,7 @@ impl VoxelStorage {
             }
         }
 
-        // Compute section CRC (clamped to selection bounds) and mark dirty with 3x3x3 neighborhood halo
-        self.calculate_and_store_section_crc(sec_coord);
-
+        // Mark dirty with 3x3x3 neighborhood halo
         for dx in -1..=1 {
             for dy in -1..=1 {
                 for dz in -1..=1 {

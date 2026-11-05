@@ -93,12 +93,11 @@ pub struct SectionStorage {
     pub palette: Vec<String>,
     pub voxels: Box<[u16; 4096]>,
     pub non_air_count: u32,
-    pub cached_crc: Option<u32>,
 }
 ```
 - `is_empty() -> bool`：若 `non_air_count == 0` 则为极速纯空判定。
 - `get_local_state(x, y, z) -> &str`：根据局部坐标 `0..16` 获取方块状态。
-- `set_local(x, y, z, state) -> bool`：更新局部方块，自动维护 Palette、`non_air_count` 并使 CRC 缓存失效。
+- `set_local(x, y, z, state) -> bool`：更新局部方块，自动维护 Palette 与 `non_air_count`。
 - `build_padded_array(get_neighbor_fn) -> PaddedVoxelArray`：向外扩展 1 格构建 18×18×18 采样窗口。
 
 #### `PaddedVoxelArray`
@@ -123,14 +122,12 @@ pub struct VoxelStorage {
     pub biome_column_map: HashMap<[i32; 2], String>,
     pub primary_biome: Option<String>,
     pub dirty_sections: HashSet<IVec3>,
-    pub section_crc_map: HashMap<IVec3, u32>,
     pub generation: AtomicU64,
 }
 ```
 - **选区裁剪与接缝脏标记**：调用 `set_bounds(...)` 自动修剪越界区块，并将边界接缝处的区块自动加入 `dirty_sections` 以便更新交界面遮挡。
 - **派生群系元数据唯一入口**：`finalize_biome_metadata()` 从 Section 级 4×4×4 数据重建地表列群系 `biome_column_map` 与主导 `primary_biome`。存档导入、实时同步 baseline、点云重建三条 ingest 路径都必须走这里，禁止各自再实现一份；逐方块 `biome_map` 覆盖层已删除（Section 数据已完整，删除后实测 `get_biome` 与平滑列零差异）。
 - **快照与增量更新**：`set_full_snapshot`、`set_section_snapshot`、`apply_delta_update`。
-- **清单比对**：`validate_manifest` 用于对比服务器端的区块 CRC32 列表，精准找出不同步的区块坐标。
 - **纯代码调试世界生成器**：`create_debug_world() -> Result<Self, VoxelError>`、`create_debug_world_from_states(...)`、`create_debug_world_from_pack_stack(...)` 采用与原版 Minecraft `DebugLevelSource` 严格一致的网格公式进行暴力展开，彻底摒弃硬编码体素快照，支持模组方块动态展开，内部采用 `OnceLock` 线程安全懒加载缓存，后续调用克隆仅需 <1ms。
 
 #### `VoxelPointCloud` 与 `PointCloudVoxelSource`

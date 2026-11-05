@@ -55,8 +55,6 @@ pub struct VoxelStorage {
     pub dirty_sections: HashSet<IVec3>,
     /// Set of section coordinates known to be completely empty.
     pub known_empty_sections: HashSet<IVec3>,
-    /// Map of section coordinate to cached CRC32 checksum.
-    pub section_crc_map: HashMap<IVec3, u32>,
     /// Incremental generation counter (Atomic for lock-free multi-thread sync).
     #[cfg_attr(feature = "serde", serde(with = "serde_atomic_u64"))]
     pub generation: AtomicU64,
@@ -78,7 +76,6 @@ impl Clone for VoxelStorage {
             primary_biome: self.primary_biome.clone(),
             dirty_sections: self.dirty_sections.clone(),
             known_empty_sections: self.known_empty_sections.clone(),
-            section_crc_map: self.section_crc_map.clone(),
             generation: AtomicU64::new(self.generation.load(Ordering::Relaxed)),
             has_explicit_bounds: self.has_explicit_bounds,
         }
@@ -99,7 +96,6 @@ impl Default for VoxelStorage {
             primary_biome: None,
             dirty_sections: HashSet::new(),
             known_empty_sections: HashSet::new(),
-            section_crc_map: HashMap::new(),
             generation: AtomicU64::new(0),
             has_explicit_bounds: false,
         }
@@ -294,15 +290,7 @@ impl VoxelStorage {
         self.biome_column_map
             .retain(|&[x, z], _| x >= min_x && x <= new_max_x && z >= min_z && z <= new_max_z);
 
-        // Prune out-of-bounds section CRC cache and known empty sections
-        self.section_crc_map.retain(|coord, _| {
-            coord.x >= new_min_sec_x
-                && coord.x <= new_max_sec_x
-                && coord.y >= new_min_sec_y
-                && coord.y <= new_max_sec_y
-                && coord.z >= new_min_sec_z
-                && coord.z <= new_max_sec_z
-        });
+        // Prune out-of-bounds known empty sections
 
         self.known_empty_sections.retain(|coord| {
             coord.x >= new_min_sec_x

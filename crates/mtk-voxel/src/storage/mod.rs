@@ -1,5 +1,4 @@
 mod biome;
-pub(crate) mod crc;
 mod point_cloud;
 mod section;
 mod sparse;

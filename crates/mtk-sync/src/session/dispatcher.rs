@@ -973,23 +973,7 @@ pub(crate) fn handle_packet(
                     let bly = (wy & 15) as usize;
                     let blz = (wz & 15) as usize;
                     let local_idx = mtk_voxel::block_index(blx, bly, blz) as u16;
-                    let ent = if let Some(mut ed) = entity.clone() {
-                        if let mtk_model::BlockEntityData::Banner {
-                            ref mut base_color, ..
-                        } = ed
-                        {
-                            let state_str = sec.get_local_state(blx, bly, blz);
-                            if let Some(resolved_color) =
-                                mtk_model::banner::extract_banner_color_from_state(state_str)
-                            {
-                                *base_color = resolved_color.to_string();
-                            }
-                        }
-                        Some(ed)
-                    } else {
-                        None
-                    };
-                    sec.set_block_entity(local_idx, ent);
+                    sec.set_block_entity(local_idx, entity.clone());
                     w.storage.dirty_sections.insert(sec_coord);
                     if state.dirty_since.is_none() {
                         state.dirty_since = Some(Instant::now());
