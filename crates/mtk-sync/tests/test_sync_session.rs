@@ -1,11 +1,9 @@
 use glam::IVec3;
-use mtk_sync::protocol::codec::compute_delta_batch_hash;
-use mtk_sync::protocol::constants::*;
-use mtk_sync::protocol::hasher::{
-    compute_sparse_state_hash, compute_sparse_state_hash_for_storage, SparseBlockEntry,
+use mtk_sync::{
+    compute_delta_batch_hash, compute_sparse_state_hash, compute_sparse_state_hash_for_storage,
+    DeltaChangeEntry, LiveSyncSession, Packet, SparseBlockEntry, SyncDecision, SyncEvent,
+    SyncLifecycle,
 };
-use mtk_sync::protocol::packet::*;
-use mtk_sync::{LiveSyncSession, SyncEvent, SyncLifecycle};
 use mtk_voxel::MesherConfig;
 use std::io::Write;
 

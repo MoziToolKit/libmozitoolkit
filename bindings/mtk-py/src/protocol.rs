@@ -5,12 +5,12 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
 
-use mtk_sync::protocol::*;
+use mtk_sync::*;
 
 /// Decodes a raw binary packet into a Python dict.
 #[pyfunction]
 pub fn decode_packet<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, PyDict>> {
-    let packet = mtk_sync::protocol::decode_packet(data)
+    let packet = mtk_sync::decode_packet(data)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
     let dict = PyDict::new(py);
@@ -337,7 +337,7 @@ pub fn encode_welcome<'py>(
         decision: dec,
         message_or_dimension: dimension.to_string(),
     };
-    let bytes = mtk_sync::protocol::codec::encode_packet(&pkt);
+    let bytes = mtk_sync::encode_packet(&pkt);
     Ok(PyBytes::new(py, &bytes))
 }
 
@@ -390,7 +390,7 @@ pub fn encode_baseline_begin<'py>(
         block_palette,
         biome_palette,
     };
-    let bytes = mtk_sync::protocol::codec::encode_packet(&pkt);
+    let bytes = mtk_sync::encode_packet(&pkt);
     Ok(PyBytes::new(py, &bytes))
 }
 
@@ -433,7 +433,7 @@ pub fn encode_baseline_chunk<'py>(
         chunk_xxhash64: hash,
         payload: payload.to_vec(),
     };
-    let bytes = mtk_sync::protocol::codec::encode_packet(&pkt);
+    let bytes = mtk_sync::encode_packet(&pkt);
     Ok(PyBytes::new(py, &bytes))
 }
 
@@ -461,7 +461,7 @@ pub fn encode_baseline_end<'py>(
         final_state_hash,
         status,
     };
-    let bytes = mtk_sync::protocol::codec::encode_packet(&pkt);
+    let bytes = mtk_sync::encode_packet(&pkt);
     Ok(PyBytes::new(py, &bytes))
 }
 
@@ -500,7 +500,7 @@ pub fn encode_delta_op<'py>(
         batch_xxhash64,
         changes: delta_entries,
     };
-    let bytes = mtk_sync::protocol::codec::encode_packet(&pkt);
+    let bytes = mtk_sync::encode_packet(&pkt);
     Ok(PyBytes::new(py, &bytes))
 }
 
@@ -522,6 +522,6 @@ pub fn encode_palette_update<'py>(
         new_revision,
         entries,
     };
-    let bytes = mtk_sync::protocol::codec::encode_packet(&pkt);
+    let bytes = mtk_sync::encode_packet(&pkt);
     Ok(PyBytes::new(py, &bytes))
 }

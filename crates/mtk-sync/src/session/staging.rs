@@ -5,18 +5,17 @@
 
 use std::collections::VecDeque;
 
-use crate::protocol::constants::{ResyncReason, MAX_DELTA_STAGING_BATCHES};
-use crate::protocol::packet::Packet;
+use crate::protocol::*;
 
 /// Staging queue for in-flight delta packets.
 #[derive(Debug, Default)]
-pub struct DeltaStagingBuffer {
+pub(crate) struct DeltaStagingBuffer {
     queue: VecDeque<(u64, Packet)>,
     total_bytes: usize,
 }
 
 impl DeltaStagingBuffer {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             queue: VecDeque::new(),
             total_bytes: 0,
@@ -24,13 +23,13 @@ impl DeltaStagingBuffer {
     }
 
     /// Clears the staging buffer completely.
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.queue.clear();
         self.total_bytes = 0;
     }
 
     /// Pushes an in-flight delta or palette update packet with its sequence ID.
-    pub fn push(
+    pub(crate) fn push(
         &mut self,
         seq_id: u64,
         packet: Packet,
@@ -46,7 +45,7 @@ impl DeltaStagingBuffer {
 
     /// Discards all packets with sequence <= snapshot_seq S, and verifies that
     /// the remaining packets start exactly at S + 1 and are strictly contiguous.
-    pub fn drain_replaying_after_snapshot(
+    pub(crate) fn drain_replaying_after_snapshot(
         &mut self,
         snapshot_seq: u64,
     ) -> Result<Vec<Packet>, ResyncReason> {
@@ -81,12 +80,7 @@ impl DeltaStagingBuffer {
         Ok(result)
     }
 
-    /// Number of packets currently staged.
-    pub fn len(&self) -> usize {
-        self.queue.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.queue.is_empty()
     }
 }

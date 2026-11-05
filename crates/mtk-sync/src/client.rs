@@ -16,7 +16,7 @@ use crate::protocol::{decode_packet, Packet};
 
 /// Commands sent from the session controller to the network client thread.
 #[derive(Debug)]
-pub enum ClientCommand {
+pub(crate) enum ClientCommand {
     /// Send raw binary packet to server.
     Send(Vec<u8>),
     /// Terminate connection and worker thread.
@@ -25,7 +25,7 @@ pub enum ClientCommand {
 
 /// Network client status messages.
 #[derive(Debug, Clone)]
-pub enum ClientMessage {
+pub(crate) enum ClientMessage {
     Status(String),
     /// Non-fatal transport diagnostics (e.g. a single undecodable frame).
     /// Must NOT be interpreted as a connection status change.
@@ -42,7 +42,7 @@ pub enum ClientMessage {
 }
 
 /// Manages the background WebSocket transport thread.
-pub struct SyncClient {
+pub(crate) struct SyncClient {
     running: Arc<AtomicBool>,
     cmd_sender: Sender<ClientCommand>,
     active_tcp: Arc<Mutex<Option<TcpStream>>>,
@@ -51,7 +51,7 @@ pub struct SyncClient {
 
 impl SyncClient {
     /// Spawns a new background WebSocket client connecting to `url`.
-    pub fn connect(
+    pub(crate) fn connect(
         url_str: String,
         msg_sender: Sender<ClientMessage>,
         auto_reconnect: bool,
@@ -86,20 +86,13 @@ impl SyncClient {
         })
     }
 
-    /// Sends a binary packet to the connected server.
-    pub fn send_packet(&self, data: Vec<u8>) -> Result<(), String> {
-        self.cmd_sender
-            .send(ClientCommand::Send(data))
-            .map_err(|e| e.to_string())
-    }
-
     /// Returns a cloned command sender to allow worker threads to send commands to the server.
-    pub fn get_cmd_sender(&self) -> Sender<ClientCommand> {
+    pub(crate) fn get_cmd_sender(&self) -> Sender<ClientCommand> {
         self.cmd_sender.clone()
     }
 
     /// Stops the client thread cleanly and immediately shuts down the underlying TCP connection.
-    pub fn stop(&mut self) {
+    pub(crate) fn stop(&mut self) {
         self.running.store(false, Ordering::SeqCst);
         let _ = self.cmd_sender.send(ClientCommand::Stop);
         if let Ok(mut guard) = self.active_tcp.lock() {

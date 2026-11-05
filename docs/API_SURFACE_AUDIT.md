@@ -378,7 +378,15 @@ PY
   - 根导出收敛：暴露规范纯净的 23 个生产接口（`VoxelWorld`, `SkinResolvedCallback`, `DeltaMesher`, `SectionMesher`, `ModelSource`, `VoxelStorage`, `SectionStorage`, `SectionBiomes`, `PaddedVoxelArray`, `SparseVoxelPayload`, `SparseVoxelColumns`, `VoxelPointCloud`, `PointCloudVoxelSource`, `BlockEntityData`, `block_index`, `VoxelReader`, `VoxelWriter`, `VoxelSource`, `ingest_from_source`, `FluidType`, `batch_repair_fluid_uv`, `repair_mesh_fluid_uv_inplace`, `repair_quad_fluid_uv`, `get_fluid_top_uvs`, `get_fluid_top_uvs_vec2`, `get_fluid_side_uvs`, `get_fluid_side_uvs_vec2`, `SmoothedBiomeColumn`, `get_point_column_biome`, `get_smoothed_column_biome`, `CoordinateSystem`, `MesherConfig`, `VoxelError`, `WorldMeshBuildResult`）；
   - 测试隔离：独立验证测试 `test_verify_against_blender.rs` 内化为 `src/verify_blender.rs` 的 `#[cfg(test)]` 单元测试，直接访问内部物理计算，不再污染公共面；
   - 下游（`mtk-save`, `mtk-bench`, `mtk-wasm`, `mtk-sync`, `mtk-py`）穿透引用统一收敛为根规范导出。
-- [ ] 推进后续 crate（`mtk-sync` → `mtk-resource` → `mtk-texture` → `mtk-material` → `mtk-save` → `mtk-package` → `libmtk`）内部 `pub mod` 改 `mod` 与根导出精简。
+- [x] **`mtk-sync` 根导出与模块私有化彻底完成 (Batch 4.5)**：
+  - 4 个内部模块（`client`, `events`, `protocol`, `session`）全部收敛为私有 `mod`；
+  - 废弃与零消费者符号清理：删除死代码 `SyncClient::send_packet`、`DeltaStagingBuffer::len`、`MAX_MESSAGE_SIZE`、`MAX_PALETTE_STRING_BYTES`、`TOTAL_PALETTE_STRING_BYTES`、`MAX_BASELINE_ENCODED_BYTES`，移除冗余重导出 `pub use mtk_model::normalize_canonical_blockstate`；
+  - 内部网络/调度/暂存细节降级为 `pub(crate)`：`SyncClient`, `ClientCommand`, `ClientMessage`, `BaselineAssembler`, `DeltaStagingBuffer`, `SessionState`, `event_worker_loop`, `check_debounced_remesh`, `handle_packet`, `HEADER_SIZE`, `MAX_PALETTE_ENTRIES`, `MAX_BASELINE_DECODED_BYTES`, `MAX_SELECTION_VOLUME`, `MAX_DELTA_BATCH_CHANGES`, `MAX_DELTA_STAGING_BATCHES`；
+  - 根导出收敛：仅暴露规范核心契约（`LiveSyncSession`, `SyncLifecycle`, `SyncEvent`, `normalize_stream_progress`, `decode_packet`, `encode_packet`, `Packet`, `DeltaChangeEntry`, `compute_sparse_state_hash`, `compute_sparse_state_hash_for_storage`, `compute_sparse_state_hash_for_point_cloud`, `compute_delta_batch_hash`, `compute_canonical_state_hash`, `SparseBlockEntry`, `SPARSE_CANONICAL_VERSION`, `Opcode`, `SyncDecision`, `BaselineAckResult`, `CancelReason`, `ResyncReason`, `ErrorCode`, `ProtocolError`, `PROTOCOL_MAGIC`, `PROTOCOL_VERSION`）；
+  - 测试隔离：内部测试 `test_baseline_alignment.rs` 与 `test_delta_seam_welding.rs` 移入 `src/` 作为内部 `#[cfg(test)]` 单元测试，直接访问内部调度器与基线组装器，杜绝因测试而泄露内部算子；
+  - 下游（`mtk-py/voxel/storage.rs`, `mtk-py/point_cloud.rs`, `mtk-py/protocol.rs`）穿透引用统一收敛为根规范导出；
+  - 同步重写 `crates/mtk-sync/README.md`，彻底移除旧版 v2 废弃协议描述。
+- [ ] 推进后续 crate（`mtk-resource` → `mtk-texture` → `mtk-material` → `mtk-save` → `mtk-package` → `libmtk`）内部 `pub mod` 改 `mod` 与根导出精简。
 - [ ] 每完成一个 crate 跑 `cargo test -p <crate>` 与 `cargo clippy -p <crate> --all-targets -- -D warnings`。
 
 ### Batch 5：绑定与适配器收敛

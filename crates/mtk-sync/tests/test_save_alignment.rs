@@ -17,10 +17,9 @@ use glam::IVec3;
 use mtk_core::AttributeData;
 use mtk_cull::FaceCuller;
 use mtk_material::BiomeResolver;
-use mtk_sync::protocol::constants::SyncDecision;
-use mtk_sync::protocol::hasher::compute_sparse_state_hash_for_storage;
-use mtk_sync::protocol::packet::*;
-use mtk_sync::{LiveSyncSession, SyncLifecycle};
+use mtk_sync::{
+    compute_sparse_state_hash_for_storage, LiveSyncSession, Packet, SyncDecision, SyncLifecycle,
+};
 use mtk_voxel::{
     MesherConfig, ModelSource, SectionBiomes, SectionMesher, SectionStorage, VoxelStorage,
 };

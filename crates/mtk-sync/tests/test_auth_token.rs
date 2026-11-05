@@ -10,8 +10,7 @@ use std::net::TcpListener;
 use std::thread;
 use std::time::Duration;
 
-use mtk_sync::protocol::{decode_packet, Packet};
-use mtk_sync::LiveSyncSession;
+use mtk_sync::{decode_packet, LiveSyncSession, Packet};
 use mtk_voxel::MesherConfig;
 use tungstenite::Message;
 

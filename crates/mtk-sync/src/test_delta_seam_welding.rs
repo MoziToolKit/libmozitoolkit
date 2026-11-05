@@ -9,9 +9,9 @@ use std::collections::HashSet;
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, RwLock};
 
+use crate::events::SyncEvent;
+use crate::session::{check_debounced_remesh, SessionState, SyncLifecycle};
 use crossbeam_channel::unbounded;
-use mtk_sync::events::SyncEvent;
-use mtk_sync::session::{check_debounced_remesh, SessionState, SyncLifecycle};
 use mtk_voxel::{MesherConfig, VoxelWorld};
 
 fn assert_no_duplicate_positions(mesh: &mtk_core::MeshData) {

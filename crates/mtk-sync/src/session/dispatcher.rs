@@ -33,38 +33,38 @@ pub enum SyncLifecycle {
 }
 
 /// Internal session state data container.
-pub struct SessionState {
-    pub lifecycle: SyncLifecycle,
-    pub epoch: u64,
-    pub sequence: u64,
-    pub server_uuid: [u8; 16],
+pub(crate) struct SessionState {
+    pub(crate) lifecycle: SyncLifecycle,
+    pub(crate) epoch: u64,
+    pub(crate) sequence: u64,
+    pub(crate) server_uuid: [u8; 16],
     /// Snapshot / world canonical state hash last confirmed by the server.
-    pub current_state_hash: u64,
-    pub min_pos: IVec3,
-    pub size: IVec3,
-    pub dimension: String,
-    pub palette_revision: u32,
-    pub palette_map: HashMap<u16, String>,
-    pub staging: DeltaStagingBuffer,
-    pub assembler: Option<BaselineAssembler>,
-    pub last_mesh_time: Option<Instant>,
-    pub pending_dirty_rebuild: bool,
+    pub(crate) current_state_hash: u64,
+    pub(crate) min_pos: IVec3,
+    pub(crate) size: IVec3,
+    pub(crate) dimension: String,
+    pub(crate) palette_revision: u32,
+    pub(crate) palette_map: HashMap<u16, String>,
+    pub(crate) staging: DeltaStagingBuffer,
+    pub(crate) assembler: Option<BaselineAssembler>,
+    pub(crate) last_mesh_time: Option<Instant>,
+    pub(crate) pending_dirty_rebuild: bool,
     /// Timestamp of the most recent delta event received (for channel quiet debounce).
-    pub last_delta_at: Option<Instant>,
+    pub(crate) last_delta_at: Option<Instant>,
     /// Timestamp when world first became dirty since last mesh emission.
-    pub dirty_since: Option<Instant>,
+    pub(crate) dirty_since: Option<Instant>,
     /// Last time any baseline/connection progress was observed (baseline watchdog).
-    pub last_progress_at: Instant,
+    pub(crate) last_progress_at: Instant,
     /// Rate-limiter so a corrupt stream cannot trigger a RESYNC storm.
-    pub resync_last_sent: Option<Instant>,
+    pub(crate) resync_last_sent: Option<Instant>,
     /// Consecutive baseline validation failures for the current selection. After a
     /// few retries we stop auto-resyncing and wait for an explicit refresh / new
     /// selection instead of spinning forever.
-    pub validation_failures: u32,
+    pub(crate) validation_failures: u32,
 }
 
 impl SessionState {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             lifecycle: SyncLifecycle::Connecting,
             epoch: 0,
@@ -89,7 +89,7 @@ impl SessionState {
     }
 
     /// Completely resets per-connection state (called for every new `start()`).
-    pub fn reset_for_new_connection(&mut self) {
+    pub(crate) fn reset_for_new_connection(&mut self) {
         *self = Self::new();
     }
 
@@ -147,7 +147,7 @@ impl Drop for WorkerExitGuard {
 }
 
 /// Background worker loop processing incoming network messages and driving the sync state machine.
-pub fn event_worker_loop(
+pub(crate) fn event_worker_loop(
     msg_receiver: Receiver<ClientMessage>,
     cmd_sender: Sender<ClientCommand>,
     world: Arc<RwLock<VoxelWorld>>,
@@ -410,7 +410,7 @@ fn check_baseline_watchdog(
 }
 
 /// Checks and performs debounced incremental dirty remeshing.
-pub fn check_debounced_remesh(
+pub(crate) fn check_debounced_remesh(
     state: &mut SessionState,
     world: &Arc<RwLock<VoxelWorld>>,
     event_sender: &Sender<SyncEvent>,
@@ -460,7 +460,7 @@ pub fn check_debounced_remesh(
 }
 
 /// Dispatches an individual packet against the session state machine.
-pub fn handle_packet(
+pub(crate) fn handle_packet(
     packet: Packet,
     bytes_len: usize,
     state: &mut SessionState,

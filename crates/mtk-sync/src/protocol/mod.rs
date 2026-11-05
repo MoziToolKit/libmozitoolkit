@@ -2,14 +2,22 @@
 //!
 //! Binary serialization, packet definitions, xxHash64 hasher, and network codecs for Minecraft Yefira Live Sync.
 
-pub mod codec;
-pub mod constants;
-pub mod error;
-pub mod hasher;
-pub mod packet;
+mod codec;
+mod constants;
+mod error;
+mod hasher;
+mod packet;
 
 pub use codec::{compute_delta_batch_hash, decode_packet, encode_packet};
-pub use constants::*;
+pub(crate) use constants::*;
+pub use constants::{
+    BaselineAckResult, CancelReason, ErrorCode, Opcode, ResyncReason, SyncDecision, PROTOCOL_MAGIC,
+    PROTOCOL_VERSION,
+};
 pub use error::ProtocolError;
-pub use hasher::{compute_canonical_state_hash, normalize_canonical_blockstate};
-pub use packet::*;
+pub use hasher::{
+    compute_canonical_state_hash, compute_sparse_state_hash,
+    compute_sparse_state_hash_for_point_cloud, compute_sparse_state_hash_for_storage,
+    SparseBlockEntry, SPARSE_CANONICAL_VERSION,
+};
+pub use packet::{DeltaChangeEntry, Packet};

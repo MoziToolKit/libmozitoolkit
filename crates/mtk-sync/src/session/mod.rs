@@ -17,16 +17,20 @@ use crate::client::{ClientCommand, ClientMessage, SyncClient};
 use crate::events::SyncEvent;
 use crate::protocol::*;
 
-pub mod assembler;
-pub mod dispatcher;
+mod assembler;
+mod dispatcher;
 mod hello;
-pub mod staging;
+mod staging;
 
+use dispatcher::{event_worker_loop, handle_packet};
 use hello::{default_hello, with_auth_token};
 
-pub use assembler::*;
-pub use dispatcher::*;
-pub use staging::*;
+#[cfg(test)]
+pub(crate) use assembler::BaselineAssembler;
+#[cfg(test)]
+pub(crate) use dispatcher::check_debounced_remesh;
+pub(crate) use dispatcher::SessionState;
+pub use dispatcher::SyncLifecycle;
 
 /// High-level Live Sync Session managing WebSocket streaming, VoxelWorld scene synchronization, and event queues.
 pub struct LiveSyncSession {
@@ -262,7 +266,7 @@ impl LiveSyncSession {
             missing_to_seq: seq + 1,
             reason: ResyncReason::StateHashMismatch,
         };
-        let buf = codec::encode_packet(&packet);
+        let buf = encode_packet(&packet);
         if let Some(cmd) = &self.cmd_sender {
             cmd.send(ClientCommand::Send(buf))
                 .map_err(|e| e.to_string())?;

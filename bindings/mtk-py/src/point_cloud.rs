@@ -363,7 +363,7 @@ impl PyVoxelPointCloud {
             )
         };
 
-        mtk_sync::protocol::hasher::compute_sparse_state_hash_for_point_cloud(
+        mtk_sync::compute_sparse_state_hash_for_point_cloud(
             &self.inner,
             min_pos_v,
             size_v,

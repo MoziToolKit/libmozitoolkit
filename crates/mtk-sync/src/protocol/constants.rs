@@ -8,18 +8,14 @@ pub const PROTOCOL_MAGIC: [u8; 2] = [0x4D, 0x54];
 pub const PROTOCOL_VERSION: u8 = 0x03;
 
 /// Standard 4-byte header size: Magic(2) + Version(1) + Opcode(1).
-pub const HEADER_SIZE: usize = 4;
+pub(crate) const HEADER_SIZE: usize = 4;
 
 /// Resource limit guards (RFC Section 2.2).
-pub const MAX_MESSAGE_SIZE: usize = 512 * 1024; // 512 KiB max message frame size
-pub const MAX_PALETTE_STRING_BYTES: usize = 1024;
-pub const MAX_PALETTE_ENTRIES: usize = 65535;
-pub const TOTAL_PALETTE_STRING_BYTES: usize = 4 * 1024 * 1024; // 4 MiB
-pub const MAX_BASELINE_ENCODED_BYTES: usize = 64 * 1024 * 1024; // 64 MiB
-pub const MAX_BASELINE_DECODED_BYTES: usize = 256 * 1024 * 1024; // 256 MiB
-pub const MAX_SELECTION_VOLUME: u64 = 33_554_432; // 32M voxels
-pub const MAX_DELTA_BATCH_CHANGES: usize = 16384;
-pub const MAX_DELTA_STAGING_BATCHES: usize = 256;
+pub(crate) const MAX_PALETTE_ENTRIES: usize = 65535;
+pub(crate) const MAX_BASELINE_DECODED_BYTES: usize = 256 * 1024 * 1024; // 256 MiB
+pub(crate) const MAX_SELECTION_VOLUME: u64 = 33_554_432; // 32M voxels
+pub(crate) const MAX_DELTA_BATCH_CHANGES: usize = 16384;
+pub(crate) const MAX_DELTA_STAGING_BATCHES: usize = 256;
 
 /// Protocol Opcode enumeration (RFC Section 4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

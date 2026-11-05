@@ -5,7 +5,7 @@
 use glam::IVec3;
 use xxhash_rust::xxh64::Xxh64;
 
-pub use mtk_model::normalize_canonical_blockstate;
+use mtk_model::normalize_canonical_blockstate;
 
 /// Canonical encoding version for sparse state hash: 0x02.
 pub const SPARSE_CANONICAL_VERSION: u8 = 0x02;

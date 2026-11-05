@@ -9,12 +9,10 @@ use std::io::Read;
 use glam::IVec3;
 use mtk_voxel::{SectionBiomes, SectionStorage, VoxelStorage};
 
-use crate::protocol::constants::{CancelReason, ResyncReason, MAX_SELECTION_VOLUME};
-use crate::protocol::hasher::compute_sparse_state_hash_for_storage;
-use crate::protocol::packet::Packet;
+use crate::protocol::*;
 
 /// Helper to unpack LSB-first bit-packed indices into u16 vector.
-pub fn unpack_lsb_indices(bytes: &[u8], count: usize, bits_per_item: u8) -> Vec<u16> {
+pub(crate) fn unpack_lsb_indices(bytes: &[u8], count: usize, bits_per_item: u8) -> Vec<u16> {
     if count == 0 {
         return Vec::new();
     }
@@ -90,41 +88,39 @@ pub fn unpack_lsb_indices(bytes: &[u8], count: usize, bits_per_item: u8) -> Vec<
 }
 
 /// Baseline assembly state machine.
-pub struct BaselineAssembler {
-    pub epoch: u64,
-    pub snapshot_uuid: [u8; 16],
-    pub snapshot_seq: u64,
-    pub min_pos: IVec3,
-    pub size: IVec3,
-    pub total_voxels: usize,
-    pub state_hash: u64,
-    pub palette_revision: u32,
-    pub total_chunks: u32,
-    pub compression_mode: u8,
-    pub palette_bits_per_block: u8,
-    pub biome_bits_per_quart: u8,
-    pub dimension: String,
-    pub block_palette: Vec<String>,
-    pub biome_palette: Vec<String>,
+pub(crate) struct BaselineAssembler {
+    pub(crate) epoch: u64,
+    pub(crate) snapshot_uuid: [u8; 16],
+    pub(crate) snapshot_seq: u64,
+    pub(crate) min_pos: IVec3,
+    pub(crate) size: IVec3,
+    pub(crate) total_voxels: usize,
+    pub(crate) total_chunks: u32,
+    pub(crate) compression_mode: u8,
+    pub(crate) palette_bits_per_block: u8,
+    pub(crate) biome_bits_per_quart: u8,
+    pub(crate) dimension: String,
+    pub(crate) block_palette: Vec<String>,
+    pub(crate) biome_palette: Vec<String>,
 
-    pub chunks_received: u32,
-    pub expected_next_voxel_index: u64,
-    pub raw_voxel_indices: Vec<u16>,
-    pub raw_quart_biome_indices: Vec<u16>,
-    pub block_entities: HashMap<IVec3, mtk_model::BlockEntityData>,
+    pub(crate) chunks_received: u32,
+    pub(crate) expected_next_voxel_index: u64,
+    pub(crate) raw_voxel_indices: Vec<u16>,
+    pub(crate) raw_quart_biome_indices: Vec<u16>,
+    pub(crate) block_entities: HashMap<IVec3, mtk_model::BlockEntityData>,
 }
 
 impl BaselineAssembler {
     /// Creates a new assembler from BASELINE_BEGIN packet.
-    pub fn new(begin_pkt: &Packet) -> Result<Self, CancelReason> {
+    pub(crate) fn new(begin_pkt: &Packet) -> Result<Self, CancelReason> {
         let (
             epoch,
             snapshot_uuid,
             snapshot_seq,
             min_pos,
             size,
-            state_hash,
-            palette_revision,
+            _state_hash,
+            _palette_revision,
             total_chunks,
             _total_encoded_bytes,
             _total_decoded_bytes,
@@ -193,8 +189,6 @@ impl BaselineAssembler {
             min_pos,
             size,
             total_voxels: total_voxels as usize,
-            state_hash,
-            palette_revision,
             total_chunks,
             compression_mode,
             palette_bits_per_block,
@@ -211,7 +205,7 @@ impl BaselineAssembler {
     }
 
     /// Appends and processes a single BASELINE_CHUNK.
-    pub fn process_chunk(&mut self, chunk: &Packet) -> Result<(), ResyncReason> {
+    pub(crate) fn process_chunk(&mut self, chunk: &Packet) -> Result<(), ResyncReason> {
         let (
             epoch,
             snapshot_uuid,
@@ -320,7 +314,7 @@ impl BaselineAssembler {
     }
 
     /// Validates BASELINE_END, reconstructs VoxelStorage, and verifies state_hash SSOT.
-    pub fn finalize(&self, end_pkt: &Packet) -> Result<VoxelStorage, ResyncReason> {
+    pub(crate) fn finalize(&self, end_pkt: &Packet) -> Result<VoxelStorage, ResyncReason> {
         let (epoch, snapshot_uuid, snapshot_seq, total_chunks_sent, final_state_hash, status) =
             match end_pkt {
                 Packet::BaselineEnd {

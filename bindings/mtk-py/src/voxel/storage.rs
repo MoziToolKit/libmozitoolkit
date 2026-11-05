@@ -185,12 +185,7 @@ impl PyVoxelStorage {
             )
         };
 
-        mtk_sync::protocol::hasher::compute_sparse_state_hash_for_storage(
-            &self.inner,
-            min_pos_v,
-            size_v,
-            dimension,
-        )
+        mtk_sync::compute_sparse_state_hash_for_storage(&self.inner, min_pos_v, size_v, dimension)
     }
 
     fn __repr__(&self) -> String {
