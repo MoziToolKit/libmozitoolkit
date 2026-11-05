@@ -9,7 +9,8 @@ pub use mtk_core::constants::voxel::{
 };
 
 /// Extracts canonical Minecraft blockstate identifier from raw state or JSON-wrapped string.
-/// Converts variants of air / structure_void / bubble_column to canonical "minecraft:air".
+/// Converts variants of air / structure_void to "minecraft:air", bubble_column to "minecraft:water",
+/// and waterlogged light/barrier to "minecraft:water" (otherwise "minecraft:air").
 #[inline]
 pub(crate) fn extract_canonical_state_str(raw_state: &str) -> &str {
     if raw_state.is_empty() || raw_state == "minecraft:air" {
@@ -34,9 +35,15 @@ pub(crate) fn extract_canonical_state_str(raw_state: &str) -> &str {
         | "cave_air"
         | "void_air"
         | "structure_void"
-        | "minecraft:structure_void"
-        | "bubble_column"
-        | "minecraft:bubble_column" => "minecraft:air",
+        | "minecraft:structure_void" => "minecraft:air",
+        "bubble_column" | "minecraft:bubble_column" => "minecraft:water",
+        "minecraft:light" | "light" | "minecraft:barrier" | "barrier" => {
+            if res.contains("waterlogged=true") {
+                "minecraft:water"
+            } else {
+                "minecraft:air"
+            }
+        }
         _ => res,
     }
 }

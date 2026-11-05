@@ -23,7 +23,11 @@ pub(crate) fn parse_fluid_info(state_str: &str) -> (Option<FluidType>, bool, u32
     let is_waterlogged = if props_str.contains("waterlogged=true") {
         true
     } else {
-        name == "seagrass" || name == "tall_seagrass" || name == "kelp" || name == "kelp_plant"
+        name == "seagrass"
+            || name == "tall_seagrass"
+            || name == "kelp"
+            || name == "kelp_plant"
+            || name == "bubble_column"
     };
 
     let base_name = name.strip_prefix("flowing_").unwrap_or(name);

@@ -279,3 +279,79 @@ fn test_flowing_fluid_top_face_under_ceiling_is_not_culled() {
         "sloped fluid top face beneath a solid ceiling must not be culled"
     );
 }
+
+#[test]
+fn test_bubble_column_and_waterlogged_continuous_fluid_mesh_no_hollow_wall() {
+    use glam::IVec3;
+    use mtk_cull::FaceCuller;
+
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+
+    // Row of 3 blocks submerged in water:
+    // (4, 4, 4) = water
+    // (5, 4, 4) = bubble_column
+    // (6, 4, 4) = light[waterlogged=true]
+    // (7, 4, 4) = water
+    world.set_block(4, 4, 4, "minecraft:water[level=0]", None);
+    world.set_block(5, 4, 4, "minecraft:bubble_column[drag=true]", None);
+    world.set_block(6, 4, 4, "minecraft:light[level=15,waterlogged=true]", None);
+    world.set_block(7, 4, 4, "minecraft:water[level=0]", None);
+
+    let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
+    let culler = FaceCuller::default();
+    let mesh = SectionMesher::mesh_section(
+        &padded,
+        &culler,
+        |_| ModelSource::None,
+        &MesherConfig::default(),
+    );
+
+    // Verify there are NO internal vertical faces along X = 5.0, 6.0, or 7.0 between the fluid blocks.
+    let quads = mesh
+        .quad_indices
+        .as_ref()
+        .expect("quad indices")
+        .as_chunks::<4>()
+        .0;
+
+    for quad in quads {
+        let p0 = mesh.positions[quad[0] as usize];
+        let p1 = mesh.positions[quad[1] as usize];
+        let p2 = mesh.positions[quad[2] as usize];
+        let p3 = mesh.positions[quad[3] as usize];
+
+        // An internal X-wall would have all 4 vertices at the exact same X coordinate (e.g. 5.0, 6.0, or 7.0)
+        let is_planar_x = (p0[0] - p1[0]).abs() < 1e-4
+            && (p1[0] - p2[0]).abs() < 1e-4
+            && (p2[0] - p3[0]).abs() < 1e-4;
+
+        if is_planar_x {
+            let x_val = p0[0];
+            assert!(
+                (x_val - 5.0).abs() > 1e-3 && (x_val - 6.0).abs() > 1e-3 && (x_val - 7.0).abs() > 1e-3,
+                "Found unexpected internal fluid wall at X = {x_val} between water and bubble_column/waterlogged light!"
+            );
+        }
+    }
+
+    // All 4 blocks must produce top fluid surfaces (around y ~ 4.888)
+    let top_quads_count = quads
+        .iter()
+        .filter(|quad| {
+            let p0 = mesh.positions[quad[0] as usize];
+            let p1 = mesh.positions[quad[1] as usize];
+            let p2 = mesh.positions[quad[2] as usize];
+            let p3 = mesh.positions[quad[3] as usize];
+            let is_horizontal_y = (p0[1] - p1[1]).abs() < 1e-4
+                && (p1[1] - p2[1]).abs() < 1e-4
+                && (p2[1] - p3[1]).abs() < 1e-4;
+            is_horizontal_y && p0[1] > 4.5
+        })
+        .count();
+
+    assert_eq!(
+        top_quads_count, 4,
+        "All 4 adjacent fluid blocks (water, bubble_column, waterlogged light, water) must emit top fluid surfaces"
+    );
+}
