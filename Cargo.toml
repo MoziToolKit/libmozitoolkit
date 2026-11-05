@@ -27,7 +27,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Mozi <mozi1924@arasaka.ltd>"]
 license = "GPL-3.0-or-later"
-repository = "https://github.com/mozi1924/libmozitoolkit"
+repository = "https://github.com/MoziToolKit/libmozitoolkit"
 readme = "README.md"
 rust-version = "1.88.0"
 [workspace.dependencies]

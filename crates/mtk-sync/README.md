@@ -3,7 +3,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](https://www.gnu.org/licenses/gpl-3.0.html)
 
-**`mtk-sync`** 是 `libmozitoolkit` (`libmtk`) 套件中的实时网络协同与二进制增量流客户端 Crate。遵循 **无宿主依赖 (Host-Agnostic)** 原则，专为建立 Minecraft（伴随模组如 [Yefira](https://github.com/mozi1924/yefira)）与 3D DCC 宿主（如 Blender [MoziToolKit](https://github.com/mozi1924/MoziToolKit) 插件、WebGPU 视口或独立渲染器）之间的高性能双向二进制实时通信通道而设计。
+**`mtk-sync`** 是 `libmozitoolkit` (`libmtk`) 套件中的实时网络协同与二进制增量流客户端 Crate。遵循 **无宿主依赖 (Host-Agnostic)** 原则，专为建立 Minecraft（伴随模组如 [Yefira](https://github.com/MoziToolKit/yefira)）与 3D DCC 宿主（如 Blender [MoziToolKit](https://github.com/MoziToolKit/MoziToolKit) 插件、WebGPU 视口或独立渲染器）之间的高性能双向二进制实时通信通道而设计。
 
 核心遵循 **RFC v3.1: MTK 2.0 Live Sync 协议与架构设计规范**，将选区状态机、两阶段流式传输、全量基线解算、xxHash64 空间状态指纹自愈、增量网格合并与单一世界大网格完全收敛在后台。
 
