@@ -430,8 +430,16 @@ PY
   - 测试隔离：将 `test_toc_forged_count_rejected`、`test_forged_toc_offsets_rejected` 与对齐检查下沉为各模块内 `#[cfg(test)]` 单元测试；
   - 下游穿透引用收敛：`libmtk`, `bindings/mtk-py` 统一采用 `iter_chunk_identifiers` 访问图集分块；
   - 同步更新 `crates/mtk-package/README.md`。
-- [ ] 推进后续 crate（`libmtk`）内部 `pub mod` 改 `mod` 与根导出精简。
-- [ ] 每完成一个 crate 跑 `cargo test -p <crate>` 与 `cargo clippy -p <crate> --all-targets -- -D warnings`。
+- [x] **`libmtk` 根导出与模块私有化彻底完成 (Batch 4.11)**：
+  - 2 个一级模块（`prebake`, `scene`）全部收敛为私有 `mod`；
+  - 7 个二级内部模块全部收敛为私有 `mod`：`prebake/{engine, models, reader, resolver}`、`scene/{exporter, metadata, package}`；
+  - 7 个三级内部模块全部收敛为私有 `mod`：`scene/exporter/{builder, collector, cropper, source}`、`scene/package/{reader, validator, writer}`；
+  - 废弃与零消费者符号清理：物理删除死结构体 `ScenePackageWriteOptions`（所有调用方均恒为 `None`，写包默认 zeroed fingerprint）、删除无外部调用的 `prebake_all_models_with_progress`、简化 `export_scene_package` 签名；
+  - 内部实现细节降级为 `pub(crate)`：`build_scene_interchange`、`write_scene_package`、`SceneWriteRequest`、`SCENE_PACKAGE_FORMAT_VERSION`；
+  - 根导出收敛：暴露精简规范的应用层生产契约（`fingerprint_str_to_bytes16`, `prebake_all_models`, `precompile_all_assets`, `precompile_all_assets_with_progress`, `resolve_active_cache_package`, `AssetCacheReader`, `CacheManifest`, `PrecompileConfig`, `PrecompileResult`, `ASSET_CACHE_FORMAT_VERSION`, `export_scene_package`, `CtmMode`, `SceneAtlasSource`, `SceneBundle`, `SceneCapabilities`, `SceneExportRequest`, `SceneExportResult`, `SceneExporterConfig`, `SceneMetadata`, `ScenePackageReader`, `ValidationReport`, `MtkError`）；
+  - 下游穿透引用收敛：`bindings/mtk-py/src/scene/{exporter, metadata, reader}.rs` 中对 `libmtk::scene::*` 的穿透统一收敛为根命名空间 `libmtk::*`；
+  - 同步更新 `crates/libmtk/README.md`。
+- [x] **Batch 4 所有 11 个核心领域 Crate 私有化与根导出收敛全面达成！**
 
 ### Batch 5：绑定与适配器收敛
 

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
 
-use libmtk::scene::{
+use libmtk::{
     export_scene_package as libmtk_export_scene, CtmMode, SceneExportRequest, SceneExporterConfig,
 };
 use mtk_voxel::SparseVoxelPayload;
@@ -124,7 +124,7 @@ pub fn export_scene_package<'py>(
         ctm_mode: resolved_ctm_mode,
     };
 
-    let result = libmtk_export_scene(output_path, request, None)
+    let result = libmtk_export_scene(output_path, request)
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
     Ok(PySceneMetadata {

@@ -11,31 +11,23 @@ use mtk_voxel::SparseVoxelPayload;
 use crate::scene::metadata::SceneMetadata;
 use crate::MtkError;
 
-/// Helper options for authoring `.mtkscene` packages.
-#[derive(Debug, Clone, Default)]
-pub struct ScenePackageWriteOptions {
-    /// Optional content fingerprint (defaults to zeroed 16 bytes).
-    pub fingerprint: Option<[u8; 16]>,
-}
-
 /// Request parameters for writing an `.mtkscene` scene interchange package.
 #[derive(Debug, Clone)]
-pub struct SceneWriteRequest<'a> {
-    pub metadata: &'a SceneMetadata,
-    pub voxels: &'a SparseVoxelPayload,
-    pub models: Option<&'a BakedModelDatabase>,
-    pub atlas_mapping: Option<&'a AtlasAddressMap>,
-    pub atlas_textures: &'a [(String, Vec<u8>)],
-    pub colormaps: Option<&'a [(String, Vec<u8>)]>,
-    pub biome_resolver_json: Option<&'a str>,
-    pub ctm_rules: Option<&'a [mtk_resource::CtmRule]>,
-    pub dynamic_entity_slots: Option<&'a HashMap<String, (u16, u16)>>,
-    pub options: Option<&'a ScenePackageWriteOptions>,
+pub(crate) struct SceneWriteRequest<'a> {
+    pub(crate) metadata: &'a SceneMetadata,
+    pub(crate) voxels: &'a SparseVoxelPayload,
+    pub(crate) models: Option<&'a BakedModelDatabase>,
+    pub(crate) atlas_mapping: Option<&'a AtlasAddressMap>,
+    pub(crate) atlas_textures: &'a [(String, Vec<u8>)],
+    pub(crate) colormaps: Option<&'a [(String, Vec<u8>)]>,
+    pub(crate) biome_resolver_json: Option<&'a str>,
+    pub(crate) ctm_rules: Option<&'a [mtk_resource::CtmRule]>,
+    pub(crate) dynamic_entity_slots: Option<&'a HashMap<String, (u16, u16)>>,
 }
 
 impl<'a> SceneWriteRequest<'a> {
     /// Creates a minimal `SceneWriteRequest` with required fields.
-    pub fn new(
+    pub(crate) fn new(
         metadata: &'a SceneMetadata,
         voxels: &'a SparseVoxelPayload,
         atlas_textures: &'a [(String, Vec<u8>)],
@@ -50,17 +42,16 @@ impl<'a> SceneWriteRequest<'a> {
             biome_resolver_json: None,
             ctm_rules: None,
             dynamic_entity_slots: None,
-            options: None,
         }
     }
 }
 
 /// High-level function to write an `.mtkscene` package file to disk.
-pub fn write_scene_package(
+pub(crate) fn write_scene_package(
     path: impl AsRef<Path>,
     req: SceneWriteRequest<'_>,
 ) -> Result<(), MtkError> {
-    let fp = req.options.and_then(|o| o.fingerprint).unwrap_or([0u8; 16]);
+    let fp = [0u8; 16];
 
     let mut writer = MtkPackageFileWriter::create(path, PackageProfile::SceneInterchange, fp)?;
 

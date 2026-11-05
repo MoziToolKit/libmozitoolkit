@@ -224,7 +224,6 @@ fn test_export_scene_package_file_roundtrip() {
             dynamic_entity_slots: Some(&fake_slots),
             ctm_mode: CtmMode::Disabled,
         },
-        None,
     )
     .expect("Export scene package file");
 

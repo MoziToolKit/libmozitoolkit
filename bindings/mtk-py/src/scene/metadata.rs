@@ -3,7 +3,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-use libmtk::scene::SceneMetadata;
+use libmtk::SceneMetadata;
 
 /// Python wrapper for Scene Interchange metadata (`META` chunk).
 #[pyclass(name = "SceneMetadata")]

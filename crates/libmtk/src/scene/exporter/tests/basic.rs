@@ -546,7 +546,6 @@ fn test_scene_export_pbr_channels_and_colormaps_roundtrip() {
             dynamic_entity_slots: None,
             ctm_mode: CtmMode::Disabled,
         },
-        None,
     )
     .expect("Export scene package");
 
@@ -688,7 +687,6 @@ fn test_scene_export_ctm_rules_and_subtiles_roundtrip() {
             dynamic_entity_slots: None,
             ctm_mode: CtmMode::Explicit(&[rule]),
         },
-        None,
     )
     .expect("Export scene package with CTM");
 
@@ -848,7 +846,6 @@ fn test_scene_export_banner_with_patterns_and_custom_baker() {
             dynamic_entity_slots: None,
             ctm_mode: CtmMode::Disabled,
         },
-        None,
     )
     .expect("Export banner scene package");
 

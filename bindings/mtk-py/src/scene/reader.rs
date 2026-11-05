@@ -3,7 +3,7 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyMemoryView};
 
-use libmtk::scene::ScenePackageReader;
+use libmtk::ScenePackageReader;
 use mtk_voxel::{CoordinateSystem, MesherConfig};
 
 use super::metadata::PySceneMetadata;

@@ -14,19 +14,18 @@
 
 use thiserror::Error;
 
-pub mod prebake;
-pub mod scene;
+mod prebake;
+mod scene;
 
 pub use prebake::{
-    fingerprint_str_to_bytes16, prebake_all_models, prebake_all_models_with_progress,
-    precompile_all_assets, precompile_all_assets_with_progress, resolve_active_cache_package,
-    AssetCacheReader, CacheManifest, PrecompileConfig, PrecompileResult,
-    ASSET_CACHE_FORMAT_VERSION,
+    fingerprint_str_to_bytes16, prebake_all_models, precompile_all_assets,
+    precompile_all_assets_with_progress, resolve_active_cache_package, AssetCacheReader,
+    CacheManifest, PrecompileConfig, PrecompileResult, ASSET_CACHE_FORMAT_VERSION,
 };
 pub use scene::{
-    export_scene_package, CtmMode, SceneBundle, SceneCapabilities, SceneExportRequest,
-    SceneExporterConfig, SceneMetadata, ScenePackageReader, ValidationReport,
-    SCENE_PACKAGE_FORMAT_VERSION,
+    export_scene_package, CtmMode, SceneAtlasSource, SceneBundle, SceneCapabilities,
+    SceneExportRequest, SceneExportResult, SceneExporterConfig, SceneMetadata, ScenePackageReader,
+    ValidationReport,
 };
 
 /// Unified error type for all `libmtk` application-layer operations.

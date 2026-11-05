@@ -6,10 +6,10 @@
 //! self-contained Scene Mini-Atlas, remaps model UV coordinates, and bundles everything
 //! into a self-contained `.mtkscene` package.
 
-pub mod builder;
-pub mod collector;
-pub mod cropper;
-pub mod source;
+mod builder;
+mod collector;
+mod cropper;
+mod source;
 
 #[cfg(test)]
 mod tests;
@@ -21,12 +21,9 @@ pub use builder::{SceneExportResult, SceneExporterConfig};
 use mtk_model::BakedModelDatabase;
 use mtk_texture::AtlasAddressMap;
 use mtk_voxel::SparseVoxelPayload;
-pub use source::{
-    AtlasLayerSource, BiomeAssetSource, CtmAssetSource, EntityAssetSource, SceneAtlasSource,
-    SceneSourceCapabilities,
-};
+pub use source::SceneAtlasSource;
 
-use super::package::{write_scene_package, ScenePackageWriteOptions, SceneWriteRequest};
+use super::package::{write_scene_package, SceneWriteRequest};
 use crate::MtkError;
 
 /// Explicit CTM rule resolution mode during scene interchange export.
@@ -54,7 +51,7 @@ pub struct SceneExportRequest<'a, S: SceneAtlasSource> {
 }
 
 /// Builds all components of a Scene Interchange bundle in memory.
-pub fn build_scene_interchange<S: SceneAtlasSource>(
+pub(crate) fn build_scene_interchange<S: SceneAtlasSource>(
     req: SceneExportRequest<'_, S>,
 ) -> Result<SceneExportResult, MtkError> {
     // 1. Resolve source CTM rules based on the explicit CtmMode
@@ -157,7 +154,6 @@ pub fn build_scene_interchange<S: SceneAtlasSource>(
 pub fn export_scene_package<S: SceneAtlasSource>(
     path: impl AsRef<Path>,
     req: SceneExportRequest<'_, S>,
-    write_options: Option<&ScenePackageWriteOptions>,
 ) -> Result<SceneExportResult, MtkError> {
     let voxels = req.voxels;
     let raw_dynamic_entity_slots = req.dynamic_entity_slots;
@@ -203,7 +199,6 @@ pub fn export_scene_package<S: SceneAtlasSource>(
     } else {
         None
     };
-    write_req.options = write_options;
 
     write_scene_package(path, write_req)?;
 

@@ -98,21 +98,27 @@ pub fn prebake_all_models(
     atlas_map: Option<&AtlasAddressMap>,
 ) -> Result<BakedModelDatabase, MtkError>;
 
-pub fn prebake_all_models_with_progress(
-    stack: &ResourcePackStack,
-    atlas_map: Option<&AtlasAddressMap>,
-    progress_callback: Option<ProgressCallback>,
-) -> Result<BakedModelDatabase, MtkError>;
+pub fn resolve_active_cache_package(
+    cache_dir: impl AsRef<Path>,
+    fingerprint: Option<[u8; 16]>,
+) -> Option<PathBuf>;
 
+// 3. 场景交换包导出与解析 (.mtkscene)
+pub fn export_scene_package<S: SceneAtlasSource>(
+    path: impl AsRef<Path>,
+    req: SceneExportRequest<'_, S>,
+) -> Result<SceneExportResult, MtkError>;
+
+pub struct ScenePackageReader { /* ... */ }
 ```
 
 ---
 
 ### 3.1 缓存包解析
 
-`libmtk::prebake::resolve_active_cache_package(cache_dir, fingerprint)` 提供宿主无关的
+`libmtk::resolve_active_cache_package(cache_dir, fingerprint)` 提供宿主无关的
 `.mtkcache` 选择策略：direct-name 优先、package header fingerprint 校验、mtime 最新回退。
-Blender 与 C4D 均应通过该函数定位 active cache。
+Blender 与外部 DCC 均通过该规范入口定位 active cache。
 
 ## 4. 快速上手示例 (Quick Start)
 

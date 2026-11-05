@@ -24,7 +24,7 @@ fn is_dynamic_entity_texture(tex: &str) -> bool {
 }
 
 /// Prebakes all blockstates discovered across all active resource packs in the stack with physical progress reporting.
-pub fn prebake_all_models_with_progress(
+pub(crate) fn prebake_all_models_with_progress(
     stack: &ResourcePackStack,
     atlas_map: Option<&AtlasAddressMap>,
     progress_callback: Option<ProgressCallback>,

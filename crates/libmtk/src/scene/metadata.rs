@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 /// Current format version for `.mtkscene` scene interchange packages.
-pub const SCENE_PACKAGE_FORMAT_VERSION: u32 = 1;
+pub(crate) const SCENE_PACKAGE_FORMAT_VERSION: u32 = 1;
 
 /// Detailed capability flags declared by this scene interchange package.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
