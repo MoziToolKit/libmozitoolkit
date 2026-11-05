@@ -77,6 +77,15 @@ impl VoxelStorage {
                     }
                 }
             }
+
+            if !padded.block_entities.is_empty() {
+                padded.block_entities.retain(|&local_idx, _| {
+                    let lx = ((local_idx >> 8) & 15) as i32;
+                    let ly = ((local_idx >> 4) & 15) as i32;
+                    let lz = (local_idx & 15) as i32;
+                    self.contains(sec_wx + lx, sec_wy + ly, sec_wz + lz)
+                });
+            }
         }
 
         let has_biomes = sec.biomes.is_some()

@@ -242,6 +242,20 @@ impl ChunkParser {
                     let x = be_comp.int("x").unwrap_or(0);
                     let y = be_comp.int("y").unwrap_or(0);
                     let z = be_comp.int("z").unwrap_or(0);
+
+                    // Validate chunk coordinate bounds if chunk coordinate tags are present
+                    let chunk_x_valid = chunk
+                        .int("xPos")
+                        .or_else(|| chunk.int("x_pos"))
+                        .is_none_or(|cx| x.div_euclid(16) == cx);
+                    let chunk_z_valid = chunk
+                        .int("zPos")
+                        .or_else(|| chunk.int("z_pos"))
+                        .is_none_or(|cz| z.div_euclid(16) == cz);
+                    if !chunk_x_valid || !chunk_z_valid {
+                        continue;
+                    }
+
                     let sec_y = y.div_euclid(16);
 
                     if sec_y >= min_section_y && sec_y <= max_section_y {

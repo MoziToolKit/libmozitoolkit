@@ -963,6 +963,15 @@ pub(crate) fn handle_packet(
             ..
         } => {
             if epoch == state.epoch {
+                if rel_pos.x < 0
+                    || rel_pos.x >= state.size.x
+                    || rel_pos.y < 0
+                    || rel_pos.y >= state.size.y
+                    || rel_pos.z < 0
+                    || rel_pos.z >= state.size.z
+                {
+                    return;
+                }
                 let wx = state.min_pos.x + rel_pos.x;
                 let wy = state.min_pos.y + rel_pos.y;
                 let wz = state.min_pos.z + rel_pos.z;

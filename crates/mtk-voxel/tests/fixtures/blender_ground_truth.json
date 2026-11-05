@@ -1,40 +1,4 @@
 {
-  "crc_tests": [
-    {
-      "name": "empty_section_crc",
-      "blocks": {},
-      "expected_crc": 3016428912
-    },
-    {
-      "name": "single_stone_at_0_0_0",
-      "blocks": {
-        "0,0,0": "minecraft:stone"
-      },
-      "expected_crc": 1734417338
-    },
-    {
-      "name": "diagonal_oak_planks",
-      "blocks": {
-        "0,0,0": "minecraft:oak_planks",
-        "1,0,1": "minecraft:oak_planks",
-        "2,0,2": "minecraft:oak_planks",
-        "3,0,3": "minecraft:oak_planks",
-        "4,0,4": "minecraft:oak_planks",
-        "5,0,5": "minecraft:oak_planks",
-        "6,0,6": "minecraft:oak_planks",
-        "7,0,7": "minecraft:oak_planks",
-        "8,0,8": "minecraft:oak_planks",
-        "9,0,9": "minecraft:oak_planks",
-        "10,0,10": "minecraft:oak_planks",
-        "11,0,11": "minecraft:oak_planks",
-        "12,0,12": "minecraft:oak_planks",
-        "13,0,13": "minecraft:oak_planks",
-        "14,0,14": "minecraft:oak_planks",
-        "15,0,15": "minecraft:oak_planks"
-      },
-      "expected_crc": 1986594889
-    }
-  ],
   "fluid_tests": [
     {
       "name": "single_source_water",

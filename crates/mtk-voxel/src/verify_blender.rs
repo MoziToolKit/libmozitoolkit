@@ -68,9 +68,6 @@ struct MeshTestCase {
 
 #[derive(Debug, Deserialize)]
 struct BlenderGroundTruth {
-    #[serde(default)]
-    #[allow(dead_code)]
-    crc_tests: Option<serde_json::Value>,
     fluid_tests: Vec<FluidTestCase>,
     biome_tests: Vec<BiomeTestCase>,
     fluid_uv_tests: Vec<FluidUvTestCase>,

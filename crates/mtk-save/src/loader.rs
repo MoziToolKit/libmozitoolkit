@@ -276,10 +276,32 @@ impl SaveLoader {
                         let sections =
                             ChunkParser::parse_chunk(&decompressed, min_sec_y, max_sec_y)?;
 
-                        for section in sections {
+                        for mut section in sections {
                             let sec_x = section.coord.x;
                             let sec_y = section.coord.y;
                             let sec_z = section.coord.z;
+
+                            // Filter block entities strictly within [true_min, true_max] bounding box
+                            if !section.block_entities.is_empty() {
+                                let sec_base_x = sec_x * 16;
+                                let sec_base_y = sec_y * 16;
+                                let sec_base_z = sec_z * 16;
+                                section.block_entities.retain(|&local_idx, _| {
+                                    let lx = ((local_idx >> 8) & 15) as i32;
+                                    let ly = ((local_idx >> 4) & 15) as i32;
+                                    let lz = (local_idx & 15) as i32;
+                                    let wx = sec_base_x + lx;
+                                    let wy = sec_base_y + ly;
+                                    let wz = sec_base_z + lz;
+                                    wx >= true_min.x
+                                        && wx <= true_max.x
+                                        && wy >= true_min.y
+                                        && wy <= true_max.y
+                                        && wz >= true_min.z
+                                        && wz <= true_max.z
+                                });
+                            }
+
                             storage.set_section(sec_x, sec_y, sec_z, section);
                             loaded_sections += 1;
                         }

@@ -489,6 +489,15 @@ impl BaselineAssembler {
 
         // Apply RFC v3.2 Sparse Block Entities
         for (rel_pos, entity) in &self.block_entities {
+            if rel_pos.x < 0
+                || rel_pos.x >= self.size.x
+                || rel_pos.y < 0
+                || rel_pos.y >= self.size.y
+                || rel_pos.z < 0
+                || rel_pos.z >= self.size.z
+            {
+                continue;
+            }
             let wx = self.min_pos.x + rel_pos.x;
             let wy = self.min_pos.y + rel_pos.y;
             let wz = self.min_pos.z + rel_pos.z;

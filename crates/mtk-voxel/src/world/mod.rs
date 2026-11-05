@@ -345,7 +345,7 @@ impl VoxelWorld {
         crate::source::ingest_from_source(source, &mut self.storage, sections)
     }
 
-    /// Exports manifest metadata (bounds, generation, section CRCs) as JSON.
+    /// Exports manifest metadata (bounds, generation, known empty sections) as JSON.
     #[cfg(feature = "serde")]
     pub fn export_manifest_metadata(&self) -> serde_json::Value {
         self.storage.export_manifest_metadata()
@@ -561,7 +561,18 @@ impl VoxelWorld {
 
         for sec_coord in coords {
             if let Some(sec) = self.storage.sections.get(sec_coord) {
-                for be in sec.block_entities.values() {
+                for (&local_idx, be) in &sec.block_entities {
+                    if self.storage.has_explicit_bounds {
+                        let lx = ((local_idx >> 8) & 15) as i32;
+                        let ly = ((local_idx >> 4) & 15) as i32;
+                        let lz = (local_idx & 15) as i32;
+                        let wx = sec_coord.x * 16 + lx;
+                        let wy = sec_coord.y * 16 + ly;
+                        let wz = sec_coord.z * 16 + lz;
+                        if !self.storage.contains(wx, wy, wz) {
+                            continue;
+                        }
+                    }
                     if let mtk_model::BlockEntityData::Skull { kind, profile, .. } = be {
                         if *kind == mtk_model::skull::SkullKind::Player {
                             let (skin_url, uuid, name) = if let Some(prof) = profile {
@@ -742,7 +753,18 @@ impl VoxelWorld {
 
         for sec_coord in coords {
             if let Some(sec) = self.storage.sections.get(sec_coord) {
-                for be in sec.block_entities.values() {
+                for (&local_idx, be) in &sec.block_entities {
+                    if self.storage.has_explicit_bounds {
+                        let lx = ((local_idx >> 8) & 15) as i32;
+                        let ly = ((local_idx >> 4) & 15) as i32;
+                        let lz = (local_idx & 15) as i32;
+                        let wx = sec_coord.x * 16 + lx;
+                        let wy = sec_coord.y * 16 + ly;
+                        let wz = sec_coord.z * 16 + lz;
+                        if !self.storage.contains(wx, wy, wz) {
+                            continue;
+                        }
+                    }
                     if let mtk_model::BlockEntityData::Skull { kind, profile, .. } = be {
                         if *kind == mtk_model::skull::SkullKind::Player {
                             let (skin_url, uuid, name) = if let Some(prof) = profile {

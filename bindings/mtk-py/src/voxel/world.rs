@@ -194,7 +194,7 @@ impl PyVoxelWorld {
     }
 
     /// Syncs world storage with updated storage (e.g. from carved point cloud)
-    /// and marks only sections with CRC checksum differences as dirty.
+    /// and marks only sections with storage differences as dirty.
     pub fn sync_from_storage(&mut self, new_storage: &PyVoxelStorage) -> usize {
         self.inner.sync_from_storage(&new_storage.inner)
     }

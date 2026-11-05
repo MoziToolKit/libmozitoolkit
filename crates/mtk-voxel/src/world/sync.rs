@@ -10,7 +10,7 @@ use super::VoxelWorld;
 
 impl VoxelWorld {
     /// Syncs world storage with an updated storage instance and marks only sections
-    /// with modified CRC checksums (and their immediate boundary neighbors) as dirty.
+    /// with modified section content (and their immediate boundary neighbors) as dirty.
     /// Returns the number of dirty sections requiring meshing.
     pub fn sync_from_storage(&mut self, new_storage: &VoxelStorage) -> usize {
         let mut dirty = HashSet::new();
