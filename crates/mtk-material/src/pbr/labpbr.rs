@@ -18,7 +18,7 @@ use mtk_texture::RgbaBuffer;
 use rayon::prelude::*;
 
 use crate::error::MaterialError;
-use crate::pbr::types::{DecodedPbr, PbrMeta};
+use crate::pbr::types::DecodedPbr;
 
 /// Old decoder's default `_s.R` when a chunk has no specular companion.
 /// `1.0 - 0.292893 = 0.707107` perceptual roughness.
@@ -62,18 +62,15 @@ static SSS_LUT: LazyLock<[u8; 256]> = LazyLock::new(|| {
 ///
 /// The two inputs may be `None` independently. When both are `None` the result
 /// is empty and only carries metadata.
-pub fn decode_labpbr13(
+pub(crate) fn decode_labpbr13(
     normal: Option<&RgbaBuffer>,
     specular: Option<&RgbaBuffer>,
 ) -> Result<DecodedPbr, MaterialError> {
-    let meta = PbrMeta::labpbr13();
-
     if normal.is_none() && specular.is_none() {
         return Ok(DecodedPbr {
             normal_gl: None,
             orm: None,
             aux: None,
-            meta,
         });
     }
 
@@ -93,7 +90,6 @@ pub fn decode_labpbr13(
             normal_gl: None,
             orm: None,
             aux: None,
-            meta,
         });
     }
 
@@ -298,14 +294,7 @@ pub fn decode_labpbr13(
         normal_gl,
         orm,
         aux,
-        meta,
     })
-}
-
-/// Decode the 8-bit `aux.R` IOR encoding back to a scalar IOR.
-#[inline]
-pub fn decode_ior(encoded: u8) -> f32 {
-    encoded as f32 / 255.0 * 7.0 + 1.0
 }
 
 #[inline]
@@ -375,4 +364,126 @@ fn encode_unit(value: f32) -> u8 {
 #[inline]
 fn encode_ior(ior: f32) -> u8 {
     encode_unit((ior.clamp(1.0, MAX_IOR) - 1.0) / (MAX_IOR - 1.0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn decode_ior(encoded: u8) -> f32 {
+        encoded as f32 / 255.0 * 7.0 + 1.0
+    }
+
+    fn buffer(width: u32, height: u32, pixels: &[[u8; 4]]) -> RgbaBuffer {
+        assert_eq!(pixels.len() as u32, width * height);
+        let mut buffer = RgbaBuffer::new(width, height);
+        for (index, pixel) in pixels.iter().enumerate() {
+            buffer.set_pixel(index as u32 % width, index as u32 / width, *pixel);
+        }
+        buffer
+    }
+
+    #[test]
+    fn missing_both_companions_is_empty() {
+        let decoded = decode_labpbr13(None, None).expect("decode");
+        assert!(decoded.normal_gl.is_none());
+        assert!(decoded.orm.is_none());
+        assert!(decoded.aux.is_none());
+    }
+
+    #[test]
+    fn normal_only_reconstructs_gl_normal_and_default_orm() {
+        let normal = buffer(2, 1, &[[128, 128, 255, 128], [255, 0, 0, 255]]);
+        let decoded = decode_labpbr13(Some(&normal), None).expect("decode");
+        let normal_gl = decoded.normal_gl.expect("normal_gl");
+        let orm = decoded.orm.expect("orm");
+        assert!(decoded.aux.is_none());
+
+        assert_eq!(normal_gl.get_pixel(0, 0), [128, 127, 255, 128]);
+        assert_eq!(normal_gl.get_pixel(1, 0), [255, 255, 128, 255]);
+
+        // AO comes from _n.B; height is copied to normal_gl.A; default roughness 0.707.
+        assert_eq!(orm.get_pixel(0, 0), [255, 180, 0, 0]);
+        assert_eq!(orm.get_pixel(1, 0), [0, 180, 0, 0]);
+    }
+
+    #[test]
+    fn specular_only_unpacks_orm_and_aux() {
+        let specular = buffer(2, 1, &[[0, 0, 0, 0], [128, 10, 64, 254]]);
+        let decoded = decode_labpbr13(None, Some(&specular)).expect("decode");
+        assert!(decoded.normal_gl.is_none());
+        let orm = decoded.orm.expect("orm");
+        let aux = decoded.aux.expect("aux");
+
+        // No normal -> AO defaults to 255.
+        assert_eq!(orm.get_pixel(0, 0), [255, 255, 0, 0]);
+        assert_eq!(aux.get_pixel(0, 0), [0, 0, 0, 0]);
+
+        assert_eq!(orm.get_pixel(1, 0), [255, 127, 0, 255]);
+        // IOR from F0=10/255 ~= 1.494 -> encoded 18; porosity 64 -> 255; SSS 0.
+        assert_eq!(aux.get_pixel(1, 0), [18, 255, 0, 0]);
+        assert!((decode_ior(18) - 1.494).abs() < 0.01);
+    }
+
+    #[test]
+    fn both_companions_keep_ao_metal_and_sss() {
+        let normal = buffer(1, 1, &[[128, 128, 255, 255]]);
+        let specular = buffer(1, 1, &[[255, 230, 255, 128]]);
+        let decoded = decode_labpbr13(Some(&normal), Some(&specular)).expect("decode");
+        let orm = decoded.orm.expect("orm");
+        let aux = decoded.aux.expect("aux");
+
+        assert_eq!(orm.get_pixel(0, 0), [255, 0, 255, 129]);
+        // Metal -> IOR 1.5; B=255 -> porosity 0, SSS 1.0.
+        assert_eq!(aux.get_pixel(0, 0), [18, 0, 255, 0]);
+    }
+
+    #[test]
+    fn emission_255_means_no_data() {
+        let specular = buffer(3, 1, &[[0, 0, 0, 255], [0, 0, 0, 254], [0, 0, 0, 128]]);
+        let decoded = decode_labpbr13(None, Some(&specular)).expect("decode");
+        let orm = decoded.orm.expect("orm");
+        assert_eq!(orm.get_pixel(0, 0)[3], 0);
+        assert_eq!(orm.get_pixel(1, 0)[3], 255);
+        assert_eq!(orm.get_pixel(2, 0)[3], 129);
+    }
+
+    #[test]
+    fn porosity_and_sss_split_at_64_65() {
+        let specular = buffer(3, 1, &[[0, 0, 64, 0], [0, 0, 65, 0], [0, 0, 255, 0]]);
+        let decoded = decode_labpbr13(None, Some(&specular)).expect("decode");
+        let aux = decoded.aux.expect("aux");
+
+        assert_eq!(aux.get_pixel(0, 0)[1], 255);
+        assert_eq!(aux.get_pixel(0, 0)[2], 0);
+
+        assert_eq!(aux.get_pixel(1, 0)[1], 0);
+        assert_eq!(aux.get_pixel(1, 0)[2], 0);
+
+        assert_eq!(aux.get_pixel(2, 0)[1], 0);
+        assert_eq!(aux.get_pixel(2, 0)[2], 255);
+    }
+
+    #[test]
+    fn ior_is_clamped_above_eight() {
+        // F0 = 229/255 is the largest dielectric value and maps far above IOR 8.
+        let specular = buffer(2, 1, &[[0, 229, 0, 0], [0, 230, 0, 0]]);
+        let decoded = decode_labpbr13(None, Some(&specular)).expect("decode");
+        let aux = decoded.aux.expect("aux");
+
+        assert_eq!(aux.get_pixel(0, 0)[0], 255);
+        assert!((decode_ior(aux.get_pixel(0, 0)[0]) - 8.0).abs() < 1e-5);
+        // Metal preset keeps the neutral 1.5 IOR (8-bit encoded).
+        assert!((decode_ior(aux.get_pixel(1, 0)[0]) - 1.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn mismatched_dimensions_are_rejected() {
+        let normal = RgbaBuffer::new(2, 1);
+        let specular = RgbaBuffer::new(1, 1);
+        let error = decode_labpbr13(Some(&normal), Some(&specular)).expect_err("must fail");
+        let message = error.to_string();
+        assert!(message.contains("2x1"), "{message}");
+        assert!(message.contains("1x1"), "{message}");
+    }
 }

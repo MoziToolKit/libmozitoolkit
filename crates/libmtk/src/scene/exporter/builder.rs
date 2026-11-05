@@ -112,7 +112,7 @@ pub fn build_scene_atlas_and_models(
             .map_err(MtkError::Texture)?;
 
         // Decode PBR companions into canonical normal_gl, orm, aux channels
-        let _ = mtk_material::pbr::decode_baked_atlas(&mut baked_atlas);
+        let _ = mtk_material::decode_baked_atlas(&mut baked_atlas);
 
         if let Some(first) = baked_atlas.chunks.first() {
             first_chunk_dims = [first.width, first.height];

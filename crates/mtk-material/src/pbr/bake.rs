@@ -70,7 +70,7 @@ pub fn decode_baked_atlas(
                 if is_empty {
                     None
                 } else {
-                    Some(crate::pbr::PbrMeta::labpbr13())
+                    Some(mtk_texture::PbrMeta::labpbr13())
                 },
             );
         }
@@ -89,7 +89,7 @@ fn sync_chunk_meta(
     has_normal: bool,
     has_orm: bool,
     has_aux: bool,
-    pbr_meta: Option<crate::pbr::PbrMeta>,
+    pbr_meta: Option<mtk_texture::PbrMeta>,
 ) {
     chunk_meta.has_normal = has_normal;
     chunk_meta.has_specular = false;

@@ -33,7 +33,7 @@ pub(crate) fn compute_face_tint(
     }
 
     // Hot path: the default palette is a static entry, no lookup/allocation needed.
-    let default_pal = mtk_material::biome::default_biome_palette();
+    let default_pal = mtk_material::default_biome_palette();
     let t_idx = Some(tint_index as i32);
 
     let info = resolver.get_tint_info(texture_key, Some(block_name), t_idx);

@@ -38,7 +38,7 @@
 - **方块分层染色注册表与分类器**：精准支持原版方块染色规则（如 `pink_petals` / `wildflowers` 的花瓣不染色与茎叶染色分层、`dead_bush` / `azalea_leaves` 永不染色保护、硬编码固定色方块如云杉/白桦树叶）。
 - **多导出器材质与网格图集解混淆**：
   - 数据驱动支持 Mineways 等网格图集 (`GridAtlasSpec`，18x18 包含 1px 保护边框像素解码)；
-  - 自动识别并纠正非正交旋转 UV（如 jmc2obj 的 45 度流动液体菱形 UV `straighten_diamond_quad_uv`）；
+  - 自动识别并纠正非正交旋转 UV（适配 `mtk_core` 旋转检测与扶正）；
   - 自动归一化超限平铺 UV 并提取仿射变换矩阵（适配 `MC_Atlas_UV_Tiling` 着色器节点）。
 - **Rayon 并行多 UV 批量重映射**：同时输出图集 UV (`atlas_uvs`) 与局部标准 [0, 1] UV (`local_uvs`)，输出逐面 Chunk ID、Texture ID、UV 模式与 Overlay 标记。
 
@@ -87,7 +87,6 @@ pub struct BiomePalette {
 - `cms.sample_grass_linear(t, h) -> [f32; 4]`: 根据温度/湿度最近邻采样并转换为 Linear RGBA。
 - `cms.sample_foliage_linear(t, h) -> [f32; 4]`: 树叶色图最近邻采样。
 - `cms.sample_dry_foliage_linear(t, h) -> [f32; 4]`: 干枯树叶色图最近邻采样。
-- `apply_dark_forest_grass_modifier(base_srgb) -> [f32; 4]`: 输入 sRGB `[r, g, b]`，执行黑森林原版加权平均修正 `((base & 0xFEFEFE) + 0x28340A) >> 1` 并返回 Linear RGBA。
 
 ---
 
@@ -160,38 +159,31 @@ pub struct MeshMultiUvRemapResult {
 ### 3.1 色彩数学与生物群系工具
 | 函数签名 | 描述 |
 | :--- | :--- |
-| `srgb_to_linear(c: f32) -> f32` | 标准 sRGB 标量分量转线性空间。 |
-| `linear_to_srgb(c: f32) -> f32` | 线性空间标量分量转 sRGB。 |
 | `hex_to_linear_rgba(hex: &str) -> [f32; 4]` | 十六进制色彩字符串（如 `"#91BD59"`）转 Linear RGBA。 |
 | `get_colormap_uv(temp: f32, hum: f32) -> [f32; 2]` | 计算原版三角形 Colormap 采样 UV。 |
 | `get_biome_palette(name: &str) -> &'static BiomePalette` | 获取权威生物群系调色板（默认回退 `plains`）。 |
-| `classify_tint_category(clean_stem, block_name, tint_index) -> &'static str` | 权威判定方块/贴图染色语义类别。 |
-| `get_swamp_grass_color(x: f64, z: f64) -> [f32; 4]` | 获取沼泽草基于原版 0.0225 频率 Perlin 噪声的权威双色插值色彩 (Linear RGBA)。 |
-| `get_redstone_wire_color(power: u8) -> [f32; 4]` | 获取红石引线对应信号强度（0..15）的权威 Linear RGBA 线性颜色。 |
-| `get_redstone_wire_srgb(power: u8) -> [f32; 4]` | 获取红石引线对应信号强度（0..15）的标准 sRGB 浮点色彩。 |
-| `get_redstone_wire_hex(power: u8) -> &'static str` | 获取红石引线对应信号强度（0..15）的十六进制颜色代码。 |
-| `blend_biome_colors(weights: &[(&str, f32)], category: &str) -> [f32; 4]` | 多生物群系加权线性混合色彩。 |
+| `default_biome_palette() -> &'static BiomePalette` | 获取默认生物群系调色板 (`plains`)。 |
+| `get_swamp_grass_color(x: f32, z: f32) -> [f32; 4]` | 获取沼泽草基于原版 0.0225 频率 Perlin 噪声的权威双色插值色彩 (Linear RGBA)。 |
+| `get_unit_cube_tint_indices(block_name: &str) -> [i16; 6]` | 获取单位立方体 6 个方向的面染色标记。 |
+| `get_default_colormaps() -> Arc<VanillaColormaps>` | 获取内置原版草地、树叶、干枯树叶 RGB 色图。 |
 | `compute_mesh_biome_attributes_per_face(texture_keys, face_biomes, resolver)` | Rayon 并行按逐面生物群系数组计算染色面属性与特异群系路由。 |
-| `reapply_uniform_biome_tint_flat(base_tt, packed, old_colors, colors, flags)` | 即时统一群系重着色：并行输出扁平 tint data/color，不重新解析贴图键。 |
+| `compute_mesh_biome_attributes_with_colormaps(...)` | 显式传入 colormaps 批量计算网格染色属性。 |
+| `compute_mesh_biome_attributes_custom_with_colormaps(...)` | 自定义群系设置的染色属性计算。 |
 | `compute_mesh_biome_attributes_paletted_flat(palette, indices, ...)` | palette-native 全量群系属性计算，避免逐面 `String`。 |
+| `reapply_uniform_biome_tint_flat(base_tt, packed, old_colors, colors, flags)` | 即时统一群系重着色：并行输出扁平 tint data/color，不重新解析贴图键。 |
 | `reapply_uniform_biome_tint(...)` | 同上，返回 array-of-structs 形式，便于非 Python 宿主。 |
 
 ### 3.2 材质与 UV 重映射
 | 函数签名 | 描述 |
 | :--- | :--- |
 | `remap_local_to_atlas(u, v, sprite) -> [f32; 2]` | 将 [0, 1] 局部 UV 映射到图集 Sprite 的 Frame 0 区域。 |
-| `remap_atlas_to_local(u, v, sprite) -> [f32; 2]` | 将图集 UV 逆变换还原为 [0, 1] 局部 UV。 |
-| `is_quad_uv_diamond(uvs: &[[f32; 2]; 4]) -> bool` | 检测是否为 45 度旋转倾斜的流动液体 UV。 |
-| `straighten_diamond_quad_uv(uvs: &mut [[f32; 2]; 4]) -> bool` | 将 45 度菱形 UV 扶正为标准正交四边形。 |
 | `MaterialResolver::resolve(mat_name, aliases, address_map)` | 多级匹配解析材质名称到 `AtlasSpriteLocation`（静态 Frame 0 优先）。 |
 | `resolve_animated_sprite(mat_name, aliases, address_map)` | 仅查找专用动画 sprite（`anim_sprites`），支持原生别名/清理名/用户别名。 |
-| `resolve_routed_sprite(mat_name, aliases, address_map, enable_animated)` | 按宿主动画策略选择 static 或 animated sprite 的统一入口。 |
 | `extract_animation_metrics(sprite) -> ([frames, frametime, interpolate], [w, h, 0])` | 统一提取动画调度器所需元数据；静态 sprite 返回安全默认值。 |
-| `remap_mesh_multi_uvs_parallel(...) -> MeshMultiUvRemapResult` | 批量并行生成图集 UV、局部 UV 与着色器路由模式；保持静态 Frame 0 兼容行为。 |
-| `remap_mesh_multi_uvs_parallel_with_options(..., enable_animated_textures)` | 动画感知版本：动画面路由到 `anim` chunk，并返回逐面动画元数据。 |
-| `remap_mesh_multi_uvs_paletted_with_options(...)` | palette + u32 indices 版本；返回 source-key palette/indices 与零拷贝 id/metric buffer。 |
+| `remap_mesh_multi_uvs_paletted_with_options(...)` | 单一规范批量 UV 重映射入口：palette + u32 indices 版本；返回 source-key palette/indices 与零拷贝 id/metric buffer。 |
 | `resolve_mesh_material_routes(keys, aliases, address_map, enable_animated)` | 只解析逐面 chunk/texture/动画路由，不触碰 UV。 |
 | `reroute_mesh_animation(uvs, ranges, keys, old_chunk_ids, atlas, aliases, enable_animated)` | 将已有 Atlas UV 从旧 sprite 反解并投影到新 sprite，支持静态↔动画幂等切换。 |
+| `decode_baked_atlas(atlas: &mut BakedAtlas) -> Result<PbrDecodeSummary, MaterialError>` | 将烘焙图集中各分块的 LabPBR 伴生贴图解码为规范 MtkPackedV1 缓冲。 |
 
 
 

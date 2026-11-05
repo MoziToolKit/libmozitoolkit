@@ -70,7 +70,7 @@ impl BiomeResolver {
     }
 
     /// Merges external compatibility overrides into the resolver maps.
-    pub fn apply_overrides(&mut self, overrides: &crate::resolver::overrides::ResolverOverrides) {
+    pub fn apply_overrides(&mut self, overrides: &crate::ResolverOverrides) {
         for (key, category) in &overrides.tint_categories {
             self.texture_tint_categories
                 .insert(key.clone(), category.clone());

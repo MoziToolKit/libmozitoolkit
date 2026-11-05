@@ -8,10 +8,6 @@
 
 use mtk_texture::RgbaBuffer;
 
-pub use mtk_texture::{
-    IorEncoding, NormalConvention, PbrLayout, PbrMeta, PbrSourceFormat, RoughnessSpace,
-};
-
 /// Decoded canonical channel buffers for one atlas chunk (or one standalone sprite).
 ///
 /// Missing source companions produce missing output layers:
@@ -20,19 +16,11 @@ pub use mtk_texture::{
 /// - specular only -> `orm` + `aux`
 /// - both -> all three
 #[derive(Debug, Clone)]
-pub struct DecodedPbr {
+pub(crate) struct DecodedPbr {
     /// RGB = OpenGL tangent normal, A = height.
     pub normal_gl: Option<RgbaBuffer>,
     /// R = AO, G = roughness, B = metallic, A = emission mask.
     pub orm: Option<RgbaBuffer>,
     /// R = encoded specular IOR, G = porosity, B = SSS weight, A = transmission mask (v1 = 0).
     pub aux: Option<RgbaBuffer>,
-    pub meta: PbrMeta,
-}
-
-impl DecodedPbr {
-    /// True when no PBR companion was available for this chunk.
-    pub fn is_empty(&self) -> bool {
-        self.normal_gl.is_none() && self.orm.is_none() && self.aux.is_none()
-    }
 }

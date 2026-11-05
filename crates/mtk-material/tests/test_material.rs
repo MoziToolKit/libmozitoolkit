@@ -1,6 +1,6 @@
 use mtk_material::{
-    clean_identifier, decode_grid_atlas_uv, remap_local_to_atlas,
-    remap_mesh_multi_uvs_parallel_with_options, GridAtlasSpec, MaterialResolver,
+    clean_identifier, remap_local_to_atlas, remap_mesh_multi_uvs_paletted_with_options,
+    GridAtlasSpec, MaterialResolver,
 };
 use mtk_resource::ResourceLocation;
 use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};
@@ -18,38 +18,6 @@ fn test_grid_atlas_spec_detection() {
     assert!(spec.matches_atlas_name("terrain-rgba.001.png"));
     assert!(spec.matches_atlas_name("world_rgb.png"));
     assert!(!spec.matches_atlas_name("stone.png"));
-}
-
-#[test]
-fn test_grid_atlas_uv_decode() {
-    let mut swatch_map = HashMap::new();
-    swatch_map.insert(
-        0,
-        vec!["grass_block_top".to_string(), "grass_top".to_string()],
-    );
-
-    let spec = GridAtlasSpec {
-        swatch_size: 18.0,
-        tile_size: 16.0,
-        border: 1.0,
-        image_width: 1024,
-        image_height: 1024,
-        atlas_name_patterns: vec!["terrain".to_string()],
-        atlas_suffix_patterns: vec![],
-        swatch_to_candidates: swatch_map,
-    };
-
-    // Swatch 0 is at col 0, row 0 on 1024x1024 image
-    // Center of swatch 0: x in [1..17], y in [1..17] -> pixel (9, 9)
-    let u = 9.0 / 1024.0;
-    let v = 1.0 - (9.0 / 1024.0);
-    let (cands, local_uv) = decode_grid_atlas_uv(u, v, &spec);
-
-    assert!(cands.is_some());
-    assert_eq!(cands.unwrap()[0], "grass_block_top");
-    // Local UV should be around center (0.5, 0.5)
-    assert!((local_uv[0] - 0.5).abs() < 1e-2);
-    assert!((local_uv[1] - 0.5).abs() < 1e-2);
 }
 
 #[test]
@@ -155,20 +123,24 @@ fn test_parallel_batch_mesh_remap() {
         [0.0, 1.0],
     ];
     let face_materials = vec!["muddy_ground".to_string(), "dirt".to_string()];
+    let face_material_indices = vec![0, 1];
     let face_loop_ranges = vec![(0, 4), (4, 4)];
 
-    let multi_res = remap_mesh_multi_uvs_parallel_with_options(
+    let multi_res = remap_mesh_multi_uvs_paletted_with_options(
         &uvs,
         &face_materials,
+        &face_material_indices,
         &face_loop_ranges,
         &address_map,
         Some(&custom_aliases),
         None,
+        None,
+        None,
         false,
     );
-    assert_eq!(multi_res.face_count, 2);
-    assert_eq!(multi_res.local_uvs.len(), 8);
-    assert_eq!(multi_res.atlas_uvs.len(), 8);
+    assert_eq!(multi_res.mesh.face_count, 2);
+    assert_eq!(multi_res.mesh.local_uvs.len(), 8);
+    assert_eq!(multi_res.mesh.atlas_uvs.len(), 8);
 }
 
 #[test]
@@ -405,44 +377,49 @@ fn animated_water_atlas() -> AtlasAddressMap {
 
 #[test]
 fn test_animated_routing_toggle_and_metrics() {
-    use mtk_material::remap_mesh_multi_uvs_parallel_with_options;
-
     let atlas = animated_water_atlas();
     let face_materials = vec!["water_still".to_string()];
+    let face_material_indices = vec![0];
     let face_loop_ranges = vec![(0, 4)];
     let uvs = vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
 
-    let animated = remap_mesh_multi_uvs_parallel_with_options(
+    let animated = remap_mesh_multi_uvs_paletted_with_options(
         &uvs,
         &face_materials,
+        &face_material_indices,
         &face_loop_ranges,
         &atlas,
+        None,
+        None,
         None,
         None,
         true,
     );
-    assert_eq!(animated.face_chunk_ids, vec![1]);
-    assert_eq!(animated.face_texture_ids, vec![11]);
-    assert!(animated.face_is_animated[0]);
-    assert_eq!(animated.face_anim_timing, vec![[4.0, 2.0, 1.0]]);
-    assert_eq!(animated.face_anim_frame_size, vec![[16.0, 16.0, 0.0]]);
-    assert!((animated.atlas_uvs[0][0] - 0.5).abs() < 1e-6);
-    assert!((animated.atlas_uvs[0][1] - 0.75).abs() < 1e-6);
+    assert_eq!(animated.mesh.face_chunk_ids, vec![1]);
+    assert_eq!(animated.mesh.face_texture_ids, vec![11]);
+    assert!(animated.mesh.face_is_animated[0]);
+    assert_eq!(animated.mesh.face_anim_timing, vec![[4.0, 2.0, 1.0]]);
+    assert_eq!(animated.mesh.face_anim_frame_size, vec![[16.0, 16.0, 0.0]]);
+    assert!((animated.mesh.atlas_uvs[0][0] - 0.5).abs() < 1e-6);
+    assert!((animated.mesh.atlas_uvs[0][1] - 0.75).abs() < 1e-6);
 
-    let static_only = remap_mesh_multi_uvs_parallel_with_options(
+    let static_only = remap_mesh_multi_uvs_paletted_with_options(
         &uvs,
         &face_materials,
+        &face_material_indices,
         &face_loop_ranges,
         &atlas,
         None,
         None,
+        None,
+        None,
         false,
     );
-    assert_eq!(static_only.face_chunk_ids, vec![0]);
-    assert_eq!(static_only.face_texture_ids, vec![10]);
-    assert!(!static_only.face_is_animated[0]);
-    assert_eq!(static_only.face_anim_timing, vec![[1.0, 1.0, 0.0]]);
-    assert_eq!(static_only.atlas_uvs[0], [0.0, 0.0]);
+    assert_eq!(static_only.mesh.face_chunk_ids, vec![0]);
+    assert_eq!(static_only.mesh.face_texture_ids, vec![10]);
+    assert!(!static_only.mesh.face_is_animated[0]);
+    assert_eq!(static_only.mesh.face_anim_timing, vec![[1.0, 1.0, 0.0]]);
+    assert_eq!(static_only.mesh.atlas_uvs[0], [0.0, 0.0]);
 }
 
 #[test]

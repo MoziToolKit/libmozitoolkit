@@ -11,7 +11,7 @@ pub const TINT_TYPE_HARDCODED: u8 = 4;
 pub const TINT_TYPE_DRY_FOLIAGE: u8 = 5;
 
 /// Static table of vanilla blocks with fixed, non-colormap biome colors.
-pub static HARDCODED_BLOCK_TINTS: &[(&str, &str)] = &[
+pub(crate) static HARDCODED_BLOCK_TINTS: &[(&str, &str)] = &[
     ("birch_leaves", "#80A755"),
     ("spruce_leaves", "#619961"),
     ("lily_pad", "#208030"),
@@ -30,13 +30,13 @@ pub static HARDCODED_BLOCK_TINTS: &[(&str, &str)] = &[
 ];
 
 /// Precomputed canonical hex strings for redstone wire power levels 0 to 15.
-pub static REDSTONE_WIRE_TINT_HEX: [&str; 16] = [
+pub(crate) static REDSTONE_WIRE_TINT_HEX: [&str; 16] = [
     "#4B0000", "#580200", "#640500", "#700700", "#7C0A00", "#880C00", "#940F00", "#A01100",
     "#AC1400", "#B81600", "#C31900", "#CF1B00", "#DB1E00", "#E72000", "#F32300", "#FF2600",
 ];
 
 /// Returns the sRGB float color `[r, g, b, 1.0]` for a redstone wire signal power level (0..15).
-pub fn get_redstone_wire_srgb(power: u8) -> [f32; 4] {
+pub(crate) fn get_redstone_wire_srgb(power: u8) -> [f32; 4] {
     let p = power.min(15) as f32;
     let t = p / 15.0;
     let r = 0.3 + 0.7 * t;
@@ -45,7 +45,7 @@ pub fn get_redstone_wire_srgb(power: u8) -> [f32; 4] {
 }
 
 /// Returns the Linear RGBA float color for Blender shaders for redstone wire signal power level (0..15).
-pub fn get_redstone_wire_color(power: u8) -> [f32; 4] {
+pub(crate) fn get_redstone_wire_color(power: u8) -> [f32; 4] {
     let srgb = get_redstone_wire_srgb(power);
     [
         super::palettes::srgb_to_linear(srgb[0]),
@@ -56,13 +56,13 @@ pub fn get_redstone_wire_color(power: u8) -> [f32; 4] {
 }
 
 /// Returns the static hex color string for a redstone wire signal power level (0..15).
-pub fn get_redstone_wire_hex(power: u8) -> &'static str {
+pub(crate) fn get_redstone_wire_hex(power: u8) -> &'static str {
     REDSTONE_WIRE_TINT_HEX[power.min(15) as usize]
 }
 
 /// Canonical swamp dual grass colors in linear RGBA.
-pub static SWAMP_GRASS_LOW_HEX: &str = "#4C763C";
-pub static SWAMP_GRASS_HIGH_HEX: &str = "#6A7039";
+pub(crate) static SWAMP_GRASS_LOW_HEX: &str = "#4C763C";
+pub(crate) static SWAMP_GRASS_HIGH_HEX: &str = "#6A7039";
 
 /// Computes the vanilla swamp grass color using Perlin noise at world coordinates `(x, z)`.
 ///
@@ -79,7 +79,7 @@ pub fn get_swamp_grass_color(x: f32, z: f32) -> [f32; 4] {
 
 /// Canonical Minecraft Block Colors Registry.
 /// Maps block stem to layer definitions: (category, default_weight).
-pub static BLOCK_TINT_REGISTRY: &[(&str, &[(&str, f32)])] = &[
+pub(crate) static BLOCK_TINT_REGISTRY: &[(&str, &[(&str, f32)])] = &[
     // Grass & Flora
     ("grass_block", &[("grass", 1.0)]),
     ("short_grass", &[("grass", 1.0)]),
@@ -156,7 +156,7 @@ pub static EXPLICIT_NONE_BLOCKS: &[&str] = &[
 ];
 
 /// Known vanilla texture stems with a grass biome colour provider.
-pub static KNOWN_GRASS_STEMS: &[&str] = &[
+pub(crate) static KNOWN_GRASS_STEMS: &[&str] = &[
     "grass_block_top",
     "grass_block_side_overlay",
     "grass_side_overlay",
@@ -313,7 +313,7 @@ pub fn is_water(stem: &str) -> bool {
 }
 
 /// Retrieve the hardcoded hex string for a block or texture stem, if any.
-pub fn get_hardcoded_tint_hex(name: &str) -> Option<&'static str> {
+pub(crate) fn get_hardcoded_tint_hex(name: &str) -> Option<&'static str> {
     let clean = name.trim().to_ascii_lowercase();
     let unnamespaced = clean.strip_prefix("minecraft:").unwrap_or(&clean);
     let stem = unnamespaced.strip_prefix("block/").unwrap_or(unnamespaced);
@@ -326,14 +326,9 @@ pub fn get_hardcoded_tint_hex(name: &str) -> Option<&'static str> {
     None
 }
 
-/// Retrieve the hardcoded linear color for a block or texture stem, if any.
-pub fn get_hardcoded_tint(name: &str) -> Option<[f32; 4]> {
-    get_hardcoded_tint_hex(name).map(hex_to_linear_rgba)
-}
-
 /// Classify a texture stem and/or block name into an authoritative tint category:
 /// "grass", "foliage", "dry_foliage", "water", "hardcoded", or "none".
-pub fn classify_tint_category(
+pub(crate) fn classify_tint_category(
     clean_stem: &str,
     block_name: Option<&str>,
     tint_index: Option<i32>,
@@ -451,17 +446,8 @@ pub fn classify_tint_category(
     "none"
 }
 
-/// Determine the unit-cube face tint index for a given block and direction.
-/// Returns 0 for tinted faces, -1 for untinted faces.
-pub fn get_unit_cube_tint_index(clean_block: &str, dir: Direction) -> i16 {
-    get_unit_cube_tint_indices(clean_block)[dir.to_index()]
-}
-
 /// Precompute the six per-direction unit-cube tint indices in a single
 /// classification pass (indexed by `Direction::to_index`).
-///
-/// Mirrors [`get_unit_cube_tint_index`] exactly, but classifies the block only
-/// once instead of once per face direction.
 pub fn get_unit_cube_tint_indices(clean_block: &str) -> [i16; 6] {
     let clean = clean_block.trim().to_ascii_lowercase();
     let unname = clean.strip_prefix("minecraft:").unwrap_or(&clean);
@@ -476,5 +462,146 @@ pub fn get_unit_cube_tint_indices(clean_block: &str) -> [i16; 6] {
         [0i16; 6]
     } else {
         [-1i16; 6]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_redstone_wire_signal_palettes() {
+        let srgb_0 = get_redstone_wire_srgb(0);
+        assert!((srgb_0[0] - 0.3).abs() < 1e-4);
+        assert_eq!(srgb_0[1], 0.0);
+        assert_eq!(srgb_0[2], 0.0);
+        assert_eq!(get_redstone_wire_hex(0), "#4B0000");
+
+        let srgb_15 = get_redstone_wire_srgb(15);
+        assert!((srgb_15[0] - 1.0).abs() < 1e-4);
+        assert!((srgb_15[1] - 0.15).abs() < 1e-4);
+        assert_eq!(srgb_15[2], 0.0);
+        assert_eq!(get_redstone_wire_hex(15), "#FF2600");
+
+        let lin_0 = get_redstone_wire_color(0);
+        let lin_15 = get_redstone_wire_color(15);
+        assert!(lin_15[0] > lin_0[0]);
+        assert_eq!(lin_0[3], 1.0);
+        assert_eq!(lin_15[3], 1.0);
+    }
+
+    #[test]
+    fn test_classify_tint_category_authoritative() {
+        // 1. None (Untinted natural textures)
+        assert_eq!(
+            classify_tint_category("dead_bush", Some("dead_bush"), None),
+            "none"
+        );
+        assert_eq!(
+            classify_tint_category("dead_bush", Some("dead_bush"), Some(0)),
+            "none"
+        );
+        assert_eq!(
+            classify_tint_category("potted_dead_bush", Some("potted_dead_bush"), None),
+            "none"
+        );
+        assert_eq!(
+            classify_tint_category("azalea_leaves", Some("azalea_leaves"), None),
+            "none"
+        );
+        assert_eq!(
+            classify_tint_category("cherry_leaves", Some("cherry_leaves"), None),
+            "none"
+        );
+        assert_eq!(
+            classify_tint_category("pale_oak_leaves", Some("pale_oak_leaves"), None),
+            "none"
+        );
+        assert_eq!(
+            classify_tint_category("yellow_poplar_leaves", Some("yellow_poplar_leaves"), None),
+            "none"
+        );
+        assert_eq!(
+            classify_tint_category("red_poplar_leaves", None, None),
+            "none"
+        );
+        assert_eq!(classify_tint_category("leaves_notint", None, None), "none");
+
+        // 2. Dry Foliage
+        assert_eq!(
+            classify_tint_category("leaf_litter", Some("leaf_litter"), Some(0)),
+            "dry_foliage"
+        );
+        assert_eq!(
+            classify_tint_category("short_dry_grass", Some("short_dry_grass"), Some(0)),
+            "dry_foliage"
+        );
+        assert_eq!(
+            classify_tint_category("tall_dry_grass", Some("tall_dry_grass"), Some(0)),
+            "dry_foliage"
+        );
+
+        // 3. Grass
+        assert_eq!(
+            classify_tint_category("short_grass", Some("short_grass"), Some(0)),
+            "grass"
+        );
+        assert_eq!(
+            classify_tint_category("bush", Some("bush"), Some(0)),
+            "grass"
+        );
+        assert_eq!(
+            classify_tint_category("grass_block_top", Some("grass_block"), Some(0)),
+            "grass"
+        );
+        assert_eq!(
+            classify_tint_category("sugar_cane", Some("sugar_cane"), Some(0)),
+            "grass"
+        );
+
+        // 4. Foliage
+        assert_eq!(
+            classify_tint_category("oak_leaves", Some("oak_leaves"), Some(0)),
+            "foliage"
+        );
+        assert_eq!(
+            classify_tint_category("jungle_leaves", Some("jungle_leaves"), Some(0)),
+            "foliage"
+        );
+        assert_eq!(
+            classify_tint_category("vine", Some("vine"), Some(0)),
+            "foliage"
+        );
+
+        // 5. Hardcoded
+        assert_eq!(
+            classify_tint_category("spruce_leaves", Some("spruce_leaves"), Some(0)),
+            "hardcoded"
+        );
+        assert_eq!(
+            classify_tint_category("birch_leaves", Some("birch_leaves"), Some(0)),
+            "hardcoded"
+        );
+        assert_eq!(
+            classify_tint_category("lily_pad", Some("lily_pad"), Some(0)),
+            "hardcoded"
+        );
+    }
+
+    #[test]
+    fn test_unit_cube_tint_indices() {
+        let grass_indices = get_unit_cube_tint_indices("grass_block");
+        assert_eq!(grass_indices[Direction::Up.to_index()], 0);
+        assert_eq!(grass_indices[Direction::Down.to_index()], -1);
+        assert_eq!(grass_indices[Direction::North.to_index()], -1);
+
+        let leaves_indices = get_unit_cube_tint_indices("oak_leaves");
+        assert_eq!(leaves_indices, [0; 6]);
+
+        let dirt_indices = get_unit_cube_tint_indices("dirt");
+        assert_eq!(dirt_indices, [-1; 6]);
+
+        let stone_indices = get_unit_cube_tint_indices("stone");
+        assert_eq!(stone_indices, [-1; 6]);
     }
 }

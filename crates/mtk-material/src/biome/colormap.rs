@@ -297,53 +297,6 @@ pub fn get_default_colormaps() -> Arc<VanillaColormaps> {
     Arc::clone(EMBEDDED_COLORMAPS.get_or_init(|| Arc::new(VanillaColormaps::load_embedded())))
 }
 
-/// Applies the vanilla `GrassColorModifier.DARK_FOREST` to a base sRGB grass color:
-/// `((baseColor & 0xFEFEFE) + 0x28340A) >> 1` (where 0x28340A is 2634762)
-/// Returns the resulting Linear RGBA.
-pub fn apply_dark_forest_grass_modifier(base_srgb: [f32; 3]) -> [f32; 4] {
-    let r = (base_srgb[0] * 255.0).round().clamp(0.0, 255.0) as u32;
-    let g = (base_srgb[1] * 255.0).round().clamp(0.0, 255.0) as u32;
-    let b = (base_srgb[2] * 255.0).round().clamp(0.0, 255.0) as u32;
-
-    let base_color = (r << 16) | (g << 8) | b;
-    let modified = ((base_color & 0xFEFEFE) + 0x28340A) >> 1;
-
-    let mr = ((modified >> 16) & 0xFF) as f32 / 255.0;
-    let mg = ((modified >> 8) & 0xFF) as f32 / 255.0;
-    let mb = (modified & 0xFF) as f32 / 255.0;
-
-    [
-        srgb_to_linear(mr),
-        srgb_to_linear(mg),
-        srgb_to_linear(mb),
-        1.0,
-    ]
-}
-
-/// Computes the authoritative linear RGBA tint for a given temperature, humidity, and category.
-/// If `is_dark_forest` is true, applies the dark forest modifier to grass tint.
-pub fn compute_resolved_tint_color(
-    tint_type: u8,
-    temperature: f32,
-    humidity: f32,
-    is_dark_forest: bool,
-) -> [f32; 4] {
-    let cms = get_default_colormaps();
-    match tint_type {
-        crate::biome::TINT_TYPE_GRASS => {
-            if is_dark_forest {
-                let base = cms.sample_grass_srgb(temperature, humidity);
-                apply_dark_forest_grass_modifier(base)
-            } else {
-                cms.sample_grass_linear(temperature, humidity)
-            }
-        }
-        crate::biome::TINT_TYPE_FOLIAGE => cms.sample_foliage_linear(temperature, humidity),
-        crate::biome::TINT_TYPE_DRY_FOLIAGE => cms.sample_dry_foliage_linear(temperature, humidity),
-        _ => [1.0, 1.0, 1.0, 1.0],
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -373,5 +326,28 @@ mod tests {
     #[test]
     fn invalid_colormap_is_rejected() {
         assert!(VanillaColormaps::with_overrides(Some(b"not a png"), None, None).is_err());
+    }
+
+    #[test]
+    fn test_resident_colormap_sampling() {
+        let cms = get_default_colormaps();
+        assert_eq!(cms.grass_pixels.len(), 256 * 256 * 3);
+        assert_eq!(cms.foliage_pixels.len(), 256 * 256 * 3);
+        assert_eq!(cms.dry_foliage_pixels.len(), 256 * 256 * 3);
+
+        // 1. Plains sample at temp=0.8, downfall=0.4
+        let plains_srgb = cms.sample_grass_srgb(0.8, 0.4);
+        let pr = (plains_srgb[0] * 255.0).round() as u8;
+        let pg = (plains_srgb[1] * 255.0).round() as u8;
+        let pb = (plains_srgb[2] * 255.0).round() as u8;
+        // Canonical Plains grass: #91BD59 -> (145, 189, 89)
+        assert_eq!((pr, pg, pb), (145, 189, 89));
+
+        // 2. Foliage sample in dark forest directly from colormap: (89, 174, 48)
+        let fol_srgb = cms.sample_foliage_srgb(0.7, 0.8);
+        let fol_r = (fol_srgb[0] * 255.0).round() as u8;
+        let fol_g = (fol_srgb[1] * 255.0).round() as u8;
+        let fol_b = (fol_srgb[2] * 255.0).round() as u8;
+        assert_eq!((fol_r, fol_g, fol_b), (89, 174, 48));
     }
 }

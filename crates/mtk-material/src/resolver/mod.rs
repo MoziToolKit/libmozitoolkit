@@ -2,11 +2,13 @@ use mtk_resource::ResourceLocation;
 use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation};
 use std::collections::HashMap;
 
-pub mod overrides;
+mod overrides;
 
 use crate::types::GridAtlasSpec;
 
-pub use self::overrides::{builtin_biome_suffixes, builtin_material_fallbacks, ResolverOverrides};
+pub use self::overrides::{
+    builtin_biome_suffixes, parse_overrides, MaterialFallbackRule, ResolverOverrides,
+};
 
 /// Generic helper to clean a raw material or texture name into a normalized identifier stem.
 pub fn clean_identifier(raw: &str) -> String {
@@ -54,7 +56,7 @@ pub fn clean_identifier(raw: &str) -> String {
 
 /// Convert a grid atlas UV coordinate (u, v) to its local [0, 1] swatch coordinate based on GridAtlasSpec.
 #[inline]
-pub fn remap_grid_atlas_uv_to_local(u: f32, v: f32, spec: &GridAtlasSpec) -> [f32; 2] {
+pub(crate) fn remap_grid_atlas_uv_to_local(u: f32, v: f32, spec: &GridAtlasSpec) -> [f32; 2] {
     let tex_w = spec.image_width.max(1) as f32;
     let tex_h = spec.image_height.max(1) as f32;
 
@@ -71,7 +73,7 @@ pub fn remap_grid_atlas_uv_to_local(u: f32, v: f32, spec: &GridAtlasSpec) -> [f3
 }
 
 /// Decode a polygon UV coordinate on a grid atlas to its candidate identifiers and local [0, 1] UVs.
-pub fn decode_grid_atlas_uv(
+pub(crate) fn decode_grid_atlas_uv(
     u: f32,
     v: f32,
     spec: &GridAtlasSpec,
@@ -189,7 +191,7 @@ pub fn resolve_animated_sprite<'a>(
 ///
 /// When `enable_animated_textures` is true, a dedicated animated sprite wins over
 /// the static Frame-0 baseline. When false, the static sprite is always preferred.
-pub fn resolve_routed_sprite<'a>(
+pub(crate) fn resolve_routed_sprite<'a>(
     raw_material_name: &str,
     custom_aliases: Option<&HashMap<String, Vec<String>>>,
     address_map: &'a AtlasAddressMap,
@@ -453,5 +455,42 @@ impl MaterialResolver {
         }
 
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_grid_atlas_uv_decode() {
+        let mut swatch_map = HashMap::new();
+        swatch_map.insert(
+            0,
+            vec!["grass_block_top".to_string(), "grass_top".to_string()],
+        );
+
+        let spec = GridAtlasSpec {
+            swatch_size: 18.0,
+            tile_size: 16.0,
+            border: 1.0,
+            image_width: 1024,
+            image_height: 1024,
+            atlas_name_patterns: vec!["terrain".to_string()],
+            atlas_suffix_patterns: vec![],
+            swatch_to_candidates: swatch_map,
+        };
+
+        // Swatch 0 is at col 0, row 0 on 1024x1024 image
+        // Center of swatch 0: x in [1..17], y in [1..17] -> pixel (9, 9)
+        let u = 9.0 / 1024.0;
+        let v = 1.0 - (9.0 / 1024.0);
+        let (cands, local_uv) = decode_grid_atlas_uv(u, v, &spec);
+
+        assert!(cands.is_some());
+        assert_eq!(cands.unwrap()[0], "grass_block_top");
+        // Local UV should be around center (0.5, 0.5)
+        assert!((local_uv[0] - 0.5).abs() < 1e-2);
+        assert!((local_uv[1] - 0.5).abs() < 1e-2);
     }
 }

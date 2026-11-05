@@ -7,12 +7,8 @@
 //! The pure decoder lives here rather than in `mtk-texture` because `mtk-material`
 //! already depends on `mtk-texture`; the reverse dependency would form a cycle.
 
-pub mod bake;
-pub mod labpbr;
-pub mod types;
+mod bake;
+mod labpbr;
+mod types;
 
 pub use bake::{decode_baked_atlas, PbrDecodeSummary};
-pub use labpbr::{decode_ior, decode_labpbr13};
-pub use types::{
-    DecodedPbr, IorEncoding, NormalConvention, PbrLayout, PbrMeta, PbrSourceFormat, RoughnessSpace,
-};

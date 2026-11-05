@@ -30,7 +30,7 @@ pub struct PrecompileConfig {
     pub compile_models: bool,
     pub num_threads: Option<usize>,
     /// Optional external material/biome compatibility overrides baked into the cache.
-    pub resolver_overrides: Option<mtk_material::resolver::overrides::ResolverOverrides>,
+    pub resolver_overrides: Option<mtk_material::ResolverOverrides>,
 }
 
 impl Default for PrecompileConfig {
@@ -253,7 +253,7 @@ fn precompile_all_assets_inner(
 
             // Decode raw LabPBR companions into canonical MtkPackedV1 channels before the
             // address map is serialized, so has_orm/has_aux/pbr metadata is authoritative.
-            mtk_material::pbr::decode_baked_atlas(&mut baked_atlas)?;
+            mtk_material::decode_baked_atlas(&mut baked_atlas)?;
 
             // Determine authoritative has_tint for each chunk
             for chunk_meta in &mut baked_atlas.address_map.chunks {
@@ -265,7 +265,7 @@ fn precompile_all_assets_inner(
                 for (res, loc) in &baked_atlas.address_map.sprites {
                     if loc.chunk_id == chunk_meta.chunk_id {
                         let tint_info = biome_resolver.get_tint_info(&res.path, None, None);
-                        if tint_info.tint_type != mtk_material::biome::TINT_TYPE_NONE {
+                        if tint_info.tint_type != mtk_material::TINT_TYPE_NONE {
                             chunk_has_tint = true;
                             break;
                         }
@@ -275,7 +275,7 @@ fn precompile_all_assets_inner(
                     for (res, loc) in &baked_atlas.address_map.anim_sprites {
                         if loc.chunk_id == chunk_meta.chunk_id {
                             let tint_info = biome_resolver.get_tint_info(&res.path, None, None);
-                            if tint_info.tint_type != mtk_material::biome::TINT_TYPE_NONE {
+                            if tint_info.tint_type != mtk_material::TINT_TYPE_NONE {
                                 chunk_has_tint = true;
                                 break;
                             }

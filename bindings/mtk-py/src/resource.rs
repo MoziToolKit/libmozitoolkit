@@ -331,7 +331,7 @@ pub fn precompile_all_assets<'py>(
 ) -> PyResult<PyPrecompileResult> {
     let resolver_overrides = match resolver_overrides_json {
         Some(json) => Some(
-            mtk_material::resolver::overrides::parse_overrides(json)
+            mtk_material::parse_overrides(json)
                 .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?,
         ),
         None => None,

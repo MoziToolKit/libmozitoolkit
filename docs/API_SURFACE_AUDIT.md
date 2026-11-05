@@ -403,7 +403,16 @@ PY
   - 测试隔离：将 `test_stitcher.rs` 移入 `stitcher/stitcher.rs` 作为内部 `#[cfg(test)]` 单元测试，不再对外暴露内部装箱细节；
   - 下游穿透引用收敛：`libmtk`, `mtk-voxel`, `mtk-material` 中对 `mtk_texture::atlas::*`, `mtk_texture::banner::*`, `mtk_texture::error::*` 的穿透统一收敛为根命名空间 `mtk_texture::*`；
   - 同步更新 `crates/mtk-texture/README.md`。
-- [ ] 推进后续 crate（`mtk-material` → `mtk-save` → `mtk-package` → `libmtk`）内部 `pub mod` 改 `mod` 与根导出精简。
+- [x] **`mtk-material` 根导出与模块私有化彻底完成 (Batch 4.8)**：
+  - 6 个内部模块（`biome`, `error`, `pbr`, `remap`, `resolver`, `types`）全部收敛为私有 `mod`；
+  - 内部子模块全部收敛为私有 `mod`：`biome/{batch, canonical_data, colormap, hardcoded, palettes, resolver}`、`pbr/{bake, labpbr, types}`、`remap/{batch, routes}`、`resolver/{mod, overrides}`；
+  - 废弃与零消费者符号清理：物理删除死代码 `is_quad_uv_diamond`, `straighten_diamond_quad_uv`, `get_hardcoded_tint`, `resolve_biome_color_set`, `builtin_material_fallbacks`, `effective_material_fallbacks`, `remap_mesh_multi_uvs_parallel_with_options`, `FaceMaterialSource`, `apply_dark_forest_grass_modifier`, `compute_resolved_tint_color`, `get_unit_cube_tint_index`, `linear_to_srgb`；
+  - 内部实现细节降级为 `pub(crate)`：`decode_labpbr13`, `decode_ior`, `DecodedPbr`, `remap_atlas_to_local`, `remap_sprite_to_sprite`, `detect_face_uv_rotation`, `straighten_face_uv`, `face_uv_requires_atlas_tiling`, `normalize_face_uv_for_atlas_tiling`, `remap_grid_atlas_uv_to_local`, `decode_grid_atlas_uv`, `resolve_routed_sprite`, `srgb_to_linear`, `hex_to_srgb`, `blend_biome_colors`, `sample_colormap_pixel*`, `classify_tint_category`, `REDSTONE_WIRE_TINT_HEX`, `get_redstone_wire_*`, `SWAMP_GRASS_*_HEX`, `BLOCK_TINT_REGISTRY`, `HARDCODED_BLOCK_TINTS`, `KNOWN_GRASS_STEMS`；
+  - 根导出收敛：暴露精简规范的生产契约（`default_biome_palette`, `get_all_biomes`, `get_biome_meta`, `get_default_colormaps`, `get_swamp_grass_color`, `hex_to_linear_rgba`, `reapply_uniform_biome_tint`, `sample_colormap_colors`, `decode_baked_atlas`, `remap_mesh_multi_uvs_paletted_with_options`, `remap_local_to_atlas`, `clean_material_identifier`, `parse_overrides`, `get_unit_cube_tint_indices`, 常量与核心结构体 `VanillaColormaps`, `BiomeResolver`, `MaterialResolver`, `GridAtlasSpec`, `ResolverOverrides`, `PbrDecodeSummary`, `MaterialError` 等）；
+  - 测试隔离：将 `decode_labpbr13` / `decode_ior`、`test_grid_atlas_uv_decode`、`test_redstone_wire_signal_palettes`、`test_classify_tint_category_authoritative`、`test_resident_colormap_sampling` 迁入各模块内部 `#[cfg(test)]` 单元测试；
+  - 下游穿透引用收敛：`bindings/mtk-py`, `libmtk`, `mtk-cli`, `mtk-voxel` 中对 `mtk_material::biome::*`, `mtk_material::pbr::*`, `mtk_material::resolver::*` 的穿透统一收敛为根命名空间 `mtk_material::*`；
+  - 同步更新 `crates/mtk-material/README.md`。
+- [ ] 推进后续 crate（`mtk-save` → `mtk-package` → `libmtk`）内部 `pub mod` 改 `mod` 与根导出精简。
 - [ ] 每完成一个 crate 跑 `cargo test -p <crate>` 与 `cargo clippy -p <crate> --all-targets -- -D warnings`。
 
 ### Batch 5：绑定与适配器收敛

@@ -41,14 +41,6 @@ impl ResolverOverrides {
             None => builtin_biome_suffixes(),
         }
     }
-
-    /// Returns configured material fallbacks, or the built-in legacy rules.
-    pub fn effective_material_fallbacks(&self) -> &[MaterialFallbackRule] {
-        match &self.material_fallbacks {
-            Some(list) => list,
-            None => builtin_material_fallbacks(),
-        }
-    }
 }
 
 /// Historical DCC exporter suffixes (Mineways / jmc2obj and similar).
@@ -103,11 +95,6 @@ pub fn builtin_biome_suffixes() -> &'static [String] {
     })
 }
 
-/// Built-in fallbacks for legacy/modded materials (retired, now owned by Python layer).
-pub fn builtin_material_fallbacks() -> &'static [MaterialFallbackRule] {
-    &[]
-}
-
 /// Parses a JSON compatibility profile.
 pub fn parse_overrides(json_str: &str) -> Result<ResolverOverrides, serde_json::Error> {
     serde_json::from_str(json_str)
@@ -128,7 +115,7 @@ mod tests {
         let overrides = parse_overrides(json).expect("parse overrides");
         assert_eq!(overrides.effective_biome_suffixes(), ["_custom"]);
         assert_eq!(
-            overrides.effective_material_fallbacks()[0].keyword,
+            overrides.material_fallbacks.as_ref().unwrap()[0].keyword,
             "leaves"
         );
         assert_eq!(overrides.tint_categories["mod:block/grass"], "grass");
@@ -140,7 +127,7 @@ mod tests {
             parse_overrides(r#"{"strip_biome_suffixes": [], "material_fallbacks": []}"#)
                 .expect("parse overrides");
         assert!(overrides.effective_biome_suffixes().is_empty());
-        assert!(overrides.effective_material_fallbacks().is_empty());
+        assert!(overrides.material_fallbacks.as_ref().unwrap().is_empty());
     }
 
     #[test]
@@ -167,7 +154,7 @@ mod tests {
         assert!(overrides
             .effective_biome_suffixes()
             .contains(&"_forest".to_string()));
-        assert!(overrides.effective_material_fallbacks().is_empty());
+        assert!(overrides.material_fallbacks.is_none());
     }
 
     #[test]

@@ -162,67 +162,8 @@ fn remap_single_face_multi_uvs(
     }
 }
 
-/// Material name source for per-face remapping: direct strings or a palette + indices.
-#[derive(Clone, Copy)]
-enum FaceMaterialSource<'a> {
-    Strings(&'a [String]),
-    Palette {
-        palette: &'a [String],
-        indices: &'a [u32],
-    },
-}
-
-impl<'a> FaceMaterialSource<'a> {
-    fn len(&self) -> usize {
-        match self {
-            Self::Strings(values) => values.len(),
-            Self::Palette { indices, .. } => indices.len(),
-        }
-    }
-
-    fn get(&self, index: usize) -> &'a str {
-        match self {
-            Self::Strings(values) => values.get(index).map(|s| s.as_str()).unwrap_or(""),
-            Self::Palette { palette, indices } => indices
-                .get(index)
-                .and_then(|idx| palette.get(*idx as usize))
-                .map(|s| s.as_str())
-                .unwrap_or(""),
-        }
-    }
-}
-
-/// Animation-aware variant of [`remap_mesh_multi_uvs_parallel`].
-///
-/// When `enable_animated_textures` is true, multi-frame sprites are routed to
-/// their dedicated animated atlas chunk and per-face animation metrics are
-/// returned. When false, the static Frame-0 chunk remains the only target.
-#[allow(clippy::too_many_arguments)]
-pub fn remap_mesh_multi_uvs_parallel_with_options(
-    source_uvs: &[[f32; 2]],
-    face_materials: &[String],
-    face_loop_ranges: &[(u32, u32)],
-    address_map: &AtlasAddressMap,
-    aliases: Option<&HashMap<String, Vec<String>>>,
-    grid_atlas_spec: Option<&GridAtlasSpec>,
-    enable_animated_textures: bool,
-) -> MeshMultiUvRemapResult {
-    remap_mesh_multi_uvs_impl(
-        source_uvs,
-        FaceMaterialSource::Strings(face_materials),
-        face_loop_ranges,
-        address_map,
-        aliases,
-        grid_atlas_spec,
-        enable_animated_textures,
-    )
-}
-
-/// Palette-native variant of [`remap_mesh_multi_uvs_parallel_with_options`].
-///
-/// Avoids constructing a `Vec<String>` with one entry per face. Also resolves the
-/// per-face source-texture keys into a compact palette + u32 index array, with an
-/// optional legacy provenance palette used as fallback for unmapped faces.
+/// Re-address all mesh UV loops into Atlas coordinates while computing
+/// normalized local [0, 1] coordinates and per-face metadata using a compact material palette.
 #[allow(clippy::too_many_arguments)]
 pub fn remap_mesh_multi_uvs_paletted_with_options(
     source_uvs: &[[f32; 2]],
@@ -236,13 +177,10 @@ pub fn remap_mesh_multi_uvs_paletted_with_options(
     existing_key_indices: Option<&[u32]>,
     enable_animated_textures: bool,
 ) -> MeshPalettedUvRemapResult {
-    let materials = FaceMaterialSource::Palette {
-        palette: face_material_palette,
-        indices: face_material_indices,
-    };
     let mesh = remap_mesh_multi_uvs_impl(
         source_uvs,
-        materials,
+        face_material_palette,
+        face_material_indices,
         face_loop_ranges,
         address_map,
         aliases,
@@ -329,15 +267,24 @@ fn build_source_key_palette(
 #[allow(clippy::too_many_arguments)]
 fn remap_mesh_multi_uvs_impl(
     source_uvs: &[[f32; 2]],
-    materials: FaceMaterialSource<'_>,
+    face_material_palette: &[String],
+    face_material_indices: &[u32],
     face_loop_ranges: &[(u32, u32)],
     address_map: &AtlasAddressMap,
     aliases: Option<&HashMap<String, Vec<String>>>,
     grid_atlas_spec: Option<&GridAtlasSpec>,
     enable_animated_textures: bool,
 ) -> MeshMultiUvRemapResult {
-    let face_count = materials.len();
+    let face_count = face_material_indices.len();
     let total_uv_len = source_uvs.len();
+
+    let get_mat = |i: usize| -> &str {
+        face_material_indices
+            .get(i)
+            .and_then(|idx| face_material_palette.get(*idx as usize))
+            .map(|s| s.as_str())
+            .unwrap_or("")
+    };
 
     if face_count != face_loop_ranges.len() {
         return MeshMultiUvRemapResult {
@@ -390,7 +337,7 @@ fn remap_mesh_multi_uvs_impl(
             .zip(local_chunks.into_par_iter())
             .map(|(((i, src), atlas_dst), local_dst)| {
                 remap_single_face_multi_uvs(
-                    materials.get(i),
+                    get_mat(i),
                     src,
                     atlas_dst,
                     local_dst,
@@ -410,7 +357,7 @@ fn remap_mesh_multi_uvs_impl(
             .zip(local_chunks.into_iter())
             .map(|(((i, src), atlas_dst), local_dst)| {
                 remap_single_face_multi_uvs(
-                    materials.get(i),
+                    get_mat(i),
                     src,
                     atlas_dst,
                     local_dst,
@@ -435,7 +382,7 @@ fn remap_mesh_multi_uvs_impl(
                 results.push(default_face_out());
                 continue;
             }
-            let mat_name = materials.get(face_idx);
+            let mat_name = get_mat(face_idx);
             let src = &source_uvs[start_idx..end_idx];
             let mut a_tmp = vec![[0.0, 0.0]; count as usize];
             let mut l_tmp = vec![[0.0, 0.0]; count as usize];

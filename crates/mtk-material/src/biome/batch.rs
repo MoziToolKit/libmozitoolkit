@@ -49,15 +49,6 @@ pub struct BiomeColorSet {
     pub water: [f32; 4],
 }
 
-/// Resolves the four tint channels and custom flags for a biome preset.
-pub fn resolve_biome_color_set(
-    biome_name: &str,
-    multi_biomes: Option<&[(String, f32)]>,
-    custom: Option<&CustomBiomeSettings>,
-) -> (BiomeColorSet, bool, bool, bool) {
-    resolve_biome_color_set_with_colormaps(biome_name, multi_biomes, custom, None)
-}
-
 /// Resolves the four tint channels and custom flags for a biome preset using explicit colormaps.
 pub fn resolve_biome_color_set_with_colormaps(
     biome_name: &str,

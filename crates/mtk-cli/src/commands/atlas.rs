@@ -237,7 +237,7 @@ fn run_bake_all(args: AtlasBakeAllArgs) -> Result<(), Box<dyn std::error::Error>
         }
 
         // Decode raw LabPBR companions into canonical MtkPackedV1 channels.
-        mtk_material::pbr::decode_baked_atlas(&mut baked)?;
+        mtk_material::decode_baked_atlas(&mut baked)?;
 
         let cat_elapsed = t_cat.elapsed();
         let sprite_count = baked.address_map.sprites.len();

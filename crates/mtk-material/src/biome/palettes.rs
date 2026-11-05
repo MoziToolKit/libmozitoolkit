@@ -2,7 +2,7 @@
 
 /// Convert standard sRGB color component (0.0 .. 1.0) to Linear RGB.
 #[inline]
-pub fn srgb_to_linear(c: f32) -> f32 {
+pub(crate) fn srgb_to_linear(c: f32) -> f32 {
     if c <= 0.04045 {
         c / 12.92
     } else {
@@ -10,18 +10,8 @@ pub fn srgb_to_linear(c: f32) -> f32 {
     }
 }
 
-/// Convert Linear RGB component (0.0 .. 1.0) to sRGB.
-#[inline]
-pub fn linear_to_srgb(c: f32) -> f32 {
-    if c <= 0.0031308 {
-        c * 12.92
-    } else {
-        1.055 * c.powf(1.0 / 2.4) - 0.055
-    }
-}
-
 /// Parse a hex color string (e.g. "#91BD59" or "91BD59") into sRGB float components `[r, g, b, a]`.
-pub fn hex_to_srgb(hex: &str) -> [f32; 4] {
+pub(crate) fn hex_to_srgb(hex: &str) -> [f32; 4] {
     let clean = hex.trim().trim_start_matches('#');
     let bytes = clean.as_bytes();
     if bytes.len() == 6 {
@@ -184,7 +174,7 @@ pub fn get_biome_palette(name_or_id: &str) -> &'static BiomePalette {
 }
 
 /// Blend multiple biome colors weighted together.
-pub fn blend_biome_colors(biome_weights: &[(&str, f32)], channel: &str) -> [f32; 4] {
+pub(crate) fn blend_biome_colors(biome_weights: &[(&str, f32)], channel: &str) -> [f32; 4] {
     let mut total_w = 0.0f32;
     let mut sum_r = 0.0f32;
     let mut sum_g = 0.0f32;
@@ -228,7 +218,7 @@ pub fn blend_biome_colors(biome_weights: &[(&str, f32)], channel: &str) -> [f32;
 /// int index = (y << 8) | x;
 /// ```
 #[inline]
-pub fn sample_colormap_pixel(
+pub(crate) fn sample_colormap_pixel(
     image_pixels: &[u8],
     width: u32,
     height: u32,
@@ -243,7 +233,7 @@ pub fn sample_colormap_pixel(
 
 /// Sample raw sRGB bytes `[r, g, b]` from a colormap buffer using authoritative Minecraft truncation.
 #[inline]
-pub fn sample_colormap_pixel_u8(
+pub(crate) fn sample_colormap_pixel_u8(
     image_pixels: &[u8],
     width: u32,
     height: u32,
@@ -276,7 +266,7 @@ pub fn sample_colormap_pixel_u8(
 
 /// Sample normalized sRGB floats `[r, g, b]` from a colormap buffer directly using normalized UV coordinates.
 #[inline]
-pub fn sample_colormap_pixel_uv(
+pub(crate) fn sample_colormap_pixel_uv(
     image_pixels: &[u8],
     width: u32,
     height: u32,
@@ -290,7 +280,7 @@ pub fn sample_colormap_pixel_uv(
 
 /// Sample raw sRGB bytes `[r, g, b]` from a colormap buffer directly using normalized UV coordinates.
 #[inline]
-pub fn sample_colormap_pixel_uv_u8(
+pub(crate) fn sample_colormap_pixel_uv_u8(
     image_pixels: &[u8],
     width: u32,
     height: u32,
@@ -321,7 +311,7 @@ pub fn sample_colormap_pixel_uv_u8(
 
 /// Sample colormap color and format directly as uppercase hex string (e.g. `"#91BD59"`).
 #[inline]
-pub fn sample_colormap_hex(
+pub(crate) fn sample_colormap_hex(
     image_pixels: &[u8],
     width: u32,
     height: u32,

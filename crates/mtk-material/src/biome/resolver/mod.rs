@@ -3,9 +3,9 @@
 //! Provides resource pack block model parsing, `tintindex` discovery,
 //! and authoritative SSOT vanilla biome mapping metadata.
 
-pub mod defaults;
-pub mod lookup;
-pub mod scanner;
-pub mod types;
+mod defaults;
+mod lookup;
+mod scanner;
+mod types;
 
 pub use types::*;

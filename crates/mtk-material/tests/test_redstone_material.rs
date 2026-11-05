@@ -1,8 +1,4 @@
-use mtk_material::biome::hardcoded::{
-    get_redstone_wire_color, get_redstone_wire_hex, get_redstone_wire_srgb,
-};
-use mtk_material::resolver::MaterialResolver;
-use mtk_material::BiomeResolver;
+use mtk_material::{BiomeResolver, MaterialResolver};
 use mtk_resource::ResourceLocation;
 use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};
 
@@ -28,30 +24,6 @@ fn make_sprite_loc(chunk_id: u16, texture_id: u32, uv_bounds: [f32; 4]) -> Atlas
         average_color: None,
         slot_index: None,
     }
-}
-
-#[test]
-fn test_redstone_wire_signal_palettes() {
-    // Power 0: #4B0000 / rgb(0.3, 0.0, 0.0)
-    let srgb_0 = get_redstone_wire_srgb(0);
-    assert!((srgb_0[0] - 0.3).abs() < 1e-4);
-    assert_eq!(srgb_0[1], 0.0);
-    assert_eq!(srgb_0[2], 0.0);
-    assert_eq!(get_redstone_wire_hex(0), "#4B0000");
-
-    // Power 15: #FF2600 / rgb(1.0, 0.15, 0.0)
-    let srgb_15 = get_redstone_wire_srgb(15);
-    assert!((srgb_15[0] - 1.0).abs() < 1e-4);
-    assert!((srgb_15[1] - 0.15).abs() < 1e-4);
-    assert_eq!(srgb_15[2], 0.0);
-    assert_eq!(get_redstone_wire_hex(15), "#FF2600");
-
-    // Linear conversions
-    let lin_0 = get_redstone_wire_color(0);
-    let lin_15 = get_redstone_wire_color(15);
-    assert!(lin_15[0] > lin_0[0]);
-    assert_eq!(lin_0[3], 1.0);
-    assert_eq!(lin_15[3], 1.0);
 }
 
 #[test]

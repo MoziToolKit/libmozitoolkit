@@ -285,7 +285,7 @@ impl PyAtlasBuilder {
             .detach(|| builder.build_category(&stack.inner, &cat))
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
-        mtk_material::pbr::decode_baked_atlas(&mut baked)
+        mtk_material::decode_baked_atlas(&mut baked)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
         Ok(PyBakedAtlas {

@@ -1558,7 +1558,7 @@ fn test_non_player_skull_textures_not_clobbered() {
 
 #[test]
 fn test_mesher_average_color_and_tint_injection() {
-    use mtk_material::biome::hex_to_linear_rgba;
+    use mtk_material::hex_to_linear_rgba;
     use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};
 
     let mut address_map = AtlasAddressMap::new();
@@ -1684,7 +1684,7 @@ fn test_mesher_average_color_and_tint_injection() {
 #[test]
 fn test_mesher_baked_model_atlas_uvs_average_color() {
     use mtk_core::Direction;
-    use mtk_material::biome::hex_to_linear_rgba;
+    use mtk_material::hex_to_linear_rgba;
     use mtk_model::{BakedFace, BakedModel};
     use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};
     use std::sync::Arc;

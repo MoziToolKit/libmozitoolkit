@@ -1,5 +1,8 @@
-pub mod batch;
-pub mod routes;
+mod batch;
+mod routes;
+
+pub use batch::remap_mesh_multi_uvs_paletted_with_options;
+pub use routes::{reroute_mesh_animation, resolve_mesh_material_routes};
 
 use mtk_texture::AtlasSpriteLocation;
 
@@ -18,7 +21,7 @@ pub fn remap_local_to_atlas(u: f32, v: f32, sprite: &AtlasSpriteLocation) -> [f3
 
 /// Invert an incoming Atlas UV coordinate back to local [0.0..1.0] space.
 #[inline]
-pub fn remap_atlas_to_local(u: f32, v: f32, sprite: &AtlasSpriteLocation) -> [f32; 2] {
+pub(crate) fn remap_atlas_to_local(u: f32, v: f32, sprite: &AtlasSpriteLocation) -> [f32; 2] {
     let [u_min, v_min, u_max, v_max] = sprite.frame_0_uv_bounds;
     let width = (u_max - u_min).max(1e-7);
     let height = (v_max - v_min).max(1e-7);
@@ -31,7 +34,7 @@ pub fn remap_atlas_to_local(u: f32, v: f32, sprite: &AtlasSpriteLocation) -> [f3
 
 /// Invert a UV coordinate from a source sprite and project it into a target sprite.
 #[inline]
-pub fn remap_sprite_to_sprite(
+pub(crate) fn remap_sprite_to_sprite(
     u: f32,
     v: f32,
     source_sprite: &AtlasSpriteLocation,
@@ -46,13 +49,13 @@ pub fn remap_sprite_to_sprite(
 /// Returns non-zero angle theta in radians only when ALL valid edges of the face are non-orthogonal.
 ///
 /// Delegates to [`mtk_core::detect_uv_rotation`] so the UV angle math has a single source of truth.
-pub fn detect_face_uv_rotation(uvs: &[[f32; 2]], tolerance: f32) -> f32 {
+pub(crate) fn detect_face_uv_rotation(uvs: &[[f32; 2]], tolerance: f32) -> f32 {
     let vecs: Vec<glam::Vec2> = uvs.iter().map(|p| glam::Vec2::new(p[0], p[1])).collect();
     mtk_core::detect_uv_rotation(&vecs, tolerance)
 }
 
 /// Straighten a rotated polygon's loop UVs back to standard axis-aligned coordinates.
-pub fn straighten_face_uv(uvs: &mut [[f32; 2]], angle: f32) -> bool {
+pub(crate) fn straighten_face_uv(uvs: &mut [[f32; 2]], angle: f32) -> bool {
     if angle.abs() < 1e-4 || uvs.len() < 3 {
         return false;
     }
@@ -76,7 +79,7 @@ pub fn straighten_face_uv(uvs: &mut [[f32; 2]], angle: f32) -> bool {
 
 /// Check if a polygon's UV coordinates escape the canonical [0, 1] unit square.
 #[inline]
-pub fn face_uv_requires_atlas_tiling(uvs: &[[f32; 2]], epsilon: f32) -> bool {
+pub(crate) fn face_uv_requires_atlas_tiling(uvs: &[[f32; 2]], epsilon: f32) -> bool {
     if uvs.is_empty() {
         return false;
     }
@@ -90,7 +93,10 @@ pub fn face_uv_requires_atlas_tiling(uvs: &[[f32; 2]], epsilon: f32) -> bool {
 
 /// Normalize one face's local UV coordinates to [0, 1] and calculate Mapping inputs for MC_Atlas_UV_Tiling.
 /// Returns ([scale_u, scale_v, location_u, location_v], is_tiled).
-pub fn normalize_face_uv_for_atlas_tiling(uvs: &mut [[f32; 2]], epsilon: f32) -> ([f32; 4], bool) {
+pub(crate) fn normalize_face_uv_for_atlas_tiling(
+    uvs: &mut [[f32; 2]],
+    epsilon: f32,
+) -> ([f32; 4], bool) {
     if uvs.is_empty() || !face_uv_requires_atlas_tiling(uvs, 1e-4) {
         return ([1.0, 1.0, 0.0, 0.0], false);
     }
@@ -142,38 +148,4 @@ pub fn normalize_face_uv_for_atlas_tiling(uvs: &mut [[f32; 2]], epsilon: f32) ->
     let loc_v = min_v + (safe_span_v - 1.0) * 0.5;
 
     ([scale_u, scale_v, loc_u, loc_v], true)
-}
-
-/// Check if a 4-vertex quad UV layout is rotated by non-orthogonal angles (e.g. jmc2obj 45-degree flowing liquid diamond).
-pub fn is_quad_uv_diamond(uvs: &[[f32; 2]; 4]) -> bool {
-    let du0 = uvs[1][0] - uvs[0][0];
-    let dv0 = uvs[1][1] - uvs[0][1];
-    let du1 = uvs[2][0] - uvs[1][0];
-    let dv1 = uvs[2][1] - uvs[1][1];
-
-    // Check for ~45 degree diagonal vectors (du ≈ ±dv)
-    let is_diag0 = (du0.abs() - dv0.abs()).abs() < 1e-3 && du0.abs() > 1e-4;
-    let is_diag1 = (du1.abs() - dv1.abs()).abs() < 1e-3 && du1.abs() > 1e-4;
-
-    is_diag0 && is_diag1
-}
-
-/// Straighten a 45-degree diamond quad UV back to orthogonal [0..1] aligned coordinates.
-pub fn straighten_diamond_quad_uv(uvs: &mut [[f32; 2]; 4]) -> bool {
-    if !is_quad_uv_diamond(uvs) {
-        return false;
-    }
-
-    let u_min = uvs.iter().map(|p| p[0]).fold(f32::INFINITY, f32::min);
-    let u_max = uvs.iter().map(|p| p[0]).fold(f32::NEG_INFINITY, f32::max);
-    let v_min = uvs.iter().map(|p| p[1]).fold(f32::INFINITY, f32::min);
-    let v_max = uvs.iter().map(|p| p[1]).fold(f32::NEG_INFINITY, f32::max);
-
-    // Standard orthogonal corners based on vertex order
-    uvs[0] = [u_min, v_min];
-    uvs[1] = [u_max, v_min];
-    uvs[2] = [u_max, v_max];
-    uvs[3] = [u_min, v_max];
-
-    true
 }
