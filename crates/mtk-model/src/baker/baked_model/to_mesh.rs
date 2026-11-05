@@ -17,7 +17,10 @@ impl BakedModel {
 
     /// Converts geometry into a `MeshData` buffer along with the ordered list of unique texture names,
     /// using specified `ModelMeshOptions` for clipping and de-overlapping.
-    pub fn to_mesh_with_options(&self, options: &ModelMeshOptions) -> (MeshData, Vec<String>) {
+    pub(crate) fn to_mesh_with_options(
+        &self,
+        options: &ModelMeshOptions,
+    ) -> (MeshData, Vec<String>) {
         let mut mesh = MeshData::new();
         mesh.uv_layout = UvLayout::PerLoop;
         let mut texture_to_slot: HashMap<String, u16> = HashMap::new();

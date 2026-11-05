@@ -150,7 +150,7 @@ fn test_mesher_custom_attributes() {
 #[test]
 fn test_grass_block_meshing_no_duplicate_overlay_faces() {
     use mtk_core::Direction;
-    use mtk_model::baker::{BakedElement, BakedFace, BakedModel};
+    use mtk_model::{BakedElement, BakedFace, BakedModel};
     use std::collections::HashMap;
     use std::sync::Arc;
 
@@ -482,7 +482,7 @@ fn test_waterlogged_isolated_block_with_baked_model() {
     let config = MesherConfig::default();
 
     // Create a mock baked model for the slab (without waterlogged in its block_state)
-    let face = mtk_model::baker::BakedFace {
+    let face = mtk_model::BakedFace {
         direction: mtk_core::Direction::Up,
         vertices: [
             glam::Vec3::new(0.0, 0.5, 0.0),
@@ -495,15 +495,15 @@ fn test_waterlogged_isolated_block_with_baked_model() {
     };
     let mut faces_map = std::collections::HashMap::new();
     faces_map.insert(mtk_core::Direction::Up, face);
-    let mut slab_model = mtk_model::baker::BakedModel {
+    let mut slab_model = mtk_model::BakedModel {
         block_state: "minecraft:oak_slab[type=bottom]".to_string(),
-        elements: vec![mtk_model::baker::BakedElement {
+        elements: vec![mtk_model::BakedElement {
             from_pos: [0.0, 0.0, 0.0],
             to_pos: [16.0, 8.0, 16.0],
             faces: faces_map,
         }],
         obj_faces: Vec::new(),
-        faces: std::array::from_fn(|_| mtk_model::baker::BakedFace::default()),
+        faces: std::array::from_fn(|_| mtk_model::BakedFace::default()),
         is_cube: false,
         is_opaque: false,
         is_emissive: false,
@@ -534,7 +534,7 @@ fn test_waterlogged_isolated_block_with_baked_model() {
 
 #[test]
 fn test_alternate_blocks_variant_sampling() {
-    use mtk_model::baker::baked_model::{BakedElement, BakedFace, BakedModel, BakedVariantGroup};
+    use mtk_model::{BakedElement, BakedFace, BakedModel, BakedVariantGroup};
     use mtk_voxel::mesher::ModelSource;
     use std::sync::Arc;
 
@@ -805,7 +805,7 @@ fn test_3d_caves_and_cliffs_biome_tinting() {
 #[test]
 fn test_cache_driven_animated_texture_routing_block_models() {
     use mtk_core::Direction;
-    use mtk_model::baker::baked_model::{BakedFace, BakedModel};
+    use mtk_model::{BakedFace, BakedModel};
     use mtk_texture::atlas::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation};
     use std::sync::Arc;
 
@@ -975,7 +975,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
         };
         let mut faces_map = std::collections::HashMap::new();
         faces_map.insert(Direction::Up, face);
-        model.elements = vec![mtk_model::baker::BakedElement {
+        model.elements = vec![mtk_model::BakedElement {
             from_pos: [0.0, 0.0, 0.0],
             to_pos: [16.0, 16.0, 16.0],
             faces: faces_map,
@@ -1089,7 +1089,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
 fn test_dirt_path_mesh_ao_neighbor_shading() {
     use glam::{Vec2, Vec3};
     use mtk_core::Direction;
-    use mtk_model::baker::{BakedElement, BakedFace, BakedModel};
+    use mtk_model::{BakedElement, BakedFace, BakedModel};
     use std::collections::HashMap;
 
     // Build a mock dirt_path model with Y = 15/16 height
@@ -1229,7 +1229,7 @@ fn test_dirt_path_mesh_ao_neighbor_shading() {
 fn test_dirt_path_adjacent_no_occlusion() {
     use glam::{Vec2, Vec3};
     use mtk_core::Direction;
-    use mtk_model::baker::{BakedElement, BakedFace, BakedModel};
+    use mtk_model::{BakedElement, BakedFace, BakedModel};
     use std::collections::HashMap;
 
     let mut faces = HashMap::new();
@@ -1389,9 +1389,9 @@ fn test_generic_block_entity_meshing_skull_and_pot() {
     sec.voxels[skull_idx as usize] = skull_pal;
 
     let skull_entity = mtk_model::BlockEntityData::new_skull(
-        mtk_model::entity::skull::SkullKind::Player,
+        mtk_model::skull::SkullKind::Player,
         Some(4),
-        Some(mtk_model::entity::skull::PlayerProfileData::new(
+        Some(mtk_model::skull::PlayerProfileData::new(
             Some("Steve".to_string()),
             None,
             Some("http://textures.minecraft.net/texture/cust123".to_string()),
@@ -1433,9 +1433,9 @@ fn test_player_skull_dynamic_atlas_meshing_and_uv_remapping() {
     world.skin_resolver.register_memory_skin(hash, png_bytes);
 
     let skull_entity = mtk_model::BlockEntityData::new_skull(
-        mtk_model::entity::skull::SkullKind::Player,
+        mtk_model::skull::SkullKind::Player,
         Some(0),
-        Some(mtk_model::entity::skull::PlayerProfileData::new(
+        Some(mtk_model::skull::PlayerProfileData::new(
             Some("Steve".to_string()),
             Some("00000000-0000-0000-0000-000000000000".to_string()),
             Some(format!("http://textures.minecraft.net/texture/{}", hash)),
@@ -1506,11 +1506,11 @@ fn test_player_skull_dynamic_atlas_meshing_and_uv_remapping() {
 
 #[test]
 fn test_non_player_skull_textures_not_clobbered() {
-    let mut baker = mtk_model::baker::ModelBaker::new();
+    let mut baker = mtk_model::ModelBaker::new();
 
     // 1. Zombie head without block entity profile (typical modern 1.13+ save where NBT lacks SkullType)
     let dummy_be = mtk_model::BlockEntityData::new_skull(
-        mtk_model::entity::skull::SkullKind::Skeleton, // Default fallback from NBT without SkullType
+        mtk_model::skull::SkullKind::Skeleton, // Default fallback from NBT without SkullType
         None,
         None,
     );
@@ -1549,11 +1549,8 @@ fn test_non_player_skull_textures_not_clobbered() {
     );
 
     // 3. Pre-1.20.5 ground skull rotation from block entity (Rot = 4 => 270 deg)
-    let rot_be = mtk_model::BlockEntityData::new_skull(
-        mtk_model::entity::skull::SkullKind::Skeleton,
-        Some(4),
-        None,
-    );
+    let rot_be =
+        mtk_model::BlockEntityData::new_skull(mtk_model::skull::SkullKind::Skeleton, Some(4), None);
     let rot_model = baker
         .bake_blockstate_with_entity("minecraft:skeleton_skull", Some(&rot_be), None, |_| None)
         .expect("Skeleton skull baking must succeed");

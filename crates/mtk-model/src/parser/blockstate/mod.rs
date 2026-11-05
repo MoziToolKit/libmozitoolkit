@@ -3,9 +3,9 @@
 //! Provides parsing of Minecraft canonical BlockState identifiers and
 //! matching logic against `blockstates/*.json` variant definitions and multipart rules.
 
-pub mod definition;
-pub mod resolver;
-pub mod state;
+pub(crate) mod definition;
+pub(crate) mod resolver;
+pub(crate) mod state;
 
 pub use definition::*;
 pub use resolver::*;

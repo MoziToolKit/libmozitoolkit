@@ -1,8 +1,7 @@
 use std::fs;
 
 use mtk_core::Direction;
-use mtk_model::baker::baked_model::{BakedElement, BakedFace, BakedModel, BakedVariantGroup};
-use mtk_model::BakedModelDatabase;
+use mtk_model::{BakedElement, BakedFace, BakedModel, BakedModelDatabase, BakedVariantGroup};
 
 fn create_sample_cube(state: &str, tex: &str) -> BakedModel {
     let mut model = BakedModel {

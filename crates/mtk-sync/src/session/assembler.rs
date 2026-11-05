@@ -514,7 +514,7 @@ impl BaselineAssembler {
             {
                 let state_str = sec.get_local_state(blx, bly, blz);
                 if let Some(resolved_color) =
-                    mtk_model::entity::banner::extract_banner_color_from_state(state_str)
+                    mtk_model::banner::extract_banner_color_from_state(state_str)
                 {
                     *base_color = resolved_color.to_string();
                 }

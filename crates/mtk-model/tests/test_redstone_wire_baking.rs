@@ -1,7 +1,5 @@
 use mtk_core::Direction;
-use mtk_model::baker::baked_model::BakedModelDatabase;
-use mtk_model::baker::ModelBaker;
-use mtk_model::{BlockModelJson, BlockStateDefinition};
+use mtk_model::{BakedModelDatabase, BlockModelJson, BlockStateDefinition, ModelBaker};
 
 fn get_test_redstone_def() -> BlockStateDefinition {
     serde_json::from_str(include_str!(

@@ -719,7 +719,7 @@ fn test_scene_export_ctm_rules_and_subtiles_roundtrip() {
 fn test_scene_export_banner_with_patterns_and_custom_baker() {
     use crate::scene::exporter::cropper::SceneAtlasSource;
     use crate::scene::exporter::export_scene_package;
-    use mtk_model::entity::banner::BannerPatternLayer;
+    use mtk_model::banner::BannerPatternLayer;
     use mtk_model::BlockEntityData;
     use mtk_texture::banner::BannerBaker;
 

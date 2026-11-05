@@ -4,8 +4,8 @@
 //! supporting both pre-1.20.5 Tag structures and 1.20.5+ Data Component structures.
 
 use crate::nbt::tag::NbtCompound;
-use mtk_model::entity::banner::BannerPatternLayer;
-use mtk_model::entity::skull::{PlayerProfileData, SkullKind};
+use mtk_model::banner::BannerPatternLayer;
+use mtk_model::skull::{PlayerProfileData, SkullKind};
 use mtk_model::BlockEntityData;
 
 /// Decodes an NBT Compound from a chunk's `block_entities` list into a typed `BlockEntityData`.

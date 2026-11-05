@@ -14,7 +14,7 @@ use std::sync::Arc;
 use glam::IVec3;
 use mtk_core::MeshData;
 use mtk_cull::FaceCuller;
-use mtk_model::baker::baked_model::BakedModelDatabase;
+use mtk_model::BakedModelDatabase;
 
 use crate::source::VoxelSource;
 use crate::storage::VoxelStorage;
@@ -563,7 +563,7 @@ impl VoxelWorld {
             if let Some(sec) = self.storage.sections.get(sec_coord) {
                 for be in sec.block_entities.values() {
                     if let mtk_model::BlockEntityData::Skull { kind, profile, .. } = be {
-                        if *kind == mtk_model::entity::skull::SkullKind::Player {
+                        if *kind == mtk_model::skull::SkullKind::Player {
                             let (skin_url, uuid, name) = if let Some(prof) = profile {
                                 (
                                     prof.skin_url.as_deref(),
@@ -653,7 +653,7 @@ impl VoxelWorld {
                     } = be
                     {
                         let key =
-                            mtk_model::entity::banner_texture_identifier(base_color, patterns);
+                            mtk_model::banner::banner_texture_identifier(base_color, patterns);
                         if !self.is_key_in_static_atlas(&key)
                             && !self.dynamic_entities.contains_key(&key)
                         {
@@ -744,7 +744,7 @@ impl VoxelWorld {
             if let Some(sec) = self.storage.sections.get(sec_coord) {
                 for be in sec.block_entities.values() {
                     if let mtk_model::BlockEntityData::Skull { kind, profile, .. } = be {
-                        if *kind == mtk_model::entity::skull::SkullKind::Player {
+                        if *kind == mtk_model::skull::SkullKind::Player {
                             let (skin_url, uuid, name) = if let Some(prof) = profile {
                                 (
                                     prof.skin_url.as_deref(),
@@ -837,7 +837,7 @@ impl VoxelWorld {
                     } = be
                     {
                         let key =
-                            mtk_model::entity::banner_texture_identifier(base_color, patterns);
+                            mtk_model::banner::banner_texture_identifier(base_color, patterns);
                         if !self.is_key_in_static_atlas(&key)
                             && !self.dynamic_entities.contains_key(&key)
                         {

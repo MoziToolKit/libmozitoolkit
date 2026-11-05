@@ -1,7 +1,7 @@
 use glam::Vec2;
 use mtk_core::Direction;
 use mtk_material::MaterialResolver;
-use mtk_model::baker::baked_model::{BakedFace, BakedModel};
+use mtk_model::{BakedFace, BakedModel};
 
 use crate::mesher::heuristic::get_unit_cube_texture_candidates;
 use crate::mesher::tint::compute_face_tint;

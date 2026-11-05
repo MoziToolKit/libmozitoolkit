@@ -56,7 +56,7 @@ fn test_scene_package_roundtrip() {
     let mut model_db = BakedModelDatabase::new();
     model_db.insert(
         "minecraft:stone".to_string(),
-        mtk_model::baker::baked_model::BakedModel {
+        mtk_model::BakedModel {
             block_state: "minecraft:stone".to_string(),
             is_cube: true,
             is_opaque: true,
@@ -290,7 +290,7 @@ fn test_validate_missing_texture_slice_and_unmapped_model_texture() {
         .unwrap();
 
     let mut model_db = BakedModelDatabase::new();
-    let mut model = mtk_model::baker::baked_model::BakedModel {
+    let mut model = mtk_model::BakedModel {
         block_state: "minecraft:stone".to_string(),
         ..Default::default()
     };

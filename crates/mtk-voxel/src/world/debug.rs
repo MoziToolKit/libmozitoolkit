@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use mtk_cull::FaceCuller;
-use mtk_model::baker::baked_model::BakedModelDatabase;
+use mtk_model::BakedModelDatabase;
 
 use crate::storage::VoxelStorage;
 use crate::types::{MesherConfig, VoxelError};

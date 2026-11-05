@@ -125,9 +125,7 @@ fn run_export_samples(args: ExportSamplesArgs) -> Result<(), Box<dyn std::error:
         let mut obj_content = String::new();
         obj_content.push_str(&format!("# BlockState: {}\n", state_str));
         obj_content.push_str(&format!("mtllib {}\n", mtl_filename));
-        obj_content.push_str(&mtk_model::parser::obj::mesh_to_obj_string(
-            &mesh, &sanitized, &textures,
-        ));
+        obj_content.push_str(&mtk_model::mesh_to_obj_string(&mesh, &sanitized, &textures));
 
         let mut mtl_content = String::new();
         mtl_content.push_str("# Materials generated for manual inspection in Blender\n");

@@ -4,18 +4,12 @@
 //! BlockState definitions for blocks lacking static models in vanilla Java JARs
 //! (Chests, Beds, Shulker Boxes, Signs, Bells, Skulls, etc.).
 
-pub mod evaluator;
-pub mod loader;
-pub mod patch;
-pub mod vanilla;
+pub(crate) mod evaluator;
+pub(crate) mod loader;
+pub(crate) mod patch;
+pub(crate) mod vanilla;
 
-pub use evaluator::entity_uv_to_faces;
-pub use loader::MiExModelLoader;
-pub use patch::apply_bell_patches;
-pub use vanilla::{
-    get_builtin_baked_model_for_state_and_entity, get_builtin_blockstate_def,
-    get_builtin_model_by_id,
-};
+use loader::MiExModelLoader;
 
 use crate::baker::BakedModel;
 use crate::parser::blockstate::{BlockState, BlockStateDefinition};

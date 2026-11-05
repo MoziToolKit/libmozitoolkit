@@ -1,11 +1,8 @@
-use std::collections::HashMap;
-
-use glam::Vec3;
-use mtk_core::Direction;
-use mtk_model::parser::obj::{ModObjLoader, WavefrontObjParser};
-use mtk_model::{BlockModelJson, BlockStateDefinition, ModelBaker};
-use mtk_testkit::{blockstate_json_path, model_json_path, require_assets};
 use std::path::Path;
+
+use mtk_core::Direction;
+use mtk_model::{BakedModel, BlockModelJson, BlockStateDefinition, ModelBaker};
+use mtk_testkit::{blockstate_json_path, model_json_path, require_assets};
 
 /// Reads a vanilla blockstate definition through the shared `mtk-testkit` asset resolver.
 fn read_vanilla_blockstate(root: &Path, block_id: &str) -> Option<BlockStateDefinition> {
@@ -103,45 +100,6 @@ fn test_stairs_blockstate_baking_and_culling() {
 }
 
 #[test]
-fn test_obj_polygon_fan_and_negative_indices() {
-    let obj_text = r#"
-# 5-vertex polygon and negative indices
-v 0.0 0.0 0.0
-v 1.0 0.0 0.0
-v 1.0 1.0 0.0
-v 0.5 1.5 0.0
-v 0.0 1.0 0.0
-vt 0.0 0.0
-vt 1.0 0.0
-vt 1.0 1.0
-vt 0.5 1.0
-vt 0.0 1.0
-usemtl [1]minecraft:block/gold_block
-f -5/-5 -4/-4 -3/-3 -2/-2 -1/-1
-"#;
-
-    let faces = WavefrontObjParser::parse_str(obj_text, None);
-    // 5-vertex polygon fanned into 3 triangles: (0,1,2), (0,2,3), (0,3,4)
-    assert_eq!(faces.len(), 3);
-    for f in &faces {
-        assert_eq!(f.verts.len(), 3);
-        assert_eq!(f.material, "minecraft:block/gold_block");
-        assert_eq!(f.tint_index, 1);
-    }
-
-    let baked = ModObjLoader::process_raw_faces(
-        &faces,
-        &HashMap::new(),
-        "minecraft:block/dirt",
-        0.0,
-        0.0,
-        0.0,
-        Vec3::ZERO,
-    );
-    assert_eq!(baked.len(), 3);
-}
-
-#[test]
 fn test_builtin_chest_and_bell_fallback() {
     let mut baker = mtk_model::ModelBaker::new();
 
@@ -184,33 +142,22 @@ fn test_builtin_chest_and_bell_fallback() {
     // should trigger fallback to builtin bell model and include the golden bell body
     let vanilla_bell_loader = |id: &str| {
         if id.contains("bell") {
-            let mut textures = HashMap::new();
-            textures.insert(
-                "particle".to_string(),
-                mtk_model::TextureValue::Path("minecraft:block/bell_bottom".to_string()),
-            );
-            textures.insert(
-                "bar".to_string(),
-                mtk_model::TextureValue::Path("minecraft:block/dark_oak_planks".to_string()),
-            );
-            textures.insert(
-                "post".to_string(),
-                mtk_model::TextureValue::Path("minecraft:block/stone".to_string()),
-            );
-            // Vanilla has 3 frame elements, 0 bell body
-            Some(mtk_model::BlockModelJson {
-                parent: None,
-                ambientocclusion: Some(true),
-                textures: Some(textures),
-                elements: Some(vec![mtk_model::ElementJson {
-                    from: [2.0, 13.0, 7.0],
-                    to: [14.0, 15.0, 9.0],
-                    faces: HashMap::new(),
-                    rotation: None,
-                    transform: None,
-                    shade: None,
-                }]),
-            })
+            let json = r#"{
+                "ambientocclusion": true,
+                "textures": {
+                    "particle": "minecraft:block/bell_bottom",
+                    "bar": "minecraft:block/dark_oak_planks",
+                    "post": "minecraft:block/stone"
+                },
+                "elements": [
+                    {
+                        "from": [2.0, 13.0, 7.0],
+                        "to": [14.0, 15.0, 9.0],
+                        "faces": {}
+                    }
+                ]
+            }"#;
+            serde_json::from_str::<BlockModelJson>(json).ok()
         } else {
             None
         }
@@ -368,8 +315,7 @@ fn test_baked_model_cull_meta_serialization() {
 
     // Test postcard roundtrip
     let bin = postcard::to_allocvec(&baked).unwrap();
-    let deserialized: mtk_model::baker::baked_model::BakedModel =
-        postcard::from_bytes(&bin).unwrap();
+    let deserialized: BakedModel = postcard::from_bytes(&bin).unwrap();
     assert!(deserialized.cull_meta.is_some());
     let des_meta = deserialized.cull_meta.unwrap();
     assert_eq!(des_meta.category, mtk_cull::CullCategory::SolidOpaque);
@@ -427,8 +373,7 @@ fn test_baked_model_atlas_uv_remapping() {
 
     // Test postcard roundtrip serialization
     let bin = postcard::to_allocvec(&baked).unwrap();
-    let deserialized: mtk_model::baker::baked_model::BakedModel =
-        postcard::from_bytes(&bin).unwrap();
+    let deserialized: BakedModel = postcard::from_bytes(&bin).unwrap();
     let des_face = deserialized.elements[0]
         .faces
         .get(&mtk_core::Direction::Up)
@@ -441,8 +386,6 @@ fn test_baked_model_atlas_uv_remapping() {
 #[test]
 fn test_baked_model_six_direction_bucketing() {
     use mtk_core::Direction;
-    use mtk_model::baker::ModelBaker;
-    use mtk_model::parser::BlockModelJson;
 
     let mut baker = ModelBaker::new();
 
@@ -504,8 +447,7 @@ fn test_baked_model_six_direction_bucketing() {
 
     // Test postcard roundtrip serialization preserving face buckets
     let bin = postcard::to_allocvec(&baked).unwrap();
-    let deserialized: mtk_model::baker::baked_model::BakedModel =
-        postcard::from_bytes(&bin).unwrap();
+    let deserialized: BakedModel = postcard::from_bytes(&bin).unwrap();
     assert_eq!(deserialized.culled_faces[Direction::Up.to_index()].len(), 2);
     assert_eq!(
         deserialized.culled_faces[Direction::Down.to_index()].len(),
@@ -704,8 +646,7 @@ fn test_baker_coplanar_opposite_contact_faces() {
 
 #[test]
 fn test_builtin_blockbench_json_models() {
-    use mtk_model::baker::ModelBaker;
-    use mtk_model::builtin::BuiltinModelRegistry;
+    use mtk_model::BuiltinModelRegistry;
 
     let test_model_ids = [
         "minecraft:block/chest",
@@ -1394,7 +1335,7 @@ fn test_dragon_and_piglin_head_geometry() {
 fn test_cross_emissive_coplanar_deduplication() {
     use glam::{Vec2, Vec3};
     use mtk_core::Direction;
-    use mtk_model::baker::baked_model::{BakedElement, BakedFace, BakedModel};
+    use mtk_model::{BakedElement, BakedFace, BakedModel};
     use std::collections::HashMap;
 
     // Simulate cross_emissive model with 2 elements on the exact same quad geometry:

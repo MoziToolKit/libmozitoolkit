@@ -186,16 +186,19 @@ pub struct BakedVariantGroup {
 | API 签名 | 描述 |
 | :--- | :--- |
 | `BlockState::parse(s: &str) -> Result<BlockState, ModelError>` | 解析方块状态字符串。 |
-| `BlockStateResolver::resolve(def, state) -> Vec<VariantMatch>` | 评估匹配方块状态对应的模型变体。 |
-| `BlockStateResolver::resolve_variants(def, state) -> Vec<(Vec<VariantMatch>, u32)>` | 提取离散变体分支及其相对权重（用于 Alternate Blocks 预烘焙）。 |
-| `get_builtin_blockstate_def(name) -> Option<BlockStateDefinition>` | 获取内置原版 Java BER 实体方块 BlockState 定义（箱子、潜影盒、钟、头颅、饰纹陶罐、末地传送门等无 JSON 几何之方块）。 |
-| `get_builtin_model_by_id(model_id) -> Option<BlockModelJson>` | 获取内置原版标准 Blockbench 兼容模型 JSON（箱子各形态、潜影盒、钟各悬挂态、头颅/龙首/猪灵首、陶罐、传送门）。 |
-| `get_builtin_model_for_state(blockstate) -> Option<BlockModelJson>` | 依据方块状态获取对应的内置实体回退模型并自动映射材质。 |
+| `BlockStateResolver::resolve(def, state)` | 评估匹配方块状态对应的模型变体。 |
+| `BlockStateResolver::resolve_variants(def, state)` | 提取离散变体分支及其相对权重（用于 Alternate Blocks 预烘焙）。 |
+| `BuiltinModelRegistry::get_builtin_blockstate_def(name) -> Option<BlockStateDefinition>` | 获取内置原版 Java BER 实体方块 BlockState 定义（箱子、潜影盒、钟、头颅、饰纹陶罐、末地传送门等无 JSON 几何之方块）。 |
+| `BuiltinModelRegistry::get_builtin_model_by_id(model_id) -> Option<BlockModelJson>` | 获取内置原版标准 Blockbench 兼容模型 JSON（箱子各形态、潜影盒、钟各悬挂态、头颅/龙首/猪灵首、陶罐、传送门）。 |
+| `BuiltinModelRegistry::bake_block_entity(state_str, entity) -> Option<BakedModel>` | 依据方块状态与实体数据动态烘焙或合成内置实体模型。 |
 | `ModelBaker::new() -> Self` | 创建通用模型烘焙器。 |
 | `baker.bake_blockstate(state_str, def, model_loader) -> Result<BakedModel, ModelError>` | 端到端烘焙指定方块状态为 `BakedModel`。 |
 | `baker.bake_blockstate_variants(state_str, def, model_loader) -> Result<BakedVariantGroup, ModelError>` | 端到端烘焙离散变体分支组为 `BakedVariantGroup`。 |
 | `is_block_emissive(state: &BlockState) -> bool` | 判断方块是否为自发光方块。 |
-| `WavefrontObjParser::parse_str(text, filter) -> Vec<ObjRawFace>` | 解析通用 Wavefront OBJ 文本。 |
+| `is_opaque_block(short_name: &str) -> bool` | 判断方块名称是否为不透明完整方块。 |
+| `is_known_non_cube(short_name: &str, is_double_slab: bool) -> bool` | 判断方块名称是否为已知非立方体几何形态。 |
+| `mesh_to_obj_string(mesh, object_name, materials) -> String` | 将 MeshData 转换为 Wavefront OBJ 字符串。 |
+| `normalize_canonical_blockstate(raw: &str) -> String` | 规范化并清洗方块状态字符串。 |
 
 ---
 
@@ -312,7 +315,7 @@ fn main() {
 
 ### 示例 4：烘焙内置红石引线并提取发光与染色属性
 ```rust
-use mtk_model::baker::ModelBaker;
+use mtk_model::ModelBaker;
 use mtk_core::attribute_constants::{ATTR_BIOME_TINT_COLOR, ATTR_UV_TRANSFORM};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -154,8 +154,8 @@ where
             Some(idx) => &clean[..idx],
             None => clean,
         };
-        let is_solid_cube = mtk_model::baker::rules::is_opaque_block(name)
-            && !mtk_model::baker::rules::is_known_non_cube(name, false);
+        let is_solid_cube =
+            mtk_model::is_opaque_block(name) && !mtk_model::is_known_non_cube(name, false);
 
         if is_solid_cube {
             return -1.0;

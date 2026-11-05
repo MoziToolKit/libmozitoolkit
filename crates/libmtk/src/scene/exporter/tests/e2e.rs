@@ -93,8 +93,8 @@ fn test_export_dynamic_entity_atlas_stitching() {
 
     let mut voxels = SparseVoxelPayload::new();
     let skull_entity = BlockEntityData::Skull {
-        kind: mtk_model::entity::skull::SkullKind::Player,
-        profile: Some(mtk_model::entity::skull::PlayerProfileData {
+        kind: mtk_model::skull::SkullKind::Player,
+        profile: Some(mtk_model::skull::PlayerProfileData {
             id: Some(skin_key.to_string()),
             name: Some("TestPlayer".to_string()),
             skin_url: None,

@@ -165,9 +165,3 @@ pub fn normalize_canonical_blockstate(raw: &str) -> &str {
         _ => trimmed,
     }
 }
-
-/// Returns true if the given block name or blockstate string is considered air-like.
-#[inline]
-pub fn is_air_like(raw: &str) -> bool {
-    normalize_canonical_blockstate(raw) == "minecraft:air"
-}

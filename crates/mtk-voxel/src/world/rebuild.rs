@@ -6,7 +6,7 @@
 use glam::IVec3;
 use mtk_core::MeshData;
 use mtk_core::{ProgressCallback, ProgressReport};
-use mtk_model::baker::baked_model::BakedModelDatabase;
+use mtk_model::{BakedModelDatabase, ModelBaker};
 
 use crate::mesher::{DeltaMesher, SectionMesher};
 use crate::types::VoxelError;
@@ -28,8 +28,8 @@ impl VoxelWorld {
                 return crate::mesher::ModelSource::Single(model);
             }
         }
-        if mtk_model::entity::banner::extract_banner_color_from_state(state).is_some() {
-            let mut baker = mtk_model::baker::ModelBaker::new();
+        if mtk_model::banner::extract_banner_color_from_state(state).is_some() {
+            let mut baker = ModelBaker::new();
             if let Ok(baked) = baker.bake_blockstate_with_entity(state, None, None, |_| None) {
                 return crate::mesher::ModelSource::OwnedSingle(std::sync::Arc::new(baked));
             }

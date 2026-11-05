@@ -49,7 +49,6 @@ pub const MIEX_HANGING_SIGN_JSON: &str =
 pub const MIEX_SKULL_JSON: &str = include_str!("../../assets/builtins/blockstates/skull.json");
 pub const MIEX_END_PORTAL_JSON: &str =
     include_str!("../../assets/builtins/blockstates/end_portal.json");
-pub const MIEX_PATCHES_JSON: &str = include_str!("../../assets/builtins/patches/miex_patches.json");
 
 /// Loader that parses upstream MiEx JSON definitions dynamically at runtime.
 pub struct MiExModelLoader;

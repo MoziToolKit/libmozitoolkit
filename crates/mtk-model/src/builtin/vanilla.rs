@@ -261,7 +261,7 @@ fn create_builtin_banner_model(
         patterns,
     }) = entity
     {
-        crate::entity::banner_texture_identifier(base_color, patterns)
+        crate::banner::banner_texture_identifier(base_color, patterns)
     } else {
         let stem = clean.strip_suffix("_wall_banner").unwrap_or(clean);
         let color = stem.strip_suffix("_banner").unwrap_or(stem);
@@ -522,11 +522,6 @@ pub fn create_builtin_decorated_pot_model(
         }
     }
     Some(model)
-}
-
-/// Fallback model for a blockstate when no external model was discovered.
-pub fn get_builtin_model_for_state(blockstate: &BlockState) -> Option<BlockModelJson> {
-    get_builtin_model_for_state_and_entity(blockstate, None)
 }
 
 /// Fallback model for a blockstate and optional block entity data.

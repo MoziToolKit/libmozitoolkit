@@ -100,7 +100,7 @@ impl BakedElement {
 
 /// Options for configuring mesh generation and face de-overlapping from baked models.
 #[derive(Debug, Clone)]
-pub struct ModelMeshOptions {
+pub(crate) struct ModelMeshOptions {
     /// Whether to clip faces occluded by interior element geometry via 2D boolean difference.
     pub clip_hidden_volume: bool,
     /// Whether to cull duplicate overlapping faces with the same normal (eliminating Z-fighting).

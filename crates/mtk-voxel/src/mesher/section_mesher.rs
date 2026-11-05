@@ -9,8 +9,7 @@ use mtk_core::{
 use mtk_core::{ProgressCallback, ProgressThrottler};
 use mtk_cull::BlockCullMeta;
 use mtk_cull::FaceCuller;
-use mtk_model::baker::is_block_emissive;
-use mtk_model::parser::blockstate::BlockState;
+use mtk_model::{is_block_emissive, BlockState};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -171,8 +170,7 @@ impl SectionMesher {
                         continue;
                     }
 
-                    let baked =
-                        mtk_model::builtin::BuiltinModelRegistry::bake_block_entity(state_str, be);
+                    let baked = mtk_model::BuiltinModelRegistry::bake_block_entity(state_str, be);
 
                     if let Some(baked_model) = baked {
                         let source =

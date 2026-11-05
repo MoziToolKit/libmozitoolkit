@@ -121,7 +121,7 @@ pub fn collect_needed_assets(
                     patterns,
                 } => {
                     needed_textures.insert("minecraft:entity/banner/banner_base".to_string());
-                    needed_textures.insert(mtk_model::entity::banner::banner_texture_identifier(
+                    needed_textures.insert(mtk_model::banner::banner_texture_identifier(
                         base_color, patterns,
                     ));
                 }
@@ -132,12 +132,9 @@ pub fn collect_needed_assets(
 
     // 4. Banner states without explicit entity visual JSON
     for state in &voxels.state_palette {
-        if let Some(color) = mtk_model::entity::banner::extract_banner_color_from_state(state) {
+        if let Some(color) = mtk_model::banner::extract_banner_color_from_state(state) {
             needed_textures.insert("minecraft:entity/banner/banner_base".to_string());
-            needed_textures.insert(mtk_model::entity::banner::banner_texture_identifier(
-                color,
-                &[],
-            ));
+            needed_textures.insert(mtk_model::banner::banner_texture_identifier(color, &[]));
         }
     }
 

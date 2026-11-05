@@ -1,17 +1,11 @@
 //! High-level typed BlockEntity representation decoupled from BlockState strings.
 
 pub mod banner;
-pub mod pot;
+pub(crate) mod pot;
 pub mod skull;
 
-pub use banner::{
-    banner_texture_identifier, dye_id_to_name, dye_rgb, name_to_dye_id, normalize_banner_pattern,
-    parse_banner_texture_identifier, BannerPatternLayer, DYE_NAMES, DYE_RGB,
-};
-pub use pot::{normalize_sherd_pattern, sherd_texture, sherd_texture_ref};
-pub use skull::{
-    decode_base64, extract_skin_hash, extract_skin_url_from_base64, PlayerProfileData, SkullKind,
-};
+pub use banner::BannerPatternLayer;
+pub use skull::{PlayerProfileData, SkullKind};
 
 use serde::{Deserialize, Serialize};
 
@@ -314,16 +308,6 @@ impl BlockEntityData {
         )
     }
 
-    /// Returns the classification category of this entity.
-    #[inline]
-    pub fn entity_category(&self) -> EntityCategory {
-        if self.is_continuous_space_entity() {
-            EntityCategory::ContinuousSpaceEntity
-        } else {
-            EntityCategory::VoxelBlockEntity
-        }
-    }
-
     /// Serializes to a clean, canonical Visual NBT JSON string suitable for point clouds,
     /// `.mtkscene` files, and persistent state storage.
     pub fn to_visual_json(&self) -> String {
@@ -336,15 +320,6 @@ impl BlockEntityData {
         data.normalize_sherds();
         Some(data)
     }
-}
-
-/// Classification of entities distinguishing discrete voxel block entities from continuous-space entities.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum EntityCategory {
-    /// Discrete voxel block entity tied to an integer grid block (e.g. DecoratedPot, Banner, Skull, Sign).
-    VoxelBlockEntity,
-    /// Continuous-space entity attached to blocks or free-floating (e.g. ItemFrame, Painting, EndCrystal).
-    ContinuousSpaceEntity,
 }
 
 #[cfg(test)]
@@ -492,7 +467,6 @@ mod tests {
         let pot = BlockEntityData::new_decorated_pot([Some("angler"), None, None, None]);
         assert!(pot.is_voxel_block_entity());
         assert!(!pot.is_continuous_space_entity());
-        assert_eq!(pot.entity_category(), EntityCategory::VoxelBlockEntity);
 
         let banner = BlockEntityData::new_banner("red", Vec::<(&str, &str)>::new());
         assert!(banner.is_voxel_block_entity());
@@ -509,10 +483,6 @@ mod tests {
         let item_frame = BlockEntityData::new_item_frame("minecraft:compass", 1, 0, false, false);
         assert!(!item_frame.is_voxel_block_entity());
         assert!(item_frame.is_continuous_space_entity());
-        assert_eq!(
-            item_frame.entity_category(),
-            EntityCategory::ContinuousSpaceEntity
-        );
 
         let painting = BlockEntityData::new_painting("minecraft:alban", 1, 1);
         assert!(!painting.is_voxel_block_entity());

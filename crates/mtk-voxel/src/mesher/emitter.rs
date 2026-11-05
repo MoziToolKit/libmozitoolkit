@@ -7,7 +7,7 @@
 use glam::{IVec3, Vec3};
 use mtk_core::Direction;
 use mtk_core::{MeshData, UvLayout};
-use mtk_model::baker::baked_model::BakedFace;
+use mtk_model::BakedFace;
 
 use crate::mesher::ao::should_flip_quad_diagonal;
 use crate::mesher::collector::FaceAttributesCollector;

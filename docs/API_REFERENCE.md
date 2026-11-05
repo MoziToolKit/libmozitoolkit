@@ -156,7 +156,7 @@ cache_output_dir/
 - **核心空间哈希与随机数生成器** (`mtk_core::random`):
   - `mc_coordinate_seed(x, y, z) -> i64`: 1:1 对齐 Java 原版 `Mth.getSeed(x, y, z)`。
   - `JavaRandom`: 48 位线性同余伪随机数生成器 (`java.util.Random` / `SingleThreadedRandomSource`)。
-- **预烘焙交替模型组** (`mtk_model::baker::baked_model::BakedVariantGroup`):
+- **预烘焙交替模型组** (`mtk_model::BakedVariantGroup`):
   - 针对自然方块（泥土、石头、沙子、草方块、睡莲等）的多旋转分支预烘焙为离散模型，支持按空间坐标种子快速抽样 (`select_by_pos`)。
 - **植物空间确定性抖动** (`mtk_core::OffsetType`):
   - 对花草、蕨类 (`OffsetType::XZ`) 及竹子 (`OffsetType::XYZ`) 依 `Mth.getSeed(x, 0, z)` 沿水平轴进行 $\pm 0.25$ 偏移，两格高植物上下层茎秆水平位移严格保持一致。

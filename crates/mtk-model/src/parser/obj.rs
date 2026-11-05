@@ -6,7 +6,7 @@ use crate::baker::math::rotate_point;
 
 /// A raw polygon face parsed from a Wavefront OBJ.
 #[derive(Debug, Clone, PartialEq)]
-pub struct ObjRawFace {
+pub(crate) struct ObjRawFace {
     pub verts: Vec<Vec3>,
     pub uvs: Vec<Vec2>,
     pub normals: Vec<Vec3>,
@@ -16,7 +16,7 @@ pub struct ObjRawFace {
 }
 
 /// Lightweight and fast Wavefront OBJ parser supporting Minecraft/Forge/MiEx extensions.
-pub struct WavefrontObjParser;
+pub(crate) struct WavefrontObjParser;
 
 impl WavefrontObjParser {
     /// Parses an OBJ text string into a list of faces.
@@ -232,7 +232,7 @@ pub struct BakedObjFace {
 }
 
 /// Generic loader and normalizer for OBJ models in Minecraft modding (Create, Immersive Engineering, etc.).
-pub struct ModObjLoader;
+pub(crate) struct ModObjLoader;
 
 impl ModObjLoader {
     /// Loads, scales, centers, and classifies OBJ faces into standardized Minecraft block geometry.
@@ -460,5 +460,44 @@ f 1/1 2/2 3/3 4/4
         // V axis flipped: 0 -> 1.0, 1.0 -> 0.0
         assert_eq!(baked[0].uvs[0], Vec2::new(0.0, 1.0));
         assert_eq!(baked[0].uvs[2], Vec2::new(1.0, 0.0));
+    }
+
+    #[test]
+    fn test_obj_polygon_fan_and_negative_indices() {
+        let obj_text = r#"
+# 5-vertex polygon and negative indices
+v 0.0 0.0 0.0
+v 1.0 0.0 0.0
+v 1.0 1.0 0.0
+v 0.5 1.5 0.0
+v 0.0 1.0 0.0
+vt 0.0 0.0
+vt 1.0 0.0
+vt 1.0 1.0
+vt 0.5 1.0
+vt 0.0 1.0
+usemtl [1]minecraft:block/gold_block
+f -5/-5 -4/-4 -3/-3 -2/-2 -1/-1
+"#;
+
+        let faces = WavefrontObjParser::parse_str(obj_text, None);
+        // 5-vertex polygon fanned into 3 triangles: (0,1,2), (0,2,3), (0,3,4)
+        assert_eq!(faces.len(), 3);
+        for f in &faces {
+            assert_eq!(f.verts.len(), 3);
+            assert_eq!(f.material, "minecraft:block/gold_block");
+            assert_eq!(f.tint_index, 1);
+        }
+
+        let baked = ModObjLoader::process_raw_faces(
+            &faces,
+            &std::collections::HashMap::new(),
+            "minecraft:block/dirt",
+            0.0,
+            0.0,
+            0.0,
+            Vec3::ZERO,
+        );
+        assert_eq!(baked.len(), 3);
     }
 }

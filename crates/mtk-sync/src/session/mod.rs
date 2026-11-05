@@ -10,7 +10,7 @@ use std::thread::JoinHandle;
 use crossbeam_channel::{Receiver, Sender};
 use mtk_core::MeshData;
 use mtk_cull::FaceCuller;
-use mtk_model::baker::baked_model::BakedModelDatabase;
+use mtk_model::BakedModelDatabase;
 use mtk_voxel::storage::VoxelStorage;
 use mtk_voxel::types::MesherConfig;
 use mtk_voxel::VoxelWorld;

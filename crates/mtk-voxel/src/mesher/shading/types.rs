@@ -1,5 +1,5 @@
 use glam::Vec2;
-use mtk_model::baker::baked_model::{BakedFace, BakedModel, BakedVariantGroup};
+use mtk_model::{BakedFace, BakedModel, BakedVariantGroup};
 use std::borrow::Cow;
 use std::sync::Arc;
 

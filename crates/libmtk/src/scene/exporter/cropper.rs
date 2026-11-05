@@ -154,7 +154,7 @@ pub fn crop_needed_sprites(
         // Case B: Entity texture fallback when not cropped from dynamic chunk
         // 1. Procedural Banner Synthesis
         if let Some((base_color, patterns)) =
-            mtk_model::entity::banner::parse_banner_texture_identifier(tex_key)
+            mtk_model::banner::parse_banner_texture_identifier(tex_key)
         {
             if let Some(ref mut baker) = banner_baker_opt {
                 let pat_refs: Vec<(&str, &str)> = patterns

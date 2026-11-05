@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use clap::{Args, Subcommand};
-use mtk_model::{parser::blockstate::BlockStateResolver, BlockState, ModelBaker};
+use mtk_model::{BlockState, BlockStateResolver, ModelBaker};
 
 use crate::utils::UniversalAssetLoader;
 

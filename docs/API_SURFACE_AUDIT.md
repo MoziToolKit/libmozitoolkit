@@ -365,7 +365,13 @@ PY
   - 内部算子降级：`subtract_rect`, `subtract_rect_into`, `is_empty_rect`, `is_full_rect`, `is_face_completely_occluded`, `extract_quad_face_occlusion_rect`, `fluid_group`, `is_same_fluid`, `is_face_occluded_by_state`, `should_skip_rendering`, `derive_parametric_face_shapes`, `is_non_full_or_partial_block` 全部降为 `pub(crate)`；
   - 根导出收敛：仅暴露真实被跨 crate 消费的核心契约（`FaceCuller`, `compute_block_cull_meta`, `parse_block_name_and_props`, `check_coplanar_overlap`, `clip_face_excluding_hidden_volume`, `ClippedQuadPiece`, `CoplanarOverlap`, `CoplanarRelation`, `FaceAlignment`, `cull_mesh_faces`, `MeshCullConfig`, `MeshCullResult`, `should_render_fluid_face`, `BlockCullMeta`, `CullCategory`, `GlassCullMode`, `LeavesCullMode` 等）；
   - 下游对 `mtk_cull::submodule::*` 的穿透调用统一收敛为根导入 `mtk_cull::*`。
-- [ ] 推进后续 crate（`mtk-model` → `mtk-voxel` → `mtk-sync` 等）内部 `pub mod` 改 `mod` 与根导出精简。
+- [x] **`mtk-model` 根导出与模块私有化彻底完成 (Batch 4.3)**：
+  - 5 个内部模块（`baker`, `builtin`, `entity`, `error`, `parser`）全部收敛为私有 `mod`；受控暴露 `banner` 与 `skull` 命名空间 (`pub use entity::{banner, skull};`)；
+  - 废弃与零消费者符号清理：删除死代码 `is_air_like`、`EntityCategory` 与 `BlockEntityData::entity_category()`、`MIEX_PATCHES_JSON`、`get_builtin_model_for_state`；
+  - 内部算子/中间 DTO 降级：`apply_uvlock_to_uvs`, `bake_face_exact`, `calculate_facing`, `default_face_uv`, `get_face_canonical_vertex`, `get_face_uvlock_transform`, `recalculate_winding`, `rotate_direction`, `rotate_element_point`, `rotate_point`, `rotate_point_3d_with_pivot`, `BakedFaceGeometry`, `ModelMeshOptions`, `BakedModel::to_mesh_with_options`, `ObjRawFace`, `WavefrontObjParser`, `ModObjLoader` 全部降为 `pub(crate)`；
+  - 根导出收敛：仅暴露真实被生产跨 crate 消费的规范接口（`BakedElement`, `BakedFace`, `BakedModel`, `BakedModelDatabase`, `BakedObjFace`, `BakedVariantGroup`, `ModelBaker`, `BuiltinModelRegistry`, `BlockEntityData`, `ModelError`, `BlockModelJson`, `BlockState`, `BlockStateDefinition`, `BlockStateResolver`, `ResolvedBlockModel`, `VariantModel`, `normalize_canonical_blockstate`, `mesh_to_obj_string`, `is_block_emissive`, `is_known_non_cube`, `is_opaque_block` 等）；
+  - 下游（`mtk-voxel`, `mtk-save`, `mtk-sync`, `libmtk`, `mtk-cli`）对 `mtk_model::baker::*`, `mtk_model::builtin::*`, `mtk_model::parser::*`, `mtk_model::entity::*` 的穿透引用统一收敛为根导入与受控模块导入。
+- [ ] 推进后续 crate（`mtk-voxel` → `mtk-sync` → `mtk-resource` → `mtk-texture` → `mtk-material` → `mtk-save` → `mtk-package` → `libmtk`）内部 `pub mod` 改 `mod` 与根导出精简。
 - [ ] 每完成一个 crate 跑 `cargo test -p <crate>` 与 `cargo clippy -p <crate> --all-targets -- -D warnings`。
 
 ### Batch 5：绑定与适配器收敛

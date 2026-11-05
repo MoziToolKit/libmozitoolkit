@@ -4,7 +4,7 @@ use mtk_core::Direction;
 use crate::parser::model_json::{BuiltinTransform, RotationJson};
 
 /// Canonical vertex extents for standard cube faces according to Minecraft FaceInfo.
-pub fn get_face_canonical_vertex(
+pub(crate) fn get_face_canonical_vertex(
     dir: Direction,
     from_pos: [f32; 3],
     to_pos: [f32; 3],
@@ -61,7 +61,7 @@ pub fn get_face_canonical_vertex(
 }
 
 /// Calculate default UV (min_u, min_v, max_u, max_v) in [0..16] matching Minecraft FaceBakery.
-pub fn default_face_uv(dir: Direction, from_pos: [f32; 3], to_pos: [f32; 3]) -> [f32; 4] {
+pub(crate) fn default_face_uv(dir: Direction, from_pos: [f32; 3], to_pos: [f32; 3]) -> [f32; 4] {
     let [fx, fy, fz] = from_pos;
     let [tx, ty, tz] = to_pos;
 
@@ -102,7 +102,7 @@ pub fn cuboid_face_get_v(uvs: [f32; 4], rot_shift: usize, vertex: usize, uv_base
 }
 
 /// Applies local element rotation (around element origin [0..16], axis, angle, and rescale).
-pub fn rotate_element_point(p: Vec3, rot: &RotationJson) -> Vec3 {
+pub(crate) fn rotate_element_point(p: Vec3, rot: &RotationJson) -> Vec3 {
     let origin = Vec3::new(
         rot.origin[0] / 16.0,
         rot.origin[1] / 16.0,
@@ -143,7 +143,7 @@ pub fn rotate_element_point(p: Vec3, rot: &RotationJson) -> Vec3 {
 }
 
 /// Rotate point by block variant X and Y angles around block center (0.5, 0.5, 0.5).
-pub fn rotate_point(p: Vec3, rot_x: f32, rot_y: f32) -> Vec3 {
+pub(crate) fn rotate_point(p: Vec3, rot_x: f32, rot_y: f32) -> Vec3 {
     let origin = Vec3::splat(0.5);
     let mut v = p - origin;
 
@@ -163,7 +163,7 @@ pub fn rotate_point(p: Vec3, rot_x: f32, rot_y: f32) -> Vec3 {
 }
 
 /// Rotates a point in 3D around an arbitrary pivot point in [0..16] space using Euler angles (X then Y then Z in degrees).
-pub fn rotate_point_3d_with_pivot(
+pub(crate) fn rotate_point_3d_with_pivot(
     p: Vec3,
     rot_x: f32,
     rot_y: f32,
@@ -203,7 +203,7 @@ pub fn rotate_point_3d_with_pivot(
 }
 
 /// Rotate a face direction by model variant angles rot_x and rot_y.
-pub fn rotate_direction(dir: Direction, rot_x: f32, rot_y: f32) -> Direction {
+pub(crate) fn rotate_direction(dir: Direction, rot_x: f32, rot_y: f32) -> Direction {
     let n = dir.normal();
     let mut v = n;
     if rot_x != 0.0 {
@@ -230,7 +230,7 @@ pub fn rotate_direction(dir: Direction, rot_x: f32, rot_y: f32) -> Direction {
 }
 
 /// Calculate closest Minecraft direction from 4 quad vertex positions.
-pub fn calculate_facing(positions: &[Vec3; 4]) -> Direction {
+pub(crate) fn calculate_facing(positions: &[Vec3; 4]) -> Direction {
     let v1 = positions[1] - positions[0];
     let v2 = positions[2] - positions[0];
     let normal = v1.cross(v2).normalize_or_zero();
@@ -262,7 +262,7 @@ fn vanilla_uv_transform_local_to_global(dir: Direction) -> Mat3 {
 }
 
 /// Computes inverse transformation for UVLock matching Minecraft BlockMath.
-pub fn get_face_uvlock_transform(rot_x: f32, rot_y: f32, original_side: Direction) -> Mat3 {
+pub(crate) fn get_face_uvlock_transform(rot_x: f32, rot_y: f32, original_side: Direction) -> Mat3 {
     let mx = Mat3::from_rotation_x((-rot_x).to_radians());
     let my = Mat3::from_rotation_y((-rot_y).to_radians());
     let model_rot = my * mx;
@@ -287,7 +287,7 @@ pub fn get_face_uvlock_transform(rot_x: f32, rot_y: f32, original_side: Directio
 }
 
 /// Apply UVLock counter-rotation to UV coordinates.
-pub fn apply_uvlock_to_uvs(
+pub(crate) fn apply_uvlock_to_uvs(
     uvs: &[Vec2; 4],
     orig_direction: Direction,
     rot_x: f32,
@@ -308,7 +308,11 @@ pub fn apply_uvlock_to_uvs(
 
 /// Exact implementation of Minecraft FaceBakery.recalculateWinding:
 /// Reorders positions and uvs so vertices match FaceInfo canonical order.
-pub fn recalculate_winding(positions: &mut [Vec3; 4], uvs: &mut [Vec2; 4], final_dir: Direction) {
+pub(crate) fn recalculate_winding(
+    positions: &mut [Vec3; 4],
+    uvs: &mut [Vec2; 4],
+    final_dir: Direction,
+) {
     let min_x = positions.iter().map(|p| p.x).fold(f32::INFINITY, f32::min);
     let min_y = positions.iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
     let min_z = positions.iter().map(|p| p.z).fold(f32::INFINITY, f32::min);
@@ -351,7 +355,7 @@ pub fn recalculate_winding(positions: &mut [Vec3; 4], uvs: &mut [Vec2; 4], final
 
 /// Result of face baking.
 #[derive(Debug, Clone, PartialEq)]
-pub struct BakedFaceGeometry {
+pub(crate) struct BakedFaceGeometry {
     pub direction: Direction,
     pub detected_rotation: f32,
     pub positions: [Vec3; 4],
@@ -361,7 +365,7 @@ pub struct BakedFaceGeometry {
 
 /// Full FaceBakery quad baking pipeline.
 #[allow(clippy::too_many_arguments)]
-pub fn bake_face_exact(
+pub(crate) fn bake_face_exact(
     orig_dir: Direction,
     from_pos: [f32; 3],
     to_pos: [f32; 3],
