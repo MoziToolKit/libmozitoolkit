@@ -3,7 +3,7 @@
 use glam::Vec3;
 use mtk_core::Direction;
 use mtk_core::MeshData;
-use mtk_cull::engine::parse_block_name_and_props;
+use mtk_cull::parse_block_name_and_props;
 use mtk_cull::FaceCuller;
 
 use crate::fluid::uv::{get_fluid_side_uvs, get_fluid_top_uvs};

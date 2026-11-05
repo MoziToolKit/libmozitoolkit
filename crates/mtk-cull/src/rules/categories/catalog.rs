@@ -326,7 +326,7 @@ pub const PARTIAL_SHAPE_EXACT_NAMES: &[&str] = &[
 ];
 
 /// Check if block identifier is a non-full or partial block.
-pub fn is_non_full_or_partial_block(name_low: &str) -> bool {
+pub(crate) fn is_non_full_or_partial_block(name_low: &str) -> bool {
     if PARTIAL_SHAPE_EXACT_NAMES.contains(&name_low) || is_non_occluding_block(name_low) {
         return true;
     }

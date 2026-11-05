@@ -3,10 +3,8 @@
 //! Provides catalogued name registries and parametric face occlusion resolvers
 //! for standard vanilla Minecraft blocks, slabs, stairs, fluids, leaves, and partial blocks.
 
-pub mod catalog;
-pub mod meta;
-pub mod parametric;
+mod catalog;
+mod meta;
+mod parametric;
 
-pub use catalog::*;
-pub use meta::*;
-pub use parametric::*;
+pub use meta::{compute_block_cull_meta, parse_block_name_and_props};

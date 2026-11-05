@@ -11,7 +11,7 @@ use crate::types::{BlockCullMeta, CullCategory, GlassCullMode, LeavesCullMode};
 /// for direct callers and non-fluid block paths.
 ///
 /// Returns `true` if this face should be skipped (culled), `false` otherwise.
-pub fn should_skip_rendering(
+pub(crate) fn should_skip_rendering(
     state_meta: &BlockCullMeta,
     neighbor_meta: &BlockCullMeta,
     direction: Direction,

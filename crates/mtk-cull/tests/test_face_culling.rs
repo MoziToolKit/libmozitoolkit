@@ -1,33 +1,7 @@
-use glam::{IVec3, Vec3};
+use glam::IVec3;
 use mtk_core::Aabb2d;
 use mtk_core::Direction;
-use mtk_cull::geometry::subtract_rect;
-use mtk_cull::{
-    extract_quad_face_occlusion_rect, is_face_completely_occluded, CullCategory, FaceCuller,
-    GlassCullMode, LeavesCullMode,
-};
-
-#[test]
-fn test_2d_rectangle_boolean_subtraction() {
-    let full = Aabb2d::from_min_max(0.0, 0.0, 1.0, 1.0);
-    let half_left = Aabb2d::from_min_max(0.0, 0.0, 0.5, 1.0);
-    let half_right = Aabb2d::from_min_max(0.5, 0.0, 1.0, 1.0);
-
-    // Subtract half left from full: remainder should be half right
-    let remainder = subtract_rect(&full, &half_left);
-    assert_eq!(remainder.len(), 1);
-    assert!((remainder[0].min.x - 0.5).abs() < 1e-4);
-    assert!((remainder[0].max.x - 1.0).abs() < 1e-4);
-
-    // Completely occluding with two halves
-    assert!(is_face_completely_occluded(
-        &[full],
-        &[half_left, half_right]
-    ));
-
-    // Partially occluding: half_left alone leaves half unoccluded
-    assert!(!is_face_completely_occluded(&[full], &[half_left]));
-}
+use mtk_cull::{CullCategory, FaceCuller, GlassCullMode, LeavesCullMode};
 
 #[test]
 fn test_solid_opaque_mutual_culling() {
@@ -247,42 +221,6 @@ fn test_fluid_culling() {
         None,
         None
     ));
-}
-
-#[test]
-fn test_quad_face_occlusion_rect_extraction() {
-    // Top face of a bottom half slab (Y=0.5 plane) -> Not on Y=1 outer boundary -> None
-    let slab_top_inner = [
-        Vec3::new(0.0, 0.5, 0.0),
-        Vec3::new(0.0, 0.5, 1.0),
-        Vec3::new(1.0, 0.5, 1.0),
-        Vec3::new(1.0, 0.5, 0.0),
-    ];
-    assert!(extract_quad_face_occlusion_rect(&slab_top_inner, Direction::Up).is_none());
-
-    // Bottom face of a bottom half slab (Y=0.0 plane) -> Full 2D face on boundary
-    let slab_bottom_outer = [
-        Vec3::new(0.0, 0.0, 1.0),
-        Vec3::new(0.0, 0.0, 0.0),
-        Vec3::new(1.0, 0.0, 0.0),
-        Vec3::new(1.0, 0.0, 1.0),
-    ];
-    let rect = extract_quad_face_occlusion_rect(&slab_bottom_outer, Direction::Down);
-    assert!(rect.is_some());
-    assert!((rect.unwrap().min.x - 0.0).abs() < 1e-4);
-    assert!((rect.unwrap().max.x - 1.0).abs() < 1e-4);
-
-    // Partial element: East face half-width quad at X=1.0 plane
-    let quad_half_east = [
-        Vec3::new(1.0, 0.5, 1.0),
-        Vec3::new(1.0, 0.0, 1.0),
-        Vec3::new(1.0, 0.0, 0.0),
-        Vec3::new(1.0, 0.5, 0.0),
-    ];
-    let rect_east = extract_quad_face_occlusion_rect(&quad_half_east, Direction::East);
-    assert!(rect_east.is_some());
-    assert!((rect_east.unwrap().min.y - 0.0).abs() < 1e-4);
-    assert!((rect_east.unwrap().max.y - 0.5).abs() < 1e-4);
 }
 
 #[test]

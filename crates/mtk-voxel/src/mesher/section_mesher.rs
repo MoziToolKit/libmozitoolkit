@@ -7,7 +7,7 @@ use mtk_core::{
     determine_block_offset_type, get_block_offset, mc_coordinate_seed, JavaRandom, OffsetType,
 };
 use mtk_core::{ProgressCallback, ProgressThrottler};
-use mtk_cull::types::BlockCullMeta;
+use mtk_cull::BlockCullMeta;
 use mtk_cull::FaceCuller;
 use mtk_model::baker::is_block_emissive;
 use mtk_model::parser::blockstate::BlockState;

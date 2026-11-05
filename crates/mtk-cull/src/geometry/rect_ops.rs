@@ -11,7 +11,7 @@ use crate::types::{is_empty_rect, is_full_rect};
 ///
 /// If `occluder` does not intersect `source`, returns `vec![source]`.
 /// If `occluder` completely covers `source`, returns `vec![]`.
-pub fn subtract_rect(source: &Aabb2d, occluder: &Aabb2d) -> Vec<Aabb2d> {
+pub(crate) fn subtract_rect(source: &Aabb2d, occluder: &Aabb2d) -> Vec<Aabb2d> {
     let mut out = [Aabb2d::ZERO; 4];
     let n = subtract_rect_into(source, occluder, &mut out);
     out[..n].to_vec()
@@ -20,7 +20,11 @@ pub fn subtract_rect(source: &Aabb2d, occluder: &Aabb2d) -> Vec<Aabb2d> {
 /// Zero-allocation rectangle subtraction writing up to 4 disjoint fragments directly into stack buffer.
 /// Returns the number of resulting fragments (0..=4).
 #[inline]
-pub fn subtract_rect_into(source: &Aabb2d, occluder: &Aabb2d, out: &mut [Aabb2d; 4]) -> usize {
+pub(crate) fn subtract_rect_into(
+    source: &Aabb2d,
+    occluder: &Aabb2d,
+    out: &mut [Aabb2d; 4],
+) -> usize {
     if !source.intersects(occluder) {
         out[0] = *source;
         return 1;
@@ -70,7 +74,10 @@ pub fn subtract_rect_into(source: &Aabb2d, occluder: &Aabb2d, out: &mut [Aabb2d;
 ///
 /// Returns `true` if target is 100% occluded (should be culled), `false` if any part remains visible.
 /// Equivalent to Minecraft `Shapes.joinIsNotEmpty(targetShape, occluderShape, BooleanOp.ONLY_FIRST) == false`.
-pub fn is_face_completely_occluded(target_rects: &[Aabb2d], neighbor_occluders: &[Aabb2d]) -> bool {
+pub(crate) fn is_face_completely_occluded(
+    target_rects: &[Aabb2d],
+    neighbor_occluders: &[Aabb2d],
+) -> bool {
     if target_rects.is_empty() {
         return true;
     }
@@ -123,7 +130,7 @@ pub fn is_face_completely_occluded(target_rects: &[Aabb2d], neighbor_occluders: 
 /// Extract 2D `Aabb2d` on the outer plane for a single quad face's vertices in [0..1] space.
 /// If the quad lies on the boundary plane corresponding to `direction`, returns `Some(Aabb2d)`;
 /// otherwise returns `None`.
-pub fn extract_quad_face_occlusion_rect(
+pub(crate) fn extract_quad_face_occlusion_rect(
     vertices: &[Vec3; 4],
     direction: Direction,
 ) -> Option<Aabb2d> {

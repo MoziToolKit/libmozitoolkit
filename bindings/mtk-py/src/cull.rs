@@ -4,8 +4,8 @@
 
 use pyo3::prelude::*;
 
-use mtk_cull::types::{GlassCullMode, LeavesCullMode};
 use mtk_cull::FaceCuller;
+use mtk_cull::{GlassCullMode, LeavesCullMode};
 
 /// Python wrapper for `FaceCuller` occlusion and geometry optimization engine.
 #[pyclass(name = "FaceCuller")]

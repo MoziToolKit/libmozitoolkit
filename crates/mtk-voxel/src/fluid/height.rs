@@ -1,7 +1,7 @@
 //! Fluid height sampling, corner averaging, and flow vector physics.
 
 use core::f32::consts::PI;
-use mtk_cull::engine::parse_block_name_and_props;
+use mtk_cull::parse_block_name_and_props;
 
 pub use mtk_core::constants::fluid::MAX_FLUID_HEIGHT;
 

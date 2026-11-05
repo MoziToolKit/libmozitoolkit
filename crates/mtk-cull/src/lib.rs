@@ -1,27 +1,27 @@
 #![forbid(unsafe_code)]
 
 extern crate alloc;
-pub mod engine;
-pub mod geometry;
-pub mod mesh_cull;
-pub mod rules;
-pub mod types;
 
-pub use engine::is_inherently_waterlogged_name;
-pub use engine::{
-    compute_block_cull_meta, derive_parametric_face_shapes, is_non_full_or_partial_block,
-    parse_block_name_and_props, FaceCuller,
-};
+mod engine;
+mod geometry;
+mod mesh_cull;
+mod rules;
+mod types;
+
+// 1. Face Culling Engine & Metadata Computation
+pub use engine::FaceCuller;
+pub use rules::{compute_block_cull_meta, parse_block_name_and_props, should_render_fluid_face};
+
+// 2. Coplanar & Volume Geometry Analysis
 pub use geometry::{
-    check_coplanar_overlap, clip_face_excluding_hidden_volume, extract_quad_face_occlusion_rect,
-    is_face_completely_occluded, ClippedQuadPiece, CoplanarOverlap, CoplanarRelation,
-    FaceAlignment,
+    check_coplanar_overlap, clip_face_excluding_hidden_volume, ClippedQuadPiece, CoplanarOverlap,
+    CoplanarRelation, FaceAlignment,
 };
+
+// 3. Mesh-Level Culling
 pub use mesh_cull::{cull_mesh_faces, MeshCullConfig, MeshCullResult};
-pub use rules::fluid_cull::{
-    fluid_group, is_face_occluded_by_state, is_same_fluid, should_render_fluid_face,
-};
-pub use rules::should_skip_rendering;
+
+// 4. Types & Enums
 pub use types::{
     BlockCullMeta, CullCategory, GlassCullMode, LeavesCullMode, EMPTY_FACE_RECT, FULL_FACE_RECT,
 };

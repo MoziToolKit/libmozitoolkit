@@ -11,6 +11,8 @@ use std::collections::HashMap;
 use mtk_core::MeshData;
 use mtk_core::{AttributeData, MeshAttribute};
 
+use crate::geometry::{check_coplanar_overlap, CoplanarOverlap, FaceAlignment};
+
 /// Configuration options for mesh face culling.
 #[derive(Debug, Clone)]
 pub struct MeshCullConfig {
@@ -237,20 +239,18 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
                                 continue;
                             }
 
-                            if let Some(rel) = crate::geometry::coplanar::check_coplanar_overlap(
+                            if let Some(rel) = check_coplanar_overlap(
                                 &face_verts,
                                 normal,
                                 other_verts,
                                 *other_norm,
                                 tol,
                             ) {
-                                let is_same_dir = rel.alignment
-                                    == crate::geometry::coplanar::FaceAlignment::SameDirection;
-                                let is_opp_dir = rel.alignment
-                                    == crate::geometry::coplanar::FaceAlignment::OppositeDirection;
+                                let is_same_dir = rel.alignment == FaceAlignment::SameDirection;
+                                let is_opp_dir = rel.alignment == FaceAlignment::OppositeDirection;
 
                                 match rel.overlap {
-                                    crate::geometry::coplanar::CoplanarOverlap::Exact => {
+                                    CoplanarOverlap::Exact => {
                                         if config.cull_duplicates && is_same_dir {
                                             faces_to_cull.insert(face_idx);
                                             break 'search;
@@ -260,14 +260,14 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
                                             break 'search;
                                         }
                                     }
-                                    crate::geometry::coplanar::CoplanarOverlap::ContainedInB => {
+                                    CoplanarOverlap::ContainedInB => {
                                         // Face A is completely covered by other face B back-to-back
                                         if config.cull_coplanar_opposite && is_opp_dir {
                                             faces_to_cull.insert(face_idx);
                                             break 'search;
                                         }
                                     }
-                                    crate::geometry::coplanar::CoplanarOverlap::ContainedInA
+                                    CoplanarOverlap::ContainedInA
                                         // Other face B is completely covered by Face A back-to-back
                                         if config.cull_coplanar_opposite && is_opp_dir => {
                                             faces_to_cull.insert(*other_idx);

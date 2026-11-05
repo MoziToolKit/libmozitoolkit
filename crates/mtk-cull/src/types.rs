@@ -60,13 +60,13 @@ pub use mtk_core::constants::geometry::{EMPTY_FACE_RECT, FULL_FACE_RECT};
 
 /// Check if a rectangle covers the full 1.0 x 1.0 face within epsilon.
 #[inline]
-pub fn is_full_rect(rect: &Aabb2d, eps: f32) -> bool {
+pub(crate) fn is_full_rect(rect: &Aabb2d, eps: f32) -> bool {
     rect.min.x <= eps && rect.min.y <= eps && rect.max.x >= 1.0 - eps && rect.max.y >= 1.0 - eps
 }
 
 /// Check if a rectangle has zero area within epsilon.
 #[inline]
-pub fn is_empty_rect(rect: &Aabb2d, eps: f32) -> bool {
+pub(crate) fn is_empty_rect(rect: &Aabb2d, eps: f32) -> bool {
     (rect.max.x - rect.min.x) <= eps || (rect.max.y - rect.min.y) <= eps
 }
 

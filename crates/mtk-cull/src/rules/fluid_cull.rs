@@ -30,7 +30,7 @@ use crate::types::{BlockCullMeta, CullCategory, FULL_FACE_RECT};
 /// Waterlogged non-fluid blocks also represent water fluid for the purpose of
 /// vanilla `FluidState.getType().isSame(...)` checks.
 #[inline]
-pub fn fluid_group(meta: &BlockCullMeta) -> Option<&str> {
+pub(crate) fn fluid_group(meta: &BlockCullMeta) -> Option<&str> {
     if meta.category == CullCategory::Fluid {
         Some(meta.cull_group.as_str())
     } else if meta.is_waterlogged {
@@ -42,7 +42,7 @@ pub fn fluid_group(meta: &BlockCullMeta) -> Option<&str> {
 
 /// Returns `true` when both metas resolve to the same vanilla fluid type.
 #[inline]
-pub fn is_same_fluid(a: &BlockCullMeta, b: &BlockCullMeta) -> bool {
+pub(crate) fn is_same_fluid(a: &BlockCullMeta, b: &BlockCullMeta) -> bool {
     match (fluid_group(a), fluid_group(b)) {
         (Some(group_a), Some(group_b)) => group_a == group_b,
         _ => false,
@@ -54,7 +54,7 @@ pub fn is_same_fluid(a: &BlockCullMeta, b: &BlockCullMeta) -> bool {
 /// `height` is the fluid surface height used for this face. The occlusion shape is the
 /// neighbor's face pointing back at the fluid. A full face shape occludes every side and
 /// the bottom; the top is occluded only when the fluid surface reaches `y = 1.0`.
-pub fn is_face_occluded_by_state(
+pub(crate) fn is_face_occluded_by_state(
     direction: Direction,
     height: f32,
     neighbor: &BlockCullMeta,

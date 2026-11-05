@@ -359,7 +359,13 @@ PY
   - 内部算子降级：`interpolate_bilinear_2d/3d/4d`、`cellular_noise_3d` 降为 `pub(crate)`；
   - 根导出补齐：导出 `process_flat_mesh_extrude_repair`、`calculate_pixel_grid_cut_factors`、`slice_face_by_pixel_grid`、`detect_uv_rotation` 等被生产 bindings/下游真实消费的算子；
   - 83 个下游跨 crate 文件对 `mtk_core::submodule::*` 的穿透引用统一收敛为从 crate 根 `mtk_core::*` 引入。
-- [ ] 推进后续 crate（`mtk-cull` → `mtk-model` → `mtk-voxel` 等）内部 `pub mod` 改 `mod` 与根导出精简。
+- [x] **`mtk-cull` 根导出与模块私有化彻底完成**：
+  - 5 个内部模块（`engine`, `geometry`, `mesh_cull`, `rules`, `types`）全部收敛为私有 `mod`；
+  - 废弃与零消费者符号清理：删除 `is_inherently_waterlogged_name`；
+  - 内部算子降级：`subtract_rect`, `subtract_rect_into`, `is_empty_rect`, `is_full_rect`, `is_face_completely_occluded`, `extract_quad_face_occlusion_rect`, `fluid_group`, `is_same_fluid`, `is_face_occluded_by_state`, `should_skip_rendering`, `derive_parametric_face_shapes`, `is_non_full_or_partial_block` 全部降为 `pub(crate)`；
+  - 根导出收敛：仅暴露真实被跨 crate 消费的核心契约（`FaceCuller`, `compute_block_cull_meta`, `parse_block_name_and_props`, `check_coplanar_overlap`, `clip_face_excluding_hidden_volume`, `ClippedQuadPiece`, `CoplanarOverlap`, `CoplanarRelation`, `FaceAlignment`, `cull_mesh_faces`, `MeshCullConfig`, `MeshCullResult`, `should_render_fluid_face`, `BlockCullMeta`, `CullCategory`, `GlassCullMode`, `LeavesCullMode` 等）；
+  - 下游对 `mtk_cull::submodule::*` 的穿透调用统一收敛为根导入 `mtk_cull::*`。
+- [ ] 推进后续 crate（`mtk-model` → `mtk-voxel` → `mtk-sync` 等）内部 `pub mod` 改 `mod` 与根导出精简。
 - [ ] 每完成一个 crate 跑 `cargo test -p <crate>` 与 `cargo clippy -p <crate> --all-targets -- -D warnings`。
 
 ### Batch 5：绑定与适配器收敛

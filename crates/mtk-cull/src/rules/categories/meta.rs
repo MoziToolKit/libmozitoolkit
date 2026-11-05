@@ -31,11 +31,6 @@ pub fn is_inherently_submerged_block(name: &str) -> bool {
     )
 }
 
-/// Predicate returning true if the block is canonically inherently waterlogged (kelp, seagrass, etc.).
-pub fn is_inherently_waterlogged_name(name: &str) -> bool {
-    is_inherently_submerged_block(name)
-}
-
 /// Fast extraction of raw block name and properties from state string.
 ///
 /// Automatically populates `waterlogged="true"` for inherently submerged blocks

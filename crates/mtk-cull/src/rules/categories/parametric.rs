@@ -14,7 +14,7 @@ use crate::types::FULL_FACE_RECT;
 
 /// Derive canonical 2D face occlusion shapes for known partial / non-full blocks
 /// based on block state properties when explicit detailed model elements are absent.
-pub fn derive_parametric_face_shapes(
+pub(crate) fn derive_parametric_face_shapes(
     name_low: &str,
     props: &BTreeMap<String, String>,
 ) -> [Vec<Aabb2d>; 6] {

@@ -110,7 +110,7 @@ impl FaceCuller {
         direction: Direction,
         face_height: f32,
     ) -> bool {
-        crate::rules::fluid_cull::should_render_fluid_face(
+        crate::rules::should_render_fluid_face(
             fluid_meta,
             self_meta,
             neighbor_meta,
@@ -141,7 +141,7 @@ impl FaceCuller {
         // and bottoms. The voxel mesher calls `should_render_fluid_face` with exact
         // per-corner heights.
         if state_meta.category == CullCategory::Fluid {
-            return crate::rules::fluid_cull::should_render_fluid_face(
+            return crate::rules::should_render_fluid_face(
                 state_meta,
                 None,
                 neighbor_meta,

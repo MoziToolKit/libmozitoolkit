@@ -252,10 +252,10 @@ impl BakedModel {
                     continue;
                 }
 
-                if let Some(rel) = mtk_cull::geometry::coplanar::check_coplanar_overlap(
-                    verts_a, *norm_a, verts_b, *norm_b, tolerance,
-                ) {
-                    use mtk_cull::geometry::coplanar::{CoplanarOverlap, FaceAlignment};
+                if let Some(rel) =
+                    mtk_cull::check_coplanar_overlap(verts_a, *norm_a, verts_b, *norm_b, tolerance)
+                {
+                    use mtk_cull::{CoplanarOverlap, FaceAlignment};
                     match rel.overlap {
                         CoplanarOverlap::Exact => {
                             if rel.alignment == FaceAlignment::SameDirection {
