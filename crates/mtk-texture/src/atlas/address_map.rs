@@ -454,15 +454,9 @@ impl AtlasAddressMap {
     /// Lookup fallback sprite location when a specific texture is missing from the atlas.
     pub fn lookup_fallback(&self) -> Option<&AtlasSpriteLocation> {
         for cand in &[
-            "missing",
-            "missingno",
+            crate::FALLBACK_TEXTURE_KEY,
             "minecraft:missingno",
-            "minecraft:block/stone",
-            "block/stone",
-            "minecraft:block/dirt",
-            "block/dirt",
-            "minecraft:block/oak_leaves",
-            "block/oak_leaves",
+            "missingno",
         ] {
             if let Some(loc) = self.lookup_str(cand) {
                 return Some(loc);

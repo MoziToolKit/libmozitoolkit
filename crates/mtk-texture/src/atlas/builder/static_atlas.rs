@@ -19,12 +19,27 @@ pub(crate) fn build_static_atlas_chunks(
     baked_chunks: &mut Vec<BakedAtlasChunk>,
     address_map: &mut AtlasAddressMap,
 ) -> Result<(), TextureError> {
-    if static_sprites.is_empty() {
+    let is_main_blocks = category_name == "blocks" && *global_chunk_counter == 0;
+    if static_sprites.is_empty() && !is_main_blocks {
         return Ok(());
     }
 
     let mut stitcher = Stitcher::new(config.max_width, config.max_height, config.mip_level);
     let mut sprite_map: HashMap<ResourceLocation, DecodedSprite> = HashMap::new();
+
+    // Ensure canonical fallback checkerboard sprite is pinned at chunk 0, slot 0 (x=0, y=0)
+    if is_main_blocks {
+        let fallback_sp = crate::atlas::create_fallback_sprite();
+        let fw = fallback_sp.frame_width + config.padding * 2;
+        let fh = fallback_sp.frame_height + config.padding * 2;
+        stitcher.register_pinned_sprite(
+            fallback_sp.sprite_id.clone(),
+            fw,
+            fh,
+            fallback_sp.sprite_id.as_string(),
+        );
+        sprite_map.insert(fallback_sp.sprite_id.clone(), fallback_sp);
+    }
 
     for sprite in static_sprites {
         let fw = sprite.frame_width + config.padding * 2;
@@ -142,6 +157,17 @@ pub(crate) fn build_static_atlas_chunks(
                 address_map
                     .sprites
                     .insert(sp.sprite_id.clone(), sprite_loc.clone());
+
+                if sp.sprite_id.namespace == "mozi" && sp.sprite_id.path == "fallback" {
+                    address_map
+                        .sprites
+                        .entry(ResourceLocation::new("minecraft", "missingno"))
+                        .or_insert_with(|| sprite_loc.clone());
+                    address_map
+                        .sprites
+                        .entry(ResourceLocation::new("minecraft", "missing"))
+                        .or_insert_with(|| sprite_loc.clone());
+                }
 
                 if slot_has_overlay {
                     let overlay_id = sp.sprite_id.with_suffix("_overlay");

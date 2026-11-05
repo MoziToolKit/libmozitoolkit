@@ -57,6 +57,7 @@ pub(crate) struct Stitcher<T> {
     max_height: u32,
     mip_level: u32,
     holders: Vec<StitcherHolder<T>>,
+    pinned_holder: Option<StitcherHolder<T>>,
 }
 
 impl<T: Clone> Stitcher<T> {
@@ -67,7 +68,36 @@ impl<T: Clone> Stitcher<T> {
             max_height,
             mip_level,
             holders: Vec::new(),
+            pinned_holder: None,
         }
+    }
+
+    /// Register a pinned sprite entry guaranteed to be placed at chunk 0, slot 0 (x=0, y=0).
+    pub fn register_pinned_sprite(
+        &mut self,
+        entry: T,
+        width: u32,
+        height: u32,
+        name: impl Into<String>,
+    ) {
+        let align = 1 << self.mip_level;
+        let padded_w = if !width.is_multiple_of(align) {
+            ((width / align) + 1) * align
+        } else {
+            width
+        };
+        let padded_h = if !height.is_multiple_of(align) {
+            ((height / align) + 1) * align
+        } else {
+            height
+        };
+
+        self.pinned_holder = Some(StitcherHolder {
+            entry,
+            width: padded_w,
+            height: padded_h,
+            name: name.into(),
+        });
     }
 
     /// Register a sprite entry with its single-frame width, height, and canonical name.
@@ -97,7 +127,7 @@ impl<T: Clone> Stitcher<T> {
     /// Sorts entries by Height desc, Width desc, Name asc, then packs into binary partitioned regions.
     /// If entries exceed max dimensions, automatically allocates subsequent atlas chunks (pages).
     pub fn stitch(&mut self) -> Result<StitchedAtlas<T>, TextureError> {
-        if self.holders.is_empty() {
+        if self.holders.is_empty() && self.pinned_holder.is_none() {
             return Ok(StitchedAtlas { chunks: Vec::new() });
         }
 
@@ -117,6 +147,11 @@ impl<T: Clone> Stitcher<T> {
 
         let mut chunks = Vec::new();
         let mut unplaced = self.holders.clone();
+
+        // 2. If a pinned holder is registered (e.g. fallback missingno), pin it at index 0 of chunk 0
+        if let Some(ref pinned) = self.pinned_holder {
+            unplaced.insert(0, pinned.clone());
+        }
 
         while !unplaced.is_empty() {
             let (chunk, remaining) = self.stitch_single_chunk(unplaced)?;
@@ -205,6 +240,26 @@ impl<T: Clone> Stitcher<T> {
         storage_y: &mut u32,
         holder: &StitcherHolder<T>,
     ) -> bool {
+        // Initial empty storage
+        if *storage_x == 0 || *storage_y == 0 {
+            let init_w = smallest_encompassing_power_of_two(holder.width);
+            let init_h = smallest_encompassing_power_of_two(holder.height);
+            if init_w > self.max_width || init_h > self.max_height {
+                return false;
+            }
+            let mut region = StitcherRegion::new(0, 0, init_w, init_h);
+            if region
+                .add(holder.clone(), holder.width, holder.height)
+                .is_some()
+            {
+                return false;
+            }
+            *storage_x = init_w;
+            *storage_y = init_h;
+            storage.push(region);
+            return true;
+        }
+
         let cur_pow_x = smallest_encompassing_power_of_two(*storage_x);
         let cur_pow_y = smallest_encompassing_power_of_two(*storage_y);
         let next_pow_x = smallest_encompassing_power_of_two(*storage_x + holder.width);
@@ -217,36 +272,91 @@ impl<T: Clone> Stitcher<T> {
             return false;
         }
 
-        let is_expand_x_diff = can_expand_x && (cur_pow_x != next_pow_x);
-        let is_expand_y_diff = can_expand_y && (cur_pow_y != next_pow_y);
+        let fits_in_y = holder.height <= *storage_y;
+        let fits_in_x = holder.width <= *storage_x;
 
-        let expand_horizontal = if is_expand_x_diff ^ is_expand_y_diff {
-            is_expand_x_diff
-        } else {
-            can_expand_x && cur_pow_x <= cur_pow_y
-        };
+        if fits_in_y && fits_in_x {
+            // Both single-axis expansions can accommodate the holder's other dimension.
+            let is_expand_x_diff = can_expand_x && (cur_pow_x != next_pow_x);
+            let is_expand_y_diff = can_expand_y && (cur_pow_y != next_pow_y);
 
-        if expand_horizontal {
-            if *storage_y == 0 {
+            let expand_horizontal = if is_expand_x_diff ^ is_expand_y_diff {
+                is_expand_x_diff
+            } else {
+                can_expand_x && cur_pow_x <= cur_pow_y
+            };
+
+            if expand_horizontal {
+                let mut new_region =
+                    StitcherRegion::new(*storage_x, 0, next_pow_x - *storage_x, *storage_y);
+                *storage_x = next_pow_x;
+                if new_region
+                    .add(holder.clone(), holder.width, holder.height)
+                    .is_some()
+                {
+                    return false;
+                }
+                storage.push(new_region);
+            } else {
+                let mut new_region =
+                    StitcherRegion::new(0, *storage_y, *storage_x, next_pow_y - *storage_y);
                 *storage_y = next_pow_y;
+                if new_region
+                    .add(holder.clone(), holder.width, holder.height)
+                    .is_some()
+                {
+                    return false;
+                }
+                storage.push(new_region);
             }
+            true
+        } else if fits_in_y && can_expand_x {
+            // Only horizontal expansion can fit the holder's height
             let mut new_region =
                 StitcherRegion::new(*storage_x, 0, next_pow_x - *storage_x, *storage_y);
             *storage_x = next_pow_x;
-            new_region.add(holder.clone(), holder.width, holder.height);
-            storage.push(new_region);
-        } else {
-            if *storage_x == 0 {
-                *storage_x = next_pow_x;
+            if new_region
+                .add(holder.clone(), holder.width, holder.height)
+                .is_some()
+            {
+                return false;
             }
+            storage.push(new_region);
+            true
+        } else if fits_in_x && can_expand_y {
+            // Only vertical expansion can fit the holder's width
             let mut new_region =
                 StitcherRegion::new(0, *storage_y, *storage_x, next_pow_y - *storage_y);
             *storage_y = next_pow_y;
-            new_region.add(holder.clone(), holder.width, holder.height);
+            if new_region
+                .add(holder.clone(), holder.width, holder.height)
+                .is_some()
+            {
+                return false;
+            }
             storage.push(new_region);
-        }
+            true
+        } else if can_expand_x && can_expand_y {
+            // Neither axis is large enough alone; expand both axes
+            let right_region =
+                StitcherRegion::new(*storage_x, 0, next_pow_x - *storage_x, *storage_y);
+            storage.push(right_region);
 
-        true
+            let mut bottom_region =
+                StitcherRegion::new(0, *storage_y, next_pow_x, next_pow_y - *storage_y);
+            *storage_x = next_pow_x;
+            *storage_y = next_pow_y;
+            if bottom_region
+                .add(holder.clone(), holder.width, holder.height)
+                .is_some()
+            {
+                return false;
+            }
+            storage.push(bottom_region);
+            true
+        } else {
+            false
+        }
     }
 }
 

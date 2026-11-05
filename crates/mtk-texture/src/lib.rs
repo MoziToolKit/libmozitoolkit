@@ -11,11 +11,12 @@ mod image;
 mod stitcher;
 
 pub use atlas::{
-    AtlasAddressMap, AtlasBuilder, AtlasBuilderConfig, AtlasChunkMeta, AtlasKeySource,
-    AtlasSpriteLocation, AtlasTextureSlot, BakedAtlas, BakedAtlasChunk, DynamicAtlasChunk,
-    DynamicAtlasManager, DynamicSlotInfo, IorEncoding, NormalConvention, PbrLayout, PbrMeta,
-    PbrSourceFormat, RoughnessSpace, SpriteKind, DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID,
-    DYNAMIC_ATLAS_HEIGHT, DYNAMIC_ATLAS_WIDTH, DYNAMIC_CHUNK_START, DYNAMIC_SLOT_SIZE,
+    create_fallback_checkerboard_buffer, create_fallback_sprite, AtlasAddressMap, AtlasBuilder,
+    AtlasBuilderConfig, AtlasChunkMeta, AtlasKeySource, AtlasSpriteLocation, AtlasTextureSlot,
+    BakedAtlas, BakedAtlasChunk, DynamicAtlasChunk, DynamicAtlasManager, DynamicSlotInfo,
+    IorEncoding, NormalConvention, PbrLayout, PbrMeta, PbrSourceFormat, RoughnessSpace, SpriteKind,
+    DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID, DYNAMIC_ATLAS_HEIGHT, DYNAMIC_ATLAS_WIDTH,
+    DYNAMIC_CHUNK_START, DYNAMIC_SLOT_SIZE, FALLBACK_TEXTURE_KEY,
 };
 pub use banner::BannerBaker;
 pub use error::TextureError;
