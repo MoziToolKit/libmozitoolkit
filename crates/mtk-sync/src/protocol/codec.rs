@@ -939,5 +939,5 @@ pub fn decode_packet(buf: &[u8]) -> Result<Packet, ProtocolError> {
 
 #[inline]
 fn decode_entity_payload(bytes: &[u8]) -> Option<mtk_model::BlockEntityData> {
-    mtk_save::block_entity::decode_block_entity_payload(bytes)
+    mtk_save::decode_block_entity_payload(bytes)
 }

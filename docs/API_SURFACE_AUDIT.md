@@ -412,7 +412,16 @@ PY
   - 测试隔离：将 `decode_labpbr13` / `decode_ior`、`test_grid_atlas_uv_decode`、`test_redstone_wire_signal_palettes`、`test_classify_tint_category_authoritative`、`test_resident_colormap_sampling` 迁入各模块内部 `#[cfg(test)]` 单元测试；
   - 下游穿透引用收敛：`bindings/mtk-py`, `libmtk`, `mtk-cli`, `mtk-voxel` 中对 `mtk_material::biome::*`, `mtk_material::pbr::*`, `mtk_material::resolver::*` 的穿透统一收敛为根命名空间 `mtk_material::*`；
   - 同步更新 `crates/mtk-material/README.md`。
-- [ ] 推进后续 crate（`mtk-save` → `mtk-package` → `libmtk`）内部 `pub mod` 改 `mod` 与根导出精简。
+- [x] **`mtk-save` 根导出与模块私有化彻底完成 (Batch 4.9)**：
+  - 7 个内部模块（`block_entity`, `chunk`, `error`, `level`, `loader`, `nbt`, `region`）全部收敛为私有 `mod`；
+  - 内部子模块全部收敛为私有 `mod`：`nbt/{error, reader, tag}`；
+  - 废弃与零消费者符号清理：物理删除死代码 `ChunkParser::parse_chunk_sections`、`parse_section_with_biomes`、`ParsedChunk`、`BaseNbt::into_compound`、`SliceReader::remaining`、`RegionFile::path`、`NbtCompound::{with_capacity, len, is_empty, short, float, double, byte_array}`、`NbtTag::{short, float, double, byte_array}`、`NbtList::{len, is_empty}`；
+  - 内部实现细节降级为 `pub(crate)`：`ChunkParser` 及其所有解析方法、`RegionFile` 及其所有方法、`format_canonical_blockstate`、`decode_block_entity`、`ChunkLocation`、`REGION_*` 与 `SECTOR_SIZE` 常量、`Nbt` 内部类型；
+  - 根导出收敛：仅暴露真正被外部消费的 4 个规范契约（`LevelData`, `SaveLoader`, `SaveError`, `decode_block_entity_payload`）；
+  - 测试隔离：将 `test_region_chunk_indexing` 与 `test_region_file_reads_gzip_chunk` 迁入 `src/region.rs` 内部 `#[cfg(test)]` 单元测试，不再为了测试暴露内部扇区寻址结构；
+  - 下游穿透引用收敛：`crates/mtk-sync/src/protocol/codec.rs` 中对 `mtk_save::block_entity::decode_block_entity_payload` 的穿透统一收敛为根命名空间 `mtk_save::decode_block_entity_payload`；
+  - 同步更新 `crates/mtk-save/README.md`。
+- [ ] 推进后续 crate（`mtk-package` → `libmtk`）内部 `pub mod` 改 `mod` 与根导出精简。
 - [ ] 每完成一个 crate 跑 `cargo test -p <crate>` 与 `cargo clippy -p <crate> --all-targets -- -D warnings`。
 
 ### Batch 5：绑定与适配器收敛

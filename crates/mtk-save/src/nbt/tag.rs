@@ -10,11 +10,13 @@ use std::ops::Deref;
 pub struct NbtStr<'a>(pub Cow<'a, str>);
 
 impl<'a> NbtStr<'a> {
+    #[cfg(test)]
     #[inline]
     pub fn from_borrowed(s: &'a str) -> Self {
         Self(Cow::Borrowed(s))
     }
 
+    #[cfg(test)]
     #[inline]
     pub fn from_owned(s: String) -> Self {
         Self(Cow::Owned(s))
@@ -100,14 +102,6 @@ impl<'a> NbtTag<'a> {
     }
 
     #[inline]
-    pub fn short(&self) -> Option<i16> {
-        match self {
-            Self::Short(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-    #[inline]
     pub fn int(&self) -> Option<i32> {
         match self {
             Self::Int(v) => Some(*v),
@@ -119,22 +113,6 @@ impl<'a> NbtTag<'a> {
     pub fn long(&self) -> Option<i64> {
         match self {
             Self::Long(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-    #[inline]
-    pub fn float(&self) -> Option<f32> {
-        match self {
-            Self::Float(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-    #[inline]
-    pub fn double(&self) -> Option<f64> {
-        match self {
-            Self::Double(v) => Some(*v),
             _ => None,
         }
     }
@@ -159,14 +137,6 @@ impl<'a> NbtTag<'a> {
     pub fn list(&self) -> Option<&NbtList<'a>> {
         match self {
             Self::List(v) => Some(v),
-            _ => None,
-        }
-    }
-
-    #[inline]
-    pub fn byte_array(&self) -> Option<&'a [u8]> {
-        match self {
-            Self::ByteArray(v) => Some(v),
             _ => None,
         }
     }
@@ -213,26 +183,11 @@ pub struct NbtCompound<'a> {
 }
 
 impl<'a> NbtCompound<'a> {
+    #[cfg(test)]
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
         }
-    }
-
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            entries: Vec::with_capacity(capacity),
-        }
-    }
-
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.entries.len()
-    }
-
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
     }
 
     #[inline]
@@ -249,11 +204,6 @@ impl<'a> NbtCompound<'a> {
     }
 
     #[inline]
-    pub fn short(&self, key: &str) -> Option<i16> {
-        self.get(key).and_then(|t| t.short())
-    }
-
-    #[inline]
     pub fn int(&self, key: &str) -> Option<i32> {
         self.get(key).and_then(|t| t.int())
     }
@@ -261,16 +211,6 @@ impl<'a> NbtCompound<'a> {
     #[inline]
     pub fn long(&self, key: &str) -> Option<i64> {
         self.get(key).and_then(|t| t.long())
-    }
-
-    #[inline]
-    pub fn float(&self, key: &str) -> Option<f32> {
-        self.get(key).and_then(|t| t.float())
-    }
-
-    #[inline]
-    pub fn double(&self, key: &str) -> Option<f64> {
-        self.get(key).and_then(|t| t.double())
     }
 
     #[inline]
@@ -286,11 +226,6 @@ impl<'a> NbtCompound<'a> {
     #[inline]
     pub fn list(&self, key: &str) -> Option<&NbtList<'a>> {
         self.get(key).and_then(|t| t.list())
-    }
-
-    #[inline]
-    pub fn byte_array(&self, key: &str) -> Option<&'a [u8]> {
-        self.get(key).and_then(|t| t.byte_array())
     }
 
     #[inline]
@@ -328,30 +263,6 @@ pub enum NbtList<'a> {
 }
 
 impl<'a> NbtList<'a> {
-    #[inline]
-    pub fn len(&self) -> usize {
-        match self {
-            Self::Byte(v) => v.len(),
-            Self::Short(v) => v.len(),
-            Self::Int(v) => v.len(),
-            Self::Long(v) => v.len(),
-            Self::Float(v) => v.len(),
-            Self::Double(v) => v.len(),
-            Self::ByteArray(v) => v.len(),
-            Self::String(v) => v.len(),
-            Self::List(v) => v.len(),
-            Self::Compound(v) => v.len(),
-            Self::IntArray(v) => v.len(),
-            Self::LongArray(v) => v.len(),
-            Self::Empty => 0,
-        }
-    }
-
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
     #[inline]
     pub fn compounds(&self) -> Option<Vec<NbtCompound<'a>>> {
         match self {

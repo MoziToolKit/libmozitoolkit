@@ -33,11 +33,6 @@ impl<'a> SliceReader<'a> {
     }
 
     #[inline]
-    pub fn remaining(&self) -> usize {
-        self.slice.len().saturating_sub(self.pos)
-    }
-
-    #[inline]
     pub fn read_u8(&mut self) -> Result<u8, NbtError> {
         if self.pos >= self.slice.len() {
             return Err(NbtError::UnexpectedEof);

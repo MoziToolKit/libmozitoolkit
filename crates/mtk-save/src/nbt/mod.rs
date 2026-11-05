@@ -3,18 +3,15 @@
 //! Provides safe, fast, 100% Stable Rust and WebAssembly (`wasm32-unknown-unknown`)
 //! compatible parsing of Minecraft Java Edition NBT data structures.
 
-pub mod error;
-pub mod reader;
-pub mod tag;
+mod error;
+mod reader;
+mod tag;
 
 use std::io::Cursor;
 
-pub use error::NbtError;
-pub use reader::{
-    SliceReader, TAG_BYTE, TAG_BYTE_ARRAY, TAG_COMPOUND, TAG_DOUBLE, TAG_END, TAG_FLOAT, TAG_INT,
-    TAG_INT_ARRAY, TAG_LIST, TAG_LONG, TAG_LONG_ARRAY, TAG_SHORT, TAG_STRING,
-};
-pub use tag::{NbtCompound, NbtList, NbtStr, NbtTag};
+pub(crate) use error::NbtError;
+pub(crate) use reader::*;
+pub(crate) use tag::*;
 
 /// The decoded root NBT structure.
 #[derive(Debug, Clone, PartialEq)]
@@ -40,18 +37,12 @@ impl<'a> BaseNbt<'a> {
     pub fn as_compound(&self) -> &NbtCompound<'a> {
         &self.root
     }
-
-    /// Consumes the container and returns the inner compound tag.
-    #[inline]
-    pub fn into_compound(self) -> NbtCompound<'a> {
-        self.root
-    }
 }
 
 /// Reads a root NBT compound from a `Cursor<&'a [u8]>`.
 ///
 /// Updates the cursor position to the end of the parsed NBT data.
-pub fn read<'a>(cursor: &mut Cursor<&'a [u8]>) -> Result<Nbt<'a>, NbtError> {
+pub(crate) fn read<'a>(cursor: &mut Cursor<&'a [u8]>) -> Result<Nbt<'a>, NbtError> {
     let pos = cursor.position() as usize;
     let slice = cursor.get_ref();
     if pos >= slice.len() {
@@ -76,8 +67,9 @@ pub fn read<'a>(cursor: &mut Cursor<&'a [u8]>) -> Result<Nbt<'a>, NbtError> {
     Ok(Nbt::Some(BaseNbt { name, root }))
 }
 
+#[cfg(test)]
 /// Reads a root NBT compound directly from an in-memory byte slice.
-pub fn read_from_slice<'a>(slice: &'a [u8]) -> Result<Nbt<'a>, NbtError> {
+pub(crate) fn read_from_slice<'a>(slice: &'a [u8]) -> Result<Nbt<'a>, NbtError> {
     let mut cursor = Cursor::new(slice);
     read(&mut cursor)
 }

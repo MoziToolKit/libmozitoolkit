@@ -273,9 +273,10 @@ impl SaveLoader {
                             }
                         };
 
-                        let parsed = ChunkParser::parse_chunk(&decompressed, min_sec_y, max_sec_y)?;
+                        let sections =
+                            ChunkParser::parse_chunk(&decompressed, min_sec_y, max_sec_y)?;
 
-                        for section in parsed.sections {
+                        for section in sections {
                             let sec_x = section.coord.x;
                             let sec_y = section.coord.y;
                             let sec_z = section.coord.z;

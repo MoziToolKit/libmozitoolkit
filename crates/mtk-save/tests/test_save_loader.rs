@@ -1,20 +1,7 @@
 use glam::IVec3;
-use mtk_save::region::RegionFile;
 use mtk_save::SaveLoader;
 use mtk_testkit::save_world;
 use mtk_voxel::VoxelStorage;
-
-#[test]
-fn test_region_chunk_indexing() {
-    assert_eq!(RegionFile::chunk_index(0, 0), 0);
-    assert_eq!(RegionFile::chunk_index(1, 0), 1);
-    assert_eq!(RegionFile::chunk_index(0, 1), 32);
-    assert_eq!(RegionFile::chunk_index(31, 31), 1023);
-
-    // Negative coordinates wrap using Euclidean remainder
-    assert_eq!(RegionFile::chunk_index(-1, -1), 31 + 31 * 32);
-    assert_eq!(RegionFile::chunk_index(-32, 0), 0);
-}
 
 #[test]
 fn test_real_world_level_dat_if_present() {
@@ -79,51 +66,6 @@ fn test_real_world_bounded_box_loading() {
     println!("Biome columns count: {}", storage.biome_column_map.len());
     let sampled = storage.get_biome(0, 64, 0);
     println!("Sampled biome at (0, 64, 0): {}", sampled);
-}
-
-#[test]
-fn test_region_file_reads_gzip_chunk() {
-    use std::io::Write;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    use flate2::write::GzEncoder;
-    use flate2::Compression;
-
-    let payload = b"gzip-compressed chunk payload".repeat(16);
-    let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
-    encoder.write_all(&payload).unwrap();
-    let compressed = encoder.finish().unwrap();
-    assert!(compressed.len() + 5 < mtk_save::region::SECTOR_SIZE);
-
-    // 4 KiB location header + one data sector. Chunk (0,0) starts at sector 2.
-    let mut bytes = vec![0u8; mtk_save::region::SECTOR_SIZE * 3];
-    bytes[0..3].copy_from_slice(&[0, 0, 2]);
-    bytes[3] = 1;
-    let data_offset = mtk_save::region::SECTOR_SIZE * 2;
-    let declared_len = (compressed.len() + 1) as u32;
-    bytes[data_offset..data_offset + 4].copy_from_slice(&declared_len.to_be_bytes());
-    bytes[data_offset + 4] = 1; // GZip
-    bytes[data_offset + 5..data_offset + 5 + compressed.len()].copy_from_slice(&compressed);
-
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let path = std::env::temp_dir().join(format!(
-        "mtk_save_gzip_{}_{}.mca",
-        std::process::id(),
-        unique
-    ));
-    std::fs::write(&path, &bytes).unwrap();
-
-    let mut region = RegionFile::open(&path).unwrap();
-    let decoded = region
-        .read_chunk_decompressed(0, 0)
-        .unwrap()
-        .expect("gzip chunk should be present");
-    assert_eq!(decoded, payload);
-    drop(region);
-    std::fs::remove_file(&path).unwrap();
 }
 
 #[test]

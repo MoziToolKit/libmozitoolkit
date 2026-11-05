@@ -1,23 +1,23 @@
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use flate2::read::{GzDecoder, ZlibDecoder};
 
 use crate::error::SaveError;
 
 /// Number of chunks along one axis of a 32x32 Anvil region file.
-pub const REGION_CHUNKS_AXIS: usize = 32;
+pub(crate) const REGION_CHUNKS_AXIS: usize = 32;
 /// Total number of chunks in a single region file (32 * 32 = 1024).
-pub const REGION_TOTAL_CHUNKS: usize = REGION_CHUNKS_AXIS * REGION_CHUNKS_AXIS;
+pub(crate) const REGION_TOTAL_CHUNKS: usize = REGION_CHUNKS_AXIS * REGION_CHUNKS_AXIS;
 /// Size of the Anvil location header in bytes (1024 entries * 4 bytes = 4096).
-pub const REGION_HEADER_SIZE: usize = 4096;
+pub(crate) const REGION_HEADER_SIZE: usize = 4096;
 /// Size of one Anvil sector in bytes (4 KiB).
-pub const SECTOR_SIZE: usize = 4096;
+pub(crate) const SECTOR_SIZE: usize = 4096;
 
 /// Location entry inside an Anvil region file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ChunkLocation {
+pub(crate) struct ChunkLocation {
     /// Offset in 4 KiB sectors from the start of the file.
     pub sector_offset: u32,
     /// Number of 4 KiB sectors allocated for this chunk.
@@ -38,15 +38,14 @@ impl ChunkLocation {
 
 /// Anvil MCA region file reader with direct sector seeking and zero unneeded decompression.
 #[derive(Debug)]
-pub struct RegionFile {
-    path: PathBuf,
+pub(crate) struct RegionFile {
     file: File,
     locations: [ChunkLocation; REGION_TOTAL_CHUNKS],
 }
 
 impl RegionFile {
     /// Opens an Anvil `.mca` region file and loads its 4096-byte chunk location header.
-    pub fn open(path: &Path) -> Result<Self, SaveError> {
+    pub(crate) fn open(path: &Path) -> Result<Self, SaveError> {
         let mut file = File::open(path)?;
         let mut header = [0u8; REGION_HEADER_SIZE];
         file.read_exact(&mut header).map_err(|e| {
@@ -73,16 +72,12 @@ impl RegionFile {
             };
         }
 
-        Ok(Self {
-            path: path.to_path_buf(),
-            file,
-            locations,
-        })
+        Ok(Self { file, locations })
     }
 
     /// Computes the linear chunk index (0..1024) within a region from world chunk coordinates.
     #[inline]
-    pub fn chunk_index(chunk_x: i32, chunk_z: i32) -> usize {
+    pub(crate) fn chunk_index(chunk_x: i32, chunk_z: i32) -> usize {
         let rel_x = chunk_x.rem_euclid(REGION_CHUNKS_AXIS as i32) as usize;
         let rel_z = chunk_z.rem_euclid(REGION_CHUNKS_AXIS as i32) as usize;
         rel_x + rel_z * REGION_CHUNKS_AXIS
@@ -90,14 +85,14 @@ impl RegionFile {
 
     /// Checks if a chunk at world chunk coordinates `(chunk_x, chunk_z)` exists in this region file.
     #[inline]
-    pub fn has_chunk(&self, chunk_x: i32, chunk_z: i32) -> bool {
+    pub(crate) fn has_chunk(&self, chunk_x: i32, chunk_z: i32) -> bool {
         let idx = Self::chunk_index(chunk_x, chunk_z);
         !self.locations[idx].is_empty()
     }
 
     /// Gets the chunk location entry for world chunk coordinates `(chunk_x, chunk_z)`.
     #[inline]
-    pub fn chunk_location(&self, chunk_x: i32, chunk_z: i32) -> ChunkLocation {
+    pub(crate) fn chunk_location(&self, chunk_x: i32, chunk_z: i32) -> ChunkLocation {
         let idx = Self::chunk_index(chunk_x, chunk_z);
         self.locations[idx]
     }
@@ -105,7 +100,7 @@ impl RegionFile {
     /// Reads and decompresses chunk payload bytes for world chunk `(chunk_x, chunk_z)`.
     ///
     /// Returns `Ok(None)` if the chunk is not generated or empty.
-    pub fn read_chunk_decompressed(
+    pub(crate) fn read_chunk_decompressed(
         &mut self,
         chunk_x: i32,
         chunk_z: i32,
@@ -160,9 +155,65 @@ impl RegionFile {
 
         Ok(Some(decompressed))
     }
+}
 
-    /// Returns the file path of this region file.
-    pub fn path(&self) -> &Path {
-        &self.path
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_region_chunk_indexing() {
+        assert_eq!(RegionFile::chunk_index(0, 0), 0);
+        assert_eq!(RegionFile::chunk_index(1, 0), 1);
+        assert_eq!(RegionFile::chunk_index(0, 1), 32);
+        assert_eq!(RegionFile::chunk_index(31, 31), 1023);
+
+        // Negative coordinates wrap using Euclidean remainder
+        assert_eq!(RegionFile::chunk_index(-1, -1), 31 + 31 * 32);
+        assert_eq!(RegionFile::chunk_index(-32, 0), 0);
+    }
+
+    #[test]
+    fn test_region_file_reads_gzip_chunk() {
+        use flate2::write::GzEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let payload = b"gzip-compressed chunk payload".repeat(16);
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
+        encoder.write_all(&payload).unwrap();
+        let compressed = encoder.finish().unwrap();
+        assert!(compressed.len() + 5 < SECTOR_SIZE);
+
+        // 4 KiB location header + one data sector. Chunk (0,0) starts at sector 2.
+        let mut bytes = vec![0u8; SECTOR_SIZE * 3];
+        bytes[0..3].copy_from_slice(&[0, 0, 2]);
+        bytes[3] = 1;
+        let data_offset = SECTOR_SIZE * 2;
+        let declared_len = (compressed.len() + 1) as u32;
+        bytes[data_offset..data_offset + 4].copy_from_slice(&declared_len.to_be_bytes());
+        bytes[data_offset + 4] = 1; // GZip
+        bytes[data_offset + 5..data_offset + 5 + compressed.len()].copy_from_slice(&compressed);
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "mtk_save_gzip_{}_{}.mca",
+            std::process::id(),
+            unique
+        ));
+        std::fs::write(&path, &bytes).unwrap();
+
+        let mut region = RegionFile::open(&path).unwrap();
+        let decoded = region
+            .read_chunk_decompressed(0, 0)
+            .unwrap()
+            .expect("gzip chunk should be present");
+        assert_eq!(decoded, payload);
+        drop(region);
+        std::fs::remove_file(&path).unwrap();
     }
 }

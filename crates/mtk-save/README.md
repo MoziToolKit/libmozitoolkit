@@ -52,13 +52,13 @@
 │                        mtk-save                        │
 │  ┌───────────────────────┐  ┌───────────────────────┐  │
 │  │       LevelData       │  │      RegionFile       │  │
-│  │ (元数据/维度/出生点)   │  │ (4KiB 扇区直接 Seek)  │  │
+│  │ (元数据/维度/出生点)   │  │ (内部 4KiB 扇区 Seek) │  │
 │  └───────────────────────┘  └───────────┬───────────┘  │
 │                                         │ 压缩扇区数据  │
 │                                         ▼              │
 │                             ┌───────────────────────┐  │
 │                             │      ChunkParser      │  │
-│                             │ (内置零拷贝 / 位解包)  │  │
+│                             │ (内部零拷贝 / 位解包)  │  │
 │                             └───────────┬───────────┘  │
 │                                         │ Section 字典 │
 │                             ┌───────────▼───────────┐  │
@@ -80,87 +80,42 @@
 ### 3.1 世界元数据与环境 (`level.rs`)
 
 ```rust
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LevelData {
     pub level_name: String,
     pub version_name: String,
     pub data_version: i32,
-    pub spawn_x: i32,
-    pub spawn_y: i32,
-    pub spawn_z: i32,
+    pub spawn: IVec3,
     pub time: i64,
     pub day_time: i64,
     pub hardcore: bool,
-    pub clear_weather_time: i32,
-    pub rain_time: i32,
-    pub raining: bool,
-    pub thunder_time: i32,
-    pub thundering: bool,
+    pub game_type: i32,
 }
 ```
-- `LevelData::from_slice(bytes: &[u8]) -> Result<Self, SaveError>`: 基于内置零拷贝 NBT 从 `level.dat` 字节流解包。
+- `LevelData::read_from_file(file_path: &Path) -> Result<Self, SaveError>`: 读取并解包 `level.dat`。
+- `LevelData::read_from_bytes(bytes: &[u8]) -> Result<Self, SaveError>`: 基于内置轻量 NBT 从解压字节流解析。
 
 ---
 
-### 3.2 Anvil 区域文件与扇区寻址 (`region.rs`)
-
-```rust
-pub const REGION_CHUNKS_AXIS: usize = 32;
-pub const REGION_TOTAL_CHUNKS: usize = 1024;
-pub const SECTOR_SIZE: usize = 4096;
-pub const REGION_HEADER_SIZE: usize = 8192; // 4096 (Locations) + 4096 (Timestamps)
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ChunkLocation {
-    pub offset_sectors: u32,
-    pub sector_count: u8,
-}
-
-pub struct RegionFile {
-    pub region_x: i32,
-    pub region_z: i32,
-    locations: [ChunkLocation; REGION_TOTAL_CHUNKS],
-    timestamps: [u32; REGION_TOTAL_CHUNKS],
-}
-```
-- `RegionFile::open(path: impl AsRef<Path>) -> Result<Self, SaveError>`: 打开并解析 `.mca` 头部 8192 字节寻址表。
-- `region.has_chunk(chunk_x, chunk_z) -> bool`: O(1) 判定区域内是否存在目标区块。
-- `region.read_chunk_decompressed(chunk_x, chunk_z) -> Result<Option<Vec<u8>>, SaveError>`: 仅定位、读取并解压目标区块的 NBT 字节流。
-
----
-
-### 3.3 现代 1.18+ 区块切片解包 (`chunk.rs`)
-
-```rust
-pub struct ChunkParser;
-
-pub struct SectionBiomes {
-    pub palette: Vec<String>,
-    pub indices: Vec<u8>,
-}
-
-pub struct ParsedChunk {
-    pub sections: Vec<SectionStorage>,
-    pub biomes: HashMap<i32, SectionBiomes>,
-}
-
-pub fn format_canonical_blockstate(block_comp: &NbtCompound) -> String;
-```
-- `ChunkParser::parse_chunk(bytes: &[u8], min_y: i32, max_y: i32) -> Result<ParsedChunk, SaveError>`: 解密 Chunk NBT，逐 Section 解包 BlockStates 与 3D 4x4x4 quart 生物群系。
-- `ChunkParser::parse_biomes(sec_comp: &NbtCompound) -> Option<SectionBiomes>`: 解码单 Section 内的 `biomes` 调色板与位压缩索引。
-- `ChunkParser::parse_chunk_sections(bytes: &[u8], min_y: i32, max_y: i32) -> Result<Vec<SectionStorage>, SaveError>`: 解密区块内所有几何 Section。
-- `format_canonical_blockstate`: 保证方块状态属性键值升序排列，生成全局一致的权威规范状态字符串。
-
----
-
-### 3.4 按需空间切片加载器 (`loader.rs`)
+### 3.2 按需空间切片加载器 (`loader.rs`)
 
 ```rust
 pub struct SaveLoader;
 ```
-- `SaveLoader::read_level_data(save_dir: &Path) -> Result<LevelData, SaveError>`: 快速读取并审阅世界配置。
+- `SaveLoader::read_level_data(save_dir: &Path) -> Result<LevelData, SaveError>`: 快速定位并读取世界配置。
+- `SaveLoader::discover_dimensions(save_dir: &Path) -> Vec<String>`: 发现可用维度（`overworld`, `the_nether`, `the_end`, 自定义命名空间维度）。
+- `SaveLoader::resolve_dimension_region_dir(save_dir: &Path, dimension: &str) -> Option<PathBuf>`: 解析指定维度的 `region/` 目录。
 - `SaveLoader::load_box_into_storage(...) -> Result<usize, SaveError>`: 给定世界目录、维度名称与 3D 轴对齐空间范围 $[P_{\min}, P_{\max}]$，精确裁剪提取相交区块并灌入 `VoxelStorage`。
 - `SaveLoader::load_box_into_storage_with_progress(..., progress: Option<ProgressCallback>) -> Result<usize, SaveError>`: 带实时物理进度节流汇报的空间切片加载器。
+
+---
+
+### 3.3 方块实体负载解码 (`block_entity.rs`)
+
+```rust
+pub fn decode_block_entity_payload(bytes: &[u8]) -> Option<BlockEntityData>;
+```
+- 支持 JSON 格式与二进制 NBT Compound 格式的通用方块实体负载解码（Banner 纹饰、Decorated Pot 陶片、Player Head 皮肤）。
 
 ---
 
@@ -169,11 +124,12 @@ pub struct SaveLoader;
 | 函数 / 方法 | 签名 / 描述 |
 | :--- | :--- |
 | `SaveLoader::read_level_data` | `(save_dir: &Path) -> Result<LevelData, SaveError>`：读取世界元数据。 |
+| `SaveLoader::discover_dimensions` | `(save_dir: &Path) -> Vec<String>`：发现存档中的可用维度。 |
+| `SaveLoader::resolve_dimension_region_dir` | `(save_dir: &Path, dimension: &str) -> Option<PathBuf>`：定位维度区域目录。 |
 | `SaveLoader::load_box_into_storage` | `(save_dir, dimension, min_coord, max_coord, &mut storage) -> Result<usize, SaveError>`：按 3D 边界范围切片加载体素。 |
 | `SaveLoader::load_box_into_storage_with_progress` | `(..., &mut storage, progress: Option<ProgressCallback>) -> Result<usize, SaveError>`：带进度汇报的切片加载。 |
-| `RegionFile::open` | `(path: impl AsRef<Path>) -> Result<Self, SaveError>`：解析 Anvil 区域文件寻址头。 |
-| `ChunkParser::parse_chunk` | `(bytes: &[u8], min_y, max_y) -> Result<ParsedChunk, SaveError>`：解密区块内所有 Section 与 3D Biomes。 |
-| `ChunkParser::parse_chunk_sections` | `(bytes: &[u8], min_y, max_y) -> Result<Vec<SectionStorage>, SaveError>`：解密区块内所有几何 Section。 |
+| `decode_block_entity_payload` | `(bytes: &[u8]) -> Option<BlockEntityData>`：通用方块实体数据解码。 |
+| `LevelData::read_from_file` | `(file_path: &Path) -> Result<LevelData, SaveError>`：直接读取 `level.dat`。 |
 
 ---
 

@@ -3,24 +3,14 @@ use crate::nbt::{Nbt, NbtCompound};
 use glam::IVec3;
 use mtk_core::constants::voxel::{block_index, SECTION_VOLUME};
 use mtk_voxel::SectionStorage;
-use std::collections::HashMap;
 use std::io::Cursor;
 
-pub use mtk_voxel::SectionBiomes;
-
-/// Parsed chunk data containing populated sections and 3D section biomes.
-#[derive(Debug, Clone)]
-pub struct ParsedChunk {
-    /// Non-empty section storage instances.
-    pub sections: Vec<SectionStorage>,
-    /// 3D paletted biomes indexed by section Y coordinate.
-    pub biomes: HashMap<i32, SectionBiomes>,
-}
+pub(crate) use mtk_voxel::SectionBiomes;
 
 /// Formats a blockstate and its properties into a canonical sorted blockstate string.
 ///
 /// Example: `minecraft:oak_stairs[facing=north,half=bottom,waterlogged=false]`
-pub fn format_canonical_blockstate(block_comp: &NbtCompound) -> String {
+pub(crate) fn format_canonical_blockstate(block_comp: &NbtCompound) -> String {
     let name = block_comp
         .string("Name")
         .map(|s| s.to_string_lossy())
@@ -57,13 +47,13 @@ pub fn format_canonical_blockstate(block_comp: &NbtCompound) -> String {
 }
 
 /// Parses a modern Minecraft 1.18+ chunk and yields populated `SectionStorage` instances.
-pub struct ChunkParser;
+pub(crate) struct ChunkParser;
 
 impl ChunkParser {
     /// Parses a single section from a section compound tag.
     ///
     /// Returns `Ok(None)` if the section is entirely air or unpopulated.
-    pub fn parse_section(
+    pub(crate) fn parse_section(
         chunk_coord: IVec3,
         section_comp: &NbtCompound,
     ) -> Result<Option<SectionStorage>, SaveError> {
@@ -172,7 +162,7 @@ impl ChunkParser {
     }
 
     /// Parses the `biomes` paletted container from a section compound tag.
-    pub fn parse_biomes(section_comp: &NbtCompound) -> Option<SectionBiomes> {
+    pub(crate) fn parse_biomes(section_comp: &NbtCompound) -> Option<SectionBiomes> {
         let biomes_comp = section_comp.compound("biomes")?;
         let pal_strings = biomes_comp.list("palette").and_then(|l| l.strings())?;
         if pal_strings.is_empty() {
@@ -209,35 +199,17 @@ impl ChunkParser {
         Some(SectionBiomes::new(palette, indices))
     }
 
-    /// Parses a single section compound, returning its geometry section and paletted biomes.
-    pub fn parse_section_with_biomes(
-        chunk_coord: IVec3,
-        section_comp: &NbtCompound,
-    ) -> Result<(Option<SectionStorage>, Option<SectionBiomes>), SaveError> {
-        let biomes = Self::parse_biomes(section_comp);
-        let mut storage = Self::parse_section(chunk_coord, section_comp)?;
-        if let Some(ref mut sec) = storage {
-            sec.biomes = biomes.clone();
-        }
-        Ok((storage, biomes))
-    }
-
     /// Parses decompressed chunk bytes, querying sections within `min_section_y..=max_section_y`,
-    /// returning populated sections and 3D section biomes.
-    pub fn parse_chunk(
+    /// returning populated sections.
+    pub(crate) fn parse_chunk(
         decompressed_bytes: &[u8],
         min_section_y: i32,
         max_section_y: i32,
-    ) -> Result<ParsedChunk, SaveError> {
+    ) -> Result<Vec<SectionStorage>, SaveError> {
         let nbt = crate::nbt::read(&mut Cursor::new(decompressed_bytes))?;
         let base = match nbt {
             Nbt::Some(b) => b,
-            Nbt::None => {
-                return Ok(ParsedChunk {
-                    sections: Vec::new(),
-                    biomes: HashMap::new(),
-                })
-            }
+            Nbt::None => return Ok(Vec::new()),
         };
 
         let chunk = base.as_compound();
@@ -247,25 +219,16 @@ impl ChunkParser {
 
         let sections_list = match chunk.list("sections").and_then(|l| l.compounds()) {
             Some(list) => list,
-            None => {
-                return Ok(ParsedChunk {
-                    sections: Vec::new(),
-                    biomes: HashMap::new(),
-                })
-            }
+            None => return Ok(Vec::new()),
         };
 
         let mut sections = Vec::new();
-        let mut biomes = HashMap::new();
 
         for sec_comp in sections_list {
             if let Some(y_byte) = sec_comp.byte("Y") {
                 let sec_y = y_byte as i32;
                 if sec_y >= min_section_y && sec_y <= max_section_y {
                     let biome_data = Self::parse_biomes(&sec_comp);
-                    if let Some(ref b) = biome_data {
-                        biomes.insert(sec_y, b.clone());
-                    }
                     if let Some(mut section) = Self::parse_section(chunk_coord, &sec_comp)? {
                         section.biomes = biome_data;
                         sections.push(section);
@@ -324,25 +287,14 @@ impl ChunkParser {
             }
         }
 
-        Ok(ParsedChunk { sections, biomes })
-    }
-
-    /// Parses decompressed chunk bytes, querying only sections whose Y coordinate falls
-    /// within `min_section_y..=max_section_y`.
-    pub fn parse_chunk_sections(
-        decompressed_bytes: &[u8],
-        min_section_y: i32,
-        max_section_y: i32,
-    ) -> Result<Vec<SectionStorage>, SaveError> {
-        let parsed = Self::parse_chunk(decompressed_bytes, min_section_y, max_section_y)?;
-        Ok(parsed.sections)
+        Ok(sections)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nbt::tag::{NbtList, NbtStr, NbtTag};
+    use crate::nbt::{NbtList, NbtStr, NbtTag};
 
     #[test]
     fn test_single_biome_section() {
@@ -399,7 +351,7 @@ mod tests {
 
     #[test]
     fn test_parse_chunk_with_decorated_pot() {
-        use crate::nbt::reader::*;
+        use crate::nbt::*;
         let mut buf = Vec::new();
         // Root compound
         buf.push(TAG_COMPOUND);
@@ -508,9 +460,9 @@ mod tests {
         buf.push(TAG_END); // end of block entity 0
         buf.push(TAG_END); // end of root compound
 
-        let parsed = ChunkParser::parse_chunk(&buf, -4, 20).expect("Should parse chunk");
-        assert_eq!(parsed.sections.len(), 1);
-        let sec = &parsed.sections[0];
+        let sections = ChunkParser::parse_chunk(&buf, -4, 20).expect("Should parse chunk");
+        assert_eq!(sections.len(), 1);
+        let sec = &sections[0];
         assert_eq!(sec.coord.y, 0);
 
         let local_idx = block_index(3, 2, 5) as u16;

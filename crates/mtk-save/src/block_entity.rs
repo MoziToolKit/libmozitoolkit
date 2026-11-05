@@ -3,7 +3,7 @@
 //! Converts raw MCA `block_entities` compounds into high-level typed `BlockEntityData`,
 //! supporting both pre-1.20.5 Tag structures and 1.20.5+ Data Component structures.
 
-use crate::nbt::tag::NbtCompound;
+use crate::nbt::NbtCompound;
 use mtk_model::banner::BannerPatternLayer;
 use mtk_model::skull::{PlayerProfileData, SkullKind};
 use mtk_model::BlockEntityData;
@@ -11,7 +11,7 @@ use mtk_model::BlockEntityData;
 /// Decodes an NBT Compound from a chunk's `block_entities` list into a typed `BlockEntityData`.
 ///
 /// Returns `None` for unsupported or non-visual block entities (e.g. standard storage chests, hoppers).
-pub fn decode_block_entity(comp: &NbtCompound) -> Option<BlockEntityData> {
+pub(crate) fn decode_block_entity(comp: &NbtCompound) -> Option<BlockEntityData> {
     let id_str = comp
         .string("id")
         .or_else(|| comp.string("Id"))?
@@ -294,7 +294,7 @@ pub fn decode_block_entity_payload(bytes: &[u8]) -> Option<BlockEntityData> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nbt::tag::{NbtList, NbtStr, NbtTag};
+    use crate::nbt::{NbtList, NbtStr, NbtTag};
 
     #[test]
     fn test_decode_banner_legacy_and_components() {
