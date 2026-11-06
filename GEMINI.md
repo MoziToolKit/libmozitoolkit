@@ -75,7 +75,7 @@
 
 ### 规则 7：双轮子体系与构建特性门禁
 
-- **日常开发态直连**：使用 Cargo 标准别名 `cargo build-all-py`（已内联附带 `--features extension-module`），构建产物软链接至相对路径 `../MoziToolKit/dev/lib/`。
+- **日常开发态直连与修改后必编铁律**：使用 Cargo 标准别名 `cargo build-all-py`（已内联附带 `--features extension-module`），构建产物软链接至相对路径 `../MoziToolKit/dev/lib/`。**铁律：凡是对核心 crate 或 Python 绑定层进行任何修改或重构，任务交付前必须无条件执行 `cargo build-all-py` 全量编译**，保证下游 `../MoziToolKit` 能够即时获取最新动态库（.so / .dylib / .pyd）进行无缝测试与联调，严禁仅跑单元测试而遗漏编译导致前端运行旧版本。
 - **构建门禁红线**：**严禁在 `Cargo.toml` 的 `default` 中开启 `extension-module`**（避免破坏独立测试二进制导致 `cargo test` 缺失 `libpython` 符号失败）。
 - **发布态构建**：使用 `maturin build --release` 产出跨平台 wheels；严禁在全局 Python 环境中执行 `pip install`。
 
