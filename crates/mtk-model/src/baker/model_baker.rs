@@ -131,6 +131,12 @@ impl ModelBaker {
         let blockstate = BlockState::parse(state_str)?;
         let canonical_str = blockstate.to_canonical_string();
 
+        if let Some(baked) =
+            BuiltinModelRegistry::get_builtin_baked_model_with_entity(&blockstate, None)
+        {
+            return Ok(BakedVariantGroup::new(canonical_str, vec![baked], vec![1]));
+        }
+
         let variant_specs = if let Some(def) = blockstate_def {
             BlockStateResolver::resolve_variants(def, &blockstate)
         } else if let Some(builtin_def) =

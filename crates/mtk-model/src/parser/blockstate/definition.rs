@@ -427,6 +427,19 @@ impl BlockStateDefinition {
             return Some(list);
         }
 
+        if short_name.contains("copper_golem_statue") {
+            let mut list = Vec::new();
+            for pose in ["standing", "sitting", "running", "star"] {
+                for facing in ["north", "south", "east", "west"] {
+                    list.push(format!(
+                        "{}[copper_golem_pose={},facing={}]",
+                        base_id, pose, facing
+                    ));
+                }
+            }
+            return Some(list);
+        }
+
         if short_name == "decorated_pot" {
             let mut list = Vec::new();
             for f in ["north", "south", "east", "west"] {

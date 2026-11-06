@@ -99,9 +99,10 @@
 ### 1. 1.21.4+ 客户端特殊模型攻坚 (Special Renderers & Copper Golem Statue) (P1)
 - [ ] **解析客户端模型新语法 (`mtk-model::special`)**
   - [ ] 扩展模型反序列化器，识别 `"type": "minecraft:special"` 与 `"type": "minecraft:select"`；
-- [ ] **铜像 / 铜傀儡像 (Copper Golem Statue) 几何模型生成**
-  - [ ] 缺少 `"elements"` 字段时路由至特殊渲染器模型构建器；
-  - [ ] 内置铜傀儡像 4 种氧化态与各姿态盒模型几何与贴图映射。
+- [x] **铜像 / 铜傀儡像 (Copper Golem Statue) 几何模型生成 (`mtk-model::copper_statue`)**
+  - [x] 缺少 `"elements"` 字段时路由至程序化盒模型构建器；
+  - [x] 内置铜傀儡像 4 种氧化态与各姿态（standing / sitting / running / star）盒模型几何与贴图映射；
+  - [x] 在 `expand_known_entity_states` 中暴力展开 16 种姿态与朝向状态，并入全量预烘焙缓存管线。
 
 ### 2. 动画曲线与骨骼重定向数学库 (`mtk-anim::retarget` - P1)
 - [ ] **Mine-imator 关键帧与曲线解算**

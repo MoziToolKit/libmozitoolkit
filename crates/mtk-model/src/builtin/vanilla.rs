@@ -533,6 +533,7 @@ pub fn get_builtin_model_for_state_and_entity(
         .name
         .strip_prefix("minecraft:")
         .unwrap_or(&blockstate.name);
+
     if clean == "decorated_pot" {
         return create_builtin_decorated_pot_model(entity);
     }
@@ -571,6 +572,10 @@ pub fn get_builtin_baked_model_for_state_and_entity(
         .name
         .strip_prefix("minecraft:")
         .unwrap_or(&blockstate.name);
+
+    if clean.contains("copper_golem_statue") {
+        return Some(crate::entity::copper_statue::create_copper_statue_baked_model(blockstate));
+    }
 
     if clean == "decorated_pot" {
         if let Some(crate::entity::BlockEntityData::DecoratedPot { sherds }) = entity {

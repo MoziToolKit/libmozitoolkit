@@ -1,6 +1,7 @@
 //! High-level typed BlockEntity representation decoupled from BlockState strings.
 
 pub mod banner;
+pub mod copper_statue;
 pub(crate) mod pot;
 pub mod skull;
 

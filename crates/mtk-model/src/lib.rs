@@ -12,7 +12,7 @@ pub use baker::{
     BakedModelDatabase, BakedVariantGroup, ModelBaker,
 };
 pub use builtin::BuiltinModelRegistry;
-pub use entity::{banner, skull, BlockEntityData};
+pub use entity::{banner, copper_statue, skull, BlockEntityData};
 pub use error::ModelError;
 pub use parser::{
     mesh_to_obj_string, normalize_canonical_blockstate, BakedObjFace, BlockModelJson, BlockState,
