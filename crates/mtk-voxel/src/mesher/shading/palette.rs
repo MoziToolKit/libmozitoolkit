@@ -395,13 +395,15 @@ pub fn resolve_palette_meshing_data_for_state<'a>(
             }
         }
         ModelSource::None => {
-            let clean_sub = clean_block
-                .strip_prefix("minecraft:")
-                .unwrap_or(clean_block);
+            let (ns, path) = match clean_block.split_once(':') {
+                Some((n, p)) => (n, p),
+                None => ("minecraft", clean_block),
+            };
+            let canonical_tex_key = format!("{}:block/{}", ns, path);
 
             let has_candidate = if let Some(atlas) = &config.atlas_address_map {
                 Direction::ALL.iter().any(|&dir| {
-                    let candidates = get_unit_cube_texture_candidates(clean_sub, dir);
+                    let candidates = get_unit_cube_texture_candidates(clean_block, dir);
                     candidates.iter().any(|cand| {
                         MaterialResolver::resolve(cand, config.custom_aliases.as_deref(), atlas)
                             .is_some()
@@ -420,7 +422,7 @@ pub fn resolve_palette_meshing_data_for_state<'a>(
             let mut faces: [Option<PreResolvedFace>; 6] = Default::default();
             // Classify the block once for all six directions instead of
             // re-running the (allocation-heavy) tint classifier per face.
-            let tint_indices = mtk_material::get_unit_cube_tint_indices(clean_sub);
+            let tint_indices = mtk_material::get_unit_cube_tint_indices(path);
             for dir in Direction::ALL {
                 let (
                     final_tex_key,
@@ -431,7 +433,7 @@ pub fn resolve_palette_meshing_data_for_state<'a>(
                     anim_frame_size,
                     average_color,
                 ) = if let Some(atlas) = &config.atlas_address_map {
-                    let candidates = get_unit_cube_texture_candidates(clean_sub, dir);
+                    let candidates = get_unit_cube_texture_candidates(clean_block, dir);
                     let mut resolved = None;
                     for cand in &candidates {
                         if let Some((res, sp)) =
@@ -498,7 +500,7 @@ pub fn resolve_palette_meshing_data_for_state<'a>(
                             Vec2::new(u_max, v_max),
                         ];
                         (
-                            format!("minecraft:block/{}", clean_sub),
+                            canonical_tex_key.clone(),
                             Some(remapped),
                             fb.chunk_id,
                             fb.chunk_id as i32,
@@ -522,7 +524,7 @@ pub fn resolve_palette_meshing_data_for_state<'a>(
                         ];
                         let avg_col = [1.0, 0.0, 1.0, 1.0];
                         (
-                            format!("minecraft:block/{}", clean_sub),
+                            canonical_tex_key.clone(),
                             Some(remapped),
                             default_chunk,
                             default_chunk as i32,
@@ -533,7 +535,7 @@ pub fn resolve_palette_meshing_data_for_state<'a>(
                     }
                 } else {
                     (
-                        format!("minecraft:block/{}", clean_sub),
+                        canonical_tex_key.clone(),
                         None,
                         0,
                         0,

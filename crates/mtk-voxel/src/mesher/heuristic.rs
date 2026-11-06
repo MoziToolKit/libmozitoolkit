@@ -7,73 +7,88 @@ use mtk_core::Direction;
 
 /// Generates directional candidate texture identifiers for unit cube blocks.
 pub(crate) fn get_unit_cube_texture_candidates(clean_block: &str, dir: Direction) -> Vec<String> {
-    let mut candidates = Vec::with_capacity(4);
+    let mut candidates = Vec::with_capacity(6);
     let is_top = dir == Direction::Up;
     let is_bottom = dir == Direction::Down;
     let is_side = !is_top && !is_bottom;
 
-    if clean_block == "grass_block" || clean_block == "grass" {
-        if is_top {
-            candidates.push("block/grass_block_top".to_string());
-            candidates.push("block/grass_top".to_string());
-        } else if is_bottom {
-            candidates.push("block/dirt".to_string());
+    let (ns, path) = match clean_block.split_once(':') {
+        Some((n, p)) => (Some(n), p),
+        None => (None, clean_block),
+    };
+
+    let mut push_cand = |stem: &str| {
+        if let Some(namespace) = ns {
+            candidates.push(format!("{}:block/{}", namespace, stem));
+            candidates.push(format!("block/{}", stem));
         } else {
-            candidates.push("block/grass_block_side".to_string());
-            candidates.push("block/grass_side".to_string());
+            candidates.push(format!("block/{}", stem));
+            candidates.push(format!("minecraft:block/{}", stem));
         }
-    } else if clean_block == "podzol" {
+    };
+
+    if path == "grass_block" || path == "grass" {
         if is_top {
-            candidates.push("block/podzol_top".to_string());
+            push_cand("grass_block_top");
+            push_cand("grass_top");
         } else if is_bottom {
-            candidates.push("block/dirt".to_string());
+            push_cand("dirt");
         } else {
-            candidates.push("block/podzol_side".to_string());
+            push_cand("grass_block_side");
+            push_cand("grass_side");
         }
-    } else if clean_block == "mycelium" {
+    } else if path == "podzol" {
         if is_top {
-            candidates.push("block/mycelium_top".to_string());
+            push_cand("podzol_top");
         } else if is_bottom {
-            candidates.push("block/dirt".to_string());
+            push_cand("dirt");
         } else {
-            candidates.push("block/mycelium_side".to_string());
+            push_cand("podzol_side");
         }
-    } else if clean_block == "wall_torch" {
-        candidates.push("block/torch".to_string());
-    } else if clean_block == "soul_wall_torch" {
-        candidates.push("block/soul_torch".to_string());
-    } else if clean_block == "redstone_wall_torch" {
-        candidates.push("block/redstone_torch".to_string());
-    } else if clean_block == "piston_head" || clean_block == "moving_piston" {
-        candidates.push("block/piston_top".to_string());
-        candidates.push("block/piston_side".to_string());
-    } else if clean_block.contains("log")
-        || clean_block.contains("wood")
-        || clean_block.contains("pillar")
-        || clean_block.contains("stem")
-        || clean_block.contains("hyphae")
+    } else if path == "mycelium" {
+        if is_top {
+            push_cand("mycelium_top");
+        } else if is_bottom {
+            push_cand("dirt");
+        } else {
+            push_cand("mycelium_side");
+        }
+    } else if path == "wall_torch" {
+        push_cand("torch");
+    } else if path == "soul_wall_torch" {
+        push_cand("soul_torch");
+    } else if path == "redstone_wall_torch" {
+        push_cand("redstone_torch");
+    } else if path == "piston_head" || path == "moving_piston" {
+        push_cand("piston_top");
+        push_cand("piston_side");
+    } else if path.contains("log")
+        || path.contains("wood")
+        || path.contains("pillar")
+        || path.contains("stem")
+        || path.contains("hyphae")
     {
         if is_top || is_bottom {
-            candidates.push(format!("block/{}_top", clean_block));
-            candidates.push(format!("block/{}_end", clean_block));
+            push_cand(&format!("{}_top", path));
+            push_cand(&format!("{}_end", path));
         } else {
-            candidates.push(format!("block/{}_side", clean_block));
-            candidates.push(format!("block/{}", clean_block));
+            push_cand(&format!("{}_side", path));
+            push_cand(path);
         }
     } else {
         if is_top {
-            candidates.push(format!("block/{}_top", clean_block));
-            candidates.push(format!("block/{}_up", clean_block));
-            candidates.push(format!("block/{}_end", clean_block));
+            push_cand(&format!("{}_top", path));
+            push_cand(&format!("{}_up", path));
+            push_cand(&format!("{}_end", path));
         } else if is_bottom {
-            candidates.push(format!("block/{}_bottom", clean_block));
-            candidates.push(format!("block/{}_down", clean_block));
-            candidates.push(format!("block/{}_end", clean_block));
+            push_cand(&format!("{}_bottom", path));
+            push_cand(&format!("{}_down", path));
+            push_cand(&format!("{}_end", path));
         } else if is_side {
-            candidates.push(format!("block/{}_side", clean_block));
-            candidates.push(format!("block/{}_front", clean_block));
+            push_cand(&format!("{}_side", path));
+            push_cand(&format!("{}_front", path));
         }
-        candidates.push(format!("block/{}", clean_block));
+        push_cand(path);
     }
 
     candidates
