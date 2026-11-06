@@ -2,6 +2,17 @@
 //!
 //! Provides static arrays and classification predicates for vanilla block categories.
 
+/// Canonical vanilla technical / invisible blocks that never emit static solid polygon models.
+pub fn is_non_mesh_placeholder_block(name: &str) -> bool {
+    let clean = name.strip_prefix("minecraft:").unwrap_or(name);
+    let base = clean.find('[').map_or(clean, |idx| &clean[..idx]);
+    let lower = base.to_ascii_lowercase();
+    matches!(
+        lower.as_str(),
+        "air" | "cave_air" | "void_air" | "structure_void" | "light" | "barrier" | "bubble_column"
+    )
+}
+
 /// Known block names for air categories.
 pub const AIR_NAMES: &[&str] = &[
     "air",

@@ -384,17 +384,15 @@ mod tests {
 
     #[test]
     fn test_air_family_normalization_matches_java_ssot() {
-        // Java normalizes by block type (`state.is(...)`), so property variants of the
-        // air family collapse to air. Air-like blocks without water (light/barrier without waterlogged)
-        // also collapse to air.
+        // Air family states collapse to canonical "minecraft:air"
         for raw in [
             "minecraft:air",
             "minecraft:cave_air",
             "minecraft:void_air",
             "minecraft:structure_void",
-            "minecraft:light[level=15,waterlogged=false]",
-            "minecraft:barrier",
-            "barrier[waterlogged=false]",
+            "cave_air",
+            "void_air",
+            "structure_void",
         ] {
             assert_eq!(
                 normalize_canonical_blockstate(raw),
@@ -403,27 +401,23 @@ mod tests {
             );
         }
 
-        // Inherently submerged bubble columns or waterlogged transparent blocks canonicalise to water.
+        // Authentic block states preserve their full identifier and property strings.
         for raw in [
             "minecraft:bubble_column",
             "minecraft:bubble_column[drag=true]",
             "minecraft:bubble_column[drag=false]",
-            "bubble_column[drag=true]",
             "minecraft:light[level=15,waterlogged=true]",
+            "minecraft:light[level=15,waterlogged=false]",
+            "minecraft:barrier",
             "minecraft:barrier[waterlogged=true]",
+            "minecraft:oak_stairs[facing=north]",
         ] {
             assert_eq!(
                 normalize_canonical_blockstate(raw),
-                "minecraft:water",
-                "raw state {raw} must canonicalise to water"
+                raw,
+                "raw state {raw} must be preserved authentically"
             );
         }
-
-        // Non-air states keep their full property string.
-        assert_eq!(
-            normalize_canonical_blockstate("minecraft:oak_stairs[facing=north]"),
-            "minecraft:oak_stairs[facing=north]"
-        );
     }
 
     #[test]

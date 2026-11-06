@@ -9,8 +9,7 @@ pub use mtk_core::constants::voxel::{
 };
 
 /// Extracts canonical Minecraft blockstate identifier from raw state or JSON-wrapped string.
-/// Converts variants of air / structure_void to "minecraft:air", bubble_column to "minecraft:water",
-/// and waterlogged light/barrier to "minecraft:water" (otherwise "minecraft:air").
+/// Delegates to `mtk_model::normalize_canonical_blockstate` as the canonical SSOT.
 #[inline]
 pub(crate) fn extract_canonical_state_str(raw_state: &str) -> &str {
     if raw_state.is_empty() || raw_state == "minecraft:air" {
@@ -24,28 +23,7 @@ pub(crate) fn extract_canonical_state_str(raw_state: &str) -> &str {
         }
     }
 
-    let base = res
-        .find('[')
-        .map_or(res, |property_start| &res[..property_start]);
-    match base {
-        "minecraft:air"
-        | "minecraft:cave_air"
-        | "minecraft:void_air"
-        | "air"
-        | "cave_air"
-        | "void_air"
-        | "structure_void"
-        | "minecraft:structure_void" => "minecraft:air",
-        "bubble_column" | "minecraft:bubble_column" => "minecraft:water",
-        "minecraft:light" | "light" | "minecraft:barrier" | "barrier" => {
-            if res.contains("waterlogged=true") {
-                "minecraft:water"
-            } else {
-                "minecraft:air"
-            }
-        }
-        _ => res,
-    }
+    mtk_model::normalize_canonical_blockstate(res)
 }
 
 /// 16x16x16 Chunk Section with dense palette-indexed storage and non-air tracking.

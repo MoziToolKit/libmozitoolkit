@@ -10,7 +10,10 @@ mod types;
 
 // 1. Face Culling Engine & Metadata Computation
 pub use engine::FaceCuller;
-pub use rules::{compute_block_cull_meta, parse_block_name_and_props, should_render_fluid_face};
+pub use rules::{
+    compute_block_cull_meta, is_inherently_submerged_block, is_non_mesh_placeholder_block,
+    parse_block_name_and_props, should_render_fluid_face,
+};
 
 // 2. Coplanar & Volume Geometry Analysis
 pub use geometry::{

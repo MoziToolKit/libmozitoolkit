@@ -137,19 +137,14 @@ impl fmt::Display for BlockState {
 
 /// Canonicalises a blockstate identifier into the server-authoritative representation:
 /// - Leading/trailing whitespace is trimmed.
-/// - Void air, cave air, structure void -> "minecraft:air"
-/// - Bubble column -> "minecraft:water"
-/// - Light, barrier: if waterlogged=true -> "minecraft:water", otherwise -> "minecraft:air"
-/// - Empty string -> "minecraft:air"
+/// - Void air, cave air, structure void, empty string -> "minecraft:air"
+/// - All other blocks preserve their authentic state identifier and properties.
 #[inline]
 pub fn normalize_canonical_blockstate(raw: &str) -> &str {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return "minecraft:air";
     }
-    // The Java SSOT normalizes the *block type* (`state.is(...)`),
-    // which ignores properties. Strip an optional `[...]` suffix before matching so
-    // variants canonicalise exactly like the server.
     let base = trimmed
         .find('[')
         .map_or(trimmed, |property_start| &trimmed[..property_start]);
@@ -162,14 +157,6 @@ pub fn normalize_canonical_blockstate(raw: &str) -> &str {
         | "void_air"
         | "minecraft:structure_void"
         | "structure_void" => "minecraft:air",
-        "minecraft:bubble_column" | "bubble_column" => "minecraft:water",
-        "minecraft:light" | "light" | "minecraft:barrier" | "barrier" => {
-            if trimmed.contains("waterlogged=true") {
-                "minecraft:water"
-            } else {
-                "minecraft:air"
-            }
-        }
         _ => trimmed,
     }
 }

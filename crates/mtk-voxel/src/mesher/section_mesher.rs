@@ -7,8 +7,7 @@ use mtk_core::{
     determine_block_offset_type, get_block_offset, mc_coordinate_seed, JavaRandom, OffsetType,
 };
 use mtk_core::{ProgressCallback, ProgressThrottler};
-use mtk_cull::BlockCullMeta;
-use mtk_cull::FaceCuller;
+use mtk_cull::{is_non_mesh_placeholder_block, BlockCullMeta, FaceCuller};
 use mtk_model::{is_block_emissive, BlockState};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -265,6 +264,11 @@ impl SectionMesher {
                         if meta.is_fluid && !meta.is_waterlogged {
                             continue;
                         }
+                    }
+
+                    // Skip static solid geometry for invisible technical / placeholder blocks
+                    if is_non_mesh_placeholder_block(state_str) {
+                        continue;
                     }
 
                     let offset_type = entry.offset_type;

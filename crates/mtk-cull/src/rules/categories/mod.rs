@@ -7,4 +7,7 @@ mod catalog;
 mod meta;
 mod parametric;
 
-pub use meta::{compute_block_cull_meta, parse_block_name_and_props};
+pub use catalog::is_non_mesh_placeholder_block;
+pub use meta::{
+    compute_block_cull_meta, is_inherently_submerged_block, parse_block_name_and_props,
+};
