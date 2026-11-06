@@ -171,11 +171,17 @@ fn test_uv_coordinate_formula_orientation() {
     })
     .expect("Build scene interchange");
 
+    let fallback_loc = result.mini_atlas_map.lookup_str("mozi:fallback").unwrap();
+    assert_eq!(fallback_loc.frame_0_uv_bounds[0], 0.0);
+    assert_eq!(fallback_loc.frame_0_uv_bounds[1], 0.0);
+    assert_eq!(fallback_loc.frame_0_uv_bounds[2], 0.5);
+    assert_eq!(fallback_loc.frame_0_uv_bounds[3], 1.0);
+
     let loc = result
         .mini_atlas_map
         .lookup_str("minecraft:block/stone")
         .unwrap();
-    assert_eq!(loc.frame_0_uv_bounds[0], 0.0);
+    assert_eq!(loc.frame_0_uv_bounds[0], 0.5);
     assert_eq!(loc.frame_0_uv_bounds[1], 0.0);
     assert_eq!(loc.frame_0_uv_bounds[2], 1.0);
     assert_eq!(loc.frame_0_uv_bounds[3], 1.0);
