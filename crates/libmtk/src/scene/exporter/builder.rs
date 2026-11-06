@@ -93,91 +93,88 @@ pub fn build_scene_atlas_and_models(
 ) -> Result<SceneExportResult, MtkError> {
     let sprite_count = crops.len();
 
-    let mut mini_atlas_map = AtlasAddressMap::new();
     let mut mini_atlas_textures = Vec::new();
     let mut first_chunk_dims = [0u32, 0u32];
 
-    if !crops.is_empty() {
-        let atlas_cfg = AtlasBuilderConfig {
-            max_width: config.max_atlas_size,
-            max_height: config.max_atlas_size,
-            mip_level: config.mip_level,
-            padding: 0,
-        };
-        let atlas_builder = AtlasBuilder::new(atlas_cfg);
+    let atlas_cfg = AtlasBuilderConfig {
+        max_width: config.max_atlas_size,
+        max_height: config.max_atlas_size,
+        mip_level: config.mip_level,
+        padding: 0,
+    };
+    let atlas_builder = AtlasBuilder::new(atlas_cfg);
 
-        let decoded_sprites: Vec<DecodedSprite> = crops.iter().map(|c| c.sprite.clone()).collect();
-        let mut baked_atlas = atlas_builder
-            .build_from_sprites_with_category(decoded_sprites, "scene")
-            .map_err(MtkError::Texture)?;
+    let decoded_sprites: Vec<DecodedSprite> = crops.iter().map(|c| c.sprite.clone()).collect();
+    let mut baked_atlas = atlas_builder
+        .build_from_sprites_with_category(decoded_sprites, "scene")
+        .map_err(MtkError::Texture)?;
 
-        // Decode PBR companions into canonical normal_gl, orm, aux channels
-        let _ = mtk_material::decode_baked_atlas(&mut baked_atlas);
+    // Decode PBR companions into canonical normal_gl, orm, aux channels
+    let _ = mtk_material::decode_baked_atlas(&mut baked_atlas);
 
-        if let Some(first) = baked_atlas.chunks.first() {
-            first_chunk_dims = [first.width, first.height];
-        }
-
-        // Authoritative Biome Tint enablement for scene chunks
-        for chunk_meta in &mut baked_atlas.address_map.chunks {
-            chunk_meta.has_tint = true;
-            chunk_meta.refresh_textures();
-        }
-
-        // Populate alias mappings for robust string lookups (skin/, banner:, etc.)
-        for crop in &crops {
-            if let Some(loc) = baked_atlas
-                .address_map
-                .lookup_static(&crop.sprite.sprite_id)
-                .cloned()
-            {
-                insert_sprite_aliases(&mut baked_atlas.address_map, &crop.key, &loc);
-                for alias in &crop.aliases {
-                    insert_sprite_aliases(&mut baked_atlas.address_map, alias, &loc);
-                }
-            }
-            if let Some(loc) = baked_atlas
-                .address_map
-                .lookup_animated(&crop.sprite.sprite_id)
-                .cloned()
-            {
-                insert_anim_aliases(&mut baked_atlas.address_map, &crop.key, &loc);
-                for alias in &crop.aliases {
-                    insert_anim_aliases(&mut baked_atlas.address_map, alias, &loc);
-                }
-            }
-        }
-
-        // Encode PNG texture layers for all chunks
-        for chunk in &baked_atlas.chunks {
-            let stem = chunk.file_stem();
-
-            let alb_png = chunk.albedo.to_png_bytes().map_err(MtkError::Texture)?;
-            mini_atlas_textures.push((format!("{}.png", stem), alb_png));
-
-            if let Some(norm) = chunk.normal_gl.as_ref().or(chunk.normal.as_ref()) {
-                let norm_png = norm.to_png_bytes().map_err(MtkError::Texture)?;
-                mini_atlas_textures.push((format!("{}_n.png", stem), norm_png));
-            }
-
-            if let Some(orm) = &chunk.orm {
-                let orm_png = orm.to_png_bytes().map_err(MtkError::Texture)?;
-                mini_atlas_textures.push((format!("{}_orm.png", stem), orm_png));
-            }
-
-            if let Some(aux) = &chunk.aux {
-                let aux_png = aux.to_png_bytes().map_err(MtkError::Texture)?;
-                mini_atlas_textures.push((format!("{}_aux.png", stem), aux_png));
-            }
-
-            if let Some(overlay) = &chunk.overlay {
-                let over_png = overlay.to_png_bytes().map_err(MtkError::Texture)?;
-                mini_atlas_textures.push((format!("{}_overlay.png", stem), over_png));
-            }
-        }
-
-        mini_atlas_map = baked_atlas.address_map;
+    if let Some(first) = baked_atlas.chunks.first() {
+        first_chunk_dims = [first.width, first.height];
     }
+
+    // Authoritative Biome Tint enablement for scene chunks
+    for chunk_meta in &mut baked_atlas.address_map.chunks {
+        chunk_meta.has_tint = true;
+        chunk_meta.refresh_textures();
+    }
+
+    // Populate alias mappings for robust string lookups (skin/, banner:, etc.)
+    for crop in &crops {
+        if let Some(loc) = baked_atlas
+            .address_map
+            .lookup_static(&crop.sprite.sprite_id)
+            .cloned()
+        {
+            insert_sprite_aliases(&mut baked_atlas.address_map, &crop.key, &loc);
+            for alias in &crop.aliases {
+                insert_sprite_aliases(&mut baked_atlas.address_map, alias, &loc);
+            }
+        }
+        if let Some(loc) = baked_atlas
+            .address_map
+            .lookup_animated(&crop.sprite.sprite_id)
+            .cloned()
+        {
+            insert_anim_aliases(&mut baked_atlas.address_map, &crop.key, &loc);
+            for alias in &crop.aliases {
+                insert_anim_aliases(&mut baked_atlas.address_map, alias, &loc);
+            }
+        }
+    }
+
+    // Encode PNG texture layers for all chunks
+    for chunk in &baked_atlas.chunks {
+        let stem = chunk.file_stem();
+
+        let alb_png = chunk.albedo.to_png_bytes().map_err(MtkError::Texture)?;
+        mini_atlas_textures.push((format!("{}.png", stem), alb_png));
+
+        if let Some(norm) = chunk.normal_gl.as_ref().or(chunk.normal.as_ref()) {
+            let norm_png = norm.to_png_bytes().map_err(MtkError::Texture)?;
+            mini_atlas_textures.push((format!("{}_n.png", stem), norm_png));
+        }
+
+        if let Some(orm) = &chunk.orm {
+            let orm_png = orm.to_png_bytes().map_err(MtkError::Texture)?;
+            mini_atlas_textures.push((format!("{}_orm.png", stem), orm_png));
+        }
+
+        if let Some(aux) = &chunk.aux {
+            let aux_png = aux.to_png_bytes().map_err(MtkError::Texture)?;
+            mini_atlas_textures.push((format!("{}_aux.png", stem), aux_png));
+        }
+
+        if let Some(overlay) = &chunk.overlay {
+            let over_png = overlay.to_png_bytes().map_err(MtkError::Texture)?;
+            mini_atlas_textures.push((format!("{}_overlay.png", stem), over_png));
+        }
+    }
+
+    let mini_atlas_map = baked_atlas.address_map;
 
     // 2. Tree-shake models & remap UV coordinates to mini-atlas
     let mut tree_shaken_models = BakedModelDatabase::new();

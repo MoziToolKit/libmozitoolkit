@@ -179,6 +179,18 @@ impl VoxelPointCloud {
         }
     }
 
+    /// Scans the point cloud's block palette for unknown blockstates lacking both models and textures.
+    pub fn scan_unknown_blocks(
+        &self,
+        model_db: Option<&mtk_model::BakedModelDatabase>,
+        atlas: Option<&mtk_texture::AtlasAddressMap>,
+        custom_aliases: Option<&std::collections::HashMap<String, Vec<String>>>,
+    ) -> Vec<String> {
+        let unique_states: std::collections::HashSet<&str> =
+            self.state_palette.iter().map(|s| s.as_str()).collect();
+        crate::storage::scan_unknown_blockstates(unique_states, model_db, atlas, custom_aliases)
+    }
+
     /// Efficient batch constructor from palette indices, avoiding allocating millions of strings on the host.
     pub fn from_indexed_arrays(
         positions: Vec<f32>,

@@ -142,6 +142,7 @@ pub enum PaletteMeshingData {
     UnitCube {
         faces: [PreResolvedFace; 6],
     },
+    Empty,
 }
 
 /// Unified fully-resolved shading and material data for an emitted face.

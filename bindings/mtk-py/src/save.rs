@@ -131,7 +131,8 @@ pub fn inspect_minecraft_save(world_dir: &str) -> PyResult<PyLevelData> {
     num_threads=None,
     callback=None,
     skin_cache_dir=None,
-    cache_package_path=None
+    cache_package_path=None,
+    force=false
 ))]
 pub fn load_and_mesh_minecraft_save(
     py: Python<'_>,
@@ -146,6 +147,7 @@ pub fn load_and_mesh_minecraft_save(
     callback: Option<Py<PyAny>>,
     skin_cache_dir: Option<String>,
     cache_package_path: Option<String>,
+    force: Option<bool>,
 ) -> PyResult<(PyMeshData, PyLevelData, PyVoxelStorage)> {
     let mut profiler = mtk_core::ExecutionProfiler::start();
 
@@ -205,6 +207,22 @@ pub fn load_and_mesh_minecraft_save(
         return Err(pyo3::exceptions::PyValueError::new_err(
             "Active asset cache (atlas) is strictly required to mesh Minecraft save geometry",
         ));
+    }
+
+    let force_proceed = force.unwrap_or(false);
+    if !force_proceed {
+        let unknown = storage.scan_unknown_blocks(
+            model_db.map(|m| m.inner.as_ref()),
+            config.and_then(|c| c.inner.atlas_address_map.as_deref()),
+            None,
+        );
+        if !unknown.is_empty() {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Found {} unknown block(s) without models or textures: {}. To proceed with fallback cubes, set force=True.",
+                unknown.len(),
+                unknown.join(", ")
+            )));
+        }
     }
 
     let cfg = config.map(|c| c.inner.clone());

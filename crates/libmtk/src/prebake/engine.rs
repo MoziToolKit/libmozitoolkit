@@ -209,35 +209,39 @@ fn precompile_all_assets_inner(
                 let def = stack.load_atlas_category(&cat);
                 def_list.push((cat.as_str().to_string(), def));
             } else {
-                for loc in stack.list_all_atlas_locations() {
-                    if let Ok(mut def) = stack.load_atlas_definition(&loc) {
-                        let cat_name = loc.path.clone();
-                        // Banner patterns are synthesized dynamically into the Dynamic Entity Atlas;
-                        // for the static atlas, we only bake the basic banner stand/pole pattern ("banner_base").
-                        if cat_name == "banner_patterns" {
-                            def = mtk_resource::AtlasDefinition {
-                                sources: vec![mtk_resource::AtlasSource::Single {
-                                    resource: mtk_resource::ResourceLocation::new(
-                                        "minecraft",
-                                        "entity/banner/banner_base",
-                                    ),
-                                    sprite: Some(mtk_resource::ResourceLocation::new(
-                                        "minecraft",
-                                        "entity/banner/banner_base",
-                                    )),
-                                }],
-                            };
-                        }
-                        if seen_cats.insert(cat_name.clone()) {
-                            def_list.push((cat_name, def));
-                        }
-                    }
-                }
+                // Canonical priority: standard categories are always processed first in canonical
+                // order, guaranteeing Blocks is Chunk 0 and mozi:fallback is pinned at (0, 0).
                 for standard_cat in &AtlasCategory::ALL_STANDARD {
                     let cat_name = standard_cat.as_str().to_string();
                     if seen_cats.insert(cat_name.clone()) {
                         let def = stack.load_atlas_category(standard_cat);
                         def_list.push((cat_name, def));
+                    }
+                }
+
+                // Additional custom/modded atlases discovered across packs:
+                for loc in stack.list_all_atlas_locations() {
+                    let cat_name = loc.path.clone();
+                    if seen_cats.insert(cat_name.clone()) {
+                        if let Ok(mut def) = stack.load_atlas_definition(&loc) {
+                            // Banner patterns are synthesized dynamically into the Dynamic Entity Atlas;
+                            // for the static atlas, we only bake the basic banner stand/pole pattern ("banner_base").
+                            if cat_name == "banner_patterns" {
+                                def = mtk_resource::AtlasDefinition {
+                                    sources: vec![mtk_resource::AtlasSource::Single {
+                                        resource: mtk_resource::ResourceLocation::new(
+                                            "minecraft",
+                                            "entity/banner/banner_base",
+                                        ),
+                                        sprite: Some(mtk_resource::ResourceLocation::new(
+                                            "minecraft",
+                                            "entity/banner/banner_base",
+                                        )),
+                                    }],
+                                };
+                            }
+                            def_list.push((cat_name, def));
+                        }
                     }
                 }
             }

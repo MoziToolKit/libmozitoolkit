@@ -569,6 +569,23 @@ impl crate::source::VoxelReader for VoxelStorage {
     }
 }
 
+impl VoxelStorage {
+    /// Scans all chunk section palettes for unknown blockstates lacking both models and textures.
+    pub fn scan_unknown_blocks(
+        &self,
+        model_db: Option<&mtk_model::BakedModelDatabase>,
+        atlas: Option<&mtk_texture::AtlasAddressMap>,
+        custom_aliases: Option<&std::collections::HashMap<String, Vec<String>>>,
+    ) -> Vec<String> {
+        let unique_states: std::collections::HashSet<&str> = self
+            .sections
+            .values()
+            .flat_map(|sec| sec.palette.iter().map(|s| s.as_str()))
+            .collect();
+        crate::storage::scan_unknown_blockstates(unique_states, model_db, atlas, custom_aliases)
+    }
+}
+
 impl crate::source::VoxelWriter for VoxelStorage {
     fn set_block(&mut self, x: i32, y: i32, z: i32, state: &str, biome: Option<&str>) {
         VoxelStorage::set_block(self, x, y, z, state, biome);

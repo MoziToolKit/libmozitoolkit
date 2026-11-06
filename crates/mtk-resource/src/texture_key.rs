@@ -78,6 +78,7 @@ impl TextureKeyVariants {
             // If the key is a raw skin identifier without prefix (e.g. "player_Alex" or hex)
             if key.starts_with("player_")
                 || key.starts_with("uuid_")
+                || key.starts_with("cdn_")
                 || (key.len() == 64 && key.chars().all(|c| c.is_ascii_hexdigit()))
             {
                 add(format!("minecraft:skin/{key}"));

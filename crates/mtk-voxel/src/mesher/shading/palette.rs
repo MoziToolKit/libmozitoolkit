@@ -399,6 +399,24 @@ pub fn resolve_palette_meshing_data_for_state<'a>(
                 .strip_prefix("minecraft:")
                 .unwrap_or(clean_block);
 
+            let has_candidate = if let Some(atlas) = &config.atlas_address_map {
+                Direction::ALL.iter().any(|&dir| {
+                    let candidates = get_unit_cube_texture_candidates(clean_sub, dir);
+                    candidates.iter().any(|cand| {
+                        MaterialResolver::resolve(cand, config.custom_aliases.as_deref(), atlas)
+                            .is_some()
+                    })
+                })
+            } else {
+                false
+            };
+
+            if !has_candidate
+                && config.unknown_block_strategy == crate::types::UnknownBlockStrategy::IgnoreAsAir
+            {
+                return PaletteMeshingData::Empty;
+            }
+
             let mut faces: [Option<PreResolvedFace>; 6] = Default::default();
             // Classify the block once for all six directions instead of
             // re-running the (allocation-heavy) tint classifier per face.
@@ -489,16 +507,25 @@ pub fn resolve_palette_meshing_data_for_state<'a>(
                             avg_col,
                         )
                     } else {
-                        let avg_col = atlas
-                            .lookup_fallback()
-                            .and_then(|s| s.average_color.as_deref())
-                            .map(mtk_material::hex_to_linear_rgba)
-                            .unwrap_or([1.0, 1.0, 1.0, 1.0]);
+                        let default_chunk = atlas.default_chunk_id();
+                        let (chunk_w, chunk_h) = atlas
+                            .get_chunk_meta(default_chunk)
+                            .map(|c| (c.width as f32, c.height as f32))
+                            .unwrap_or((4096.0, 4096.0));
+                        let u_span = 16.0 / chunk_w.max(16.0);
+                        let v_span = 16.0 / chunk_h.max(16.0);
+                        let remapped = [
+                            Vec2::new(0.0, v_span),
+                            Vec2::new(0.0, 0.0),
+                            Vec2::new(u_span, 0.0),
+                            Vec2::new(u_span, v_span),
+                        ];
+                        let avg_col = [1.0, 0.0, 1.0, 1.0];
                         (
                             format!("minecraft:block/{}", clean_sub),
-                            None,
-                            0,
-                            0,
+                            Some(remapped),
+                            default_chunk,
+                            default_chunk as i32,
                             [1.0, 1.0, 0.0],
                             [16.0, 16.0, 0.0],
                             avg_col,

@@ -19,7 +19,9 @@ pub(crate) fn build_static_atlas_chunks(
     baked_chunks: &mut Vec<BakedAtlasChunk>,
     address_map: &mut AtlasAddressMap,
 ) -> Result<(), TextureError> {
-    let is_main_blocks = category_name == "blocks" && *global_chunk_counter == 0;
+    let fallback_id = mtk_resource::ResourceLocation::new("mozi", "fallback");
+    let is_main_blocks = (category_name == "blocks" || category_name == "scene")
+        && !address_map.sprites.contains_key(&fallback_id);
     if static_sprites.is_empty() && !is_main_blocks {
         return Ok(());
     }

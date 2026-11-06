@@ -25,6 +25,17 @@ pub enum CoordinateSystem {
     YUpRightHanded,
 }
 
+/// Strategy for handling unknown blocks (blocks without models or textures in model_db/atlas).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum UnknownBlockStrategy {
+    /// Emit a 6-faced unit cube with the mozi:fallback checkerboard texture (default).
+    #[default]
+    FallbackCube,
+    /// Completely skip geometry for unknown blocks (treat as air).
+    IgnoreAsAir,
+}
+
 /// Configuration options for the voxel section and world mesher.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -67,6 +78,8 @@ pub struct MesherConfig {
     /// Optional procedural banner baker for multi-layer composite banners.
     #[cfg_attr(feature = "serde", serde(skip))]
     pub banner_baker: Option<Arc<mtk_texture::BannerBaker>>,
+    /// Strategy for handling unknown blocks lacking both models and textures.
+    pub unknown_block_strategy: UnknownBlockStrategy,
 }
 
 impl Default for MesherConfig {
@@ -88,6 +101,7 @@ impl Default for MesherConfig {
             enable_random_offsets: true,
             enable_animated_textures: true,
             banner_baker: None,
+            unknown_block_strategy: UnknownBlockStrategy::FallbackCube,
         }
     }
 }

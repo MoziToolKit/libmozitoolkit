@@ -42,7 +42,7 @@ impl ResolvedPaletteEntry {
         culler: &FaceCuller,
         config: &MesherConfig,
     ) -> Self {
-        let (meta, is_emissive) = if let Some(model) = source.primary_model() {
+        let (mut meta, is_emissive) = if let Some(model) = source.primary_model() {
             let mut meta = model.get_or_compute_cull_meta();
             if st.contains("waterlogged=true") {
                 meta.is_waterlogged = true;
@@ -64,6 +64,13 @@ impl ResolvedPaletteEntry {
         };
 
         let meshing_data = Arc::new(resolve_palette_meshing_data_for_state(st, source, config));
+        if matches!(*meshing_data, PaletteMeshingData::Empty) {
+            let mut empty_meta = (*meta).clone();
+            empty_meta.is_air = true;
+            empty_meta.is_full_cube = false;
+            empty_meta.is_opaque = false;
+            meta = Arc::new(empty_meta);
+        }
 
         Self {
             has_model: !source.is_none(),
@@ -343,7 +350,9 @@ impl SectionMesher {
                                     let b = &variants[chosen];
                                     (&b.culled_faces, &b.unculled_faces)
                                 }
-                                PaletteMeshingData::UnitCube { .. } => unreachable!(),
+                                PaletteMeshingData::UnitCube { .. } | PaletteMeshingData::Empty => {
+                                    unreachable!()
+                                }
                             }
                         };
 
@@ -448,6 +457,7 @@ impl SectionMesher {
                         // Standard unit cube meshing
                         let cube_faces = match &*entry.meshing_data {
                             PaletteMeshingData::UnitCube { faces } => faces,
+                            PaletteMeshingData::Empty => continue,
                             _ => unreachable!(),
                         };
 

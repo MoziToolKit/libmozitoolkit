@@ -18,7 +18,7 @@ pub struct PyMesherConfig {
 #[pymethods]
 impl PyMesherConfig {
     #[new]
-    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_vertices=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None, enable_alternate_blocks=true, enable_random_offsets=true, ctm_solver=None, enable_animated_textures=true, colormaps=None))]
+    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_vertices=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None, enable_alternate_blocks=true, enable_random_offsets=true, ctm_solver=None, enable_animated_textures=true, colormaps=None, unknown_block_strategy=None))]
     pub fn new(
         enable_ao: bool,
         mesh_fluids: bool,
@@ -34,7 +34,14 @@ impl PyMesherConfig {
         ctm_solver: Option<&crate::ctm::PyCtmSolver>,
         enable_animated_textures: bool,
         colormaps: Option<&PyVanillaColormaps>,
+        unknown_block_strategy: Option<&str>,
     ) -> Self {
+        let strategy = match unknown_block_strategy {
+            Some("IGNORE_AS_AIR") | Some("ignore_as_air") | Some("air") => {
+                mtk_voxel::UnknownBlockStrategy::IgnoreAsAir
+            }
+            _ => mtk_voxel::UnknownBlockStrategy::FallbackCube,
+        };
         let config = MesherConfig {
             enable_ao,
             mesh_fluids,
@@ -54,6 +61,7 @@ impl PyMesherConfig {
             enable_animated_textures,
             banner_baker: atlas.and_then(|a| a.banner_baker.clone()),
             colormaps: colormaps.map(|c| c.inner.clone()),
+            unknown_block_strategy: strategy,
             ..Default::default()
         };
         Self {
@@ -103,6 +111,24 @@ impl PyMesherConfig {
             self.inner.coordinate_system,
             CoordinateSystem::ZUpRightHanded
         )
+    }
+
+    #[getter]
+    pub fn unknown_block_strategy(&self) -> &'static str {
+        match self.inner.unknown_block_strategy {
+            mtk_voxel::UnknownBlockStrategy::FallbackCube => "FALLBACK_CUBE",
+            mtk_voxel::UnknownBlockStrategy::IgnoreAsAir => "IGNORE_AS_AIR",
+        }
+    }
+
+    #[setter]
+    pub fn set_unknown_block_strategy(&mut self, strategy: &str) {
+        self.inner.unknown_block_strategy = match strategy {
+            "IGNORE_AS_AIR" | "ignore_as_air" | "air" => {
+                mtk_voxel::UnknownBlockStrategy::IgnoreAsAir
+            }
+            _ => mtk_voxel::UnknownBlockStrategy::FallbackCube,
+        };
     }
 
     #[getter]

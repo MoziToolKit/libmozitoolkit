@@ -462,11 +462,7 @@ impl AtlasAddressMap {
                 return Some(loc);
             }
         }
-        let def_chunk = self.default_chunk_id();
-        self.sprites
-            .values()
-            .find(|s| s.chunk_id == def_chunk)
-            .or_else(|| self.sprites.values().next())
+        None
     }
 }
 

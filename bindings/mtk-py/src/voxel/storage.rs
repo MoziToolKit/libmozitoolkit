@@ -188,6 +188,20 @@ impl PyVoxelStorage {
         mtk_sync::compute_sparse_state_hash_for_storage(&self.inner, min_pos_v, size_v, dimension)
     }
 
+    /// Scans all chunk section palettes for unknown blockstates lacking both models and textures.
+    #[pyo3(signature = (model_db=None, atlas=None, custom_aliases=None))]
+    pub fn scan_unknown_blocks(
+        &self,
+        model_db: Option<&crate::model::PyBakedModelDatabase>,
+        atlas: Option<&crate::texture::PyBakedAtlas>,
+        custom_aliases: Option<std::collections::HashMap<String, Vec<String>>>,
+    ) -> Vec<String> {
+        let m_db = model_db.map(|b| b.inner.as_ref());
+        let a_map = atlas.map(|a| &a.inner.address_map);
+        self.inner
+            .scan_unknown_blocks(m_db, a_map, custom_aliases.as_ref())
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "<VoxelStorage bounds=({}, {}, {}, size={}x{}x{}) sections={} dirty={}>",
