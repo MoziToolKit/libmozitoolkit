@@ -595,6 +595,96 @@ fn classify_file(_path: &Path, mut probe: PackProbe) -> PackProbe {
     probe
 }
 
+pub const CANONICAL_BASE_BLOCKS: [&str; 3] = ["stone", "dirt", "oak_planks"];
+
+/// Validates whether a given path (unpacked folder or JAR/ZIP archive) can serve as
+/// the canonical vanilla client foundation for the baking pipeline.
+pub fn path_provides_vanilla_client(path: &Path) -> bool {
+    if !path.exists() {
+        return false;
+    }
+    if path.is_dir() {
+        let mc = path.join("assets").join("minecraft");
+        for block in CANONICAL_BASE_BLOCKS {
+            if !mc
+                .join("blockstates")
+                .join(format!("{}.json", block))
+                .is_file()
+            {
+                return false;
+            }
+            if !mc
+                .join("models")
+                .join("block")
+                .join(format!("{}.json", block))
+                .is_file()
+            {
+                return false;
+            }
+            if !mc
+                .join("textures")
+                .join("block")
+                .join(format!("{}.png", block))
+                .is_file()
+            {
+                return false;
+            }
+        }
+        true
+    } else if path.is_file() {
+        let ext = path
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        if ext != "jar" && ext != "zip" {
+            return false;
+        }
+        let probe = probe_pack(path);
+        if probe.kind == KIND_VANILLA_CLIENT {
+            return true;
+        }
+        #[cfg(feature = "zip")]
+        {
+            let file = match File::open(path) {
+                Ok(f) => f,
+                Err(_) => return false,
+            };
+            let archive = match zip::ZipArchive::new(file) {
+                Ok(a) => a,
+                Err(_) => return false,
+            };
+            let raw_names: Vec<String> = archive
+                .file_names()
+                .filter_map(|r| r.ok())
+                .map(|s| s.to_string())
+                .collect();
+            let (_, names) = strip_wrapper_root(&raw_names);
+            let names_set: std::collections::HashSet<&str> =
+                names.iter().map(|s| s.as_str()).collect();
+
+            for block in CANONICAL_BASE_BLOCKS {
+                let bs = format!("assets/minecraft/blockstates/{}.json", block);
+                let model = format!("assets/minecraft/models/block/{}.json", block);
+                let tex = format!("assets/minecraft/textures/block/{}.png", block);
+                if !names_set.contains(bs.as_str())
+                    || !names_set.contains(model.as_str())
+                    || !names_set.contains(tex.as_str())
+                {
+                    return false;
+                }
+            }
+            true
+        }
+        #[cfg(not(feature = "zip"))]
+        {
+            false
+        }
+    } else {
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

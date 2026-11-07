@@ -413,3 +413,25 @@ pub fn probe_pack<'py>(py: Python<'py>, path: &str) -> PyResult<Bound<'py, PyDic
 
     Ok(dict)
 }
+
+/// Validates whether a given path can serve as a vanilla client foundation.
+#[pyfunction]
+pub fn path_provides_vanilla_client(py: Python<'_>, path: &str) -> bool {
+    let p = Path::new(path);
+    py.detach(|| mtk_resource::path_provides_vanilla_client(p))
+}
+
+/// Evaluates asset cache readiness status against active configuration.
+#[pyfunction]
+pub fn evaluate_cache_status(
+    py: Python<'_>,
+    cache_dir: &str,
+    stack_pack_count: usize,
+    has_vanilla: bool,
+    expected_fingerprint: &str,
+) -> &'static str {
+    let cdir = Path::new(cache_dir);
+    py.detach(|| {
+        libmtk::evaluate_cache_status(cdir, stack_pack_count, has_vanilla, expected_fingerprint)
+    })
+}

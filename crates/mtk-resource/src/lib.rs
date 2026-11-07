@@ -27,5 +27,5 @@ pub use pack::ZipPack;
 pub use pack::{
     DirectoryPack, DiscoveredSprite, MemoryPack, PbrCompanions, ResourcePack, ResourcePackStack,
 };
-pub use probe::{probe_pack, PackProbe};
+pub use probe::{path_provides_vanilla_client, probe_pack, PackProbe};
 pub use texture_key::TextureKeyVariants;

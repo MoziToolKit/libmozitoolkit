@@ -64,3 +64,50 @@ pub fn resolve_active_cache_package(
         .collect();
     newest(all)
 }
+
+/// Evaluates the readiness/freshness status of precompiled caches against an active stack and cache directory.
+/// Returns one of: "READY", "MISSING", "STALE", "NO_PACKS", "NO_VANILLA".
+pub fn evaluate_cache_status(
+    cache_dir: impl AsRef<Path>,
+    stack_pack_count: usize,
+    has_vanilla: bool,
+    expected_fingerprint: &str,
+) -> &'static str {
+    if stack_pack_count == 0 {
+        return "NO_PACKS";
+    }
+    if !has_vanilla {
+        return "NO_VANILLA";
+    }
+
+    let dir = cache_dir.as_ref();
+    let has_any_package = if dir.is_dir() {
+        std::fs::read_dir(dir)
+            .ok()
+            .map(|mut rd| {
+                rd.any(|ent| {
+                    ent.ok().map(|e| e.path()).is_some_and(|p| {
+                        p.extension().is_some_and(|ext| ext == "mtkcache") && p.is_file()
+                    })
+                })
+            })
+            .unwrap_or(false)
+    } else {
+        false
+    };
+
+    let fp = expected_fingerprint.trim();
+    if fp.is_empty() {
+        return if has_any_package { "STALE" } else { "MISSING" };
+    }
+
+    if resolve_active_cache_package(dir, Some(fp)).is_some() {
+        return "READY";
+    }
+
+    if has_any_package {
+        "STALE"
+    } else {
+        "MISSING"
+    }
+}

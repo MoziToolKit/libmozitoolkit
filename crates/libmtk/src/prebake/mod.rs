@@ -16,4 +16,4 @@ pub use reader::{
     fingerprint_str_to_bytes16, AssetCacheReader, CacheManifest, ASSET_CACHE_FORMAT_VERSION,
 };
 
-pub use resolver::resolve_active_cache_package;
+pub use resolver::{evaluate_cache_status, resolve_active_cache_package};
