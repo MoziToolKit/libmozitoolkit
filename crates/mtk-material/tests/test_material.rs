@@ -57,6 +57,7 @@ fn test_resolver_and_atlas_projection() {
             has_overlay: false,
             average_color: None,
             slot_index: None,
+            ..Default::default()
         },
     );
 
@@ -105,6 +106,7 @@ fn test_parallel_batch_mesh_remap() {
             has_overlay: false,
             average_color: None,
             slot_index: None,
+            ..Default::default()
         },
     );
 

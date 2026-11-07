@@ -75,6 +75,9 @@ pub struct AtlasSpriteLocation {
     /// Average solid color of the texture as a hex string `#RRGGBB` (excluding alpha).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub average_color: Option<String>,
+    /// Whether this texture is 100% opaque without any transparent or cutout pixels.
+    #[serde(default = "default_true")]
+    pub is_opaque: bool,
     /// Optional slot index for dynamic entity atlases.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slot_index: Option<u16>,
@@ -101,9 +104,14 @@ impl Default for AtlasSpriteLocation {
             has_specular: false,
             has_overlay: false,
             average_color: None,
+            is_opaque: true,
             slot_index: None,
         }
     }
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_category() -> String {

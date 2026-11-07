@@ -878,6 +878,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
                 has_overlay: false,
                 average_color: None,
                 slot_index: None,
+                ..Default::default()
             },
         );
         // Insert vertical strip sprite into animated cache
@@ -903,6 +904,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
                 has_overlay: false,
                 average_color: None,
                 slot_index: None,
+                ..Default::default()
             },
         );
     }
@@ -931,6 +933,7 @@ fn test_cache_driven_animated_texture_routing_block_models() {
             has_overlay: false,
             average_color: None,
             slot_index: None,
+            ..Default::default()
         },
     );
 
@@ -1896,6 +1899,7 @@ fn test_plain_banner_without_block_entity_meshing() {
         has_overlay: false,
         average_color: None,
         slot_index: None,
+        ..Default::default()
     };
     addr_map.sprites.insert(banner_base_id, banner_base_loc);
 
@@ -1961,5 +1965,42 @@ fn test_plain_banner_without_block_entity_meshing() {
     assert!(
         blue_cloth_found,
         "Plain wall blue banner cloth must map to slot 11 on dynamic atlas"
+    );
+}
+
+#[test]
+fn test_spawner_does_not_cull_underlying_block_face() {
+    let mut sec = SectionStorage::new(glam::IVec3::new(0, 0, 0));
+    let pal_stone = sec.palette.len() as u16;
+    sec.palette.push("minecraft:cobblestone".to_string());
+    sec.voxels[block_index(1, 1, 1)] = pal_stone;
+
+    let pal_spawner = sec.palette.len() as u16;
+    sec.palette.push("minecraft:spawner".to_string());
+    sec.voxels[block_index(1, 2, 1)] = pal_spawner;
+    sec.non_air_count = 2;
+
+    let padded = sec.build_padded_array(|_, _, _| "minecraft:air");
+    let culler = FaceCuller::default();
+    let config = MesherConfig::default();
+
+    let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
+
+    // Cobblestone at (1, 1, 1) has Up neighbor spawner at (1, 2, 1).
+    // Because spawner is non-occluding / non-opaque, cobblestone's Up face must NOT be culled!
+    let has_up_face_at_y2 = (0..mesh.quad_count()).any(|q| {
+        let q_indices = &mesh.indices[q * 4..q * 4 + 4];
+        q_indices.iter().all(|&idx| {
+            let pos = mesh.positions[idx as usize];
+            (pos[1] - 2.0).abs() < 1e-4
+                && pos[0] >= 1.0
+                && pos[0] <= 2.0
+                && pos[2] >= 1.0
+                && pos[2] <= 2.0
+        })
+    });
+    assert!(
+        has_up_face_at_y2,
+        "Cobblestone top face under spawner must NOT be culled (no hollow void underneath spawner)!"
     );
 }

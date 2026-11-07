@@ -349,6 +349,25 @@ impl RgbaBuffer {
         f32_buf
     }
 
+    /// Returns `true` if all pixels in this buffer have alpha == 255 (completely opaque).
+    #[inline]
+    pub fn is_opaque(&self) -> bool {
+        if self.pixels.is_empty() {
+            return true;
+        }
+        self.pixels
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|chunk| chunk[3] == 255)
+    }
+
+    /// Returns `true` if any pixel in this buffer has alpha < 255 (contains cutout or translucent pixels).
+    #[inline]
+    pub fn has_transparency(&self) -> bool {
+        !self.is_opaque()
+    }
+
     /// Calculates the average RGB solid color across the entire image buffer,
     /// weighted by pixel alpha to avoid darkening transparent borders/cutouts.
     /// Returns a standard uppercase hex string, e.g. `"#80A755"`, without an alpha channel.
@@ -510,5 +529,22 @@ mod tests {
 
         // (0, 1) should remain pure red [255, 0, 0, 255]
         assert_eq!(base.get_pixel(0, 1), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn test_rgba_buffer_opacity_check() {
+        let opaque_buf = RgbaBuffer::solid(4, 4, 100, 150, 200, 255);
+        assert!(opaque_buf.is_opaque());
+        assert!(!opaque_buf.has_transparency());
+
+        let mut cutout_buf = RgbaBuffer::solid(4, 4, 100, 150, 200, 255);
+        cutout_buf.set_pixel(2, 2, [0, 0, 0, 0]);
+        assert!(!cutout_buf.is_opaque());
+        assert!(cutout_buf.has_transparency());
+
+        let mut translucent_buf = RgbaBuffer::solid(4, 4, 100, 150, 200, 255);
+        translucent_buf.set_pixel(1, 1, [100, 150, 200, 254]);
+        assert!(!translucent_buf.is_opaque());
+        assert!(translucent_buf.has_transparency());
     }
 }

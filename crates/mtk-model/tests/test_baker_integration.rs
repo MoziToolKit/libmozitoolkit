@@ -969,6 +969,19 @@ fn test_vault_and_spawner_inverted_elements() {
             "Spawner mesh must have all 12 faces (6 outer + 6 inner)"
         );
         assert!(textures.iter().any(|t| t.contains("spawner")));
+
+        // Cull metadata validation: spawner must never occlude adjacent blocks
+        assert!(
+            !spawner.is_opaque,
+            "Spawner must not be marked as solid opaque"
+        );
+        let meta = spawner.get_or_compute_cull_meta();
+        assert!(!meta.is_opaque, "Spawner cull meta must not be opaque");
+        assert_eq!(
+            meta.full_face_mask,
+            mtk_core::DirMask::empty(),
+            "Spawner must have empty full_face_mask so adjacent blocks do not cull their contacting faces"
+        );
     }
 
     // 2. Vault: Element 0 (outer box) + Element 1 (inner cage), top face must be preserved
@@ -1410,4 +1423,39 @@ fn test_cross_emissive_coplanar_deduplication() {
         .collect();
     assert_eq!(remaining_faces.len(), 1);
     assert_eq!(remaining_faces[0].texture, "minecraft:block/firefly_bush");
+}
+
+#[test]
+fn test_texture_alpha_dynamic_cull_meta_update() {
+    let root = require_assets!();
+    let mut baker = ModelBaker::new();
+    let loader = vanilla_model_loader(&root);
+
+    if let Some(bs_def) = read_vanilla_blockstate(&root, "minecraft:stone") {
+        let mut stone = baker
+            .bake_blockstate("minecraft:stone", Some(&bs_def), &loader)
+            .expect("Should bake stone");
+
+        // 1. Initial state without atlas: stone is fully opaque full cube
+        assert!(stone.is_cube);
+        assert!(stone.is_opaque);
+        let meta_before = stone.get_or_compute_cull_meta();
+        assert!(meta_before.is_opaque);
+        assert_eq!(meta_before.full_face_mask, mtk_core::DirMask::ALL);
+
+        // 2. Atlas reports texture has cutout/transparency (e.g. custom texture pack):
+        stone.update_cull_meta_with_atlas(|_tex| {
+            Some(false) // transparent / cutout
+        });
+
+        // 3. After atlas update: opacity and full_face_mask must be cleared!
+        assert!(!stone.is_opaque, "Model must transition to non-opaque");
+        let meta_after = stone.get_or_compute_cull_meta();
+        assert!(!meta_after.is_opaque);
+        assert_eq!(
+            meta_after.full_face_mask,
+            mtk_core::DirMask::empty(),
+            "Full face mask must be empty to prevent culling adjacent faces"
+        );
+    }
 }

@@ -313,6 +313,7 @@ impl DynamicAtlasChunk {
                 has_specular: false,
                 has_overlay: false,
                 average_color: None,
+                is_opaque: true,
                 slot_index: Some(slot_idx),
             };
 

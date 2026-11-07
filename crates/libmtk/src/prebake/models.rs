@@ -157,6 +157,12 @@ pub(crate) fn prebake_all_models_with_progress(
                                 resolved
                             }
                         });
+                        group.update_cull_meta_with_atlas(|tex| {
+                            if is_dynamic_entity_texture(tex) {
+                                return None;
+                            }
+                            atlas.resolve_texture_key(tex).map(|sp| sp.is_opaque)
+                        });
                     }
                     group.deduplicate_faces();
                     pairs.push((state_str, group));
@@ -195,6 +201,12 @@ pub(crate) fn prebake_all_models_with_progress(
                                 remap_cache.insert(tex.to_string(), resolved);
                                 resolved
                             }
+                        });
+                        group.update_cull_meta_with_atlas(|tex| {
+                            if is_dynamic_entity_texture(tex) {
+                                return None;
+                            }
+                            atlas.resolve_texture_key(tex).map(|sp| sp.is_opaque)
                         });
                     }
                     group.deduplicate_faces();

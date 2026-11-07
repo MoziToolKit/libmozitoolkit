@@ -104,6 +104,9 @@ pub const NON_OPAQUE_SUBSTRINGS: &[&str] = &[
     "grindstone",
     "cutter",
     "piston",
+    "spawner",
+    "vault",
+    "grate",
 ];
 
 /// Determines if a block is a known non-cube shape based on its canonical name.

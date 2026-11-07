@@ -75,6 +75,7 @@ tiles=0-3
                 has_overlay: false,
                 average_color: None,
                 slot_index: None,
+                ..Default::default()
             },
         );
     }

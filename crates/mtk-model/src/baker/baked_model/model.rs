@@ -423,6 +423,71 @@ impl BakedModel {
             }
         }
     }
+
+    /// Re-evaluates model opacity and culling metadata against authoritative texture opacity.
+    pub fn update_cull_meta_with_atlas<F>(&mut self, mut is_texture_opaque_fn: F)
+    where
+        F: FnMut(&str) -> Option<bool>,
+    {
+        let mut all_textures_opaque = true;
+        let mut checked_any = false;
+
+        for elem in &self.elements {
+            for face in elem.faces.values() {
+                if let Some(is_opaque) = is_texture_opaque_fn(&face.texture) {
+                    checked_any = true;
+                    if !is_opaque {
+                        all_textures_opaque = false;
+                        break;
+                    }
+                }
+            }
+            if !all_textures_opaque {
+                break;
+            }
+        }
+
+        if all_textures_opaque && self.elements.is_empty() && self.is_cube {
+            for face in &self.faces {
+                if let Some(is_opaque) = is_texture_opaque_fn(&face.texture) {
+                    checked_any = true;
+                    if !is_opaque {
+                        all_textures_opaque = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if checked_any {
+            let new_is_opaque = self.is_cube && all_textures_opaque;
+            if self.is_opaque != new_is_opaque {
+                self.is_opaque = new_is_opaque;
+                let mut quads: Vec<([glam::Vec3; 4], mtk_core::Direction)> = Vec::new();
+                if !self.elements.is_empty() {
+                    for elem in &self.elements {
+                        for (&dir, face) in &elem.faces {
+                            quads.push((face.vertices, dir));
+                        }
+                    }
+                } else if self.is_cube {
+                    for dir in mtk_core::Direction::ALL {
+                        quads.push((self.faces[dir.to_index()].vertices, dir));
+                    }
+                }
+                let quads_slice = if quads.is_empty() {
+                    None
+                } else {
+                    Some(quads.as_slice())
+                };
+                self.cull_meta = Some(mtk_cull::compute_block_cull_meta(
+                    &self.block_state,
+                    quads_slice,
+                    Some(self.is_opaque),
+                ));
+            }
+        }
+    }
 }
 
 /// Helper detecting if `emissive_tex` is an emissive companion overlay of `base_tex`.

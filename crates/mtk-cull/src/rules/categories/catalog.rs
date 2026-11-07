@@ -212,6 +212,9 @@ pub fn is_non_occluding_block(name_low: &str) -> bool {
     if NON_OCCLUDING_NAMES.contains(&name_low) {
         return true;
     }
+    if name_low.contains("spawner") || name_low.contains("vault") || name_low.contains("grate") {
+        return true;
+    }
     if name_low.contains("statue") {
         return true;
     }

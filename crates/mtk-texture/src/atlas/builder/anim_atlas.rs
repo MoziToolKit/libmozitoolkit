@@ -139,6 +139,7 @@ pub(crate) fn build_anim_atlas_chunks(
                     has_specular: slot_has_specular,
                     has_overlay: slot_has_overlay,
                     average_color: Some(sp.albedo.average_rgb_hex()),
+                    is_opaque: sp.albedo.is_opaque(),
                     slot_index: None,
                 };
 

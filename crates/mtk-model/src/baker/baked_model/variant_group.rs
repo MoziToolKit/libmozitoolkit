@@ -134,6 +134,16 @@ impl BakedVariantGroup {
             model.remap_to_atlas_with(&mut lookup_fn);
         }
     }
+
+    /// Re-evaluates opacity and culling metadata for all model variants against texture opacity.
+    pub fn update_cull_meta_with_atlas<F>(&mut self, mut is_texture_opaque_fn: F)
+    where
+        F: FnMut(&str) -> Option<bool>,
+    {
+        for model in &mut self.models {
+            model.update_cull_meta_with_atlas(&mut is_texture_opaque_fn);
+        }
+    }
 }
 
 #[cfg(test)]
