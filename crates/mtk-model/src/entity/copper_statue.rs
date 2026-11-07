@@ -828,8 +828,8 @@ pub fn create_copper_statue_baked_model(blockstate: &BlockState) -> BakedModel {
 
     let mut found_faces: [Option<BakedFace>; 6] = [None, None, None, None, None, None];
     for elem in &baked_elements {
-        for (&orig_dir, face) in &elem.faces {
-            let idx = orig_dir.to_index();
+        for face in elem.faces.values() {
+            let idx = face.direction.to_index();
             if found_faces[idx].is_none() {
                 found_faces[idx] = Some(face.clone());
             }

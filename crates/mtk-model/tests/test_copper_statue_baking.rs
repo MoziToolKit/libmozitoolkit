@@ -259,17 +259,22 @@ fn test_copper_statue_bake_variants_group() {
     assert!(!meta.is_full_cube, "Copper statue must not be full cube");
     assert!(!meta.is_opaque, "Copper statue must not be opaque");
 
-    // Verify 6-face summary contains real geometric vertices and uvs
+    // Verify 6-face summary contains real geometric vertices and uvs for each direction
     use mtk_core::Direction;
-    let up_face = primary.get_face(Direction::Up);
-    assert_ne!(
-        up_face.vertices,
-        [glam::Vec3::ZERO; 4],
-        "Up face summary must have non-zero vertices"
-    );
-    assert_ne!(
-        up_face.uvs,
-        [glam::Vec2::ZERO; 4],
-        "Up face summary must have non-zero UVs"
-    );
+    for dir in Direction::ALL {
+        let f = primary.get_face(dir);
+        assert_eq!(f.direction, dir);
+        assert_ne!(
+            f.vertices,
+            [glam::Vec3::ZERO; 4],
+            "{:?} face summary must have non-zero vertices",
+            dir
+        );
+        assert_ne!(
+            f.uvs,
+            [glam::Vec2::ZERO; 4],
+            "{:?} face summary must have non-zero UVs",
+            dir
+        );
+    }
 }

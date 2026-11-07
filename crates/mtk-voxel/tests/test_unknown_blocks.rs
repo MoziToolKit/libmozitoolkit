@@ -111,3 +111,103 @@ fn test_unknown_block_strategy_fallback_cube_vs_ignore_air() {
         "IgnoreAsAir strategy must skip geometry for unknown blocks"
     );
 }
+
+#[test]
+fn test_placeholder_with_custom_model_is_meshed_when_provided() {
+    let mut address_map = AtlasAddressMap::default();
+    let loc = AtlasSpriteLocation {
+        chunk_id: 0,
+        uv_bounds: [0.0, 0.0, 0.0625, 0.0625],
+        frame_0_uv_bounds: [0.0, 0.0, 0.0625, 0.0625],
+        ..Default::default()
+    };
+    address_map.sprites.insert(
+        ResourceLocation::parse("minecraft:block/barrier").unwrap(),
+        loc,
+    );
+    let atlas_arc = Arc::new(address_map);
+    let culler = FaceCuller::default();
+
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+    world.set_block(5, 5, 5, "minecraft:barrier", None);
+
+    let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
+    let cfg = MesherConfig {
+        atlas_address_map: Some(atlas_arc.clone()),
+        ..Default::default()
+    };
+
+    // Case A: ModelSource::None -> placeholder is skipped (0 quads)
+    let mesh_empty = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &cfg);
+    assert_eq!(
+        mesh_empty.quad_count(),
+        0,
+        "Barrier without model must produce 0 quads"
+    );
+
+    // Case B: ModelSource::Single(model) -> resource pack provided model for barrier; must be meshed!
+    use mtk_core::Direction;
+    let mut custom_model = BakedModel {
+        block_state: "minecraft:barrier".to_string(),
+        ..Default::default()
+    };
+    let mut faces_map = std::collections::HashMap::new();
+    for dir in Direction::ALL {
+        faces_map.insert(
+            dir,
+            mtk_model::BakedFace {
+                direction: dir,
+                texture: "minecraft:block/barrier".to_string(),
+                uv_rot: 0.0,
+                uv_bounds: [0.0, 0.0, 1.0, 1.0],
+                tint_index: -1,
+                cullface: Some(dir),
+                vertices: [
+                    glam::Vec3::new(0.0, 0.0, 0.0),
+                    glam::Vec3::new(1.0, 0.0, 0.0),
+                    glam::Vec3::new(1.0, 1.0, 0.0),
+                    glam::Vec3::new(0.0, 1.0, 0.0),
+                ],
+                uvs: [
+                    glam::Vec2::new(0.0, 0.0),
+                    glam::Vec2::new(1.0, 0.0),
+                    glam::Vec2::new(1.0, 1.0),
+                    glam::Vec2::new(0.0, 1.0),
+                ],
+                normal: glam::Vec3::new(0.0, 0.0, -1.0),
+                atlas_uvs: Some([
+                    glam::Vec2::new(0.0, 0.0),
+                    glam::Vec2::new(0.0625, 0.0),
+                    glam::Vec2::new(0.0625, 0.0625),
+                    glam::Vec2::new(0.0, 0.0625),
+                ]),
+                atlas_chunk_id: Some(0),
+                atlas_texture_id: Some(0),
+            },
+        );
+    }
+    custom_model.elements = vec![mtk_model::BakedElement {
+        from_pos: [0.0, 0.0, 0.0],
+        to_pos: [16.0, 16.0, 16.0],
+        faces: faces_map,
+    }];
+    custom_model.rebuild_face_buckets();
+    let mesh_with_model = SectionMesher::mesh_section(
+        &padded,
+        &culler,
+        |s| {
+            if s == "minecraft:barrier" {
+                ModelSource::Single(&custom_model)
+            } else {
+                ModelSource::None
+            }
+        },
+        &cfg,
+    );
+    assert_eq!(
+        mesh_with_model.quad_count(),
+        6,
+        "Barrier with custom model from resource pack must be meshed"
+    );
+}

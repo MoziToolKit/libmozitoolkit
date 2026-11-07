@@ -219,7 +219,10 @@ impl SectionMesher {
                     }
 
                     let state_str = &padded.palette[pal_idx];
-                    if is_non_mesh_placeholder_block(state_str) && !meta.is_waterlogged {
+                    if !entry.has_model
+                        && is_non_mesh_placeholder_block(state_str)
+                        && !meta.is_waterlogged
+                    {
                         continue;
                     }
 
@@ -277,8 +280,8 @@ impl SectionMesher {
                         }
                     }
 
-                    // Skip static solid geometry for invisible technical / placeholder blocks
-                    if is_non_mesh_placeholder_block(state_str) {
+                    // Skip static solid geometry for invisible technical / placeholder blocks without explicit model
+                    if !entry.has_model && is_non_mesh_placeholder_block(state_str) {
                         continue;
                     }
 
