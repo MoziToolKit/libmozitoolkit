@@ -214,11 +214,15 @@ impl SectionMesher {
 
                     let entry = &palette_entries[pal_idx];
                     let meta = &entry.meta;
-                    if meta.is_air {
+                    if meta.is_air && !meta.is_waterlogged {
                         continue;
                     }
 
                     let state_str = &padded.palette[pal_idx];
+                    if is_non_mesh_placeholder_block(state_str) && !meta.is_waterlogged {
+                        continue;
+                    }
+
                     let block_pos = IVec3::new(wx as i32, wy as i32, wz as i32);
 
                     // 1. Fluid Meshing (Water, Lava, or Waterlogged)

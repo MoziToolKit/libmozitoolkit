@@ -570,11 +570,11 @@ mod tests {
 
             let count = uv::repair_mesh_fluid_uv_inplace(
                 py,
-                &py_pos.into_any(),
-                &py_loops.into_any(),
-                &py_starts.into_any(),
-                &py_totals.into_any(),
-                &py_uvs.into_any(),
+                py_pos.as_any(),
+                py_loops.as_any(),
+                py_starts.as_any(),
+                py_totals.as_any(),
+                py_uvs.as_any(),
                 None,
                 false,
                 0.005,
@@ -582,6 +582,33 @@ mod tests {
             .unwrap();
 
             assert_eq!(count, 1);
+
+            // Verify aliasing rejection when uvs is passed as positions or loop_verts
+            let err_alias_pos = uv::repair_mesh_fluid_uv_inplace(
+                py,
+                py_uvs.as_any(),
+                py_loops.as_any(),
+                py_starts.as_any(),
+                py_totals.as_any(),
+                py_uvs.as_any(),
+                None,
+                false,
+                0.005,
+            );
+            assert!(err_alias_pos.is_err());
+
+            let err_alias_loop = uv::repair_mesh_fluid_uv_inplace(
+                py,
+                py_pos.as_any(),
+                py_uvs.as_any(),
+                py_starts.as_any(),
+                py_totals.as_any(),
+                py_uvs.as_any(),
+                None,
+                false,
+                0.005,
+            );
+            assert!(err_alias_loop.is_err());
         });
     }
 }

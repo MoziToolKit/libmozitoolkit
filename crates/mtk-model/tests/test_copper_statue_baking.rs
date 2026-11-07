@@ -115,10 +115,19 @@ fn test_copper_statue_all_poses_baking() {
             .expect("Must bake statue pose");
 
         assert!(
-            !baked.elements.is_empty(),
+            baked.elements.len() >= 9,
             "Pose {} must have elements",
             pose
         );
+        for (elem_idx, elem) in baked.elements.iter().enumerate() {
+            assert_eq!(
+                elem.faces.len(),
+                6,
+                "Pose {} element {} must have exactly 6 faces",
+                pose,
+                elem_idx
+            );
+        }
         assert!(
             !baked.unculled_faces.is_empty(),
             "Pose {} must have unculled faces",
@@ -239,5 +248,28 @@ fn test_copper_statue_bake_variants_group() {
     assert_eq!(
         primary.unculled_faces[0].texture,
         "minecraft:entity/copper_golem/copper_golem_oxidized"
+    );
+
+    // Verify cull_meta is NonOccluding and not full cube
+    let meta = primary
+        .cull_meta
+        .as_ref()
+        .expect("Copper statue must have cull_meta");
+    assert_eq!(meta.category, mtk_cull::CullCategory::NonOccluding);
+    assert!(!meta.is_full_cube, "Copper statue must not be full cube");
+    assert!(!meta.is_opaque, "Copper statue must not be opaque");
+
+    // Verify 6-face summary contains real geometric vertices and uvs
+    use mtk_core::Direction;
+    let up_face = primary.get_face(Direction::Up);
+    assert_ne!(
+        up_face.vertices,
+        [glam::Vec3::ZERO; 4],
+        "Up face summary must have non-zero vertices"
+    );
+    assert_ne!(
+        up_face.uvs,
+        [glam::Vec2::ZERO; 4],
+        "Up face summary must have non-zero UVs"
     );
 }

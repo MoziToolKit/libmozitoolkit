@@ -23,6 +23,8 @@ use crate::parser::model_json::{BlockModelJson, ResolvedBlockModel};
 pub struct ModelBaker {
     /// In-memory cache for baked models keyed by canonical BlockState string.
     bake_cache: HashMap<String, BakedModel>,
+    /// In-memory cache for baked variant groups keyed by canonical BlockState string.
+    variant_cache: HashMap<String, BakedVariantGroup>,
     /// Thread-local cache for dynamically resolved model hierarchies.
     resolved_cache: HashMap<String, std::sync::Arc<ResolvedBlockModel>>,
     /// Shared pre-resolved model database (zero-copy read across threads).
@@ -41,6 +43,7 @@ impl ModelBaker {
     ) -> Self {
         Self {
             bake_cache: HashMap::new(),
+            variant_cache: HashMap::new(),
             resolved_cache: HashMap::new(),
             shared_resolved: Some(shared),
         }
@@ -49,6 +52,7 @@ impl ModelBaker {
     /// Clears the internal bake cache and resolved model cache.
     pub fn clear_cache(&mut self) {
         self.bake_cache.clear();
+        self.variant_cache.clear();
         self.resolved_cache.clear();
     }
 
@@ -83,11 +87,6 @@ impl ModelBaker {
         let blockstate = BlockState::parse(state_str)?;
         let canonical_str = blockstate.to_canonical_string();
 
-        if let Some(baked) =
-            BuiltinModelRegistry::get_builtin_baked_model_with_entity(&blockstate, entity)
-        {
-            return Ok(baked);
-        }
         let cache_key = match entity {
             Some(e) => format!("{}:{:?}", canonical_str, e),
             None => canonical_str.clone(),
@@ -95,6 +94,21 @@ impl ModelBaker {
 
         if let Some(cached) = self.bake_cache.get(&cache_key) {
             return Ok(cached.clone());
+        }
+
+        if entity.is_none() {
+            if let Some(group) = self.variant_cache.get(&canonical_str) {
+                let primary = group.select_primary().clone();
+                self.bake_cache.insert(cache_key, primary.clone());
+                return Ok(primary);
+            }
+        }
+
+        if let Some(baked) =
+            BuiltinModelRegistry::get_builtin_baked_model_with_entity(&blockstate, entity)
+        {
+            self.bake_cache.insert(cache_key, baked.clone());
+            return Ok(baked);
         }
 
         let variant_matches = if let Some(def) = blockstate_def {
@@ -131,10 +145,18 @@ impl ModelBaker {
         let blockstate = BlockState::parse(state_str)?;
         let canonical_str = blockstate.to_canonical_string();
 
+        if let Some(cached) = self.variant_cache.get(&canonical_str) {
+            return Ok(cached.clone());
+        }
+
         if let Some(baked) =
             BuiltinModelRegistry::get_builtin_baked_model_with_entity(&blockstate, None)
         {
-            return Ok(BakedVariantGroup::new(canonical_str, vec![baked], vec![1]));
+            let group = BakedVariantGroup::new(canonical_str.clone(), vec![baked.clone()], vec![1]);
+            self.variant_cache
+                .insert(canonical_str.clone(), group.clone());
+            self.bake_cache.insert(canonical_str, baked);
+            return Ok(group);
         }
 
         let variant_specs = if let Some(def) = blockstate_def {
@@ -157,7 +179,9 @@ impl ModelBaker {
             weights.push(weight);
         }
 
-        Ok(BakedVariantGroup::new(canonical_str, models, weights))
+        let group = BakedVariantGroup::new(canonical_str.clone(), models, weights);
+        self.variant_cache.insert(canonical_str, group.clone());
+        Ok(group)
     }
 
     fn bake_matches<F>(
@@ -668,5 +692,72 @@ f 1/1 2/2 3/3
         assert_eq!(group.models[1].get_face(Direction::Up).uv_rot, 90.0);
         assert_eq!(group.models[2].get_face(Direction::Up).uv_rot, 180.0);
         assert_eq!(group.models[3].get_face(Direction::Up).uv_rot, 270.0);
+    }
+
+    #[test]
+    fn test_bake_single_then_variants_cache_regression() {
+        let mut baker = ModelBaker::new();
+
+        let model_json = r##"{
+            "textures": { "all": "minecraft:block/dirt" },
+            "elements": [{
+                "from": [0, 0, 0],
+                "to": [16, 16, 16],
+                "faces": {
+                    "up": { "texture": "#all", "cullface": "up" }
+                }
+            }]
+        }"##;
+        let parsed_model: BlockModelJson = serde_json::from_str(model_json).unwrap();
+
+        let bs_def_json = r##"{
+            "variants": {
+                "": [
+                    { "model": "minecraft:block/dirt" },
+                    { "model": "minecraft:block/dirt", "y": 90 }
+                ]
+            }
+        }"##;
+        let bs_def: BlockStateDefinition = serde_json::from_str(bs_def_json).unwrap();
+
+        // 1. First call bake_blockstate (single model baked into bake_cache)
+        let single_baked = baker
+            .bake_blockstate("minecraft:dirt", Some(&bs_def), |_id| {
+                Some(parsed_model.clone())
+            })
+            .unwrap();
+        assert_eq!(single_baked.get_face(Direction::Up).uv_rot, 0.0);
+
+        // 2. Then call bake_blockstate_variants; must not return a 1-element group from bake_cache
+        let group = baker
+            .bake_blockstate_variants("minecraft:dirt", Some(&bs_def), |_id| {
+                Some(parsed_model.clone())
+            })
+            .unwrap();
+        assert_eq!(
+            group.len(),
+            2,
+            "bake_blockstate_variants after bake_blockstate must not lose variants"
+        );
+        assert_eq!(group.weights, vec![1, 1]);
+        assert_eq!(group.total_weight, 2);
+        assert_eq!(group.models[0].get_face(Direction::Up).uv_rot, 0.0);
+        assert_eq!(group.models[1].get_face(Direction::Up).uv_rot, 90.0);
+
+        // 3. Clear cache and test reverse order: variants first, then single
+        baker.clear_cache();
+        let group_first = baker
+            .bake_blockstate_variants("minecraft:dirt", Some(&bs_def), |_id| {
+                Some(parsed_model.clone())
+            })
+            .unwrap();
+        assert_eq!(group_first.len(), 2);
+
+        let single_after = baker
+            .bake_blockstate("minecraft:dirt", Some(&bs_def), |_id| {
+                Some(parsed_model.clone())
+            })
+            .unwrap();
+        assert_eq!(single_after.get_face(Direction::Up).uv_rot, 0.0);
     }
 }

@@ -129,43 +129,54 @@ pub fn compute_block_cull_meta(
     let json_type = props.get("__type").and_then(|v| v.parse::<i64>().ok());
 
     let is_waterlogged = props.get("waterlogged").map(|s| s.as_str()) == Some("true");
-    let is_air = state_str.is_empty()
-        || AIR_NAMES.iter().any(|&n| name_low == n)
-        || name_low.ends_with("air");
     let clean_name = name_low.strip_prefix("minecraft:").unwrap_or(&name_low);
+    let is_air = state_str.is_empty()
+        || AIR_NAMES.iter().any(|&n| name_low == n || clean_name == n)
+        || clean_name == "air"
+        || clean_name.ends_with("_air");
     let is_fluid = !is_air
         && (FLUID_NAMES
             .iter()
             .any(|&n| n.strip_prefix("minecraft:").unwrap_or(n) == clean_name));
     let is_leaves = !is_air
-        && (LEAVES_NAMES.iter().any(|&n| name_low == n)
-            || name_low.ends_with("_leaves")
-            || name_low.ends_with("leaves")
-            || name_low == "mangrove_roots");
+        && (LEAVES_NAMES
+            .iter()
+            .any(|&n| name_low == n || clean_name == n)
+            || clean_name == "leaves"
+            || clean_name.ends_with("_leaves")
+            || clean_name == "mangrove_roots");
 
-    let is_pane = name_low.ends_with("_pane")
-        || name_low.ends_with("_bars")
-        || name_low == "glass_pane"
-        || name_low == "iron_bars";
+    let is_pane = clean_name.ends_with("_pane")
+        || clean_name.ends_with("_bars")
+        || clean_name == "glass_pane"
+        || clean_name == "iron_bars";
+    let is_ice = clean_name == "ice"
+        || clean_name.ends_with("_ice")
+        || clean_name == "frosted_ice"
+        || clean_name == "blue_ice"
+        || clean_name == "packed_ice";
     let is_glass = !is_air
         && !is_pane
-        && (GLASS_NAMES.iter().any(|&n| name_low == n)
-            || (name_low.contains("stained_glass") && !is_pane)
-            || (name_low.ends_with("glass") && !is_pane)
-            || name_low.ends_with("ice"));
+        && (GLASS_NAMES
+            .iter()
+            .any(|&n| name_low == n || clean_name == n)
+            || (clean_name.contains("stained_glass") && !is_pane)
+            || clean_name == "glass"
+            || clean_name.ends_with("_glass")
+            || is_ice);
     let is_non_occluding = !is_air
-        && (json_type == Some(1) || json_type == Some(4) || is_non_occluding_block(&name_low));
+        && (json_type == Some(1) || json_type == Some(4) || is_non_occluding_block(clean_name));
     let is_double_slab =
-        name_low.ends_with("_slab") && props.get("type").map(|s| s.as_str()) == Some("double");
+        clean_name.ends_with("_slab") && props.get("type").map(|s| s.as_str()) == Some("double");
     let is_non_full = !is_air
         && !is_double_slab
         && (is_pane
-            || name_low.ends_with("_slab")
-            || name_low.ends_with("_stairs")
-            || (name_low.contains("piston")
+            || clean_name.ends_with("_slab")
+            || clean_name.ends_with("_stairs")
+            || (clean_name.contains("piston")
                 && (props.get("extended").map(|s| s.as_str()) == Some("true")
-                    || name_low.contains("head")))
-            || is_non_full_or_partial_block(&name_low));
+                    || clean_name.contains("head")))
+            || is_non_full_or_partial_block(clean_name));
 
     let (
         category,
@@ -371,5 +382,27 @@ pub fn compute_block_cull_meta(
         props,
         is_waterlogged,
         has_baked_model: element_quads.is_some(),
+    }
+}
+
+/// Computes standard non-occluding cull metadata for non-solid, decorative, or complex entity blocks.
+pub fn compute_non_occluding_meta(state_str: &str) -> BlockCullMeta {
+    let (name, props) = parse_block_name_and_props(state_str);
+    let is_waterlogged = props.get("waterlogged").map(|s| s.as_str()) == Some("true");
+    BlockCullMeta {
+        state_str: state_str.to_string(),
+        block_name: name,
+        category: CullCategory::NonOccluding,
+        is_full_cube: false,
+        is_opaque: false,
+        is_air: false,
+        is_fluid: false,
+        cull_group: "non_occluding".to_string(),
+        face_shapes: Default::default(),
+        full_face_mask: DirMask::empty(),
+        empty_face_mask: DirMask::ALL,
+        props,
+        is_waterlogged,
+        has_baked_model: false,
     }
 }

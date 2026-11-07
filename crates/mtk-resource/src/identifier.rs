@@ -83,20 +83,14 @@ impl ResourceLocation {
 
         // 2. Check if has namespace prefix, e.g. "namespace:path"
         if let Some((ns, path)) = input.split_once(':') {
-            let clean_path = path
-                .strip_prefix("textures/")
-                .unwrap_or(path)
-                .strip_suffix(".png")
-                .unwrap_or(path);
+            let stripped = path.strip_prefix("textures/").unwrap_or(path);
+            let clean_path = stripped.strip_suffix(".png").unwrap_or(stripped);
             return Ok(Self::new(ns, clean_path));
         }
 
         // 3. Raw path without namespace, e.g. "textures/block/stone.png" or "block/stone"
-        let clean_path = input
-            .strip_prefix("textures/")
-            .unwrap_or(&input)
-            .strip_suffix(".png")
-            .unwrap_or(&input);
+        let stripped = input.strip_prefix("textures/").unwrap_or(&input);
+        let clean_path = stripped.strip_suffix(".png").unwrap_or(stripped);
 
         Ok(Self::new(DEFAULT_NAMESPACE, clean_path))
     }
@@ -244,5 +238,47 @@ impl<'de> Deserialize<'de> for ResourceLocation {
     {
         let s = String::deserialize(deserializer)?;
         Self::parse(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_texture_path_variations() {
+        // Raw without .png
+        let loc1 = ResourceLocation::parse_texture_path("textures/block/stone").unwrap();
+        assert_eq!(loc1.namespace, "minecraft");
+        assert_eq!(loc1.path, "block/stone");
+
+        // Raw with .png
+        let loc2 = ResourceLocation::parse_texture_path("textures/block/stone.png").unwrap();
+        assert_eq!(loc2.namespace, "minecraft");
+        assert_eq!(loc2.path, "block/stone");
+
+        // Bare path
+        let loc3 = ResourceLocation::parse_texture_path("block/stone").unwrap();
+        assert_eq!(loc3.namespace, "minecraft");
+        assert_eq!(loc3.path, "block/stone");
+
+        // Namespaced with textures/ and without .png
+        let loc4 =
+            ResourceLocation::parse_texture_path("custom:textures/entity/copper_statue/model")
+                .unwrap();
+        assert_eq!(loc4.namespace, "custom");
+        assert_eq!(loc4.path, "entity/copper_statue/model");
+
+        // Namespaced with textures/ and with .png
+        let loc5 =
+            ResourceLocation::parse_texture_path("custom:textures/entity/copper_statue/model.png")
+                .unwrap();
+        assert_eq!(loc5.namespace, "custom");
+        assert_eq!(loc5.path, "entity/copper_statue/model");
+
+        // Namespaced without textures/ and without .png
+        let loc6 = ResourceLocation::parse_texture_path("custom:entity/copper_statue").unwrap();
+        assert_eq!(loc6.namespace, "custom");
+        assert_eq!(loc6.path, "entity/copper_statue");
     }
 }

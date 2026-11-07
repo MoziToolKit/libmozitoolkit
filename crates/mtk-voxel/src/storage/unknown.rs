@@ -39,10 +39,12 @@ pub fn is_blockstate_unknown(
         return false;
     }
 
-    // Dynamic built-in entity blocks (skulls, banners, decorated pots) have built-in geometry renderers
+    // Dynamic built-in entity blocks (skulls, banners, decorated pots, copper golem statues) have built-in geometry renderers
     if mtk_model::skull::SkullKind::from_block_name(base).is_some()
         || mtk_model::banner::extract_banner_color_from_state(state_str).is_some()
         || lower == "decorated_pot"
+        || lower == "copper_golem_statue"
+        || lower.ends_with("_copper_golem_statue")
     {
         return false;
     }

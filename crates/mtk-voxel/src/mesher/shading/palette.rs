@@ -1,5 +1,6 @@
 use glam::Vec2;
 use mtk_core::Direction;
+use mtk_cull::is_non_mesh_placeholder_block;
 use mtk_material::MaterialResolver;
 use mtk_model::{BakedFace, BakedModel};
 
@@ -395,6 +396,10 @@ pub fn resolve_palette_meshing_data_for_state<'a>(
             }
         }
         ModelSource::None => {
+            if is_non_mesh_placeholder_block(state_str) {
+                return PaletteMeshingData::Empty;
+            }
+
             let (ns, path) = match clean_block.split_once(':') {
                 Some((n, p)) => (n, p),
                 None => ("minecraft", clean_block),

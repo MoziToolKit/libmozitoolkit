@@ -597,7 +597,7 @@ fn closest_direction(normal: Vec3) -> Direction {
 }
 
 /// Computes the 6 standard faces for a local cuboid box with 64x64 texture mapping.
-fn make_box_faces(b: &ModelBox, model_matrix: Mat4, texture: &str) -> Vec<BakedFace> {
+fn make_box_faces(b: &ModelBox, model_matrix: Mat4, texture: &str) -> Vec<(Direction, BakedFace)> {
     let x = b.from.x;
     let y = b.from.y;
     let z = b.from.z;
@@ -627,6 +627,7 @@ fn make_box_faces(b: &ModelBox, model_matrix: Mat4, texture: &str) -> Vec<BakedF
     let face_specs = [
         // Up (Y min in entity, facing -Y):
         (
+            Direction::Up,
             [
                 Vec3::new(x, y, z),
                 Vec3::new(x + dx, y, z),
@@ -637,6 +638,7 @@ fn make_box_faces(b: &ModelBox, model_matrix: Mat4, texture: &str) -> Vec<BakedF
         ),
         // Down (Y max in entity, facing +Y):
         (
+            Direction::Down,
             [
                 Vec3::new(x, y + dy, z + dz),
                 Vec3::new(x + dx, y + dy, z + dz),
@@ -647,6 +649,7 @@ fn make_box_faces(b: &ModelBox, model_matrix: Mat4, texture: &str) -> Vec<BakedF
         ),
         // North (Z min, facing -Z):
         (
+            Direction::North,
             [
                 Vec3::new(x + dx, y, z),
                 Vec3::new(x, y, z),
@@ -657,6 +660,7 @@ fn make_box_faces(b: &ModelBox, model_matrix: Mat4, texture: &str) -> Vec<BakedF
         ),
         // South (Z max, facing +Z):
         (
+            Direction::South,
             [
                 Vec3::new(x, y, z + dz),
                 Vec3::new(x + dx, y, z + dz),
@@ -667,6 +671,7 @@ fn make_box_faces(b: &ModelBox, model_matrix: Mat4, texture: &str) -> Vec<BakedF
         ),
         // West (X min, facing -X):
         (
+            Direction::West,
             [
                 Vec3::new(x, y, z + dz),
                 Vec3::new(x, y, z),
@@ -677,6 +682,7 @@ fn make_box_faces(b: &ModelBox, model_matrix: Mat4, texture: &str) -> Vec<BakedF
         ),
         // East (X max, facing +X):
         (
+            Direction::East,
             [
                 Vec3::new(x + dx, y, z),
                 Vec3::new(x + dx, y, z + dz),
@@ -689,7 +695,7 @@ fn make_box_faces(b: &ModelBox, model_matrix: Mat4, texture: &str) -> Vec<BakedF
 
     let mut faces = Vec::with_capacity(6);
 
-    for (raw_pts, uv_box) in face_specs {
+    for (orig_dir, raw_pts, uv_box) in face_specs {
         // Transform vertices to normalized [0.0, 1.0] block space:
         let mut transformed_verts = [Vec3::ZERO; 4];
         for (i, p) in raw_pts.iter().enumerate() {
@@ -711,20 +717,23 @@ fn make_box_faces(b: &ModelBox, model_matrix: Mat4, texture: &str) -> Vec<BakedF
             Vec2::new(min_u / 64.0, max_v / 64.0),
         ];
 
-        faces.push(BakedFace {
-            direction,
-            texture: texture.to_string(),
-            uv_rot: 0.0,
-            uv_bounds: [min_u / 64.0, min_v / 64.0, max_u / 64.0, max_v / 64.0],
-            tint_index: -1,
-            cullface: None,
-            vertices: transformed_verts,
-            uvs,
-            normal,
-            atlas_uvs: None,
-            atlas_chunk_id: None,
-            atlas_texture_id: None,
-        });
+        faces.push((
+            orig_dir,
+            BakedFace {
+                direction,
+                texture: texture.to_string(),
+                uv_rot: 0.0,
+                uv_bounds: [min_u / 64.0, min_v / 64.0, max_u / 64.0, max_v / 64.0],
+                tint_index: -1,
+                cullface: None,
+                vertices: transformed_verts,
+                uvs,
+                normal,
+                atlas_uvs: None,
+                atlas_chunk_id: None,
+                atlas_texture_id: None,
+            },
+        ));
     }
 
     faces
@@ -792,15 +801,22 @@ pub fn create_copper_statue_baked_model(blockstate: &BlockState) -> BakedModel {
         for b in &part.boxes {
             let faces = make_box_faces(b, mat, texture);
             let mut face_map = HashMap::new();
-            for f in faces {
-                face_map.insert(f.direction, f);
+            for (orig_dir, f) in faces {
+                face_map.insert(orig_dir, f);
             }
 
-            // Approximate axis-aligned bounding box from box corners:
-            let c0 = mat.transform_point3(b.from);
-            let c1 = mat.transform_point3(b.from + b.size);
-            let min_p = c0.min(c1);
-            let max_p = c0.max(c1);
+            // Accurate axis-aligned bounding box covering all 8 rotated box corners:
+            let mut min_p = Vec3::splat(f32::INFINITY);
+            let mut max_p = Vec3::splat(f32::NEG_INFINITY);
+            for dx in [0.0, b.size.x] {
+                for dy in [0.0, b.size.y] {
+                    for dz in [0.0, b.size.z] {
+                        let corner = mat.transform_point3(b.from + Vec3::new(dx, dy, dz));
+                        min_p = min_p.min(corner);
+                        max_p = max_p.max(corner);
+                    }
+                }
+            }
 
             baked_elements.push(BakedElement {
                 from_pos: [min_p.x, min_p.y, min_p.z],
@@ -810,38 +826,58 @@ pub fn create_copper_statue_baked_model(blockstate: &BlockState) -> BakedModel {
         }
     }
 
-    let default_face = BakedFace {
-        direction: Direction::Up,
-        texture: texture.to_string(),
-        uv_rot: 0.0,
-        uv_bounds: [0.0, 0.0, 1.0, 1.0],
-        tint_index: -1,
-        cullface: None,
-        vertices: [Vec3::ZERO; 4],
-        uvs: [Vec2::ZERO; 4],
-        normal: Direction::Up.normal(),
-        atlas_uvs: None,
-        atlas_chunk_id: None,
-        atlas_texture_id: None,
-    };
+    let mut found_faces: [Option<BakedFace>; 6] = [None, None, None, None, None, None];
+    for elem in &baked_elements {
+        for (&orig_dir, face) in &elem.faces {
+            let idx = orig_dir.to_index();
+            if found_faces[idx].is_none() {
+                found_faces[idx] = Some(face.clone());
+            }
+        }
+    }
+
+    let mut six_faces = [
+        BakedFace::default(),
+        BakedFace::default(),
+        BakedFace::default(),
+        BakedFace::default(),
+        BakedFace::default(),
+        BakedFace::default(),
+    ];
+    for dir in Direction::ALL {
+        let idx = dir.to_index();
+        if let Some(f) = found_faces[idx].take() {
+            six_faces[idx] = f;
+        } else {
+            six_faces[idx] = BakedFace {
+                direction: dir,
+                texture: texture.to_string(),
+                uv_rot: 0.0,
+                uv_bounds: [0.0, 0.0, 1.0, 1.0],
+                tint_index: -1,
+                cullface: None,
+                vertices: [Vec3::ZERO; 4],
+                uvs: [Vec2::ZERO; 4],
+                normal: dir.normal(),
+                ..Default::default()
+            };
+        }
+    }
 
     let canonical_str = blockstate.to_canonical_string();
+    let mut cull_meta = mtk_cull::compute_non_occluding_meta(&canonical_str);
+    cull_meta.is_full_cube = false;
+    cull_meta.is_opaque = false;
+
     let mut model = BakedModel {
         block_state: canonical_str,
         elements: baked_elements,
         obj_faces: Vec::new(),
-        faces: [
-            default_face.clone(),
-            default_face.clone(),
-            default_face.clone(),
-            default_face.clone(),
-            default_face.clone(),
-            default_face,
-        ],
+        faces: six_faces,
         is_cube: false,
         is_opaque: false,
         is_emissive: false,
-        cull_meta: None,
+        cull_meta: Some(cull_meta),
         culled_faces: Default::default(),
         unculled_faces: Default::default(),
     };

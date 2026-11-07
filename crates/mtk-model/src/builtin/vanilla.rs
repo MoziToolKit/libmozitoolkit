@@ -573,7 +573,7 @@ pub fn get_builtin_baked_model_for_state_and_entity(
         .strip_prefix("minecraft:")
         .unwrap_or(&blockstate.name);
 
-    if clean.contains("copper_golem_statue") {
+    if clean == "copper_golem_statue" || clean.ends_with("_copper_golem_statue") {
         return Some(crate::entity::copper_statue::create_copper_statue_baked_model(blockstate));
     }
 

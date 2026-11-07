@@ -426,6 +426,34 @@ pub fn repair_mesh_fluid_uv_inplace<'py>(
     use crate::mesh::topology::{get_cow_slice_f32, get_cow_slice_u32};
     use pyo3::buffer::PyBuffer;
 
+    if positions.is(uvs) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "positions and uvs must not be the same object",
+        ));
+    }
+    if loop_verts.is(uvs) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "loop_verts and uvs must not be the same object",
+        ));
+    }
+    if face_loop_starts.is(uvs) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "face_loop_starts and uvs must not be the same object",
+        ));
+    }
+    if face_loop_totals.is(uvs) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "face_loop_totals and uvs must not be the same object",
+        ));
+    }
+    if let Some(faces) = face_indices {
+        if faces.is(uvs) {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "face_indices and uvs must not be the same object",
+            ));
+        }
+    }
+
     let pos_slice = get_cow_slice_f32(positions)?;
     let loop_slice = get_cow_slice_u32(loop_verts)?;
     let starts_slice = get_cow_slice_u32(face_loop_starts)?;
@@ -437,9 +465,59 @@ pub fn repair_mesh_fluid_uv_inplace<'py>(
         None
     };
 
+    let check_overlap = |uvs_start: usize, uvs_len_bytes: usize| -> PyResult<()> {
+        let uvs_end = uvs_start + uvs_len_bytes;
+
+        let check_buf = |name: &str, slice_start: usize, slice_len_bytes: usize| -> PyResult<()> {
+            let slice_end = slice_start + slice_len_bytes;
+            if (slice_start < uvs_end) && (uvs_start < slice_end) {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "{} and uvs buffers must not overlap in memory",
+                    name
+                )));
+            }
+            Ok(())
+        };
+
+        check_buf(
+            "positions",
+            pos_slice.as_ptr() as usize,
+            pos_slice.len() * std::mem::size_of::<f32>(),
+        )?;
+        check_buf(
+            "loop_verts",
+            loop_slice.as_ptr() as usize,
+            loop_slice.len() * std::mem::size_of::<u32>(),
+        )?;
+        check_buf(
+            "face_loop_starts",
+            starts_slice.as_ptr() as usize,
+            starts_slice.len() * std::mem::size_of::<u32>(),
+        )?;
+        check_buf(
+            "face_loop_totals",
+            totals_slice.as_ptr() as usize,
+            totals_slice.len() * std::mem::size_of::<u32>(),
+        )?;
+        if let Some(ref faces) = faces_slice {
+            check_buf(
+                "face_indices",
+                faces.as_ptr() as usize,
+                faces.len() * std::mem::size_of::<u32>(),
+            )?;
+        }
+        Ok(())
+    };
+
     // Obtain mutable slice to uvs buffer
     if let Ok(buf) = PyBuffer::<f32>::get(uvs) {
-        if !buf.readonly() && buf.is_c_contiguous() {
+        if buf.readonly() {
+            return Err(pyo3::exceptions::PyBufferError::new_err(
+                "uvs buffer must be writable",
+            ));
+        }
+        if buf.is_c_contiguous() {
+            check_overlap(buf.buf_ptr() as usize, buf.len_bytes())?;
             let uvs_mut: &mut [f32] = unsafe {
                 std::slice::from_raw_parts_mut(buf.buf_ptr() as *mut f32, buf.item_count())
             };
@@ -460,11 +538,17 @@ pub fn repair_mesh_fluid_uv_inplace<'py>(
     }
 
     if let Ok(buf) = PyBuffer::<u8>::get(uvs) {
+        if buf.readonly() {
+            return Err(pyo3::exceptions::PyBufferError::new_err(
+                "uvs buffer must be writable",
+            ));
+        }
         let ptr = buf.buf_ptr();
         let len_bytes = buf.len_bytes();
         let is_aligned = (ptr as usize) % std::mem::align_of::<f32>() == 0;
         let is_len_valid = len_bytes % std::mem::size_of::<f32>() == 0;
-        if !buf.readonly() && is_aligned && is_len_valid && buf.is_c_contiguous() {
+        if is_aligned && is_len_valid && buf.is_c_contiguous() {
+            check_overlap(ptr as usize, len_bytes)?;
             let uvs_mut: &mut [f32] =
                 unsafe { std::slice::from_raw_parts_mut(ptr as *mut f32, len_bytes / 4) };
             let count = py.detach(|| {

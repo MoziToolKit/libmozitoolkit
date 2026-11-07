@@ -14,95 +14,94 @@ use pyo3::buffer::PyBuffer;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
-pub enum CowSlice<'a, T> {
-    Borrowed(&'a [T]),
+pub enum CowSlice<T> {
+    PyF32(PyBuffer<f32>),
+    PyU32(PyBuffer<u32>),
+    PyI32(PyBuffer<i32>),
+    PyU8(PyBuffer<u8>),
+    PyI8(PyBuffer<i8>),
     Owned(Vec<T>),
 }
 
-impl<'a, T> std::ops::Deref for CowSlice<'a, T> {
-    type Target = [T];
-    fn deref(&self) -> &[T] {
+impl<T> CowSlice<T> {
+    pub fn as_slice(&self) -> &[T] {
         match self {
-            CowSlice::Borrowed(s) => s,
-            CowSlice::Owned(ref v) => v.as_slice(),
+            Self::PyF32(b) => unsafe {
+                std::slice::from_raw_parts(b.buf_ptr() as *const T, b.item_count())
+            },
+            Self::PyU32(b) => unsafe {
+                std::slice::from_raw_parts(b.buf_ptr() as *const T, b.item_count())
+            },
+            Self::PyI32(b) => unsafe {
+                std::slice::from_raw_parts(b.buf_ptr() as *const T, b.item_count())
+            },
+            Self::PyU8(b) => unsafe {
+                std::slice::from_raw_parts(b.buf_ptr() as *const T, b.item_count())
+            },
+            Self::PyI8(b) => unsafe {
+                std::slice::from_raw_parts(b.buf_ptr() as *const T, b.item_count())
+            },
+            Self::Owned(v) => v.as_slice(),
         }
     }
 }
 
-pub fn get_cow_slice_f32<'py>(obj: &Bound<'py, PyAny>) -> PyResult<CowSlice<'py, f32>> {
+impl<T> std::ops::Deref for CowSlice<T> {
+    type Target = [T];
+    fn deref(&self) -> &[T] {
+        self.as_slice()
+    }
+}
+
+pub fn get_cow_slice_f32(obj: &Bound<'_, PyAny>) -> PyResult<CowSlice<f32>> {
     if let Ok(buf) = PyBuffer::<f32>::get(obj) {
         if buf.is_c_contiguous() {
-            // SAFETY: C-contiguous buffer = one densely packed block; `obj` outlives `'py`.
-            let slice = unsafe {
-                std::slice::from_raw_parts(buf.buf_ptr() as *const f32, buf.item_count())
-            };
-            return Ok(CowSlice::Borrowed(slice));
+            return Ok(CowSlice::PyF32(buf));
         }
     }
     let vec: Vec<f32> = obj.extract()?;
     Ok(CowSlice::Owned(vec))
 }
 
-pub fn get_cow_slice_u32<'py>(obj: &Bound<'py, PyAny>) -> PyResult<CowSlice<'py, u32>> {
+pub fn get_cow_slice_u32(obj: &Bound<'_, PyAny>) -> PyResult<CowSlice<u32>> {
     if let Ok(buf) = PyBuffer::<u32>::get(obj) {
         if buf.is_c_contiguous() {
-            // SAFETY: C-contiguous buffer = one densely packed block; `obj` outlives `'py`.
-            let slice = unsafe {
-                std::slice::from_raw_parts(buf.buf_ptr() as *const u32, buf.item_count())
-            };
-            return Ok(CowSlice::Borrowed(slice));
+            return Ok(CowSlice::PyU32(buf));
         }
     }
     if let Ok(buf) = PyBuffer::<i32>::get(obj) {
         if buf.is_c_contiguous() {
-            // SAFETY: as above; `i32` and `u32` share size/alignment and every bit pattern
-            // is a valid `u32`, so the reinterpretation is well-defined.
-            let slice = unsafe {
-                std::slice::from_raw_parts(buf.buf_ptr() as *const u32, buf.item_count())
-            };
-            return Ok(CowSlice::Borrowed(slice));
+            return Ok(CowSlice::PyI32(buf));
         }
     }
     let vec: Vec<u32> = obj.extract()?;
     Ok(CowSlice::Owned(vec))
 }
 
-pub fn get_cow_slice_i32<'py>(obj: &Bound<'py, PyAny>) -> PyResult<CowSlice<'py, i32>> {
+pub fn get_cow_slice_i32(obj: &Bound<'_, PyAny>) -> PyResult<CowSlice<i32>> {
     if let Ok(buf) = PyBuffer::<i32>::get(obj) {
         if buf.is_c_contiguous() {
-            let slice = unsafe {
-                std::slice::from_raw_parts(buf.buf_ptr() as *const i32, buf.item_count())
-            };
-            return Ok(CowSlice::Borrowed(slice));
+            return Ok(CowSlice::PyI32(buf));
         }
     }
     if let Ok(buf) = PyBuffer::<u32>::get(obj) {
         if buf.is_c_contiguous() {
-            let slice = unsafe {
-                std::slice::from_raw_parts(buf.buf_ptr() as *const i32, buf.item_count())
-            };
-            return Ok(CowSlice::Borrowed(slice));
+            return Ok(CowSlice::PyU32(buf));
         }
     }
     let vec: Vec<i32> = obj.extract()?;
     Ok(CowSlice::Owned(vec))
 }
 
-pub fn get_cow_slice_u8<'py>(obj: &Bound<'py, PyAny>) -> PyResult<CowSlice<'py, u8>> {
+pub fn get_cow_slice_u8(obj: &Bound<'_, PyAny>) -> PyResult<CowSlice<u8>> {
     if let Ok(buf) = PyBuffer::<u8>::get(obj) {
         if buf.is_c_contiguous() {
-            // SAFETY: C-contiguous buffer = one densely packed block; `obj` outlives `'py`.
-            let slice =
-                unsafe { std::slice::from_raw_parts(buf.buf_ptr() as *const u8, buf.item_count()) };
-            return Ok(CowSlice::Borrowed(slice));
+            return Ok(CowSlice::PyU8(buf));
         }
     }
     if let Ok(buf) = PyBuffer::<i8>::get(obj) {
         if buf.is_c_contiguous() {
-            // SAFETY: as above; every `i8` bit pattern is a valid `u8`.
-            let slice =
-                unsafe { std::slice::from_raw_parts(buf.buf_ptr() as *const u8, buf.item_count()) };
-            return Ok(CowSlice::Borrowed(slice));
+            return Ok(CowSlice::PyI8(buf));
         }
     }
     let vec: Vec<u8> = obj.extract()?;

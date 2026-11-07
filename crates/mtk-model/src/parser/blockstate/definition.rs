@@ -427,7 +427,7 @@ impl BlockStateDefinition {
             return Some(list);
         }
 
-        if short_name.contains("copper_golem_statue") {
+        if short_name == "copper_golem_statue" || short_name.ends_with("_copper_golem_statue") {
             let mut list = Vec::new();
             for pose in ["standing", "sitting", "running", "star"] {
                 for facing in ["north", "south", "east", "west"] {

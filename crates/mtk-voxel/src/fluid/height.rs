@@ -1,7 +1,7 @@
 //! Fluid height sampling, corner averaging, and flow vector physics.
 
 use core::f32::consts::PI;
-use mtk_cull::parse_block_name_and_props;
+use mtk_cull::{is_inherently_submerged_block, parse_block_name_and_props};
 
 pub use mtk_core::constants::fluid::MAX_FLUID_HEIGHT;
 
@@ -23,11 +23,7 @@ pub(crate) fn parse_fluid_info(state_str: &str) -> (Option<FluidType>, bool, u32
     let is_waterlogged = if props_str.contains("waterlogged=true") {
         true
     } else {
-        name == "seagrass"
-            || name == "tall_seagrass"
-            || name == "kelp"
-            || name == "kelp_plant"
-            || name == "bubble_column"
+        is_inherently_submerged_block(name)
     };
 
     let base_name = name.strip_prefix("flowing_").unwrap_or(name);

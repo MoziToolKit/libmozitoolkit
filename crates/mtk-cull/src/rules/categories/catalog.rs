@@ -203,11 +203,16 @@ pub const NON_OCCLUDING_NAMES: &[&str] = &[
     "turtle_egg",
     "sniffer_egg",
     "cobweb",
+    "copper_statue",
+    "copper_golem_statue",
 ];
 
 /// Check if block identifier is non-occluding vegetation, decoration, or plant.
 pub fn is_non_occluding_block(name_low: &str) -> bool {
     if NON_OCCLUDING_NAMES.contains(&name_low) {
+        return true;
+    }
+    if name_low.contains("statue") {
         return true;
     }
     if name_low.ends_with("_flower")
