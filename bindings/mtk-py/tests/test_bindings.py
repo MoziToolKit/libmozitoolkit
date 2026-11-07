@@ -187,6 +187,30 @@ class TestLibMtkPy(unittest.TestCase):
         self.assertEqual(mesh2.face_count, 1)
         self.assertEqual(mesh2.quad_count, 1)
 
+    def test_repair_mesh_fluid_uv_inplace_overlapping_memory(self):
+        import numpy as np
+
+        # Create a single contiguous float32 buffer
+        shared_buf = np.zeros(32, dtype=np.float32)
+        # Slices with distinct Python objects but overlapping memory spans:
+        pos_view = shared_buf[0:12]  # 12 floats = 4 verts * 3
+        uvs_view = shared_buf[8:16]  # 8 floats = 4 loops * 2 (overlaps pos at indices 8..11)
+        self.assertIsNot(pos_view, uvs_view)
+
+        loops = np.array([0, 1, 2, 3], dtype=np.uint32)
+        starts = np.array([0], dtype=np.uint32)
+        totals = np.array([4], dtype=np.uint32)
+
+        with self.assertRaises(ValueError) as ctx:
+            libmtk_py.repair_mesh_fluid_uv_inplace(
+                pos_view,
+                loops,
+                starts,
+                totals,
+                uvs_view,
+            )
+        self.assertIn("must not overlap in memory", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

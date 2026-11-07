@@ -609,6 +609,33 @@ mod tests {
                 0.005,
             );
             assert!(err_alias_loop.is_err());
+
+            // Verify aliasing rejection when uvs and positions are distinct objects but share overlapping memory spans
+            let shared_bytes = pyo3::types::PyByteArray::new(py, &[0u8; 128]);
+            let shared_mv = pyo3::types::PyMemoryView::from(&shared_bytes).unwrap();
+            let shared_f32 = shared_mv.call_method1("cast", ("f",)).unwrap();
+            let sub_pos = shared_f32
+                .call_method1("__getitem__", (pyo3::types::PySlice::new(py, 0, 12, 1),))
+                .unwrap();
+            let sub_uvs = shared_f32
+                .call_method1("__getitem__", (pyo3::types::PySlice::new(py, 8, 16, 1),))
+                .unwrap();
+            assert!(!sub_pos.is(&sub_uvs), "Slices must be distinct objects");
+
+            let err_overlap = uv::repair_mesh_fluid_uv_inplace(
+                py,
+                sub_pos.as_any(),
+                py_loops.as_any(),
+                py_starts.as_any(),
+                py_totals.as_any(),
+                sub_uvs.as_any(),
+                None,
+                false,
+                0.005,
+            );
+            assert!(err_overlap.is_err(), "Overlapping memory must be rejected");
+            let err_msg = err_overlap.unwrap_err().to_string();
+            assert!(err_msg.contains("must not overlap in memory"));
         });
     }
 }
