@@ -11,6 +11,7 @@ mod error;
 mod identifier;
 mod meta;
 mod pack;
+pub mod probe;
 pub mod skin;
 mod texture_key;
 
@@ -26,4 +27,5 @@ pub use pack::ZipPack;
 pub use pack::{
     DirectoryPack, DiscoveredSprite, MemoryPack, PbrCompanions, ResourcePack, ResourcePackStack,
 };
+pub use probe::{probe_pack, PackProbe};
 pub use texture_key::TextureKeyVariants;

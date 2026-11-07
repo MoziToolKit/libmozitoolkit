@@ -389,3 +389,27 @@ pub fn resolve_active_cache_package(cache_dir: &str, fingerprint: Option<&str>) 
     libmtk::resolve_active_cache_package(cache_dir, fingerprint)
         .map(|path| path.to_string_lossy().into_owned())
 }
+
+/// Probe a resource pack or client archive/folder and return metadata/classification dictionary.
+#[pyfunction]
+pub fn probe_pack<'py>(py: Python<'py>, path: &str) -> PyResult<Bound<'py, PyDict>> {
+    let p = Path::new(path);
+    let probe = py.detach(|| mtk_resource::probe_pack(p));
+
+    let dict = PyDict::new(py);
+    dict.set_item("kind", &probe.kind)?;
+    dict.set_item("confidence", probe.confidence)?;
+    dict.set_item("suggested_pack_type", probe.suggested_pack_type.as_deref())?;
+    dict.set_item("evidence", probe.evidence)?;
+
+    let details_json = serde_json::to_string(&probe.details)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    let json_mod = py.import("json")?;
+    let details_dict = json_mod.call_method1("loads", (details_json,))?;
+    dict.set_item("details", details_dict)?;
+
+    dict.set_item("error", probe.error.as_deref())?;
+    dict.set_item("entry_count", probe.entry_count)?;
+
+    Ok(dict)
+}
