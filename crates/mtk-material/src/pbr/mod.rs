@@ -9,6 +9,8 @@
 
 mod bake;
 mod labpbr;
+mod preset;
 mod types;
 
 pub use bake::{decode_baked_atlas, PbrDecodeSummary};
+pub use preset::{get_physical_preset, rule_matches_preset, PhysicalMaterialPreset};

@@ -12,7 +12,10 @@ mod remap;
 mod resolver;
 mod types;
 
-pub use pbr::{decode_baked_atlas, PbrDecodeSummary};
+pub use pbr::{
+    decode_baked_atlas, get_physical_preset, rule_matches_preset, PbrDecodeSummary,
+    PhysicalMaterialPreset,
+};
 
 pub use biome::{
     compute_mesh_biome_attributes_custom_with_colormaps,

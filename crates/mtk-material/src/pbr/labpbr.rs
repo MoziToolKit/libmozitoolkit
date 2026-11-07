@@ -357,12 +357,12 @@ fn sss_byte_scalar(blue: u8) -> u8 {
 }
 
 #[inline]
-fn encode_unit(value: f32) -> u8 {
+pub(crate) fn encode_unit(value: f32) -> u8 {
     (value.clamp(0.0, 1.0) * 255.0 + 0.5) as u8
 }
 
 #[inline]
-fn encode_ior(ior: f32) -> u8 {
+pub(crate) fn encode_ior(ior: f32) -> u8 {
     encode_unit((ior.clamp(1.0, MAX_IOR) - 1.0) / (MAX_IOR - 1.0))
 }
 

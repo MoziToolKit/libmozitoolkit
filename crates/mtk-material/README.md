@@ -183,7 +183,8 @@ pub struct MeshMultiUvRemapResult {
 | `remap_mesh_multi_uvs_paletted_with_options(...)` | 单一规范批量 UV 重映射入口：palette + u32 indices 版本；返回 source-key palette/indices 与零拷贝 id/metric buffer。 |
 | `resolve_mesh_material_routes(keys, aliases, address_map, enable_animated)` | 只解析逐面 chunk/texture/动画路由，不触碰 UV。 |
 | `reroute_mesh_animation(uvs, ranges, keys, old_chunk_ids, atlas, aliases, enable_animated)` | 将已有 Atlas UV 从旧 sprite 反解并投影到新 sprite，支持静态↔动画幂等切换。 |
-| `decode_baked_atlas(atlas: &mut BakedAtlas) -> Result<PbrDecodeSummary, MaterialError>` | 将烘焙图集中各分块的 LabPBR 伴生贴图解码为规范 MtkPackedV1 缓冲。 |
+| `decode_baked_atlas(atlas: &mut BakedAtlas) -> Result<PbrDecodeSummary, MaterialError>` | 将烘焙图集中各分块的 LabPBR 伴生贴图解码为规范 MtkPackedV1 缓冲，并自动注入水体/玻璃/冰块等内置物理预设。 |
+| `get_physical_preset(path: &str) -> Option<PhysicalMaterialPreset>` | 查询水体/玻璃/冰块/蜂蜜/史莱姆等材质的内置物理预设（透射、IOR、粗糙度）。 |
 
 
 

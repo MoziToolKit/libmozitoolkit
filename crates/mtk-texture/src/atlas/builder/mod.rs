@@ -57,6 +57,7 @@ impl AtlasBuilder {
             let discovered = if category_name == "blocks" {
                 let ctm_rules = stack.load_ctm_rules();
                 if !ctm_rules.is_empty() {
+                    address_map.ctm_rules = ctm_rules.clone();
                     stack.collect_sprites_including_ctm(definition, &ctm_rules)?
                 } else {
                     stack.collect_sprites_for_atlas(definition)?

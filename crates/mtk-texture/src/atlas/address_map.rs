@@ -262,6 +262,9 @@ pub struct AtlasAddressMap {
     /// Source priority records per sprite key (Static vs Dynamic).
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub sprite_sources: HashMap<ResourceLocation, AtlasKeySource>,
+    /// Optional CTM rules associated with this address map.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ctm_rules: Vec<mtk_resource::CtmRule>,
 }
 
 impl AtlasAddressMap {
@@ -271,6 +274,7 @@ impl AtlasAddressMap {
             sprites: HashMap::new(),
             anim_sprites: HashMap::new(),
             sprite_sources: HashMap::new(),
+            ctm_rules: Vec::new(),
         }
     }
 
