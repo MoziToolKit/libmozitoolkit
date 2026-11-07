@@ -103,6 +103,13 @@ pub fn resolve_active_cache_package(
     fingerprint: Option<[u8; 16]>,
 ) -> Option<PathBuf>;
 
+pub fn evaluate_cache_status(
+    cache_dir: impl AsRef<Path>,
+    stack_pack_count: usize,
+    has_vanilla: bool,
+    expected_fingerprint: Option<&str>,
+) -> &'static str;
+
 // 3. 场景交换包导出与解析 (.mtkscene)
 pub fn export_scene_package<S: SceneAtlasSource>(
     path: impl AsRef<Path>,

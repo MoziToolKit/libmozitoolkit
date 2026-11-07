@@ -223,6 +223,12 @@ pub struct CtmSolver {
 | `solver.resolve_face(state, face, pos, base_tile, biome, get_block) -> Option<ResourceLocation>` | 根据邻域方块状态与基础贴图解算目标面替换贴图（使用标准静态切线）。 |
 | `solver.resolve_face_with_tangents(state, face, tangents, pos, base_tile, biome, get_block) -> Option<ResourceLocation>` | 支持显式传入动态 2D 切线基底 `(up, left)` 的解算接口，自适应感知旋转方块与 UV 旋转。 |
 
+### 3.3 资源包嗅探与原版权威校验 (`probe.rs`)
+| 方法签名 | 描述 |
+| :--- | :--- |
+| `probe_pack(path: &Path) -> PackProbe` | 快速探测资源包物理形态、包格式、`pack.mcmeta` 元数据、原版方块状态/模型/纹理存在性与匹配评分。 |
+| `path_provides_vanilla_client(path: &Path) -> bool` | 严格门禁检测：验证给定目录或 ZIP/JAR 文件是否包含核心原版客户端资产（石头、泥土、橡木木板等核心模型、状态和纹理）。 |
+
 
 ---
 

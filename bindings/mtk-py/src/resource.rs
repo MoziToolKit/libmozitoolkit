@@ -284,33 +284,6 @@ impl PyAssetCache {
     }
 }
 
-/// Checks if a `.mtkcache` file at `path` is valid for `fingerprint` using 64-byte header.
-#[pyfunction]
-pub fn is_valid_cache_package(path: &str, fingerprint: &str) -> bool {
-    libmtk::AssetCacheReader::is_valid_cache_file(path, fingerprint)
-}
-
-/// Reads the manifest of a cache package or searches for one in a directory.
-#[pyfunction]
-pub fn get_cache_manifest<'py>(
-    py: Python<'py>,
-    path: &str,
-) -> PyResult<Option<Bound<'py, PyDict>>> {
-    let p = std::path::Path::new(path);
-    if let Some(m) = libmtk::CacheManifest::read_from_dir(p) {
-        let dict = PyDict::new(py);
-        dict.set_item("format_version", m.format_version)?;
-        dict.set_item("fingerprint", m.fingerprint)?;
-        dict.set_item("pack_count", m.pack_count)?;
-        dict.set_item("atlas_chunks", m.atlas_chunks)?;
-        dict.set_item("baked_models", m.baked_models)?;
-        dict.set_item("created_at_epoch_secs", m.created_at_epoch_secs)?;
-        Ok(Some(dict))
-    } else {
-        Ok(None)
-    }
-}
-
 /// Executes unified end-to-end asset precompilation directly to persistent cache folder.
 ///
 /// Releases Python GIL during multi-threaded baking, re-acquiring for progress callbacks.

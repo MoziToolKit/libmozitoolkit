@@ -55,24 +55,6 @@ impl CacheManifest {
         reader.read_chunk_json("manifest").ok()
     }
 
-    /// Read manifest from a package file or by locating `<fingerprint>.mtkcache` in `cache_dir`.
-    pub fn read_from_dir(cache_dir: &Path) -> Option<Self> {
-        if cache_dir.is_file() {
-            return Self::read_from_package(cache_dir);
-        }
-        if let Ok(entries) = fs::read_dir(cache_dir) {
-            for entry in entries.flatten() {
-                let p = entry.path();
-                if p.extension().is_some_and(|ext| ext == "mtkcache") {
-                    if let Some(manifest) = Self::read_from_package(&p) {
-                        return Some(manifest);
-                    }
-                }
-            }
-        }
-        None
-    }
-
     /// Check if manifest matches a given stack fingerprint and format version.
     pub fn is_valid_for(&self, fingerprint: &str) -> bool {
         self.format_version == ASSET_CACHE_FORMAT_VERSION && self.fingerprint == fingerprint
