@@ -360,7 +360,7 @@ pub const MESH_ATTRIBUTE_SPECS: &[MeshAttributeSpec] = &[
     ),
     MeshAttributeSpec::new(
         constants::ATTR_BIOME_TINT_COLOR,
-        AttributeDomain::Face,
+        AttributeDomain::Corner,
         "float4",
         AttributeRole::Material,
     ),

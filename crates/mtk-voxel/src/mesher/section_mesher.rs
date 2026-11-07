@@ -19,10 +19,11 @@ use crate::types::{MesherConfig, VoxelError};
 
 use super::collector::FaceAttributesCollector;
 use super::emitter::{emit_baked_face, emit_unit_cube_face};
+use super::grid_pool::UNIT_CUBE_CORNERS;
 use super::shading::{
     resolve_model_face_shading, resolve_palette_meshing_data_for_state,
-    resolve_unit_cube_face_shading, sample_biome_tint, ModelSource, PaletteMeshingData,
-    PreResolvedModelFace,
+    resolve_unit_cube_face_shading, sample_quad_corner_biome_tints, ModelSource,
+    PaletteMeshingData, PreResolvedModelFace,
 };
 
 /// Pre-resolved entry bundling all per-blockstate meshing metadata, model sources, and culling data.
@@ -393,15 +394,41 @@ impl SectionMesher {
                                 get_padded_neighbor_state,
                             );
 
-                            let (final_tint_data, final_tint_color) = sample_biome_tint(
-                                padded.biome_data.as_deref(),
-                                lx,
-                                ly,
-                                lz,
-                                shading.tint_data,
-                                shading.tint_color,
-                                config.colormaps.as_deref(),
-                            );
+                            let corner_offsets = [
+                                [
+                                    (face.vertices[0].x.clamp(0.0, 1.0).round() as usize).min(1),
+                                    (face.vertices[0].y.clamp(0.0, 1.0).round() as usize).min(1),
+                                    (face.vertices[0].z.clamp(0.0, 1.0).round() as usize).min(1),
+                                ],
+                                [
+                                    (face.vertices[1].x.clamp(0.0, 1.0).round() as usize).min(1),
+                                    (face.vertices[1].y.clamp(0.0, 1.0).round() as usize).min(1),
+                                    (face.vertices[1].z.clamp(0.0, 1.0).round() as usize).min(1),
+                                ],
+                                [
+                                    (face.vertices[2].x.clamp(0.0, 1.0).round() as usize).min(1),
+                                    (face.vertices[2].y.clamp(0.0, 1.0).round() as usize).min(1),
+                                    (face.vertices[2].z.clamp(0.0, 1.0).round() as usize).min(1),
+                                ],
+                                [
+                                    (face.vertices[3].x.clamp(0.0, 1.0).round() as usize).min(1),
+                                    (face.vertices[3].y.clamp(0.0, 1.0).round() as usize).min(1),
+                                    (face.vertices[3].z.clamp(0.0, 1.0).round() as usize).min(1),
+                                ],
+                            ];
+
+                            let (final_tint_data, corner_tint_colors) =
+                                sample_quad_corner_biome_tints(
+                                    padded.biome_data.as_deref(),
+                                    lx,
+                                    ly,
+                                    lz,
+                                    &corner_offsets,
+                                    shading.tint_data,
+                                    shading.tint_color,
+                                    config.colormaps.as_deref(),
+                                    config.smooth_biome_blend,
+                                );
 
                             emit_baked_face(
                                 &mut mesh,
@@ -414,7 +441,7 @@ impl SectionMesher {
                                 &mut collector,
                                 &shading,
                                 final_tint_data,
-                                final_tint_color,
+                                corner_tint_colors,
                                 block_pos,
                             );
                         };
@@ -522,15 +549,20 @@ impl SectionMesher {
                                 get_padded_neighbor_state,
                             );
 
-                            let (final_tint_data, final_tint_color) = sample_biome_tint(
-                                padded.biome_data.as_deref(),
-                                lx,
-                                ly,
-                                lz,
-                                shading.tint_data,
-                                shading.tint_color,
-                                config.colormaps.as_deref(),
-                            );
+                            let dir_idx = dir.to_index();
+                            let corners = UNIT_CUBE_CORNERS[dir_idx];
+                            let (final_tint_data, corner_tint_colors) =
+                                sample_quad_corner_biome_tints(
+                                    padded.biome_data.as_deref(),
+                                    lx,
+                                    ly,
+                                    lz,
+                                    &corners,
+                                    shading.tint_data,
+                                    shading.tint_color,
+                                    config.colormaps.as_deref(),
+                                    config.smooth_biome_blend,
+                                );
 
                             let grid_ctx = grid_pool
                                 .as_mut()
@@ -547,7 +579,7 @@ impl SectionMesher {
                                 &mut collector,
                                 &shading,
                                 final_tint_data,
-                                final_tint_color,
+                                corner_tint_colors,
                                 block_pos,
                                 grid_ctx,
                             );

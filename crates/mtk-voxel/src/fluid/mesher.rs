@@ -281,7 +281,7 @@ where
                     [1.0, 1.0, 0.0, 0.0],
                     0.0,
                     f_tint_data,
-                    f_tint_color,
+                    [f_tint_color; 4],
                     glam::IVec3::new(x, y, z),
                     anim_timing,
                     anim_frame_size,

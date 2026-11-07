@@ -18,7 +18,7 @@ pub struct PyMesherConfig {
 #[pymethods]
 impl PyMesherConfig {
     #[new]
-    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_vertices=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None, enable_alternate_blocks=true, enable_random_offsets=true, ctm_solver=None, enable_animated_textures=true, colormaps=None, unknown_block_strategy=None))]
+    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_vertices=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None, enable_alternate_blocks=true, enable_random_offsets=true, ctm_solver=None, enable_animated_textures=true, colormaps=None, unknown_block_strategy=None, smooth_biome_blend=true))]
     pub fn new(
         enable_ao: bool,
         mesh_fluids: bool,
@@ -35,6 +35,7 @@ impl PyMesherConfig {
         enable_animated_textures: bool,
         colormaps: Option<&PyVanillaColormaps>,
         unknown_block_strategy: Option<&str>,
+        smooth_biome_blend: bool,
     ) -> Self {
         let strategy = match unknown_block_strategy {
             Some("IGNORE_AS_AIR") | Some("ignore_as_air") | Some("air") => {
@@ -62,6 +63,7 @@ impl PyMesherConfig {
             banner_baker: atlas.and_then(|a| a.banner_baker.clone()),
             colormaps: colormaps.map(|c| c.inner.clone()),
             unknown_block_strategy: strategy,
+            smooth_biome_blend,
             ..Default::default()
         };
         Self {
@@ -129,6 +131,16 @@ impl PyMesherConfig {
             }
             _ => mtk_voxel::UnknownBlockStrategy::FallbackCube,
         };
+    }
+
+    #[getter]
+    pub fn smooth_biome_blend(&self) -> bool {
+        self.inner.smooth_biome_blend
+    }
+
+    #[setter]
+    pub fn set_smooth_biome_blend(&mut self, enabled: bool) {
+        self.inner.smooth_biome_blend = enabled;
     }
 
     #[getter]

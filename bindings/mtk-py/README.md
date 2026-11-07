@@ -87,7 +87,7 @@ Python 模块名：`libmtk_py`
   - `from_storage(storage, config=None, culler=None, model_db=None, num_threads=None)`
   - `create_debug_world(config=None, culler=None, model_db=None, num_threads=None)`
   - `rebuild_all() -> MeshData`, `rebuild_dirty() -> Dict`, `get_world_mesh() -> MeshData`, `sync_from_storage(storage)`, `clear_cache()`, `hot_reload(config=None, model_db=None)`, `num_threads` (getter)
-- **`MesherConfig` (`PyMesherConfig`)**：网格化配置（AO 开关、流体曲面、坐标系转换、线程数、顶点焊接）。
+- **`MesherConfig` (`PyMesherConfig`)**：网格化配置（AO 开关、平滑生物群系过渡 `smooth_biome_blend`、流体曲面、坐标系转换、线程数、顶点焊接）。
 - **`LiveSyncSession` (`PyLiveSyncSession`)**：原生 WebSocket 实时协同客户端。
   - `start(url, auto_reconnect=True, max_reconnect_attempts=5, auth_token=None)`, `stop()`
   - `auth_token` 会随默认 HELLO 发送（RFC v3.1 §4.1；Python 侧先 `strip()`；

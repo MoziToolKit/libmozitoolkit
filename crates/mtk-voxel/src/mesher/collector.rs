@@ -35,7 +35,7 @@ impl FaceAttributesCollector {
             uv_transforms: Vec::with_capacity(capacity),
             uv_rotations: Vec::with_capacity(capacity),
             biome_tint_data: Vec::with_capacity(capacity),
-            biome_tint_colors: Vec::with_capacity(capacity),
+            biome_tint_colors: Vec::with_capacity(capacity * 4),
             block_xs: Vec::with_capacity(capacity),
             block_ys: Vec::with_capacity(capacity),
             block_zs: Vec::with_capacity(capacity),
@@ -55,7 +55,7 @@ impl FaceAttributesCollector {
         uv_transform: [f32; 4],
         uv_rotation: f32,
         tint_data: [f32; 4],
-        tint_color: [f32; 4],
+        corner_tint_colors: [[f32; 4]; 4],
         block_pos: IVec3,
         anim_timing: [f32; 3],
         anim_frame_size: [f32; 3],
@@ -103,7 +103,8 @@ impl FaceAttributesCollector {
         self.uv_transforms.push(uv_transform);
         self.uv_rotations.push(uv_rotation);
         self.biome_tint_data.push(tint_data);
-        self.biome_tint_colors.push(tint_color);
+        self.biome_tint_colors
+            .extend_from_slice(&corner_tint_colors);
         self.block_xs.push(block_pos.x);
         self.block_ys.push(block_pos.y);
         self.block_zs.push(block_pos.z);
@@ -158,7 +159,7 @@ impl FaceAttributesCollector {
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
             ATTR_BIOME_TINT_COLOR,
-            AttributeDomain::Face,
+            AttributeDomain::Corner,
             AttributeData::Float4(self.biome_tint_colors),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
@@ -214,7 +215,7 @@ mod tests {
             [1.0, 1.0, 0.0, 0.0],
             0.0,
             [1.0, 0.0, 0.0, 0.0],
-            [1.0, 1.0, 1.0, 1.0],
+            [[1.0, 1.0, 1.0, 1.0]; 4],
             glam::IVec3::new(1, 2, 3),
             anim_timing,
             [16.0, 16.0, 0.0],

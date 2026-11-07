@@ -27,7 +27,7 @@ pub fn emit_baked_face(
     collector: &mut FaceAttributesCollector,
     shading: &ResolvedFaceShading<'_>,
     final_tint_data: [f32; 4],
-    final_tint_color: [f32; 4],
+    corner_tint_colors: [[f32; 4]; 4],
     block_pos: IVec3,
 ) {
     mesh.uv_layout = UvLayout::PerLoop;
@@ -56,7 +56,7 @@ pub fn emit_baked_face(
         ao_brightness,
         shading,
         final_tint_data,
-        final_tint_color,
+        corner_tint_colors,
         block_pos,
         face.tint_index,
         face.uv_rot,
@@ -71,30 +71,26 @@ pub(crate) fn emit_quad_shading_and_topology(
     ao_brightness: [f32; 4],
     shading: &ResolvedFaceShading<'_>,
     final_tint_data: [f32; 4],
-    final_tint_color: [f32; 4],
+    corner_tint_colors: [[f32; 4]; 4],
     block_pos: IVec3,
     tint_index: i16,
     uv_rot: f32,
 ) {
-    let face_color = if final_tint_data[2] > 0.0 {
+    let colors_vec = mesh.colors.get_or_insert_with(Vec::new);
+    if final_tint_data[2] > 0.0 {
         let avg = shading.average_color;
         let is_grayscale = (avg[0] - avg[1]).abs() < 0.03 && (avg[1] - avg[2]).abs() < 0.03;
-        if is_grayscale {
-            final_tint_color
-        } else {
-            [
-                avg[0] * final_tint_color[0],
-                avg[1] * final_tint_color[1],
-                avg[2] * final_tint_color[2],
-                1.0,
-            ]
+        for c in corner_tint_colors {
+            let col = if is_grayscale {
+                c
+            } else {
+                [avg[0] * c[0], avg[1] * c[1], avg[2] * c[2], 1.0]
+            };
+            colors_vec.push(col);
         }
     } else {
-        shading.average_color
-    };
-    mesh.colors
-        .get_or_insert_with(Vec::new)
-        .extend_from_slice(&[face_color; 4]);
+        colors_vec.extend_from_slice(&[shading.average_color; 4]);
+    }
 
     mesh.quad_indices
         .get_or_insert_with(Vec::new)
@@ -129,7 +125,7 @@ pub(crate) fn emit_quad_shading_and_topology(
         [1.0, 1.0, 0.0, 0.0],
         uv_rot,
         final_tint_data,
-        final_tint_color,
+        corner_tint_colors,
         block_pos,
         shading.anim_timing,
         shading.anim_frame_size,
@@ -151,7 +147,7 @@ pub fn emit_unit_cube_face(
     collector: &mut FaceAttributesCollector,
     shading: &ResolvedFaceShading<'_>,
     final_tint_data: [f32; 4],
-    final_tint_color: [f32; 4],
+    corner_tint_colors: [[f32; 4]; 4],
     block_pos: IVec3,
     mut grid_context: Option<(&mut GridVertexPool, [usize; 3], Vec3)>,
 ) {
@@ -271,7 +267,7 @@ pub fn emit_unit_cube_face(
         ao_brightness,
         shading,
         final_tint_data,
-        final_tint_color,
+        corner_tint_colors,
         block_pos,
         -1,
         0.0,

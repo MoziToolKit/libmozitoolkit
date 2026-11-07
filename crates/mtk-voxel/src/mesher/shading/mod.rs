@@ -12,7 +12,7 @@ pub(crate) mod types;
 pub(crate) use anim::{extract_anim_metrics, lookup_animated_from_cache};
 pub(crate) use palette::resolve_palette_meshing_data_for_state;
 pub(crate) use resolver::{
-    resolve_model_face_shading, resolve_unit_cube_face_shading, sample_biome_tint,
+    resolve_model_face_shading, resolve_unit_cube_face_shading, sample_quad_corner_biome_tints,
 };
 pub use types::ModelSource;
 pub(crate) use types::{PaletteMeshingData, PreResolvedModelFace, ResolvedFaceShading};

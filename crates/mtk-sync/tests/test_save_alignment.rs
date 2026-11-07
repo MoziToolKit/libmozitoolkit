@@ -445,11 +445,16 @@ fn tint_attributes(mesh: &mtk_core::MeshData) -> Vec<([i32; 3], [f32; 4])> {
         .iter()
         .enumerate()
         .map(|(i, color)| {
+            let face_idx = if colors.len() == xs.len() * 4 {
+                i / 4
+            } else {
+                i
+            };
             (
                 [
-                    xs.get(i).copied().unwrap_or(0),
-                    ys.get(i).copied().unwrap_or(0),
-                    zs.get(i).copied().unwrap_or(0),
+                    xs.get(face_idx).copied().unwrap_or(0),
+                    ys.get(face_idx).copied().unwrap_or(0),
+                    zs.get(face_idx).copied().unwrap_or(0),
                 ],
                 *color,
             )

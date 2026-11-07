@@ -256,6 +256,57 @@ where
     }
 }
 
+/// Samples tint color from a single `SmoothedBiomeColumn` based on the tint type.
+#[inline]
+pub fn sample_column_tint_color(
+    col: &SmoothedBiomeColumn,
+    tint_type: u8,
+    colormaps: Option<&mtk_material::VanillaColormaps>,
+    default_tint_color: [f32; 4],
+) -> ([f32; 4], bool) {
+    match tint_type {
+        mtk_material::TINT_TYPE_GRASS => {
+            if col.has_custom_grass {
+                (col.grass_color, true)
+            } else if let Some(cms) = colormaps {
+                (
+                    cms.sample_grass_linear_uv(col.colormap_uv[0], col.colormap_uv[1]),
+                    false,
+                )
+            } else {
+                (col.grass_color, false)
+            }
+        }
+        mtk_material::TINT_TYPE_FOLIAGE => {
+            if col.has_custom_foliage {
+                (col.foliage_color, true)
+            } else if let Some(cms) = colormaps {
+                (
+                    cms.sample_foliage_linear_uv(col.colormap_uv[0], col.colormap_uv[1]),
+                    false,
+                )
+            } else {
+                (col.foliage_color, false)
+            }
+        }
+        mtk_material::TINT_TYPE_DRY_FOLIAGE => {
+            if col.has_custom_dry_foliage {
+                (col.dry_foliage_color, true)
+            } else if let Some(cms) = colormaps {
+                (
+                    cms.sample_dry_foliage_linear_uv(col.colormap_uv[0], col.colormap_uv[1]),
+                    false,
+                )
+            } else {
+                (col.dry_foliage_color, false)
+            }
+        }
+        mtk_material::TINT_TYPE_WATER => (col.water_color, false),
+        mtk_material::TINT_TYPE_HARDCODED => (default_tint_color, true),
+        _ => (default_tint_color, false),
+    }
+}
+
 /// Samples per-column/3D quart biome tint colors based on face tint configuration.
 pub fn sample_biome_tint(
     biome_data: Option<&[SmoothedBiomeColumn]>,
@@ -281,50 +332,8 @@ pub fn sample_biome_tint(
         if col_idx < biome_cols.len() && tint_data[2] > 0.0 {
             let col = &biome_cols[col_idx];
             let tt = tint_data[3] as u8;
-            let (c, has_custom) = match tt {
-                mtk_material::TINT_TYPE_GRASS => {
-                    if col.has_custom_grass {
-                        (col.grass_color, true)
-                    } else if let Some(cms) = effective_cms {
-                        (
-                            cms.sample_grass_linear_uv(col.colormap_uv[0], col.colormap_uv[1]),
-                            false,
-                        )
-                    } else {
-                        (col.grass_color, false)
-                    }
-                }
-                mtk_material::TINT_TYPE_FOLIAGE => {
-                    if col.has_custom_foliage {
-                        (col.foliage_color, true)
-                    } else if let Some(cms) = effective_cms {
-                        (
-                            cms.sample_foliage_linear_uv(col.colormap_uv[0], col.colormap_uv[1]),
-                            false,
-                        )
-                    } else {
-                        (col.foliage_color, false)
-                    }
-                }
-                mtk_material::TINT_TYPE_DRY_FOLIAGE => {
-                    if col.has_custom_dry_foliage {
-                        (col.dry_foliage_color, true)
-                    } else if let Some(cms) = effective_cms {
-                        (
-                            cms.sample_dry_foliage_linear_uv(
-                                col.colormap_uv[0],
-                                col.colormap_uv[1],
-                            ),
-                            false,
-                        )
-                    } else {
-                        (col.dry_foliage_color, false)
-                    }
-                }
-                mtk_material::TINT_TYPE_WATER => (col.water_color, false),
-                mtk_material::TINT_TYPE_HARDCODED => (default_tint_color, true),
-                _ => (default_tint_color, false),
-            };
+            let (c, has_custom) =
+                sample_column_tint_color(col, tt, effective_cms, default_tint_color);
             if has_custom {
                 tint_data[3] = mtk_material::TINT_TYPE_HARDCODED as f32;
             }
@@ -335,4 +344,118 @@ pub fn sample_biome_tint(
     } else {
         (tint_data, default_tint_color)
     }
+}
+
+/// Samples 4-corner smoothed biome tint colors for a quad face.
+///
+/// When `smooth_blend` is true, each corner averages the dual-grid neighbor columns
+/// around that vertex corner, producing C0 continuous, seamless color transitions across adjacent faces.
+/// When `smooth_blend` is false, each corner receives the block's uniform column tint.
+pub fn sample_quad_corner_biome_tints(
+    biome_data: Option<&[SmoothedBiomeColumn]>,
+    lx: usize,
+    ly: usize,
+    lz: usize,
+    corner_offsets: &[[usize; 3]; 4],
+    mut tint_data: [f32; 4],
+    default_tint_color: [f32; 4],
+    colormaps: Option<&mtk_material::VanillaColormaps>,
+    smooth_blend: bool,
+) -> ([f32; 4], [[f32; 4]; 4]) {
+    if tint_data[2] <= 0.0 || biome_data.is_none() {
+        return (tint_data, [default_tint_color; 4]);
+    }
+    let biome_cols = biome_data.unwrap();
+    let tt = tint_data[3] as u8;
+    if tt == mtk_material::TINT_TYPE_HARDCODED {
+        return (tint_data, [default_tint_color; 4]);
+    }
+
+    if !smooth_blend {
+        let (td, single_col) = sample_biome_tint(
+            Some(biome_cols),
+            lx,
+            ly,
+            lz,
+            tint_data,
+            default_tint_color,
+            colormaps,
+        );
+        return (td, [single_col; 4]);
+    }
+
+    let is_3d = biome_cols.len() == 1024;
+    let mut any_custom = false;
+    let mut corners = [[0.0f32; 4]; 4];
+
+    for (k, offset) in corner_offsets.iter().enumerate() {
+        let cx = lx + offset[0];
+        let cy = ly + offset[1];
+        let cz = lz + offset[2];
+
+        let qy = if is_3d { (cy >> 2) & 3 } else { 0 };
+
+        // 4 dual-grid neighbor columns around this vertex corner
+        let x0 = cx.saturating_sub(1).min(15);
+        let x1 = cx.min(15);
+        let z0 = cz.saturating_sub(1).min(15);
+        let z1 = cz.min(15);
+
+        let sample_indices = if x0 == x1 && z0 == z1 {
+            [(x0, z0), (x0, z0), (x0, z0), (x0, z0)]
+        } else if x0 == x1 {
+            [(x0, z0), (x0, z1), (x0, z0), (x0, z1)]
+        } else if z0 == z1 {
+            [(x0, z0), (x1, z0), (x0, z0), (x1, z0)]
+        } else {
+            [(x0, z0), (x1, z0), (x0, z1), (x1, z1)]
+        };
+
+        let num_samples = if x0 == x1 && z0 == z1 {
+            1
+        } else if x0 == x1 || z0 == z1 {
+            2
+        } else {
+            4
+        };
+
+        let mut sum_r = 0.0f32;
+        let mut sum_g = 0.0f32;
+        let mut sum_b = 0.0f32;
+        let mut sum_a = 0.0f32;
+
+        for &(sx, sz) in &sample_indices[..num_samples] {
+            let col_idx = if is_3d {
+                (qy << 8) | (sx << 4) | sz
+            } else {
+                sx * 16 + sz
+            };
+            if col_idx < biome_cols.len() {
+                let col = &biome_cols[col_idx];
+                let (c, has_cust) =
+                    sample_column_tint_color(col, tt, colormaps, default_tint_color);
+                if has_cust {
+                    any_custom = true;
+                }
+                sum_r += c[0];
+                sum_g += c[1];
+                sum_b += c[2];
+                sum_a += c[3];
+            } else {
+                sum_r += default_tint_color[0];
+                sum_g += default_tint_color[1];
+                sum_b += default_tint_color[2];
+                sum_a += default_tint_color[3];
+            }
+        }
+
+        let inv = 1.0 / (num_samples as f32);
+        corners[k] = [sum_r * inv, sum_g * inv, sum_b * inv, sum_a * inv];
+    }
+
+    if any_custom {
+        tint_data[3] = mtk_material::TINT_TYPE_HARDCODED as f32;
+    }
+
+    (tint_data, corners)
 }

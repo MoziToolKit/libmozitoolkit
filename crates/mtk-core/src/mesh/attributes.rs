@@ -55,7 +55,7 @@ impl MeshData {
             anim_timings.push(attr.anim_timing);
             anim_sizes.push(attr.anim_frame_size);
             has_animation |= attr.anim_timing[0] > 1.0;
-            tint_colors.push(attr.biome_tint_color);
+            tint_colors.extend_from_slice(&[attr.biome_tint_color; 4]);
             tint_datas.push(attr.biome_tint_data);
             if include_block_coords {
                 block_x.push(attr.block_pos[0]);
@@ -105,7 +105,7 @@ impl MeshData {
         }
         self.add_custom_attribute(MeshAttribute::new(
             ATTR_BIOME_TINT_COLOR,
-            AttributeDomain::Face,
+            AttributeDomain::Corner,
             AttributeData::Float4(tint_colors),
         ));
         self.add_custom_attribute(MeshAttribute::new(
