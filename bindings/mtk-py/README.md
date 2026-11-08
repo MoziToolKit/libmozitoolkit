@@ -104,7 +104,7 @@ Python 模块名：`libmtk_py`
 
 ### 2.7 资源包预烘焙与图集 (`resource` & `texture`)
 - **`ResourcePackStack` (`PyResourcePackStack`)**：虚拟文件系统 (VFS) 资源包层叠加载器。
-- **`probe_pack(path: str) -> dict`**：快速探测资源包（类型、格式版本、有效性、原版资产证据等）。
+- **`probe_pack(path: str) -> dict`**：快速探测资源包（类型、格式版本、有效性、`has_renderable_assets`、`has_block_assets`、`asset_summary` 资产统计等）。
 - **`path_provides_vanilla_client(path: str) -> bool`**：严格门禁检测路径/ZIP 是否提供原版客户端完整权威资产（核心方块模型、状态与纹理）。
 - **`evaluate_cache_status(cache_dir, stack_pack_count, has_vanilla, expected_fingerprint=None) -> str`**：缓存状态判定门禁（返回 `"NO_PACKS"` | `"NO_VANILLA"` | `"READY"` | `"STALE"` | `"MISSING"`）。
 - **`BakedAtlas`**：烘焙图集容器；测试/开发用的 `AtlasBuilder` 位于 `libmtk_py.unstable.testing`。

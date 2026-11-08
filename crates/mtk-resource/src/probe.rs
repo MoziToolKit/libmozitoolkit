@@ -26,6 +26,19 @@ const METADATA_PROBES: [&str; 6] = [
 
 const MOJANG_SIGNATURE_PREFIX: &str = "META-INF/MOJANGCS.";
 
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub struct AssetSummary {
+    pub has_renderable_assets: bool,
+    pub has_block_assets: bool,
+    pub blockstate_count: usize,
+    pub block_model_count: usize,
+    pub item_model_count: usize,
+    pub block_texture_count: usize,
+    pub ctm_property_count: usize,
+    pub total_asset_entries: usize,
+    pub namespaces: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PackProbe {
     pub kind: String,
@@ -35,6 +48,7 @@ pub struct PackProbe {
     pub details: HashMap<String, serde_json::Value>,
     pub error: Option<String>,
     pub entry_count: usize,
+    pub asset_summary: AssetSummary,
 }
 
 impl Default for PackProbe {
@@ -47,6 +61,7 @@ impl Default for PackProbe {
             details: HashMap::new(),
             error: None,
             entry_count: 0,
+            asset_summary: AssetSummary::default(),
         }
     }
 }
@@ -181,6 +196,73 @@ fn extract_pack_mcmeta_details(
                 );
             } else {
                 details.insert("description".to_string(), desc.clone());
+            }
+        }
+    }
+}
+
+pub fn summarize_assets_from_paths<'a, I>(entries: I) -> AssetSummary
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    let mut summary = AssetSummary::default();
+    let mut ns_set = std::collections::BTreeSet::new();
+
+    for raw in entries {
+        let entry = raw.trim_start_matches('/');
+        if !entry.starts_with("assets/") {
+            continue;
+        }
+        summary.total_asset_entries += 1;
+
+        let rest = &entry["assets/".len()..];
+        if let Some(slash_pos) = rest.find('/') {
+            let ns = &rest[..slash_pos];
+            if !ns.is_empty() && ns != ".mcassetsroot" {
+                ns_set.insert(ns.to_string());
+            }
+            let sub = &rest[slash_pos + 1..];
+
+            if sub.starts_with("blockstates/") && sub.ends_with(".json") {
+                summary.blockstate_count += 1;
+            } else if sub.starts_with("models/block/") && sub.ends_with(".json") {
+                summary.block_model_count += 1;
+            } else if sub.starts_with("models/item/") && sub.ends_with(".json") {
+                summary.item_model_count += 1;
+            } else if sub.starts_with("textures/block/") && sub.ends_with(".png") {
+                summary.block_texture_count += 1;
+            } else if (sub.starts_with("optifine/") || sub.starts_with("textures/"))
+                && sub.ends_with(".properties")
+            {
+                summary.ctm_property_count += 1;
+            }
+        }
+    }
+
+    summary.has_block_assets = summary.blockstate_count > 0
+        || summary.block_model_count > 0
+        || summary.block_texture_count > 0
+        || summary.ctm_property_count > 0;
+
+    summary.has_renderable_assets = summary.has_block_assets || summary.item_model_count > 0;
+    summary.namespaces = ns_set.into_iter().collect();
+    summary
+}
+
+fn collect_dir_asset_paths(root: &Path, current: &Path, out: &mut Vec<String>, depth: usize) {
+    if depth > 8 {
+        return;
+    }
+    if let Ok(entries) = fs::read_dir(current) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if let Ok(rel) = p.strip_prefix(root) {
+                let rel_str = rel.to_string_lossy().replace('\\', "/");
+                if p.is_dir() {
+                    collect_dir_asset_paths(root, &p, out, depth + 1);
+                } else if p.is_file() {
+                    out.push(rel_str);
+                }
             }
         }
     }
@@ -337,6 +419,17 @@ fn classify_dir(path: &Path, mut probe: PackProbe) -> PackProbe {
     if is_file(&["modrinth.index.json"]) {
         sig.add(KIND_MODPACK, 40, "modrinth.index.json");
     }
+
+    let mut dir_asset_paths = Vec::new();
+    let assets_dir = path.join("assets");
+    if assets_dir.is_dir() {
+        collect_dir_asset_paths(path, &assets_dir, &mut dir_asset_paths, 0);
+    }
+    let asset_summary = summarize_assets_from_paths(dir_asset_paths.iter().map(|s| s.as_str()));
+    if let Ok(val) = serde_json::to_value(&asset_summary) {
+        probe.details.insert("asset_summary".to_string(), val);
+    }
+    probe.asset_summary = asset_summary;
 
     finalize(probe, sig)
 }
@@ -586,6 +679,12 @@ fn classify_file(path: &Path, mut probe: PackProbe) -> PackProbe {
         sig.add(KIND_MOD, 5, "compiled classes");
     }
 
+    let asset_summary = summarize_assets_from_paths(names.iter().map(|s| s.as_str()));
+    if let Ok(val) = serde_json::to_value(&asset_summary) {
+        probe.details.insert("asset_summary".to_string(), val);
+    }
+    probe.asset_summary = asset_summary;
+
     finalize(probe, sig)
 }
 
@@ -739,5 +838,79 @@ mod tests {
         assert_eq!(probe.kind, KIND_RESOURCE_PACK);
         assert_eq!(probe.suggested_pack_type.as_deref(), Some("RESOURCE_PACK"));
         assert_eq!(probe.details.get("pack_format").unwrap().as_i64(), Some(88));
+        assert!(probe.asset_summary.has_block_assets);
+        assert!(probe.asset_summary.has_renderable_assets);
+        assert_eq!(probe.asset_summary.block_texture_count, 1);
+        assert_eq!(probe.asset_summary.namespaces, vec!["minecraft"]);
+    }
+
+    #[test]
+    fn test_functional_mod_has_no_renderable_assets() {
+        let tmp = tempfile::tempdir().unwrap();
+        let zip_path = tmp.path().join("sodium.jar");
+        {
+            let file = File::create(&zip_path).unwrap();
+            let mut zip = zip::ZipWriter::new(file);
+            let options = zip::write::SimpleFileOptions::default();
+
+            zip.start_file("fabric.mod.json", options).unwrap();
+            zip.write_all(br#"{"schemaVersion": 1, "id": "sodium", "name": "Sodium"}"#)
+                .unwrap();
+
+            zip.start_file("assets/sodium/icon.png", options).unwrap();
+            zip.write_all(b"\x89PNG\r\n\x1a\n").unwrap();
+
+            zip.start_file("assets/sodium/lang/en_us.json", options)
+                .unwrap();
+            zip.write_all(b"{}").unwrap();
+
+            zip.finish().unwrap();
+        }
+
+        let probe = probe_pack(&zip_path);
+        assert_eq!(probe.kind, KIND_MOD);
+        assert_eq!(probe.suggested_pack_type.as_deref(), Some("MOD_JAR"));
+        assert!(!probe.asset_summary.has_block_assets);
+        assert!(!probe.asset_summary.has_renderable_assets);
+        assert_eq!(probe.asset_summary.blockstate_count, 0);
+        assert_eq!(probe.asset_summary.block_model_count, 0);
+    }
+
+    #[test]
+    fn test_block_mod_has_renderable_assets() {
+        let tmp = tempfile::tempdir().unwrap();
+        let zip_path = tmp.path().join("waystones.jar");
+        {
+            let file = File::create(&zip_path).unwrap();
+            let mut zip = zip::ZipWriter::new(file);
+            let options = zip::write::SimpleFileOptions::default();
+
+            zip.start_file("fabric.mod.json", options).unwrap();
+            zip.write_all(br#"{"schemaVersion": 1, "id": "waystones", "name": "Waystones"}"#)
+                .unwrap();
+
+            zip.start_file("assets/waystones/blockstates/waystone.json", options)
+                .unwrap();
+            zip.write_all(b"{}").unwrap();
+
+            zip.start_file("assets/waystones/models/block/waystone.json", options)
+                .unwrap();
+            zip.write_all(b"{}").unwrap();
+
+            zip.start_file("assets/waystones/textures/block/waystone.png", options)
+                .unwrap();
+            zip.write_all(b"\x89PNG\r\n\x1a\n").unwrap();
+
+            zip.finish().unwrap();
+        }
+
+        let probe = probe_pack(&zip_path);
+        assert_eq!(probe.kind, KIND_MOD);
+        assert!(probe.asset_summary.has_block_assets);
+        assert!(probe.asset_summary.has_renderable_assets);
+        assert_eq!(probe.asset_summary.blockstate_count, 1);
+        assert_eq!(probe.asset_summary.block_model_count, 1);
+        assert_eq!(probe.asset_summary.block_texture_count, 1);
+        assert_eq!(probe.asset_summary.namespaces, vec!["waystones"]);
     }
 }

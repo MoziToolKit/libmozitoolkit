@@ -374,6 +374,11 @@ pub fn probe_pack<'py>(py: Python<'py>, path: &str) -> PyResult<Bound<'py, PyDic
     dict.set_item("confidence", probe.confidence)?;
     dict.set_item("suggested_pack_type", probe.suggested_pack_type.as_deref())?;
     dict.set_item("evidence", probe.evidence)?;
+    dict.set_item(
+        "has_renderable_assets",
+        probe.asset_summary.has_renderable_assets,
+    )?;
+    dict.set_item("has_block_assets", probe.asset_summary.has_block_assets)?;
 
     let details_json = serde_json::to_string(&probe.details)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;

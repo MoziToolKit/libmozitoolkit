@@ -226,8 +226,14 @@ pub struct CtmSolver {
 ### 3.3 资源包嗅探与原版权威校验 (`probe.rs`)
 | 方法签名 | 描述 |
 | :--- | :--- |
-| `probe_pack(path: &Path) -> PackProbe` | 快速探测资源包物理形态、包格式、`pack.mcmeta` 元数据、原版方块状态/模型/纹理存在性与匹配评分。 |
+| `probe_pack(path: &Path) -> PackProbe` | 快速探测资源包物理形态、包格式、`pack.mcmeta` 元数据、原版方块状态/模型/纹理存在性、资产指标统计 (`AssetSummary`) 与匹配评分。 |
 | `path_provides_vanilla_client(path: &Path) -> bool` | 严格门禁检测：验证给定目录或 ZIP/JAR 文件是否包含核心原版客户端资产（石头、泥土、橡木木板等核心模型、状态和纹理）。 |
+
+`PackProbe.asset_summary` (`AssetSummary`) 结构提供精细资产统计：
+- `has_renderable_assets: bool`：是否包含可渲染资产（方块状态、模型、方块贴图或 CTM 配置）；
+- `has_block_assets: bool`：是否包含方块级几何/纹理资产（用于过滤纯代码/功能模组）；
+- `blockstate_count`、`block_model_count`、`item_model_count`、`block_texture_count`、`ctm_property_count`；
+- `namespaces: Vec<String>`：资源包内涉及的命名空间清单。
 
 
 ---
