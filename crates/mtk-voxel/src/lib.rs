@@ -30,5 +30,3 @@ pub use types::{
 };
 pub use world::{SkinResolvedCallback, VoxelWorld};
 
-#[cfg(test)]
-mod verify_blender;

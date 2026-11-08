@@ -7,11 +7,11 @@ use mtk_cull::FaceCuller;
 use mtk_material::{get_biome_palette, get_colormap_uv};
 use serde::Deserialize;
 
-use crate::fluid::height::{
+use super::height::{
     calculate_fluid_corner_heights, calculate_fluid_flow_vector, get_fluid_base_height,
 };
-use crate::fluid::uv::{get_fluid_side_uvs, get_fluid_top_uvs};
-use crate::fluid::FluidType;
+use super::uv::{get_fluid_side_uvs, get_fluid_top_uvs};
+use super::FluidType;
 use crate::mesher::shading::ModelSource;
 use crate::mesher::SectionMesher;
 use crate::storage::VoxelStorage;
