@@ -43,38 +43,6 @@
         assert_eq!(mesh.vertex_count(), 24);
     }
 
-    #[test]
-    fn test_bake_obj_model() {
-        let mut baker = ModelBaker::new();
-        let obj_text = r#"
-v 0 0 0
-v 16 0 0
-v 16 16 0
-vt 0 0
-vt 1 0
-vt 1 1
-f 1/1 2/2 3/3
-"#;
-        let baked = baker
-            .bake_obj_model(
-                "mod:custom_gear",
-                obj_text,
-                &HashMap::new(),
-                "mod:block/gear",
-                0.0,
-                0.0,
-                0.0,
-                Vec3::ZERO,
-                None,
-            )
-            .unwrap();
-
-        assert!(!baked.is_cube);
-        assert_eq!(baked.obj_faces.len(), 1);
-        let mesh = baked.to_mesh(false);
-        assert_eq!(mesh.triangle_count(), 1);
-        assert_eq!(mesh.vertex_count(), 3);
-    }
 
     #[test]
     fn test_bake_blockstate_variants() {

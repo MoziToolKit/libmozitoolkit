@@ -28,7 +28,7 @@ use super::shading::{
 
 /// Pre-resolved entry bundling all per-blockstate meshing metadata, model sources, and culling data.
 #[derive(Clone)]
-pub struct ResolvedPaletteEntry {
+pub(crate) struct ResolvedPaletteEntry {
     pub has_model: bool,
     pub meta: Arc<BlockCullMeta>,
     pub is_emissive: bool,
@@ -37,7 +37,7 @@ pub struct ResolvedPaletteEntry {
 }
 
 impl ResolvedPaletteEntry {
-    pub fn resolve<'a>(
+    pub(crate) fn resolve<'a>(
         st: &str,
         source: &ModelSource<'a>,
         culler: &FaceCuller,
@@ -101,7 +101,7 @@ impl SectionMesher {
     }
 
     /// Meshes a single `PaddedVoxelArray` with an optional pre-resolved palette cache.
-    pub fn mesh_section_with_cache<'a, F>(
+    pub(crate) fn mesh_section_with_cache<'a, F>(
         padded: &PaddedVoxelArray,
         culler: &FaceCuller,
         mut get_model_source: F,
@@ -597,7 +597,7 @@ impl SectionMesher {
     }
 
     /// Meshes a batch of `PaddedVoxelArray`s with optional progress feedback.
-    pub fn mesh_sections_with_source_and_progress<'a, F>(
+    pub(crate) fn mesh_sections_with_source_and_progress<'a, F>(
         sections: &[PaddedVoxelArray],
         culler: &FaceCuller,
         model_provider: F,

@@ -201,7 +201,7 @@ fn extract_pack_mcmeta_details(
     }
 }
 
-pub fn summarize_assets_from_paths<'a, I>(entries: I) -> AssetSummary
+pub(crate) fn summarize_assets_from_paths<'a, I>(entries: I) -> AssetSummary
 where
     I: IntoIterator<Item = &'a str>,
 {

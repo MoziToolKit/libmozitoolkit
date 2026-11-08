@@ -3,7 +3,6 @@ pub(crate) mod batch;
 pub(crate) mod emissive;
 pub(crate) mod math;
 pub(crate) mod model_baker;
-pub(crate) mod obj_baker;
 pub(crate) mod planar;
 pub(crate) mod rules;
 

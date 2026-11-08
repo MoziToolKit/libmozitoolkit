@@ -86,7 +86,7 @@ impl VoxelWorld {
     }
 
     /// Synchronizes all registered dynamic entity slots into `self.config.atlas_address_map`.
-    pub fn sync_dynamic_atlas_to_config(&mut self) {
+    fn sync_dynamic_atlas_to_config(&mut self) {
         if let Some(ref current_map) = self.config.atlas_address_map {
             let mut new_map = (**current_map).clone();
             self.dynamic_entities.register_to_address_map(&mut new_map);
@@ -174,11 +174,6 @@ impl VoxelWorld {
         };
         world.sync_dynamic_atlas_to_config();
         world
-    }
-
-    /// Sets the worker thread count for parallel meshing.
-    pub fn set_num_threads(&mut self, num_threads: Option<usize>) {
-        self.num_threads = num_threads;
     }
 
     /// Returns the configured worker thread count.
@@ -517,24 +512,6 @@ impl VoxelWorld {
     /// Sets the on-disk cache directory for downloaded player skins.
     pub fn set_skin_cache_dir(&mut self, cache_dir: Option<std::path::PathBuf>) {
         self.skin_resolver = mtk_resource::skin::SkinResolver::new(cache_dir);
-    }
-
-    /// Explicitly registers a skin PNG into the dynamic atlas and updates the active address map.
-    pub fn register_skin(
-        &mut self,
-        key: &str,
-        png: &[u8],
-    ) -> Result<(), mtk_texture::TextureError> {
-        self.skin_resolver.register_memory_skin(key, png.to_vec());
-        self.dynamic_entities.add_skin_png(key, png)?;
-        let mut new_map = if let Some(ref current_map) = self.config.atlas_address_map {
-            (**current_map).clone()
-        } else {
-            mtk_texture::AtlasAddressMap::new()
-        };
-        self.dynamic_entities.register_to_address_map(&mut new_map);
-        self.config.atlas_address_map = Some(Arc::new(new_map));
-        Ok(())
     }
 
     /// Sets the callback triggered when a background skin download finishes.

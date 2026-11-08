@@ -541,33 +541,6 @@ impl ModelBaker {
         }
         Ok(arc_r)
     }
-
-    /// Bakes a Wavefront OBJ mesh into a `BakedModel`.
-    #[allow(clippy::too_many_arguments)]
-    pub fn bake_obj_model(
-        &mut self,
-        block_state: &str,
-        obj_text: &str,
-        texture_mappings: &HashMap<String, String>,
-        fallback_texture: &str,
-        rot_x: f32,
-        rot_y: f32,
-        rot_z: f32,
-        offset: Vec3,
-        object_filter: Option<&[&str]>,
-    ) -> Result<BakedModel, ModelError> {
-        super::obj_baker::bake_obj_model_impl(
-            block_state,
-            obj_text,
-            texture_mappings,
-            fallback_texture,
-            rot_x,
-            rot_y,
-            rot_z,
-            offset,
-            object_filter,
-        )
-    }
 }
 
 #[cfg(test)]
