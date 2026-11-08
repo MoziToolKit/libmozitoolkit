@@ -278,3 +278,69 @@ fn test_copper_statue_bake_variants_group() {
         );
     }
 }
+
+#[test]
+fn test_copper_statue_arm_and_leg_uv_bounds_strictly_fit_opaque_texture() {
+    let mut baker = ModelBaker::new();
+    let state = "minecraft:copper_golem_statue[copper_golem_pose=standing,facing=north]";
+    let baked = baker
+        .bake_blockstate(state, None, |_| None)
+        .expect("Bake statue");
+
+    // Right Arm: box at (-3, -1, -2) size (3, 10, 4) with tex_offset (36, 16)
+    // Left Arm: box at (0, -1, -2) size (3, 10, 4) with tex_offset (50, 16)
+    // Find all faces originating from Direction::Down (the bottom of arm/foot in entity coords):
+    let mut right_arm_bottom: Option<[f32; 4]> = None;
+    let mut left_arm_bottom: Option<[f32; 4]> = None;
+
+    for elem in &baked.elements {
+        if let Some(down_face) = elem.faces.get(&mtk_core::Direction::Down) {
+            let u_span = (down_face.uv_bounds[2] - down_face.uv_bounds[0]) * 64.0;
+            let v_span = (down_face.uv_bounds[3] - down_face.uv_bounds[1]) * 64.0;
+            let u_min_px = (down_face.uv_bounds[0] * 64.0).round() as i32;
+            let v_min_px = (down_face.uv_bounds[1] * 64.0).round() as i32;
+
+            if (u_min_px - 43).abs() <= 1 && (v_min_px - 16).abs() <= 1 {
+                right_arm_bottom = Some([
+                    down_face.uv_bounds[0] * 64.0,
+                    down_face.uv_bounds[1] * 64.0,
+                    down_face.uv_bounds[2] * 64.0,
+                    down_face.uv_bounds[3] * 64.0,
+                ]);
+                assert!(
+                    (u_span - 3.0).abs() < 1e-4,
+                    "Right arm bottom U span must be exactly 3px, got {}px (must not sample transparent 4th pixel!)",
+                    u_span
+                );
+                assert!(
+                    (v_span - 4.0).abs() < 1e-4,
+                    "Right arm bottom V span must be exactly 4px, got {}px",
+                    v_span
+                );
+            } else if (u_min_px - 57).abs() <= 1 && (v_min_px - 16).abs() <= 1 {
+                left_arm_bottom = Some([
+                    down_face.uv_bounds[0] * 64.0,
+                    down_face.uv_bounds[1] * 64.0,
+                    down_face.uv_bounds[2] * 64.0,
+                    down_face.uv_bounds[3] * 64.0,
+                ]);
+                assert!(
+                    (u_span - 3.0).abs() < 1e-4,
+                    "Left arm bottom U span must be exactly 3px, got {}px (must not sample transparent 4th pixel!)",
+                    u_span
+                );
+                assert!(
+                    (v_span - 4.0).abs() < 1e-4,
+                    "Left arm bottom V span must be exactly 4px, got {}px",
+                    v_span
+                );
+            }
+        }
+    }
+
+    assert!(
+        right_arm_bottom.is_some(),
+        "Must find right arm bottom face"
+    );
+    assert!(left_arm_bottom.is_some(), "Must find left arm bottom face");
+}

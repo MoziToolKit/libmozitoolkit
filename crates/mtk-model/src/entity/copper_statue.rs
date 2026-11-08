@@ -597,6 +597,7 @@ fn closest_direction(normal: Vec3) -> Direction {
 }
 
 /// Computes the 6 standard faces for a local cuboid box with 64x64 texture mapping.
+/// Follows Minecraft vanilla `ModelPart.Cube` and `ModelPart.Polygon` UV unwrapping.
 fn make_box_faces(b: &ModelBox, model_matrix: Mat4, texture: &str) -> Vec<(Direction, BakedFace)> {
     let x = b.from.x;
     let y = b.from.y;
@@ -607,95 +608,116 @@ fn make_box_faces(b: &ModelBox, model_matrix: Mat4, texture: &str) -> Vec<(Direc
 
     let [u, v] = b.tex_offset;
 
-    // Entity local corners:
-    // Up face (in entity coords, top is Y min): [x, y, z] to [x+dx, y, z+dz]
-    // Down face (in entity coords, bottom is Y max): [x, y+dy, z] to [x+dx, y+dy, z+dz]
-    // North face (front, Z min): [x, y, z] to [x+dx, y+dy, z]
-    // South face (back, Z max): [x, y, z+dz] to [x+dx, y+dy, z+dz]
-    // West face (X min): [x, y, z] to [x, y+dy, z+dz]
-    // East face (X max): [x+dx, y, z] to [x+dx, y+dy, z+dz]
+    // Standard Minecraft ModelPart.Cube texture bounds in 64x64 pixel space:
+    // u0 = xTexOffs
+    // u1 = xTexOffs + depth
+    // u2 = xTexOffs + depth + width
+    // u22 = xTexOffs + depth + 2 * width
+    // u3 = xTexOffs + 2 * depth + width
+    // u4 = xTexOffs + 2 * (depth + width)
+    let u0 = u;
+    let u1 = u + dz;
+    let u2 = u + dz + dx;
+    let u22 = u + dz + 2.0 * dx;
+    let u3 = u + 2.0 * dz + dx;
+    let u4 = u + 2.0 * (dz + dx);
 
-    // Standard texture bounds in 64x64 pixel space:
-    let up_uv = [u + dz, v, u + dz + dx, v + dz];
-    let down_uv = [u + dz + dx, v, u + 2.0 * dz + dx, v + dz];
-    let north_uv = [u + dz, v + dz, u + dz + dx, v + dz + dy];
-    let south_uv = [u + 2.0 * dz + dx, v + dz, u + 2.0 * (dz + dx), v + dz + dy];
-    let west_uv = [u, v + dz, u + dz, v + dz + dy];
-    let east_uv = [u + dz + dx, v + dz, u + 2.0 * dz + dx, v + dz + dy];
+    // v0 = yTexOffs
+    // v1 = yTexOffs + depth
+    // v2 = yTexOffs + depth + height
+    let v0 = v;
+    let v1 = v + dz;
+    let v2 = v + dz + dy;
 
-    // Local quad vertex definitions with outward-pointing winding:
+    // 8 canonical cuboid corner vertices in entity space:
+    let t0 = Vec3::new(x, y, z);
+    let t1 = Vec3::new(x + dx, y, z);
+    let t2 = Vec3::new(x + dx, y + dy, z);
+    let t3 = Vec3::new(x, y + dy, z);
+    let l0 = Vec3::new(x, y, z + dz);
+    let l1 = Vec3::new(x + dx, y, z + dz);
+    let l2 = Vec3::new(x + dx, y + dy, z + dz);
+    let l3 = Vec3::new(x, y + dy, z + dz);
+
+    // 6 outward CCW face specifications with per-vertex UVs from vanilla ModelPart:
     let face_specs = [
-        // Up (Y min in entity, facing -Y):
+        // Up (entity minY face, facing -Y in entity coords, ModelPart Direction.DOWN):
         (
             Direction::Up,
+            [t0, t1, l1, l0],
             [
-                Vec3::new(x, y, z),
-                Vec3::new(x + dx, y, z),
-                Vec3::new(x + dx, y, z + dz),
-                Vec3::new(x, y, z + dz),
+                Vec2::new(u1 / 64.0, v1 / 64.0),
+                Vec2::new(u2 / 64.0, v1 / 64.0),
+                Vec2::new(u2 / 64.0, v0 / 64.0),
+                Vec2::new(u1 / 64.0, v0 / 64.0),
             ],
-            up_uv,
+            [u1 / 64.0, v0 / 64.0, u2 / 64.0, v1 / 64.0],
         ),
-        // Down (Y max in entity, facing +Y):
+        // Down (entity maxY face, facing +Y in entity coords, ModelPart Direction.UP):
         (
             Direction::Down,
+            [l3, l2, t2, t3],
             [
-                Vec3::new(x, y + dy, z + dz),
-                Vec3::new(x + dx, y + dy, z + dz),
-                Vec3::new(x + dx, y + dy, z),
-                Vec3::new(x, y + dy, z),
+                Vec2::new(u2 / 64.0, v0 / 64.0),
+                Vec2::new(u22 / 64.0, v0 / 64.0),
+                Vec2::new(u22 / 64.0, v1 / 64.0),
+                Vec2::new(u2 / 64.0, v1 / 64.0),
             ],
-            down_uv,
+            [u2 / 64.0, v0 / 64.0, u22 / 64.0, v1 / 64.0],
         ),
-        // North (Z min, facing -Z):
+        // North (entity minZ face, facing -Z in entity coords, ModelPart Direction.NORTH):
         (
             Direction::North,
+            [t1, t0, t3, t2],
             [
-                Vec3::new(x + dx, y, z),
-                Vec3::new(x, y, z),
-                Vec3::new(x, y + dy, z),
-                Vec3::new(x + dx, y + dy, z),
+                Vec2::new(u2 / 64.0, v1 / 64.0),
+                Vec2::new(u1 / 64.0, v1 / 64.0),
+                Vec2::new(u1 / 64.0, v2 / 64.0),
+                Vec2::new(u2 / 64.0, v2 / 64.0),
             ],
-            north_uv,
+            [u1 / 64.0, v1 / 64.0, u2 / 64.0, v2 / 64.0],
         ),
-        // South (Z max, facing +Z):
+        // South (entity maxZ face, facing +Z in entity coords, ModelPart Direction.SOUTH):
         (
             Direction::South,
+            [l0, l1, l2, l3],
             [
-                Vec3::new(x, y, z + dz),
-                Vec3::new(x + dx, y, z + dz),
-                Vec3::new(x + dx, y + dy, z + dz),
-                Vec3::new(x, y + dy, z + dz),
+                Vec2::new(u4 / 64.0, v1 / 64.0),
+                Vec2::new(u3 / 64.0, v1 / 64.0),
+                Vec2::new(u3 / 64.0, v2 / 64.0),
+                Vec2::new(u4 / 64.0, v2 / 64.0),
             ],
-            south_uv,
+            [u3 / 64.0, v1 / 64.0, u4 / 64.0, v2 / 64.0],
         ),
-        // West (X min, facing -X):
+        // West (entity minX face, facing -X in entity coords, ModelPart Direction.WEST):
         (
             Direction::West,
+            [t0, l0, l3, t3],
             [
-                Vec3::new(x, y, z + dz),
-                Vec3::new(x, y, z),
-                Vec3::new(x, y + dy, z),
-                Vec3::new(x, y + dy, z + dz),
+                Vec2::new(u1 / 64.0, v1 / 64.0),
+                Vec2::new(u0 / 64.0, v1 / 64.0),
+                Vec2::new(u0 / 64.0, v2 / 64.0),
+                Vec2::new(u1 / 64.0, v2 / 64.0),
             ],
-            west_uv,
+            [u0 / 64.0, v1 / 64.0, u1 / 64.0, v2 / 64.0],
         ),
-        // East (X max, facing +X):
+        // East (entity maxX face, facing +X in entity coords, ModelPart Direction.EAST):
         (
             Direction::East,
+            [l1, t1, t2, l2],
             [
-                Vec3::new(x + dx, y, z),
-                Vec3::new(x + dx, y, z + dz),
-                Vec3::new(x + dx, y + dy, z + dz),
-                Vec3::new(x + dx, y + dy, z),
+                Vec2::new(u3 / 64.0, v1 / 64.0),
+                Vec2::new(u2 / 64.0, v1 / 64.0),
+                Vec2::new(u2 / 64.0, v2 / 64.0),
+                Vec2::new(u3 / 64.0, v2 / 64.0),
             ],
-            east_uv,
+            [u2 / 64.0, v1 / 64.0, u3 / 64.0, v2 / 64.0],
         ),
     ];
 
     let mut faces = Vec::with_capacity(6);
 
-    for (orig_dir, raw_pts, uv_box) in face_specs {
+    for (orig_dir, raw_pts, uvs, uv_bounds) in face_specs {
         // Transform vertices to normalized [0.0, 1.0] block space:
         let mut transformed_verts = [Vec3::ZERO; 4];
         for (i, p) in raw_pts.iter().enumerate() {
@@ -709,21 +731,13 @@ fn make_box_faces(b: &ModelBox, model_matrix: Mat4, texture: &str) -> Vec<(Direc
         let normal = v1.cross(v2).normalize_or_zero();
         let direction = closest_direction(normal);
 
-        let [min_u, min_v, max_u, max_v] = uv_box;
-        let uvs = [
-            Vec2::new(min_u / 64.0, min_v / 64.0),
-            Vec2::new(max_u / 64.0, min_v / 64.0),
-            Vec2::new(max_u / 64.0, max_v / 64.0),
-            Vec2::new(min_u / 64.0, max_v / 64.0),
-        ];
-
         faces.push((
             orig_dir,
             BakedFace {
                 direction,
                 texture: texture.to_string(),
                 uv_rot: 0.0,
-                uv_bounds: [min_u / 64.0, min_v / 64.0, max_u / 64.0, max_v / 64.0],
+                uv_bounds,
                 tint_index: -1,
                 cullface: None,
                 vertices: transformed_verts,
