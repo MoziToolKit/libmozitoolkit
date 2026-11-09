@@ -362,10 +362,12 @@ pub fn sample_quad_corner_biome_tints(
     colormaps: Option<&mtk_material::VanillaColormaps>,
     smooth_blend: bool,
 ) -> ([f32; 4], [[f32; 4]; 4]) {
-    if tint_data[2] <= 0.0 || biome_data.is_none() {
+    if tint_data[2] <= 0.0 {
         return (tint_data, [default_tint_color; 4]);
     }
-    let biome_cols = biome_data.unwrap();
+    let Some(biome_cols) = biome_data else {
+        return (tint_data, [default_tint_color; 4]);
+    };
     let tt = tint_data[3] as u8;
     if tt == mtk_material::TINT_TYPE_HARDCODED {
         return (tint_data, [default_tint_color; 4]);
@@ -458,4 +460,78 @@ pub fn sample_quad_corner_biome_tints(
     }
 
     (tint_data, corners)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sample_quad_corner_biome_tints_none_biome_data_does_not_panic() {
+        let offsets = [[0, 0, 0]; 4];
+        let default_color = [0.2, 0.8, 0.2, 1.0];
+
+        // 1. None biome_data with positive tint weight, smooth_blend = false
+        let tint_data = [0.0, 0.0, 1.0, 0.0];
+        let (td, corners) = sample_quad_corner_biome_tints(
+            None,
+            0,
+            0,
+            0,
+            &offsets,
+            tint_data,
+            default_color,
+            None,
+            false,
+        );
+        assert_eq!(td, tint_data);
+        assert_eq!(corners, [default_color; 4]);
+
+        // 2. None biome_data with positive tint weight, smooth_blend = true
+        let (td2, corners2) = sample_quad_corner_biome_tints(
+            None,
+            0,
+            0,
+            0,
+            &offsets,
+            tint_data,
+            default_color,
+            None,
+            true,
+        );
+        assert_eq!(td2, tint_data);
+        assert_eq!(corners2, [default_color; 4]);
+
+        // 3. Negative tint weight
+        let tint_data_neg = [0.0, 0.0, 0.0, 0.0];
+        let (td3, corners3) = sample_quad_corner_biome_tints(
+            None,
+            0,
+            0,
+            0,
+            &offsets,
+            tint_data_neg,
+            default_color,
+            None,
+            true,
+        );
+        assert_eq!(td3, tint_data_neg);
+        assert_eq!(corners3, [default_color; 4]);
+
+        // 4. Hardcoded tint type
+        let tint_data_hardcoded = [0.0, 0.0, 1.0, mtk_material::TINT_TYPE_HARDCODED as f32];
+        let (td4, corners4) = sample_quad_corner_biome_tints(
+            None,
+            0,
+            0,
+            0,
+            &offsets,
+            tint_data_hardcoded,
+            default_color,
+            None,
+            true,
+        );
+        assert_eq!(td4, tint_data_hardcoded);
+        assert_eq!(corners4, [default_color; 4]);
+    }
 }

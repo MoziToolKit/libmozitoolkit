@@ -117,6 +117,25 @@ fn test_classify_tint_category_authoritative() {
         classify_tint_category("lily_pad", Some("lily_pad"), Some(0)),
         "hardcoded"
     );
+
+    // Boundary conditions: out-of-bounds tint index, negative tint index, unknown stems
+    assert_eq!(
+        classify_tint_category("leaf_litter", Some("leaf_litter"), Some(9999)),
+        "dry_foliage"
+    );
+    assert_eq!(
+        classify_tint_category("short_grass", Some("short_grass"), Some(9999)),
+        "grass"
+    );
+    assert_eq!(
+        classify_tint_category("short_grass", Some("short_grass"), Some(-1)),
+        "none"
+    );
+    assert_eq!(
+        classify_tint_category("unknown_block_xyz", Some("unknown_block_xyz"), Some(0)),
+        "none"
+    );
+    assert_eq!(classify_tint_category("", None, None), "none");
 }
 
 #[test]

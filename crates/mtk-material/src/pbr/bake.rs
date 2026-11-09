@@ -131,31 +131,16 @@ pub fn decode_baked_atlas(
         // lack LabPBR transmission support (water, glass, ice, honey, slime, etc.).
         if let Some(chunk_presets) = presets_by_chunk.get(&chunk.chunk_id) {
             if !chunk_presets.is_empty() {
-                if chunk.aux.is_none() {
+                let width = chunk.width;
+                let height = chunk.height;
+                let aux = chunk.aux.get_or_insert_with(|| {
                     // Default aux: IOR 1.5 (byte 18), porosity 0, SSS 0, transmission 0
-                    chunk.aux = Some(mtk_texture::RgbaBuffer::solid(
-                        chunk.width,
-                        chunk.height,
-                        18,
-                        0,
-                        0,
-                        0,
-                    ));
-                }
-                if chunk.orm.is_none() {
+                    mtk_texture::RgbaBuffer::solid(width, height, 18, 0, 0, 0)
+                });
+                let orm = chunk.orm.get_or_insert_with(|| {
                     // Default orm: AO 255, roughness 0.707 (byte 180), metallic 0, emission 0
-                    chunk.orm = Some(mtk_texture::RgbaBuffer::solid(
-                        chunk.width,
-                        chunk.height,
-                        255,
-                        180,
-                        0,
-                        0,
-                    ));
-                }
-
-                let aux = chunk.aux.as_mut().unwrap();
-                let orm = chunk.orm.as_mut().unwrap();
+                    mtk_texture::RgbaBuffer::solid(width, height, 255, 180, 0, 0)
+                });
                 for (rect, preset) in chunk_presets {
                     let x_start = rect[0];
                     let y_start = rect[1];

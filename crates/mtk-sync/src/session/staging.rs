@@ -63,7 +63,7 @@ impl DeltaStagingBuffer {
         }
 
         // Verify gap between snapshot_seq and first staged packet
-        let first_seq = self.queue.front().unwrap().0;
+        let first_seq = self.queue.front().ok_or(ResyncReason::SequenceGap)?.0;
         if first_seq != snapshot_seq + 1 {
             return Err(ResyncReason::SequenceGap);
         }
@@ -115,5 +115,31 @@ mod tests {
         staging.push(15, dummy_pkt(15), 10).unwrap();
         let err = staging.drain_replaying_after_snapshot(10);
         assert_eq!(err, Err(ResyncReason::SequenceGap));
+    }
+
+    #[test]
+    fn test_empty_staging_drain_does_not_panic() {
+        let mut staging = DeltaStagingBuffer::new();
+        let res = staging.drain_replaying_after_snapshot(100);
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), Vec::<Packet>::new());
+    }
+
+    #[test]
+    fn test_staging_drain_purged_all_does_not_panic() {
+        let mut staging = DeltaStagingBuffer::new();
+        let dummy_pkt = |seq: u64| Packet::DeltaOp {
+            epoch: 1,
+            seq_id: seq,
+            palette_revision: 1,
+            count: 0,
+            batch_xxhash64: 0,
+            changes: Vec::new(),
+        };
+        staging.push(5, dummy_pkt(5), 10).unwrap();
+        staging.push(10, dummy_pkt(10), 10).unwrap();
+        let res = staging.drain_replaying_after_snapshot(10);
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), Vec::<Packet>::new());
     }
 }

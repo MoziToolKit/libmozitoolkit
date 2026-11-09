@@ -6,7 +6,10 @@
 use glam::IVec3;
 use xxhash_rust::xxh64::Xxh64;
 
-use super::decode::{decode_entity_payload, read_str};
+use super::decode::{
+    decode_entity_payload, read_array, read_i32_le, read_slice, read_str, read_u16_le, read_u32_le,
+    read_u64_le, read_u8,
+};
 use crate::protocol::constants::*;
 use crate::protocol::error::ProtocolError;
 use crate::protocol::packet::Packet;
@@ -20,27 +23,23 @@ pub(crate) fn decode_baseline_begin(
             field: "BaselineBegin fixed fields",
         });
     }
-    let epoch = u64::from_le_bytes(buf[*offset..*offset + 8].try_into().unwrap());
-    let mut snapshot_uuid = [0u8; 16];
-    snapshot_uuid.copy_from_slice(&buf[*offset + 8..*offset + 24]);
-    let snapshot_seq = u64::from_le_bytes(buf[*offset + 24..*offset + 32].try_into().unwrap());
-    let min_x = i32::from_le_bytes(buf[*offset + 32..*offset + 36].try_into().unwrap());
-    let min_y = i32::from_le_bytes(buf[*offset + 36..*offset + 40].try_into().unwrap());
-    let min_z = i32::from_le_bytes(buf[*offset + 40..*offset + 44].try_into().unwrap());
-    let size_x = i32::from_le_bytes(buf[*offset + 44..*offset + 48].try_into().unwrap());
-    let size_y = i32::from_le_bytes(buf[*offset + 48..*offset + 52].try_into().unwrap());
-    let size_z = i32::from_le_bytes(buf[*offset + 52..*offset + 56].try_into().unwrap());
-    let state_hash = u64::from_le_bytes(buf[*offset + 56..*offset + 64].try_into().unwrap());
-    let palette_revision = u32::from_le_bytes(buf[*offset + 64..*offset + 68].try_into().unwrap());
-    let total_chunks = u32::from_le_bytes(buf[*offset + 68..*offset + 72].try_into().unwrap());
-    let total_encoded_bytes =
-        u64::from_le_bytes(buf[*offset + 72..*offset + 80].try_into().unwrap());
-    let total_decoded_bytes =
-        u64::from_le_bytes(buf[*offset + 80..*offset + 88].try_into().unwrap());
-    let compression_mode = buf[*offset + 88];
-    let palette_bits_per_block = buf[*offset + 89];
-    let biome_bits_per_quart = buf[*offset + 90];
-    *offset += 91;
+    let epoch = read_u64_le(buf, offset, "BaselineBegin epoch")?;
+    let snapshot_uuid = read_array::<16>(buf, offset, "BaselineBegin snapshot_uuid")?;
+    let snapshot_seq = read_u64_le(buf, offset, "BaselineBegin snapshot_seq")?;
+    let min_x = read_i32_le(buf, offset, "BaselineBegin min_pos.x")?;
+    let min_y = read_i32_le(buf, offset, "BaselineBegin min_pos.y")?;
+    let min_z = read_i32_le(buf, offset, "BaselineBegin min_pos.z")?;
+    let size_x = read_i32_le(buf, offset, "BaselineBegin size.x")?;
+    let size_y = read_i32_le(buf, offset, "BaselineBegin size.y")?;
+    let size_z = read_i32_le(buf, offset, "BaselineBegin size.z")?;
+    let state_hash = read_u64_le(buf, offset, "BaselineBegin state_hash")?;
+    let palette_revision = read_u32_le(buf, offset, "BaselineBegin palette_revision")?;
+    let total_chunks = read_u32_le(buf, offset, "BaselineBegin total_chunks")?;
+    let total_encoded_bytes = read_u64_le(buf, offset, "BaselineBegin total_encoded_bytes")?;
+    let total_decoded_bytes = read_u64_le(buf, offset, "BaselineBegin total_decoded_bytes")?;
+    let compression_mode = read_u8(buf, offset, "BaselineBegin compression_mode")?;
+    let palette_bits_per_block = read_u8(buf, offset, "BaselineBegin palette_bits_per_block")?;
+    let biome_bits_per_quart = read_u8(buf, offset, "BaselineBegin biome_bits_per_quart")?;
 
     if total_decoded_bytes as usize > MAX_BASELINE_DECODED_BYTES {
         return Err(ProtocolError::ResourceLimitExceeded {
@@ -52,14 +51,7 @@ pub(crate) fn decode_baseline_begin(
 
     let dimension = read_str(buf, offset, "BaselineBegin dimension")?.to_string();
 
-    if *offset + 4 > buf.len() {
-        return Err(ProtocolError::TruncatedPayload {
-            field: "block_palette length",
-        });
-    }
-    let block_palette_len =
-        u32::from_le_bytes(buf[*offset..*offset + 4].try_into().unwrap()) as usize;
-    *offset += 4;
+    let block_palette_len = read_u32_le(buf, offset, "block_palette length")? as usize;
     if block_palette_len > MAX_PALETTE_ENTRIES {
         return Err(ProtocolError::ResourceLimitExceeded {
             resource: "Block Palette Entries",
@@ -73,14 +65,7 @@ pub(crate) fn decode_baseline_begin(
         block_palette.push(read_str(buf, offset, "block_palette entry")?.to_string());
     }
 
-    if *offset + 2 > buf.len() {
-        return Err(ProtocolError::TruncatedPayload {
-            field: "biome_palette length",
-        });
-    }
-    let biome_palette_len =
-        u16::from_le_bytes(buf[*offset..*offset + 2].try_into().unwrap()) as usize;
-    *offset += 2;
+    let biome_palette_len = read_u16_le(buf, offset, "biome_palette length")? as usize;
     let mut biome_palette = Vec::with_capacity(biome_palette_len);
     for _ in 0..biome_palette_len {
         biome_palette.push(read_str(buf, offset, "biome_palette entry")?.to_string());
@@ -115,26 +100,17 @@ pub(crate) fn decode_baseline_chunk(
             field: "BaselineChunk header",
         });
     }
-    let epoch = u64::from_le_bytes(buf[*offset..*offset + 8].try_into().unwrap());
-    let mut snapshot_uuid = [0u8; 16];
-    snapshot_uuid.copy_from_slice(&buf[*offset + 8..*offset + 24]);
-    let chunk_index = u32::from_le_bytes(buf[*offset + 24..*offset + 28].try_into().unwrap());
-    let total_chunks = u32::from_le_bytes(buf[*offset + 28..*offset + 32].try_into().unwrap());
-    let first_voxel_index = u64::from_le_bytes(buf[*offset + 32..*offset + 40].try_into().unwrap());
-    let voxel_count = u32::from_le_bytes(buf[*offset + 40..*offset + 44].try_into().unwrap());
-    let payload_len =
-        u32::from_le_bytes(buf[*offset + 44..*offset + 48].try_into().unwrap()) as usize;
-    let decoded_target_bytes =
-        u32::from_le_bytes(buf[*offset + 48..*offset + 52].try_into().unwrap());
-    let chunk_xxhash64 = u64::from_le_bytes(buf[*offset + 52..*offset + 60].try_into().unwrap());
-    *offset += 60;
+    let epoch = read_u64_le(buf, offset, "BaselineChunk epoch")?;
+    let snapshot_uuid = read_array::<16>(buf, offset, "BaselineChunk snapshot_uuid")?;
+    let chunk_index = read_u32_le(buf, offset, "BaselineChunk chunk_index")?;
+    let total_chunks = read_u32_le(buf, offset, "BaselineChunk total_chunks")?;
+    let first_voxel_index = read_u64_le(buf, offset, "BaselineChunk first_voxel_index")?;
+    let voxel_count = read_u32_le(buf, offset, "BaselineChunk voxel_count")?;
+    let payload_len = read_u32_le(buf, offset, "BaselineChunk payload_len")? as usize;
+    let decoded_target_bytes = read_u32_le(buf, offset, "BaselineChunk decoded_target_bytes")?;
+    let chunk_xxhash64 = read_u64_le(buf, offset, "BaselineChunk chunk_xxhash64")?;
 
-    if *offset + payload_len > buf.len() {
-        return Err(ProtocolError::TruncatedPayload {
-            field: "BaselineChunk payload",
-        });
-    }
-    let payload = buf[*offset..*offset + payload_len].to_vec();
+    let payload = read_slice(buf, offset, payload_len, "BaselineChunk payload")?.to_vec();
 
     // Verify chunk hash
     let mut hasher = Xxh64::new(0);
@@ -168,14 +144,12 @@ pub(crate) fn decode_baseline_end(buf: &[u8], offset: &mut usize) -> Result<Pack
             field: "BaselineEnd",
         });
     }
-    let epoch = u64::from_le_bytes(buf[*offset..*offset + 8].try_into().unwrap());
-    let mut snapshot_uuid = [0u8; 16];
-    snapshot_uuid.copy_from_slice(&buf[*offset + 8..*offset + 24]);
-    let snapshot_seq = u64::from_le_bytes(buf[*offset + 24..*offset + 32].try_into().unwrap());
-    let total_chunks_sent = u32::from_le_bytes(buf[*offset + 32..*offset + 36].try_into().unwrap());
-    let final_state_hash = u64::from_le_bytes(buf[*offset + 36..*offset + 44].try_into().unwrap());
-    let status = buf[*offset + 44];
-    *offset += 45;
+    let epoch = read_u64_le(buf, offset, "BaselineEnd epoch")?;
+    let snapshot_uuid = read_array::<16>(buf, offset, "BaselineEnd snapshot_uuid")?;
+    let snapshot_seq = read_u64_le(buf, offset, "BaselineEnd snapshot_seq")?;
+    let total_chunks_sent = read_u32_le(buf, offset, "BaselineEnd total_chunks_sent")?;
+    let final_state_hash = read_u64_le(buf, offset, "BaselineEnd final_state_hash")?;
+    let status = read_u8(buf, offset, "BaselineEnd status")?;
 
     Ok(Packet::BaselineEnd {
         epoch,
@@ -193,16 +167,14 @@ pub(crate) fn decode_baseline_ack(buf: &[u8], offset: &mut usize) -> Result<Pack
             field: "BaselineAck",
         });
     }
-    let epoch = u64::from_le_bytes(buf[*offset..*offset + 8].try_into().unwrap());
-    let mut snapshot_uuid = [0u8; 16];
-    snapshot_uuid.copy_from_slice(&buf[*offset + 8..*offset + 24]);
-    let committed_seq = u64::from_le_bytes(buf[*offset + 24..*offset + 32].try_into().unwrap());
-    let res_byte = buf[*offset + 32];
+    let epoch = read_u64_le(buf, offset, "BaselineAck epoch")?;
+    let snapshot_uuid = read_array::<16>(buf, offset, "BaselineAck snapshot_uuid")?;
+    let committed_seq = read_u64_le(buf, offset, "BaselineAck committed_seq")?;
+    let res_byte = read_u8(buf, offset, "BaselineAck result_code")?;
     let result_code = BaselineAckResult::from_u8(res_byte).ok_or(ProtocolError::InvalidEnum {
         field: "BaselineAckResult",
         val: res_byte as u32,
     })?;
-    *offset += 33;
 
     Ok(Packet::BaselineAck {
         epoch,
@@ -221,31 +193,22 @@ pub(crate) fn decode_baseline_entities(
             field: "BaselineEntities header",
         });
     }
-    let epoch = u64::from_le_bytes(buf[*offset..*offset + 8].try_into().unwrap());
-    let snapshot_uuid: [u8; 16] = buf[*offset + 8..*offset + 24].try_into().unwrap();
-    let count = u32::from_le_bytes(buf[*offset + 24..*offset + 28].try_into().unwrap()) as usize;
-    *offset += 28;
-
-    let mut entities = Vec::with_capacity(count);
+    let epoch = read_u64_le(buf, offset, "BaselineEntities epoch")?;
+    let snapshot_uuid = read_array::<16>(buf, offset, "BaselineEntities snapshot_uuid")?;
+    let count = read_u32_le(buf, offset, "BaselineEntities count")? as usize;
+    let max_possible = (buf.len().saturating_sub(*offset)) / 16;
+    let mut entities = Vec::with_capacity(count.min(max_possible));
     for _ in 0..count {
         if *offset + 16 > buf.len() {
             return Err(ProtocolError::TruncatedPayload {
                 field: "BaselineEntities entry coords & len",
             });
         }
-        let rx = u32::from_le_bytes(buf[*offset..*offset + 4].try_into().unwrap()) as i32;
-        let ry = u32::from_le_bytes(buf[*offset + 4..*offset + 8].try_into().unwrap()) as i32;
-        let rz = u32::from_le_bytes(buf[*offset + 8..*offset + 12].try_into().unwrap()) as i32;
-        let payload_len =
-            u32::from_le_bytes(buf[*offset + 12..*offset + 16].try_into().unwrap()) as usize;
-        *offset += 16;
-        if *offset + payload_len > buf.len() {
-            return Err(ProtocolError::TruncatedPayload {
-                field: "BaselineEntities entry payload",
-            });
-        }
-        let payload_slice = &buf[*offset..*offset + payload_len];
-        *offset += payload_len;
+        let rx = read_i32_le(buf, offset, "BaselineEntities rx")?;
+        let ry = read_i32_le(buf, offset, "BaselineEntities ry")?;
+        let rz = read_i32_le(buf, offset, "BaselineEntities rz")?;
+        let payload_len = read_u32_le(buf, offset, "BaselineEntities payload_len")? as usize;
+        let payload_slice = read_slice(buf, offset, payload_len, "BaselineEntities entry payload")?;
 
         if let Some(ed) = decode_entity_payload(payload_slice) {
             entities.push((IVec3::new(rx, ry, rz), ed));

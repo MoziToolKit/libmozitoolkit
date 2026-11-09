@@ -375,8 +375,8 @@ pub(crate) fn classify_tint_category(
                     let idx = ti as usize;
                     if idx < layers.len() {
                         return layers[idx].0;
-                    } else if !layers.is_empty() {
-                        return layers.last().unwrap().0;
+                    } else if let Some(last) = layers.last() {
+                        return last.0;
                     }
                 } else {
                     for &(cat, _) in layers {

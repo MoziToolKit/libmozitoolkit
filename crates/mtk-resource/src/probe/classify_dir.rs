@@ -33,12 +33,14 @@ pub(crate) fn collect_dir_asset_paths(
 }
 
 pub(crate) fn classify_dir(path: &Path, mut probe: PackProbe) -> PackProbe {
-    let read_res = fs::read_dir(path);
-    if let Err(e) = read_res {
-        probe.error = Some(e.to_string());
-        return probe;
-    }
-    let entries_vec: Vec<_> = read_res.unwrap().flatten().collect();
+    let read_dir = match fs::read_dir(path) {
+        Ok(rd) => rd,
+        Err(e) => {
+            probe.error = Some(e.to_string());
+            return probe;
+        }
+    };
+    let entries_vec: Vec<_> = read_dir.flatten().collect();
     probe.entry_count = entries_vec.len();
 
     let mut sig = Signals::new();

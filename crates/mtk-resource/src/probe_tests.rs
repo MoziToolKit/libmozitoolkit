@@ -126,3 +126,14 @@ fn test_block_mod_has_renderable_assets() {
     assert_eq!(probe.asset_summary.block_texture_count, 1);
     assert_eq!(probe.asset_summary.namespaces, vec!["waystones"]);
 }
+
+#[test]
+fn test_classify_dir_non_existent_does_not_panic() {
+    let non_existent = Path::new("/path/that/does/not/exist/at/all");
+    let probe = classify_dir(non_existent, PackProbe::default());
+    assert!(probe.error.is_some());
+
+    // Also verify probe_pack on non-existent path
+    let probe2 = probe_pack(non_existent);
+    assert_eq!(probe2.error.as_deref(), Some("path does not exist"));
+}

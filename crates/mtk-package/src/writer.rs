@@ -375,7 +375,7 @@ fn replace_file(temp_path: &Path, final_path: &Path) -> PackageResult<()> {
         }
     }
     Err(last_error
-        .expect("rename loop always records an error on failure")
+        .unwrap_or_else(|| std::io::Error::other("rename failed without error"))
         .into())
 }
 
@@ -418,5 +418,13 @@ mod tests {
 
         let header = writer.finish().unwrap();
         assert_eq!(header.toc_offset % 64, 0);
+    }
+
+    #[test]
+    fn test_replace_file_non_existent_does_not_panic() {
+        let temp = Path::new("/non/existent/path/temp.tmp");
+        let dest = Path::new("/non/existent/path/dest.bin");
+        let res = replace_file(temp, dest);
+        assert!(res.is_err());
     }
 }

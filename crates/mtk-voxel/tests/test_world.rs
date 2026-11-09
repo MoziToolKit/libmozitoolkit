@@ -235,3 +235,18 @@ fn test_voxel_world_manifest_export_import() {
     assert_eq!(min_x, 0);
     assert_eq!(sz_x, 16);
 }
+
+#[test]
+fn test_rebuild_world_empty_mesh_does_not_panic() {
+    let mut world = VoxelWorld::new(None, None, None);
+    // World is completely empty (no sections or blocks)
+    let res = world.rebuild_all();
+    assert!(res.is_ok());
+    let mesh = res.unwrap();
+    assert_eq!(mesh.vertex_count(), 0);
+    assert_eq!(mesh.triangle_count(), 0);
+
+    // Rebuild with progress callback
+    let res_cb = world.rebuild_all_with_progress(None);
+    assert!(res_cb.is_ok());
+}

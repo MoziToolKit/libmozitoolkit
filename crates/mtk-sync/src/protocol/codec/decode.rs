@@ -22,28 +22,103 @@ pub fn compute_delta_batch_hash(changes: &[DeltaChangeEntry]) -> u64 {
     hasher.digest()
 }
 
+#[inline]
+pub(crate) fn read_array<const N: usize>(
+    buf: &[u8],
+    offset: &mut usize,
+    field: &'static str,
+) -> Result<[u8; N], ProtocolError> {
+    let end = offset
+        .checked_add(N)
+        .ok_or(ProtocolError::TruncatedPayload { field })?;
+    let slice = buf
+        .get(*offset..end)
+        .ok_or(ProtocolError::TruncatedPayload { field })?;
+    *offset = end;
+    slice
+        .try_into()
+        .map_err(|_| ProtocolError::TruncatedPayload { field })
+}
+
+#[inline]
+pub(crate) fn read_slice<'a>(
+    buf: &'a [u8],
+    offset: &mut usize,
+    len: usize,
+    field: &'static str,
+) -> Result<&'a [u8], ProtocolError> {
+    let end = offset
+        .checked_add(len)
+        .ok_or(ProtocolError::TruncatedPayload { field })?;
+    let slice = buf
+        .get(*offset..end)
+        .ok_or(ProtocolError::TruncatedPayload { field })?;
+    *offset = end;
+    Ok(slice)
+}
+
+#[inline]
+pub(crate) fn read_u8(
+    buf: &[u8],
+    offset: &mut usize,
+    field: &'static str,
+) -> Result<u8, ProtocolError> {
+    let val = buf
+        .get(*offset)
+        .copied()
+        .ok_or(ProtocolError::TruncatedPayload { field })?;
+    *offset += 1;
+    Ok(val)
+}
+
+#[inline]
+pub(crate) fn read_u16_le(
+    buf: &[u8],
+    offset: &mut usize,
+    field: &'static str,
+) -> Result<u16, ProtocolError> {
+    read_array::<2>(buf, offset, field).map(u16::from_le_bytes)
+}
+
+#[inline]
+pub(crate) fn read_i32_le(
+    buf: &[u8],
+    offset: &mut usize,
+    field: &'static str,
+) -> Result<i32, ProtocolError> {
+    read_array::<4>(buf, offset, field).map(i32::from_le_bytes)
+}
+
+#[inline]
+pub(crate) fn read_u32_le(
+    buf: &[u8],
+    offset: &mut usize,
+    field: &'static str,
+) -> Result<u32, ProtocolError> {
+    read_array::<4>(buf, offset, field).map(u32::from_le_bytes)
+}
+
+#[inline]
+pub(crate) fn read_u64_le(
+    buf: &[u8],
+    offset: &mut usize,
+    field: &'static str,
+) -> Result<u64, ProtocolError> {
+    read_array::<8>(buf, offset, field).map(u64::from_le_bytes)
+}
+
 /// Helper to read a little-endian u16-length prefixed UTF-8 string.
 pub(crate) fn read_str<'a>(
     buf: &'a [u8],
     offset: &mut usize,
     field: &'static str,
 ) -> Result<&'a str, ProtocolError> {
-    if *offset + 2 > buf.len() {
-        return Err(ProtocolError::TruncatedPayload { field });
-    }
-    let len = u16::from_le_bytes([buf[*offset], buf[*offset + 1]]) as usize;
-    *offset += 2;
-    if *offset + len > buf.len() {
-        return Err(ProtocolError::TruncatedPayload { field });
-    }
-    let s = std::str::from_utf8(&buf[*offset..*offset + len]).map_err(|e| {
-        ProtocolError::Utf8Error {
-            field,
-            detail: e.to_string(),
-        }
-    })?;
-    *offset += len;
-    Ok(s)
+    let len = read_u16_le(buf, offset, field)? as usize;
+    let slice = read_slice(buf, offset, len, field)?;
+    std::str::from_utf8(slice).map_err(|e| ProtocolError::Utf8Error {
+        field,
+        detail: e.to_string(),
+    })
 }
 
 #[inline]
@@ -102,22 +177,20 @@ fn decode_hello(buf: &[u8], offset: &mut usize) -> Result<Packet, ProtocolError>
             field: "Hello fixed fields",
         });
     }
-    let min_version = u16::from_le_bytes(buf[*offset..*offset + 2].try_into().unwrap());
-    let max_version = u16::from_le_bytes(buf[*offset + 2..*offset + 4].try_into().unwrap());
-    let capabilities = u32::from_le_bytes(buf[*offset + 4..*offset + 8].try_into().unwrap());
-    let flags = u32::from_le_bytes(buf[*offset + 8..*offset + 12].try_into().unwrap());
-    let mut cached_world_uuid = [0u8; 16];
-    cached_world_uuid.copy_from_slice(&buf[*offset + 12..*offset + 28]);
-    let cached_epoch = u64::from_le_bytes(buf[*offset + 28..*offset + 36].try_into().unwrap());
-    let cached_seq = u64::from_le_bytes(buf[*offset + 36..*offset + 44].try_into().unwrap());
-    let c_min_x = i32::from_le_bytes(buf[*offset + 44..*offset + 48].try_into().unwrap());
-    let c_min_y = i32::from_le_bytes(buf[*offset + 48..*offset + 52].try_into().unwrap());
-    let c_min_z = i32::from_le_bytes(buf[*offset + 52..*offset + 56].try_into().unwrap());
-    let c_size_x = i32::from_le_bytes(buf[*offset + 56..*offset + 60].try_into().unwrap());
-    let c_size_y = i32::from_le_bytes(buf[*offset + 60..*offset + 64].try_into().unwrap());
-    let c_size_z = i32::from_le_bytes(buf[*offset + 64..*offset + 68].try_into().unwrap());
-    let cached_state_hash = u64::from_le_bytes(buf[*offset + 68..*offset + 76].try_into().unwrap());
-    *offset += 76;
+    let min_version = read_u16_le(buf, offset, "Hello min_version")?;
+    let max_version = read_u16_le(buf, offset, "Hello max_version")?;
+    let capabilities = read_u32_le(buf, offset, "Hello capabilities")?;
+    let flags = read_u32_le(buf, offset, "Hello flags")?;
+    let cached_world_uuid = read_array::<16>(buf, offset, "Hello cached_world_uuid")?;
+    let cached_epoch = read_u64_le(buf, offset, "Hello cached_epoch")?;
+    let cached_seq = read_u64_le(buf, offset, "Hello cached_seq")?;
+    let c_min_x = read_i32_le(buf, offset, "Hello cached_min.x")?;
+    let c_min_y = read_i32_le(buf, offset, "Hello cached_min.y")?;
+    let c_min_z = read_i32_le(buf, offset, "Hello cached_min.z")?;
+    let c_size_x = read_i32_le(buf, offset, "Hello cached_size.x")?;
+    let c_size_y = read_i32_le(buf, offset, "Hello cached_size.y")?;
+    let c_size_z = read_i32_le(buf, offset, "Hello cached_size.z")?;
+    let cached_state_hash = read_u64_le(buf, offset, "Hello cached_state_hash")?;
 
     let auth_token = read_str(buf, offset, "Hello auth_token")?.to_string();
     let cached_dimension = read_str(buf, offset, "Hello cached_dimension")?.to_string();
@@ -144,25 +217,22 @@ fn decode_welcome(buf: &[u8], offset: &mut usize) -> Result<Packet, ProtocolErro
             field: "Welcome fixed fields",
         });
     }
-    let negotiated_version = u16::from_le_bytes(buf[*offset..*offset + 2].try_into().unwrap());
-    let mut server_uuid = [0u8; 16];
-    server_uuid.copy_from_slice(&buf[*offset + 2..*offset + 18]);
-    let epoch = u64::from_le_bytes(buf[*offset + 18..*offset + 26].try_into().unwrap());
-    let server_seq = u64::from_le_bytes(buf[*offset + 26..*offset + 34].try_into().unwrap());
-    let min_x = i32::from_le_bytes(buf[*offset + 34..*offset + 38].try_into().unwrap());
-    let min_y = i32::from_le_bytes(buf[*offset + 38..*offset + 42].try_into().unwrap());
-    let min_z = i32::from_le_bytes(buf[*offset + 42..*offset + 46].try_into().unwrap());
-    let size_x = i32::from_le_bytes(buf[*offset + 46..*offset + 50].try_into().unwrap());
-    let size_y = i32::from_le_bytes(buf[*offset + 50..*offset + 54].try_into().unwrap());
-    let size_z = i32::from_le_bytes(buf[*offset + 54..*offset + 58].try_into().unwrap());
-    let current_state_hash =
-        u64::from_le_bytes(buf[*offset + 58..*offset + 66].try_into().unwrap());
-    let dec_byte = buf[*offset + 66];
+    let negotiated_version = read_u16_le(buf, offset, "Welcome negotiated_version")?;
+    let server_uuid = read_array::<16>(buf, offset, "Welcome server_uuid")?;
+    let epoch = read_u64_le(buf, offset, "Welcome epoch")?;
+    let server_seq = read_u64_le(buf, offset, "Welcome server_seq")?;
+    let min_x = read_i32_le(buf, offset, "Welcome min_x")?;
+    let min_y = read_i32_le(buf, offset, "Welcome min_y")?;
+    let min_z = read_i32_le(buf, offset, "Welcome min_z")?;
+    let size_x = read_i32_le(buf, offset, "Welcome size_x")?;
+    let size_y = read_i32_le(buf, offset, "Welcome size_y")?;
+    let size_z = read_i32_le(buf, offset, "Welcome size_z")?;
+    let current_state_hash = read_u64_le(buf, offset, "Welcome current_state_hash")?;
+    let dec_byte = read_u8(buf, offset, "Welcome decision")?;
     let decision = SyncDecision::from_u8(dec_byte).ok_or(ProtocolError::InvalidEnum {
         field: "SyncDecision",
         val: dec_byte as u32,
     })?;
-    *offset += 67;
 
     let message_or_dimension = read_str(buf, offset, "Welcome message_or_dimension")?.to_string();
 
@@ -185,12 +255,11 @@ fn decode_delta_op(buf: &[u8], offset: &mut usize) -> Result<Packet, ProtocolErr
             field: "DeltaOp header",
         });
     }
-    let epoch = u64::from_le_bytes(buf[*offset..*offset + 8].try_into().unwrap());
-    let seq_id = u64::from_le_bytes(buf[*offset + 8..*offset + 16].try_into().unwrap());
-    let palette_revision = u32::from_le_bytes(buf[*offset + 16..*offset + 20].try_into().unwrap());
-    let count = u16::from_le_bytes(buf[*offset + 20..*offset + 22].try_into().unwrap()) as usize;
-    let batch_xxhash64 = u64::from_le_bytes(buf[*offset + 22..*offset + 30].try_into().unwrap());
-    *offset += 30;
+    let epoch = read_u64_le(buf, offset, "DeltaOp epoch")?;
+    let seq_id = read_u64_le(buf, offset, "DeltaOp seq_id")?;
+    let palette_revision = read_u32_le(buf, offset, "DeltaOp palette_revision")?;
+    let count = read_u16_le(buf, offset, "DeltaOp count")? as usize;
+    let batch_xxhash64 = read_u64_le(buf, offset, "DeltaOp batch_xxhash64")?;
 
     if count > MAX_DELTA_BATCH_CHANGES {
         return Err(ProtocolError::ResourceLimitExceeded {
@@ -201,7 +270,15 @@ fn decode_delta_op(buf: &[u8], offset: &mut usize) -> Result<Packet, ProtocolErr
     }
 
     let entry_size = 14; // 3 * 4 + 2
-    if *offset + count * entry_size > buf.len() {
+    let entries_len =
+        count
+            .checked_mul(entry_size)
+            .ok_or(ProtocolError::ResourceLimitExceeded {
+                resource: "Delta Changes per Batch",
+                limit: MAX_DELTA_BATCH_CHANGES,
+                actual: count,
+            })?;
+    if *offset + entries_len > buf.len() {
         return Err(ProtocolError::TruncatedPayload {
             field: "DeltaOp entries",
         });
@@ -209,11 +286,10 @@ fn decode_delta_op(buf: &[u8], offset: &mut usize) -> Result<Packet, ProtocolErr
 
     let mut changes = Vec::with_capacity(count);
     for _ in 0..count {
-        let rx = i32::from_le_bytes(buf[*offset..*offset + 4].try_into().unwrap());
-        let ry = i32::from_le_bytes(buf[*offset + 4..*offset + 8].try_into().unwrap());
-        let rz = i32::from_le_bytes(buf[*offset + 8..*offset + 12].try_into().unwrap());
-        let state_id = u16::from_le_bytes(buf[*offset + 12..*offset + 14].try_into().unwrap());
-        *offset += 14;
+        let rx = read_i32_le(buf, offset, "DeltaOp entry rx")?;
+        let ry = read_i32_le(buf, offset, "DeltaOp entry ry")?;
+        let rz = read_i32_le(buf, offset, "DeltaOp entry rz")?;
+        let state_id = read_u16_le(buf, offset, "DeltaOp entry state_id")?;
         changes.push(DeltaChangeEntry {
             rel_pos: IVec3::new(rx, ry, rz),
             state_id,
@@ -245,22 +321,15 @@ fn decode_palette_update(buf: &[u8], offset: &mut usize) -> Result<Packet, Proto
             field: "PaletteUpdate header",
         });
     }
-    let epoch = u64::from_le_bytes(buf[*offset..*offset + 8].try_into().unwrap());
-    let seq_id = u64::from_le_bytes(buf[*offset + 8..*offset + 16].try_into().unwrap());
-    let base_revision = u32::from_le_bytes(buf[*offset + 16..*offset + 20].try_into().unwrap());
-    let new_revision = u32::from_le_bytes(buf[*offset + 20..*offset + 24].try_into().unwrap());
-    let count = u16::from_le_bytes(buf[*offset + 24..*offset + 26].try_into().unwrap()) as usize;
-    *offset += 26;
+    let epoch = read_u64_le(buf, offset, "PaletteUpdate epoch")?;
+    let seq_id = read_u64_le(buf, offset, "PaletteUpdate seq_id")?;
+    let base_revision = read_u32_le(buf, offset, "PaletteUpdate base_revision")?;
+    let new_revision = read_u32_le(buf, offset, "PaletteUpdate new_revision")?;
+    let count = read_u16_le(buf, offset, "PaletteUpdate count")? as usize;
 
     let mut entries = Vec::with_capacity(count);
     for _ in 0..count {
-        if *offset + 2 > buf.len() {
-            return Err(ProtocolError::TruncatedPayload {
-                field: "PaletteUpdate state_id",
-            });
-        }
-        let id = u16::from_le_bytes(buf[*offset..*offset + 2].try_into().unwrap());
-        *offset += 2;
+        let id = read_u16_le(buf, offset, "PaletteUpdate state_id")?;
         let s = read_str(buf, offset, "PaletteUpdate state string")?.to_string();
         entries.push((id, s));
     }
@@ -278,15 +347,13 @@ fn decode_cancel(buf: &[u8], offset: &mut usize) -> Result<Packet, ProtocolError
     if *offset + 25 > buf.len() {
         return Err(ProtocolError::TruncatedPayload { field: "Cancel" });
     }
-    let epoch = u64::from_le_bytes(buf[*offset..*offset + 8].try_into().unwrap());
-    let mut snapshot_uuid = [0u8; 16];
-    snapshot_uuid.copy_from_slice(&buf[*offset + 8..*offset + 24]);
-    let r_byte = buf[*offset + 24];
+    let epoch = read_u64_le(buf, offset, "Cancel epoch")?;
+    let snapshot_uuid = read_array::<16>(buf, offset, "Cancel snapshot_uuid")?;
+    let r_byte = read_u8(buf, offset, "Cancel reason")?;
     let reason = CancelReason::from_u8(r_byte).ok_or(ProtocolError::InvalidEnum {
         field: "CancelReason",
         val: r_byte as u32,
     })?;
-    *offset += 25;
 
     Ok(Packet::Cancel {
         epoch,
@@ -301,15 +368,14 @@ fn decode_resync_request(buf: &[u8], offset: &mut usize) -> Result<Packet, Proto
             field: "ResyncRequest",
         });
     }
-    let epoch = u64::from_le_bytes(buf[*offset..*offset + 8].try_into().unwrap());
-    let missing_from_seq = u64::from_le_bytes(buf[*offset + 8..*offset + 16].try_into().unwrap());
-    let missing_to_seq = u64::from_le_bytes(buf[*offset + 16..*offset + 24].try_into().unwrap());
-    let r_byte = buf[*offset + 24];
+    let epoch = read_u64_le(buf, offset, "ResyncRequest epoch")?;
+    let missing_from_seq = read_u64_le(buf, offset, "ResyncRequest missing_from_seq")?;
+    let missing_to_seq = read_u64_le(buf, offset, "ResyncRequest missing_to_seq")?;
+    let r_byte = read_u8(buf, offset, "ResyncRequest reason")?;
     let reason = ResyncReason::from_u8(r_byte).ok_or(ProtocolError::InvalidEnum {
         field: "ResyncReason",
         val: r_byte as u32,
     })?;
-    *offset += 25;
 
     Ok(Packet::ResyncRequest {
         epoch,
@@ -323,8 +389,7 @@ fn decode_ping(buf: &[u8], offset: &mut usize) -> Result<Packet, ProtocolError> 
     if *offset + 8 > buf.len() {
         return Err(ProtocolError::TruncatedPayload { field: "Ping" });
     }
-    let timestamp = u64::from_le_bytes(buf[*offset..*offset + 8].try_into().unwrap());
-    *offset += 8;
+    let timestamp = read_u64_le(buf, offset, "Ping timestamp")?;
     Ok(Packet::Ping { timestamp })
 }
 
@@ -332,8 +397,7 @@ fn decode_pong(buf: &[u8], offset: &mut usize) -> Result<Packet, ProtocolError> 
     if *offset + 8 > buf.len() {
         return Err(ProtocolError::TruncatedPayload { field: "Pong" });
     }
-    let timestamp = u64::from_le_bytes(buf[*offset..*offset + 8].try_into().unwrap());
-    *offset += 8;
+    let timestamp = read_u64_le(buf, offset, "Pong timestamp")?;
     Ok(Packet::Pong { timestamp })
 }
 
@@ -343,13 +407,12 @@ fn decode_error(buf: &[u8], offset: &mut usize) -> Result<Packet, ProtocolError>
             field: "Error fixed fields",
         });
     }
-    let epoch = u64::from_le_bytes(buf[*offset..*offset + 8].try_into().unwrap());
-    let code_val = u16::from_le_bytes(buf[*offset + 8..*offset + 10].try_into().unwrap());
+    let epoch = read_u64_le(buf, offset, "Error epoch")?;
+    let code_val = read_u16_le(buf, offset, "Error code_val")?;
     let error_code = ErrorCode::from_u16(code_val).ok_or(ProtocolError::InvalidEnum {
         field: "ErrorCode",
         val: code_val as u32,
     })?;
-    *offset += 10;
     let message = read_str(buf, offset, "Error message")?.to_string();
 
     Ok(Packet::Error {
@@ -365,22 +428,15 @@ fn decode_delta_entity(buf: &[u8], offset: &mut usize) -> Result<Packet, Protoco
             field: "DeltaEntity header",
         });
     }
-    let epoch = u64::from_le_bytes(buf[*offset..*offset + 8].try_into().unwrap());
-    let seq_id = u64::from_le_bytes(buf[*offset + 8..*offset + 16].try_into().unwrap());
-    let rx = u32::from_le_bytes(buf[*offset + 16..*offset + 20].try_into().unwrap()) as i32;
-    let ry = u32::from_le_bytes(buf[*offset + 20..*offset + 24].try_into().unwrap()) as i32;
-    let rz = u32::from_le_bytes(buf[*offset + 24..*offset + 28].try_into().unwrap()) as i32;
-    let payload_len =
-        u32::from_le_bytes(buf[*offset + 28..*offset + 32].try_into().unwrap()) as usize;
-    *offset += 32;
+    let epoch = read_u64_le(buf, offset, "DeltaEntity epoch")?;
+    let seq_id = read_u64_le(buf, offset, "DeltaEntity seq_id")?;
+    let rx = read_i32_le(buf, offset, "DeltaEntity rx")?;
+    let ry = read_i32_le(buf, offset, "DeltaEntity ry")?;
+    let rz = read_i32_le(buf, offset, "DeltaEntity rz")?;
+    let payload_len = read_u32_le(buf, offset, "DeltaEntity payload_len")? as usize;
 
     let entity = if payload_len > 0 {
-        if *offset + payload_len > buf.len() {
-            return Err(ProtocolError::TruncatedPayload {
-                field: "DeltaEntity payload",
-            });
-        }
-        let payload_slice = &buf[*offset..*offset + payload_len];
+        let payload_slice = read_slice(buf, offset, payload_len, "DeltaEntity payload")?;
         decode_entity_payload(payload_slice)
     } else {
         None

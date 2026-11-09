@@ -71,7 +71,9 @@ impl VoxelWorld {
                 ));
             }
             self.last_profile = Some(profiler.finish());
-            return Ok(self.world_mesh.as_ref().unwrap());
+            return self.world_mesh.as_ref().ok_or_else(|| {
+                VoxelError::MalformedSnapshot("World mesh is uninitialized".to_string())
+            });
         }
 
         #[cfg(feature = "parallel")]
@@ -134,7 +136,9 @@ impl VoxelWorld {
         self.storage.clear_dirty_sections();
 
         self.last_profile = Some(profiler.finish());
-        Ok(self.world_mesh.as_ref().unwrap())
+        self.world_mesh.as_ref().ok_or_else(|| {
+            VoxelError::MalformedSnapshot("World mesh assembly produced no mesh".to_string())
+        })
     }
 
     /// Incrementally rebuilds only the modified/dirty sections directly in-place into the

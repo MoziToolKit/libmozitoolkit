@@ -97,15 +97,19 @@ impl ChunkParser {
         let data_longs = bs.long_array("data");
         if palette.len() == 1 || data_longs.is_none() {
             // Entire 16x16x16 section is filled with a single state
-            let single_state = &palette[0];
-            let pal_id = 1u16;
-            section.palette.push(single_state.clone());
-            section.voxels.fill(pal_id);
-            section.non_air_count = SECTION_VOLUME as u32;
-            return Ok(Some(section));
+            if let Some(single_state) = palette.first() {
+                let pal_id = 1u16;
+                section.palette.push(single_state.clone());
+                section.voxels.fill(pal_id);
+                section.non_air_count = SECTION_VOLUME as u32;
+                return Ok(Some(section));
+            }
+            return Ok(None);
         }
 
-        let data = data_longs.unwrap();
+        let Some(data) = data_longs else {
+            return Ok(Some(section));
+        };
         let bits_per_block =
             (32 - ((palette.len() as u32).saturating_sub(1)).leading_zeros()).max(4) as usize;
         let blocks_per_long = 64 / bits_per_block;
@@ -493,5 +497,88 @@ mod tests {
             }
             _ => panic!("Expected DecoratedPot"),
         }
+    }
+
+    #[test]
+    fn test_parse_block_states_missing_data_longs_and_empty_palette() {
+        let chunk_coord = glam::IVec3::new(0, 0, 0);
+
+        // Case 1: Palette with 1 block, missing data_longs (fills entire section)
+        let mut bs_compound = NbtCompound::new();
+        let mut pal_list = Vec::new();
+        let mut stone_comp = NbtCompound::new();
+        stone_comp.entries.push((
+            NbtStr::from_borrowed("Name"),
+            NbtTag::String(NbtStr::from_borrowed("minecraft:stone")),
+        ));
+        pal_list.push(stone_comp);
+        bs_compound.entries.push((
+            NbtStr::from_borrowed("palette"),
+            NbtTag::List(NbtList::Compound(pal_list)),
+        ));
+
+        let mut sec_comp = NbtCompound::new();
+        sec_comp
+            .entries
+            .push((NbtStr::from_borrowed("Y"), NbtTag::Byte(0)));
+        sec_comp.entries.push((
+            NbtStr::from_borrowed("block_states"),
+            NbtTag::Compound(bs_compound),
+        ));
+
+        let parsed = ChunkParser::parse_section(chunk_coord, &sec_comp).expect("parse section");
+        assert!(parsed.is_some());
+        let sec = parsed.unwrap();
+        assert_eq!(sec.palette.len(), 2); // air + stone
+        assert_eq!(sec.non_air_count, SECTION_VOLUME as u32);
+
+        // Case 2: Empty palette compounds -> returns Ok(None) without panic
+        let mut empty_bs = NbtCompound::new();
+        empty_bs.entries.push((
+            NbtStr::from_borrowed("palette"),
+            NbtTag::List(NbtList::Compound(Vec::new())),
+        ));
+        let mut sec_comp_empty = NbtCompound::new();
+        sec_comp_empty
+            .entries
+            .push((NbtStr::from_borrowed("Y"), NbtTag::Byte(0)));
+        sec_comp_empty.entries.push((
+            NbtStr::from_borrowed("block_states"),
+            NbtTag::Compound(empty_bs),
+        ));
+        let parsed_empty =
+            ChunkParser::parse_section(chunk_coord, &sec_comp_empty).expect("parse empty");
+        assert!(parsed_empty.is_none());
+
+        // Case 3: Multi-state palette with MISSING data_longs -> returns Ok(Some(sec)) without panic
+        let mut multi_bs = NbtCompound::new();
+        let mut multi_pal = Vec::new();
+        let mut dirt_comp = NbtCompound::new();
+        dirt_comp.entries.push((
+            NbtStr::from_borrowed("Name"),
+            NbtTag::String(NbtStr::from_borrowed("minecraft:dirt")),
+        ));
+        multi_pal.push(dirt_comp);
+        let mut grass_comp = NbtCompound::new();
+        grass_comp.entries.push((
+            NbtStr::from_borrowed("Name"),
+            NbtTag::String(NbtStr::from_borrowed("minecraft:grass_block")),
+        ));
+        multi_pal.push(grass_comp);
+        multi_bs.entries.push((
+            NbtStr::from_borrowed("palette"),
+            NbtTag::List(NbtList::Compound(multi_pal)),
+        ));
+        let mut sec_comp_multi = NbtCompound::new();
+        sec_comp_multi
+            .entries
+            .push((NbtStr::from_borrowed("Y"), NbtTag::Byte(0)));
+        sec_comp_multi.entries.push((
+            NbtStr::from_borrowed("block_states"),
+            NbtTag::Compound(multi_bs),
+        ));
+        let parsed_multi =
+            ChunkParser::parse_section(chunk_coord, &sec_comp_multi).expect("parse multi");
+        assert!(parsed_multi.is_some());
     }
 }
