@@ -89,6 +89,22 @@ impl TextureKeyVariants {
             }
         }
 
+        // 3.5. Painting texture aliases
+        let painting_spec = key
+            .strip_prefix("minecraft:painting/")
+            .or_else(|| key.strip_prefix("painting/"))
+            .or_else(|| key.strip_prefix("minecraft:textures/painting/"))
+            .or_else(|| key.strip_prefix("textures/painting/"));
+
+        if let Some(spec) = painting_spec {
+            add(format!("minecraft:painting/{spec}"));
+            add(format!("painting/{spec}"));
+            add(format!("minecraft:textures/painting/{spec}"));
+            add(format!("textures/painting/{spec}"));
+            add(format!("minecraft:{spec}"));
+            add(spec.to_string());
+        }
+
         // 4. Standard namespace aliases
         if let Some(stripped) = key.strip_prefix("minecraft:") {
             add(stripped.to_string());
@@ -167,6 +183,23 @@ mod tests {
                 loc
             );
         }
+    }
+
+    #[test]
+    fn test_painting_key_variants() {
+        let variants = TextureKeyVariants::for_key("minecraft:painting/kebab");
+        assert!(variants.contains(&"minecraft:painting/kebab".to_string()));
+        assert!(variants.contains(&"painting/kebab".to_string()));
+        assert!(variants.contains(&"minecraft:kebab".to_string()));
+        assert!(variants.contains(&"kebab".to_string()));
+
+        let locs = TextureKeyVariants::resource_locations_for_key("minecraft:painting/water");
+        assert!(locs
+            .iter()
+            .any(|l| l.namespace == "minecraft" && l.path == "painting/water"));
+        assert!(locs
+            .iter()
+            .any(|l| l.namespace == "minecraft" && l.path == "water"));
     }
 
     #[test]

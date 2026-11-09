@@ -378,14 +378,11 @@ mod tests {
             10,
             65,
             -20,
-            "minecraft:item_frame[facing=north]",
+            "minecraft:white_banner[rotation=2]",
             "minecraft:plains",
-            Some(&BlockEntityData::new_item_frame(
-                "minecraft:diamond_sword",
-                1,
-                2,
-                true,
-                false,
+            Some(&BlockEntityData::new_banner(
+                "white",
+                vec![("stripe_top", "blue")],
             )),
             Some(14),
         );
@@ -393,9 +390,14 @@ mod tests {
             11,
             65,
             -20,
-            "minecraft:painting[facing=west]",
+            "minecraft:decorated_pot[facing=north]",
             "minecraft:plains",
-            Some(&BlockEntityData::new_painting("minecraft:kebab", 1, 1)),
+            Some(&BlockEntityData::new_decorated_pot([
+                Some("angler"),
+                None,
+                None,
+                None,
+            ])),
             None,
         );
 
@@ -405,12 +407,12 @@ mod tests {
         assert_eq!(payload.entity_palette.len(), 2);
 
         // Verify typed lookup
-        let be1 = payload.entity_data_at(1).expect("Must find item frame");
+        let be1 = payload.entity_data_at(1).expect("Must find banner");
         match be1 {
-            BlockEntityData::ItemFrame { item_id, .. } => {
-                assert_eq!(item_id, "minecraft:diamond_sword");
+            BlockEntityData::Banner { base_color, .. } => {
+                assert_eq!(base_color, "white");
             }
-            _ => panic!("Expected ItemFrame"),
+            _ => panic!("Expected Banner"),
         }
 
         // Convert to point cloud and verify
@@ -420,12 +422,9 @@ mod tests {
         assert_eq!(cloud.state_at(0), Some("minecraft:stone"));
         assert_eq!(
             cloud.state_at(1),
-            Some("minecraft:item_frame[facing=north]")
+            Some("minecraft:white_banner[rotation=2]")
         );
-        assert!(cloud
-            .entity_at(1)
-            .unwrap()
-            .contains("\"minecraft:item_frame\""));
+        assert!(cloud.entity_at(1).unwrap().contains("\"minecraft:banner\""));
 
         // Roundtrip from point cloud back to sparse payload
         let payload2 = SparseVoxelPayload::from_point_cloud(&cloud);
@@ -445,14 +444,18 @@ mod tests {
             5,
             10,
             15,
-            "minecraft:end_crystal",
+            "minecraft:oak_sign[rotation=4]",
             "minecraft:the_end",
-            Some(&BlockEntityData::new_end_crystal(true, None)),
+            Some(&BlockEntityData::new_sign(
+                vec!["hello".to_string()],
+                None::<&str>,
+                false,
+            )),
             Some(15),
         );
 
         let json = payload.to_json().expect("Serialize sparse payload to json");
-        assert!(json.contains("\"minecraft:end_crystal\""));
+        assert!(json.contains("minecraft:sign"));
 
         let deserialized = SparseVoxelPayload::from_json(&json).expect("Deserialize json");
         assert_eq!(payload, deserialized);

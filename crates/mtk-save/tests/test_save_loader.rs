@@ -95,68 +95,90 @@ fn test_legacy_dimension_folders_are_ignored() {
 
 #[test]
 fn test_save_loader_detects_paintings_in_entities_mca() {
-    let candidate = std::path::PathBuf::from(
-        "/Users/jaxlocke/Library/Application Support/PrismLauncher/instances/26.2/minecraft/saves/新的世界 (1)",
-    );
-    if !candidate.exists() {
-        eprintln!("Skipping user test save: path does not exist");
-        return;
-    }
+    let candidate = mtk_testkit::save_world()
+        .or_else(|| {
+            let p = std::path::PathBuf::from(
+                "/Users/jaxlocke/Library/Application Support/PrismLauncher/instances/26.2/minecraft/saves/新的世界 (1)",
+            );
+            if p.exists() {
+                Some(p)
+            } else {
+                None
+            }
+        });
+
+    let save_dir = match candidate {
+        Some(c) => c,
+        None => {
+            eprintln!("Skipping test: no test save found via mtk_testkit::save_world()");
+            return;
+        }
+    };
 
     let mut storage = VoxelStorage::new();
     let min_coord = IVec3::new(-17, -61, -17);
     let max_coord = IVec3::new(19, -48, 17);
 
-    let loaded = SaveLoader::load_box_into_storage(
-        &candidate,
+    let (loaded, entities) = SaveLoader::load_box_with_entities(
+        &save_dir,
         "overworld",
         min_coord,
         max_coord,
         &mut storage,
+        None,
     )
     .expect("Failed loading user save box");
 
     assert!(loaded > 0, "Sections should have been loaded");
+    assert!(
+        entities.len() >= 4,
+        "Should have extracted at least 4 visual entities"
+    );
 
     // 1. Unpacked painting (4x4)
-    let block_unpacked = storage.get_block(-8, -59, 10);
-    assert_eq!(
-        block_unpacked,
-        "minecraft:painting[facing=east,variant=unpacked]"
-    );
-    let entity_unpacked = storage
-        .get_block_entity(-8, -59, 10)
+    let unpacked = entities
+        .iter()
+        .find(|e| {
+            if let mtk_model::EntityKindData::Painting(p) = &e.kind {
+                p.variant == "unpacked"
+            } else {
+                false
+            }
+        })
         .expect("Unpacked painting entity should exist");
-    match entity_unpacked {
-        mtk_model::BlockEntityData::Painting {
-            variant,
-            width,
-            height,
-        } => {
-            assert_eq!(variant, "unpacked");
-            assert_eq!(*width, 4);
-            assert_eq!(*height, 4);
-        }
-        _ => panic!("Expected BlockEntityData::Painting"),
+    assert_eq!(unpacked.facing, Some(mtk_core::Direction::East));
+    assert_eq!(unpacked.position, glam::DVec3::new(-8.0, -59.0, 10.0));
+    if let mtk_model::EntityKindData::Painting(p) = &unpacked.kind {
+        assert_eq!(p.width, 4);
+        assert_eq!(p.height, 4);
     }
 
     // 2. Humble painting (2x2)
-    let block_humble = storage.get_block(-8, -59, 7);
-    assert_eq!(
-        block_humble,
-        "minecraft:painting[facing=east,variant=humble]"
-    );
+    assert!(entities.iter().any(|e| {
+        if let mtk_model::EntityKindData::Painting(p) = &e.kind {
+            p.variant == "humble" && p.width == 2 && p.height == 2
+        } else {
+            false
+        }
+    }));
 
     // 3. Pool painting (2x1)
-    let block_pool = storage.get_block(-8, -57, 7);
-    assert_eq!(block_pool, "minecraft:painting[facing=east,variant=pool]");
+    assert!(entities.iter().any(|e| {
+        if let mtk_model::EntityKindData::Painting(p) = &e.kind {
+            p.variant == "pool" && p.width == 2 && p.height == 1
+        } else {
+            false
+        }
+    }));
 
     // 4. Sunset painting (2x1)
-    let block_sunset = storage.get_block(-8, -60, 7);
-    assert_eq!(
-        block_sunset,
-        "minecraft:painting[facing=east,variant=sunset]"
-    );
+    assert!(entities.iter().any(|e| {
+        if let mtk_model::EntityKindData::Painting(p) = &e.kind {
+            p.variant == "sunset" && p.width == 2 && p.height == 1
+        } else {
+            false
+        }
+    }));
 
     println!("All 4 paintings successfully detected and loaded from user's save!");
 }

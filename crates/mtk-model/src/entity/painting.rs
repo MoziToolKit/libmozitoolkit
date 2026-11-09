@@ -569,7 +569,23 @@ fn closest_direction(normal: Vec3) -> Direction {
 /// - Back faces: tiled wooden `back.png` per 1x1 block.
 /// - Border faces: 1/16 block wooden rim slices along outer perimeter only.
 pub fn create_painting_baked_model(variant_name: &str, facing: Direction) -> BakedModel {
-    let (width, height) = painting_dimension(variant_name);
+    create_painting_baked_model_with_size(variant_name, facing, 0, 0)
+}
+
+/// Creates a procedural `BakedModel` for a painting with explicit dimensions or registry fallback.
+pub fn create_painting_baked_model_with_size(
+    variant_name: &str,
+    facing: Direction,
+    custom_w: u32,
+    custom_h: u32,
+) -> BakedModel {
+    let (width, height) = if custom_w > 0 && custom_h > 0 {
+        (custom_w as u8, custom_h as u8)
+    } else {
+        painting_dimension(variant_name)
+    };
+    let width = width.max(1);
+    let height = height.max(1);
     let front_texture = painting_texture_id(variant_name);
     let back_texture = PAINTING_BACK_TEXTURE;
 
@@ -612,16 +628,19 @@ pub fn create_painting_baked_model(variant_name: &str, facing: Direction) -> Bak
                     verts[i] = transform_point(*p);
                 }
 
-                let u_min = (sx as f32) / w;
-                let u_max = ((sx + 1) as f32) / w;
-                let v_min = (sy as f32) / h;
-                let v_max = ((sy + 1) as f32) / h;
+                // Vanilla PaintingRenderer UV alignment:
+                // frontU0 = (width - sx) / w; frontU1 = (width - (sx + 1)) / w
+                // frontV0 = (height - sy) / h; frontV1 = (height - (sy + 1)) / h
+                let u0 = (width - sx) as f32 / w;
+                let u1 = (width - (sx + 1)) as f32 / w;
+                let v0 = (height - sy) as f32 / h;
+                let v1 = (height - (sy + 1)) as f32 / h;
 
                 let uvs = [
-                    Vec2::new(u_max, v_min),
-                    Vec2::new(u_min, v_min),
-                    Vec2::new(u_min, v_max),
-                    Vec2::new(u_max, v_max),
+                    Vec2::new(u1, v0),
+                    Vec2::new(u0, v0),
+                    Vec2::new(u0, v1),
+                    Vec2::new(u1, v1),
                 ];
 
                 let norm = rot_mat
@@ -635,7 +654,7 @@ pub fn create_painting_baked_model(variant_name: &str, facing: Direction) -> Bak
                         direction: dir,
                         texture: front_texture.clone(),
                         uv_rot: 0.0,
-                        uv_bounds: [u_min, v_min, u_max, v_max],
+                        uv_bounds: [u1, v1, u0, v0],
                         tint_index: -1,
                         cullface: None,
                         vertices: verts,
@@ -661,11 +680,12 @@ pub fn create_painting_baked_model(variant_name: &str, facing: Direction) -> Bak
                     verts[i] = transform_point(*p);
                 }
 
+                // Vanilla PaintingRenderer back quad: (x0,y0)->(1,0), (x1,y0)->(0,0), (x1,y1)->(0,1), (x0,y1)->(1,1)
                 let uvs = [
-                    Vec2::new(0.0, 1.0),
-                    Vec2::new(1.0, 1.0),
                     Vec2::new(1.0, 0.0),
                     Vec2::new(0.0, 0.0),
+                    Vec2::new(0.0, 1.0),
+                    Vec2::new(1.0, 1.0),
                 ];
 
                 let norm = rot_mat
@@ -706,10 +726,10 @@ pub fn create_painting_baked_model(variant_name: &str, facing: Direction) -> Bak
                 }
 
                 let uvs = [
-                    Vec2::new(0.0, 1.0),
-                    Vec2::new(1.0, 1.0),
-                    Vec2::new(1.0, 1.0 - PAINTING_RIM_UV_THICKNESS),
-                    Vec2::new(0.0, 1.0 - PAINTING_RIM_UV_THICKNESS),
+                    Vec2::new(0.0, 0.0),
+                    Vec2::new(1.0, 0.0),
+                    Vec2::new(1.0, PAINTING_RIM_UV_THICKNESS),
+                    Vec2::new(0.0, PAINTING_RIM_UV_THICKNESS),
                 ];
 
                 let norm = rot_mat.transform_vector3(Vec3::Y).normalize();
@@ -721,7 +741,7 @@ pub fn create_painting_baked_model(variant_name: &str, facing: Direction) -> Bak
                         direction: dir,
                         texture: back_texture.to_string(),
                         uv_rot: 0.0,
-                        uv_bounds: [0.0, 1.0 - PAINTING_RIM_UV_THICKNESS, 1.0, 1.0],
+                        uv_bounds: [0.0, 0.0, 1.0, PAINTING_RIM_UV_THICKNESS],
                         tint_index: -1,
                         cullface: None,
                         vertices: verts,
@@ -748,10 +768,10 @@ pub fn create_painting_baked_model(variant_name: &str, facing: Direction) -> Bak
                 }
 
                 let uvs = [
-                    Vec2::new(0.0, 1.0 - PAINTING_RIM_UV_THICKNESS),
-                    Vec2::new(1.0, 1.0 - PAINTING_RIM_UV_THICKNESS),
-                    Vec2::new(1.0, 1.0),
-                    Vec2::new(0.0, 1.0),
+                    Vec2::new(0.0, 0.0),
+                    Vec2::new(1.0, 0.0),
+                    Vec2::new(1.0, PAINTING_RIM_UV_THICKNESS),
+                    Vec2::new(0.0, PAINTING_RIM_UV_THICKNESS),
                 ];
 
                 let norm = rot_mat.transform_vector3(Vec3::NEG_Y).normalize();
@@ -763,7 +783,7 @@ pub fn create_painting_baked_model(variant_name: &str, facing: Direction) -> Bak
                         direction: dir,
                         texture: back_texture.to_string(),
                         uv_rot: 0.0,
-                        uv_bounds: [0.0, 1.0 - PAINTING_RIM_UV_THICKNESS, 1.0, 1.0],
+                        uv_bounds: [0.0, 0.0, 1.0, PAINTING_RIM_UV_THICKNESS],
                         tint_index: -1,
                         cullface: None,
                         vertices: verts,
@@ -790,10 +810,10 @@ pub fn create_painting_baked_model(variant_name: &str, facing: Direction) -> Bak
                 }
 
                 let uvs = [
-                    Vec2::new(PAINTING_RIM_UV_THICKNESS, 1.0),
                     Vec2::new(PAINTING_RIM_UV_THICKNESS, 0.0),
-                    Vec2::new(0.0, 0.0),
+                    Vec2::new(PAINTING_RIM_UV_THICKNESS, 1.0),
                     Vec2::new(0.0, 1.0),
+                    Vec2::new(0.0, 0.0),
                 ];
 
                 let norm = rot_mat.transform_vector3(Vec3::X).normalize();
@@ -832,10 +852,10 @@ pub fn create_painting_baked_model(variant_name: &str, facing: Direction) -> Bak
                 }
 
                 let uvs = [
-                    Vec2::new(0.0, 1.0),
-                    Vec2::new(0.0, 0.0),
                     Vec2::new(PAINTING_RIM_UV_THICKNESS, 0.0),
                     Vec2::new(PAINTING_RIM_UV_THICKNESS, 1.0),
+                    Vec2::new(0.0, 1.0),
+                    Vec2::new(0.0, 0.0),
                 ];
 
                 let norm = rot_mat.transform_vector3(Vec3::NEG_X).normalize();
@@ -878,8 +898,9 @@ pub fn create_painting_baked_model(variant_name: &str, facing: Direction) -> Bak
 
     let mut model = BakedModel {
         block_state: format!(
-            "minecraft:painting[variant={},facing={:?}]",
-            variant_name, facing
+            "minecraft:painting[facing={},variant={}]",
+            facing.as_str(),
+            variant_name
         ),
         elements,
         obj_faces: Vec::new(),
@@ -1000,6 +1021,43 @@ mod tests {
         assert_eq!(mesh.positions.len(), 24);
         assert_eq!(mesh.uvs.len(), 24);
         assert_eq!(mesh.normals.len(), 24);
+    }
+
+    #[test]
+    fn test_painting_uv_alignment_with_vanilla() {
+        // 1x1 painting
+        let model = create_painting_baked_model("kebab", Direction::North);
+        let el = &model.elements[0];
+        let front = el.faces.get(&Direction::North).expect("Front face");
+        // pt0 (x0, y1) bottom-left: u=0.0, v=1.0
+        // pt1 (x1, y1) bottom-right: u=1.0, v=1.0
+        // pt2 (x1, y0) top-right: u=1.0, v=0.0
+        // pt3 (x0, y0) top-left: u=0.0, v=0.0
+        assert_eq!(front.uvs[0], Vec2::new(0.0, 1.0));
+        assert_eq!(front.uvs[1], Vec2::new(1.0, 1.0));
+        assert_eq!(front.uvs[2], Vec2::new(1.0, 0.0));
+        assert_eq!(front.uvs[3], Vec2::new(0.0, 0.0));
+
+        // Back face:
+        let back = el.faces.get(&Direction::South).expect("Back face");
+        assert_eq!(back.uvs[0], Vec2::new(1.0, 0.0));
+        assert_eq!(back.uvs[1], Vec2::new(0.0, 0.0));
+        assert_eq!(back.uvs[2], Vec2::new(0.0, 1.0));
+        assert_eq!(back.uvs[3], Vec2::new(1.0, 1.0));
+
+        // 2x1 painting: sx=0 (right segment of world, left segment of texture is sx=1)
+        // For sx=width-1 (sx=1), U ranges from 0.0 to 0.5 (left slice of texture)
+        // For sx=0, U ranges from 0.5 to 1.0 (right slice of texture)
+        let model_2x1 = create_painting_baked_model("pool", Direction::North);
+        // segment 0 is sx=0, sy=0
+        let seg_right_world = &model_2x1.elements[0];
+        let front_right = seg_right_world.faces.get(&Direction::North).unwrap();
+        assert_eq!(front_right.uv_bounds, [0.5, 0.0, 1.0, 1.0]);
+
+        // segment 1 is sx=1, sy=0 (viewer's left)
+        let seg_left_world = &model_2x1.elements[1];
+        let front_left = seg_left_world.faces.get(&Direction::North).unwrap();
+        assert_eq!(front_left.uv_bounds, [0.0, 0.0, 0.5, 1.0]);
     }
 
     #[test]

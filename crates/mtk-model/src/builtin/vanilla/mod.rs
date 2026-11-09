@@ -127,7 +127,7 @@ pub fn get_builtin_model_for_state_and_entity(
     None
 }
 
-/// Pre-baked direct model synthesizer for entity blocks (e.g. Decorated Pot).
+/// Pre-baked direct model synthesizer for entity blocks (e.g. Copper Golem Statue, Decorated Pot).
 pub fn get_builtin_baked_model_for_state_and_entity(
     blockstate: &BlockState,
     entity: Option<&crate::entity::BlockEntityData>,
@@ -139,27 +139,6 @@ pub fn get_builtin_baked_model_for_state_and_entity(
 
     if clean == "copper_golem_statue" || clean.ends_with("_copper_golem_statue") {
         return Some(crate::entity::copper_statue::create_copper_statue_baked_model(blockstate));
-    }
-
-    if clean == "painting" {
-        let facing = blockstate
-            .properties
-            .get("facing")
-            .and_then(|f| mtk_core::Direction::parse_loose(f))
-            .unwrap_or(mtk_core::Direction::North);
-
-        let variant = match entity {
-            Some(crate::entity::BlockEntityData::Painting { variant, .. }) => variant.as_str(),
-            _ => blockstate
-                .properties
-                .get("variant")
-                .map(|s| s.as_str())
-                .unwrap_or("kebab"),
-        };
-
-        return Some(crate::entity::painting::create_painting_baked_model(
-            variant, facing,
-        ));
     }
 
     if clean == "decorated_pot" {

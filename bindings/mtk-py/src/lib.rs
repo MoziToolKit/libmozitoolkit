@@ -163,7 +163,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // 9. Minecraft Save Loader
     m.add_function(wrap_pyfunction!(save::inspect_minecraft_save, m)?)?;
-    m.add_function(wrap_pyfunction!(save::load_minecraft_save_storage, m)?)?;
     m.add_function(wrap_pyfunction!(save::load_and_mesh_minecraft_save, m)?)?;
 
     // 10. Scene Interchange (.mtkscene)

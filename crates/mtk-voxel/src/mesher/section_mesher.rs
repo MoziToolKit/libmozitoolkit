@@ -159,8 +159,18 @@ impl SectionMesher {
                         }
                     }
 
-                    // Skip static solid geometry for invisible technical / placeholder blocks without explicit model
-                    if !entry.has_model && is_non_mesh_placeholder_block(state_str) {
+                    let local_idx = ((lx << 8) | (ly << 4) | lz) as u16;
+                    let entity_data = if has_block_entities {
+                        entity_meshing_entries.get(&local_idx)
+                    } else {
+                        None
+                    };
+
+                    // Skip static solid geometry for invisible technical / placeholder blocks without explicit model or entity data
+                    if !entry.has_model
+                        && entity_data.is_none()
+                        && is_non_mesh_placeholder_block(state_str)
+                    {
                         continue;
                     }
 
@@ -191,13 +201,6 @@ impl SectionMesher {
                         } else {
                             None
                         }
-                    };
-
-                    let entity_data = if has_block_entities {
-                        let local_idx = ((lx << 8) | (ly << 4) | lz) as u16;
-                        entity_meshing_entries.get(&local_idx)
-                    } else {
-                        None
                     };
 
                     if entity_data.is_some() || entry.has_model {
@@ -241,11 +244,14 @@ impl SectionMesher {
                                 is_face_cubic(face_dir, &face.vertices, meta.is_full_cube);
                             let ao_brightness = if config.enable_ao && !is_emissive {
                                 calculate_face_ao_float(face_dir, face_cubic, |dx, dy, dz| {
-                                    let sx = (px as i32 + dx) as usize;
-                                    let sy = (py as i32 + dy) as usize;
-                                    let sz = (pz as i32 + dz) as usize;
-                                    if sx < 18 && sy < 18 && sz < 18 {
-                                        is_solid_opaque_fn(sx, sy, sz)
+                                    let sx = px as i32 + dx;
+                                    let sy = py as i32 + dy;
+                                    let sz = pz as i32 + dz;
+                                    if (0..18).contains(&sx)
+                                        && (0..18).contains(&sy)
+                                        && (0..18).contains(&sz)
+                                    {
+                                        is_solid_opaque_fn(sx as usize, sy as usize, sz as usize)
                                     } else {
                                         false
                                     }

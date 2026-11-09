@@ -117,29 +117,6 @@ pub fn inspect_minecraft_save(world_dir: &str) -> PyResult<PyLevelData> {
     })
 }
 
-/// Loads a bounded 3D selection from an Anvil save directly into a `VoxelStorage` without requiring model meshing.
-#[pyfunction]
-#[pyo3(signature = (
-    world_dir,
-    dimension="overworld",
-    min_block=(0, -64, 0),
-    max_block=(15, 64, 15),
-))]
-pub fn load_minecraft_save_storage(
-    world_dir: &str,
-    dimension: &str,
-    min_block: (i32, i32, i32),
-    max_block: (i32, i32, i32),
-) -> PyResult<PyVoxelStorage> {
-    let path = Path::new(world_dir);
-    let min_coord = IVec3::new(min_block.0, min_block.1, min_block.2);
-    let max_coord = IVec3::new(max_block.0, max_block.1, max_block.2);
-    let mut storage = VoxelStorage::new();
-    SaveLoader::load_box_into_storage(path, dimension, min_coord, max_coord, &mut storage)
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-    Ok(PyVoxelStorage { inner: storage })
-}
-
 /// End-to-end pipeline: Loads bounded 3D world selection from save, feeds into `VoxelWorld`,
 /// and meshes into `PyMeshData` with Atlas UVs and Ambient Occlusion.
 #[pyfunction]
@@ -204,8 +181,8 @@ pub fn load_and_mesh_minecraft_save(
         .map(|f| f as &(dyn Fn(mtk_core::ProgressReport) + Send + Sync));
 
     let mut storage = VoxelStorage::new();
-    let loaded_sections = profiler.measure("load_region_chunks", || {
-        SaveLoader::load_box_into_storage_with_progress(
+    let (loaded_sections, loaded_entities) = profiler.measure("load_region_chunks", || {
+        SaveLoader::load_box_with_entities(
             path,
             dimension,
             min_coord,
@@ -275,6 +252,20 @@ pub fn load_and_mesh_minecraft_save(
         })
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
+    let mut final_mesh = mesh;
+    if let Some(atlas_map) = config.and_then(|c| c.inner.atlas_address_map.as_deref()) {
+        profiler.measure("bake_visual_entities", || {
+            for ent in &loaded_entities {
+                if let Some((ent_mesh, _)) = mtk_model::EntityBaker::bake_entity_mesh(ent, |tex| {
+                    let (_, loc) = mtk_material::MaterialResolver::resolve(tex, None, atlas_map)?;
+                    Some((loc.uv_bounds, loc.chunk_id, loc.texture_id))
+                }) {
+                    final_mesh.append_mesh(&ent_mesh);
+                }
+            }
+        });
+    }
+
     if let Some(wp) = world_profile {
         for stage in wp.stages {
             profiler.record_stage(stage.name, stage.duration_us, stage.items_count);
@@ -287,7 +278,7 @@ pub fn load_and_mesh_minecraft_save(
 
     Ok((
         PyMeshData {
-            inner: mesh,
+            inner: final_mesh,
             profile: Some(final_profile),
             dynamic_entity_atlases,
             dynamic_entity_slots,

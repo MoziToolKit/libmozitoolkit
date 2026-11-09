@@ -33,14 +33,11 @@ fn test_scene_package_roundtrip() {
         1,
         3,
         3,
-        "minecraft:item_frame[facing=north]",
+        "minecraft:white_banner[rotation=2]",
         "minecraft:plains",
-        Some(&BlockEntityData::new_item_frame(
-            "minecraft:compass",
-            1,
-            0,
-            false,
-            false,
+        Some(&BlockEntityData::new_banner(
+            "white",
+            vec![("stripe_top", "blue")],
         )),
         Some(14),
     );

@@ -2006,28 +2006,18 @@ fn test_spawner_does_not_cull_underlying_block_face() {
 }
 
 #[test]
-fn test_painting_meshing_with_block_entity() {
-    let mut world = VoxelWorld::new(None, None, None);
-    world.set_block(
-        5,
-        10,
-        5,
-        "minecraft:painting[facing=north,variant=kebab]",
-        None,
+fn test_entity_baker_painting_mesh() {
+    let painting = mtk_model::EntityInstance::new_painting(
+        glam::DVec3::new(5.0, 10.0, 5.0),
+        mtk_core::Direction::North,
+        "kebab",
+        1,
+        1,
     );
-    world.set_block_entity(
-        5,
-        10,
-        5,
-        Some(mtk_model::BlockEntityData::Painting {
-            variant: "kebab".to_string(),
-            width: 1,
-            height: 1,
-        }),
-    );
-
-    let mesh = world.rebuild_all().expect("Rebuild should succeed");
-    // 1x1 painting has 6 quads: front, back, top, bottom, left, right (welded to 8 corner vertices)
+    let (mesh, textures) =
+        mtk_model::EntityBaker::bake_entity_mesh(&painting, |_| None).expect("Bake painting mesh");
     assert_eq!(mesh.quad_count(), 6);
-    assert_eq!(mesh.vertex_count(), 8);
+    assert_eq!(mesh.vertex_count(), 24);
+    assert!(textures.contains(&"minecraft:painting/kebab".to_string()));
+    assert!(textures.contains(&"minecraft:painting/back".to_string()));
 }

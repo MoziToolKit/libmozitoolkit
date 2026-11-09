@@ -535,3 +535,59 @@ fn test_paletted_source_key_prefers_base_over_overlay() {
         vec!["minecraft:block/grass_block_side".to_string()]
     );
 }
+
+#[test]
+fn test_painting_material_resolver_and_fluid_prevention() {
+    let mut atlas = AtlasAddressMap::new();
+
+    // Insert water fluid block
+    atlas.sprites.insert(
+        ResourceLocation::new("minecraft", "block/water_still"),
+        AtlasSpriteLocation {
+            chunk_id: 0,
+            texture_id: 100,
+            frame_0_uv_bounds: [0.0, 0.0, 0.5, 0.5],
+            ..Default::default()
+        },
+    );
+
+    // Insert painting water
+    atlas.sprites.insert(
+        ResourceLocation::new("minecraft", "painting/water"),
+        AtlasSpriteLocation {
+            chunk_id: 0,
+            texture_id: 200,
+            frame_0_uv_bounds: [0.5, 0.5, 1.0, 1.0],
+            ..Default::default()
+        },
+    );
+
+    // Insert painting kebab
+    atlas.sprites.insert(
+        ResourceLocation::new("minecraft", "painting/kebab"),
+        AtlasSpriteLocation {
+            chunk_id: 0,
+            texture_id: 201,
+            frame_0_uv_bounds: [0.0, 0.5, 0.5, 1.0],
+            ..Default::default()
+        },
+    );
+
+    // 1. "minecraft:water" must resolve to block/water_still
+    let (res, loc) =
+        MaterialResolver::resolve("minecraft:water", None, &atlas).expect("water should resolve");
+    assert_eq!(res.path, "block/water_still");
+    assert_eq!(loc.texture_id, 100);
+
+    // 2. "minecraft:painting/water" must NOT collide with fluid, must resolve to painting/water
+    let (res_p, loc_p) = MaterialResolver::resolve("minecraft:painting/water", None, &atlas)
+        .expect("painting/water should resolve");
+    assert_eq!(res_p.path, "painting/water");
+    assert_eq!(loc_p.texture_id, 200);
+
+    // 3. "minecraft:painting/kebab" resolves to painting/kebab
+    let (res_k, loc_k) = MaterialResolver::resolve("minecraft:painting/kebab", None, &atlas)
+        .expect("painting/kebab should resolve");
+    assert_eq!(res_k.path, "painting/kebab");
+    assert_eq!(loc_k.texture_id, 201);
+}

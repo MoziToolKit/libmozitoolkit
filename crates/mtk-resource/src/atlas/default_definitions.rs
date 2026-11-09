@@ -215,16 +215,10 @@ impl AtlasCategory {
                 }],
             },
             AtlasCategory::Paintings => AtlasDefinition {
-                sources: vec![
-                    AtlasSource::Directory {
-                        source: "painting".to_string(),
-                        prefix: "painting/".to_string(),
-                    },
-                    AtlasSource::Directory {
-                        source: "painting".to_string(),
-                        prefix: "".to_string(),
-                    },
-                ],
+                sources: vec![AtlasSource::Directory {
+                    source: "painting".to_string(),
+                    prefix: "painting/".to_string(),
+                }],
             },
             AtlasCategory::Celestials => AtlasDefinition {
                 sources: vec![

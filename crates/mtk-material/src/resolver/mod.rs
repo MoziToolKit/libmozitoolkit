@@ -25,17 +25,24 @@ pub fn clean_identifier(raw: &str) -> String {
     }
 
     // 3. Strip canonical Minecraft namespace and path prefixes
+    if let Some(rest) = s
+        .strip_prefix("minecraft:")
+        .or_else(|| s.strip_prefix("tex/minecraft/"))
+    {
+        s = rest.to_string();
+    }
+
     let prefixes = [
-        "minecraft:",
-        "tex/minecraft/",
         "textures/block/",
         "textures/entity/",
         "textures/item/",
         "textures/banner/",
+        "textures/painting/",
         "textures/",
         "block/",
         "entity/",
         "item/",
+        "painting/",
     ];
 
     for prefix in prefixes {
@@ -252,15 +259,25 @@ impl MaterialResolver {
     ) -> Option<(ResourceLocation, &'a AtlasSpriteLocation)> {
         let cleaned = clean_identifier(raw_material_name);
 
-        // 0. Built-in fluid alias prioritization (prevents "water" / "lava" from colliding with paintings or particles)
-        if let Some(candidates) =
-            get_fluid_candidates(raw_material_name).or_else(|| get_fluid_candidates(&cleaned))
-        {
-            for &cand in candidates {
-                if let Some(sprite_loc) = address_map.lookup_str(cand) {
-                    let res_loc = ResourceLocation::parse(cand)
-                        .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand));
-                    return Some((res_loc, sprite_loc));
+        // 0. Built-in fluid alias prioritization for un-prefixed or block-prefixed names.
+        // Prevents bare "water" or "lava" from missing or colliding with non-block textures,
+        // but never hijacks paths that explicitly target other categories like
+        // "painting/water", "item/water_bucket", or "entity/xxx".
+        let has_non_block_path = raw_material_name.contains('/')
+            && !raw_material_name.starts_with("block/")
+            && !raw_material_name.starts_with("textures/block/")
+            && !raw_material_name.starts_with("minecraft:block/");
+
+        if !has_non_block_path {
+            if let Some(candidates) =
+                get_fluid_candidates(raw_material_name).or_else(|| get_fluid_candidates(&cleaned))
+            {
+                for &cand in candidates {
+                    if let Some(sprite_loc) = address_map.lookup_str(cand) {
+                        let res_loc = ResourceLocation::parse(cand)
+                            .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand));
+                        return Some((res_loc, sprite_loc));
+                    }
                 }
             }
         }
@@ -272,6 +289,16 @@ impl MaterialResolver {
             }
         }
 
+        // 1b. Direct O(1) lookup with default 'minecraft:' namespace if missing
+        if !raw_material_name.contains(':') {
+            let with_ns = format!("minecraft:{}", raw_material_name);
+            if let Some(loc) = address_map.lookup_str(&with_ns) {
+                if let Ok(res_loc) = ResourceLocation::parse(&with_ns) {
+                    return Some((res_loc, loc));
+                }
+            }
+        }
+
         // 2. Direct O(1) lookup attempt on cleaned name
         if let Some(loc) = address_map.lookup_str(&cleaned) {
             if let Ok(res_loc) = ResourceLocation::parse(&cleaned) {
@@ -279,7 +306,7 @@ impl MaterialResolver {
             }
         }
 
-        // 3. Search external / user-provided alias table
+        // 4. Search external / user-provided alias table
         if let Some(alias_map) = custom_aliases {
             // Check raw name
             if let Some(candidates) = alias_map.get(raw_material_name) {
@@ -413,11 +440,12 @@ impl MaterialResolver {
             }
         }
 
-        // 4. Default standard Minecraft category fallbacks
+        // 5. Default standard Minecraft category fallbacks
         let fallbacks = [
             format!("block/{}", cleaned),
-            format!("entity/{}", cleaned),
             format!("item/{}", cleaned),
+            format!("entity/{}", cleaned),
+            format!("painting/{}", cleaned),
             cleaned.clone(),
         ];
 

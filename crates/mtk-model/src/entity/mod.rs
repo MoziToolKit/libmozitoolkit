@@ -1,12 +1,16 @@
 //! High-level typed BlockEntity representation decoupled from BlockState strings.
 
+pub mod baker;
 pub mod banner;
 pub mod copper_statue;
+pub mod instance;
 pub mod painting;
 pub(crate) mod pot;
 pub mod skull;
 
+pub use baker::EntityBaker;
 pub use banner::BannerPatternLayer;
+pub use instance::{ArmorStandData, EntityInstance, EntityKindData, ItemFrameData, PaintingData};
 pub use skull::{PlayerProfileData, SkullKind};
 
 use serde::{Deserialize, Serialize};
@@ -14,21 +18,6 @@ use serde::{Deserialize, Serialize};
 #[inline]
 fn default_banner_base_color() -> String {
     "white".to_string()
-}
-
-#[inline]
-fn default_true() -> bool {
-    true
-}
-
-#[inline]
-fn default_item_count() -> u8 {
-    1
-}
-
-#[inline]
-fn default_painting_dimension() -> u8 {
-    1
 }
 
 #[inline]
@@ -81,36 +70,6 @@ pub enum BlockEntityData {
         back_glowing: Option<bool>,
         #[serde(default)]
         is_waxed: bool,
-    },
-    /// Item Frame or Glow Item Frame (treated as block-attached entity).
-    #[serde(rename = "minecraft:item_frame", alias = "item_frame")]
-    ItemFrame {
-        item_id: String,
-        #[serde(default = "default_item_count")]
-        count: u8,
-        #[serde(default)]
-        rotation: u8,
-        #[serde(default)]
-        is_glowing: bool,
-        #[serde(default)]
-        is_invisible: bool,
-    },
-    /// Hanging Painting (treated as block-attached entity).
-    #[serde(rename = "minecraft:painting", alias = "painting")]
-    Painting {
-        variant: String,
-        #[serde(default = "default_painting_dimension")]
-        width: u8,
-        #[serde(default = "default_painting_dimension")]
-        height: u8,
-    },
-    /// End Crystal (treated as block-attached entity).
-    #[serde(rename = "minecraft:end_crystal", alias = "end_crystal")]
-    EndCrystal {
-        #[serde(default = "default_true")]
-        show_bottom: bool,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        beam_target: Option<[i32; 3]>,
     },
     /// Generic or custom block entity with an explicit type ID and raw NBT payload.
     #[serde(rename = "generic")]
@@ -209,46 +168,6 @@ impl BlockEntityData {
         }
     }
 
-    /// Constructs a canonical `ItemFrame` data struct.
-    pub fn new_item_frame(
-        item_id: impl Into<String>,
-        count: u8,
-        rotation: u8,
-        is_glowing: bool,
-        is_invisible: bool,
-    ) -> Self {
-        Self::ItemFrame {
-            item_id: item_id.into(),
-            count: count.max(1),
-            rotation: rotation & 7,
-            is_glowing,
-            is_invisible,
-        }
-    }
-
-    /// Constructs a canonical `Painting` data struct.
-    pub fn new_painting(variant: impl Into<String>, width: u8, height: u8) -> Self {
-        let v_str = variant.into();
-        let (dim_w, dim_h) = if width == 0 || height == 0 {
-            painting::painting_dimension(&v_str)
-        } else {
-            (width, height)
-        };
-        Self::Painting {
-            variant: v_str,
-            width: dim_w.max(1),
-            height: dim_h.max(1),
-        }
-    }
-
-    /// Constructs a canonical `EndCrystal` data struct.
-    pub fn new_end_crystal(show_bottom: bool, beam_target: Option<[i32; 3]>) -> Self {
-        Self::EndCrystal {
-            show_bottom,
-            beam_target,
-        }
-    }
-
     /// Constructs a generic custom block entity with an explicit identifier.
     pub fn new_generic(custom_id: impl Into<String>, nbt_bytes: Vec<u8>) -> Self {
         Self::Generic {
@@ -271,10 +190,6 @@ impl BlockEntityData {
                     Some(kind.default_texture_path().to_string())
                 }
             }
-            Self::Painting { variant, .. } => {
-                let v = variant.strip_prefix("minecraft:").unwrap_or(variant);
-                Some(format!("minecraft:painting/{}", v))
-            }
             _ => None,
         }
     }
@@ -289,31 +204,6 @@ impl BlockEntityData {
                     .map(str::to_string);
             }
         }
-    }
-
-    /// Returns true if this entity is an intrinsic discrete voxel block entity
-    /// tied to an integer grid block (e.g. DecoratedPot, Banner, Skull, Sign).
-    #[inline]
-    pub fn is_voxel_block_entity(&self) -> bool {
-        matches!(
-            self,
-            Self::DecoratedPot { .. }
-                | Self::Banner { .. }
-                | Self::Skull { .. }
-                | Self::Sign { .. }
-                | Self::Generic { .. }
-                | Self::Raw { .. }
-        )
-    }
-
-    /// Returns true if this entity is a continuous-space entity (e.g. ItemFrame, Painting, EndCrystal)
-    /// that is decoupled from discrete voxel blocks.
-    #[inline]
-    pub fn is_continuous_space_entity(&self) -> bool {
-        matches!(
-            self,
-            Self::ItemFrame { .. } | Self::Painting { .. } | Self::EndCrystal { .. }
-        )
     }
 
     /// Serializes to a clean, canonical Visual NBT JSON string suitable for point clouds,
@@ -333,6 +223,7 @@ impl BlockEntityData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mtk_core::Direction;
 
     #[test]
     fn test_canonical_visual_nbt_json_roundtrip() {
@@ -393,38 +284,8 @@ mod tests {
     }
 
     #[test]
-    fn test_block_attached_entities_roundtrip() {
-        // 1. Item Frame
-        let item_frame =
-            BlockEntityData::new_item_frame("minecraft:diamond_sword", 1, 3, true, false);
-        let if_json = item_frame.to_visual_json();
-        assert!(if_json.contains("\"minecraft:item_frame\""));
-        assert!(if_json.contains("\"minecraft:diamond_sword\""));
-        assert!(if_json.contains("\"is_glowing\":true"));
-        let if_parsed = BlockEntityData::from_visual_json(&if_json).expect("Parse item frame");
-        assert_eq!(item_frame, if_parsed);
-
-        // 2. Painting
-        let painting = BlockEntityData::new_painting("minecraft:kebab", 2, 2);
-        let p_json = painting.to_visual_json();
-        assert!(p_json.contains("\"minecraft:painting\""));
-        assert!(p_json.contains("\"minecraft:kebab\""));
-        assert_eq!(
-            painting.texture_identifier(),
-            Some("minecraft:painting/kebab".to_string())
-        );
-        let p_parsed = BlockEntityData::from_visual_json(&p_json).expect("Parse painting");
-        assert_eq!(painting, p_parsed);
-
-        // 3. End Crystal
-        let crystal = BlockEntityData::new_end_crystal(true, Some([100, 64, -200]));
-        let ec_json = crystal.to_visual_json();
-        assert!(ec_json.contains("\"minecraft:end_crystal\""));
-        assert!(ec_json.contains("100"));
-        let ec_parsed = BlockEntityData::from_visual_json(&ec_json).expect("Parse end crystal");
-        assert_eq!(crystal, ec_parsed);
-
-        // 4. Sign
+    fn test_block_entities_roundtrip() {
+        // 1. Sign
         let sign = BlockEntityData::new_sign(
             vec!["Welcome to".to_string(), "MoziToolKit".to_string()],
             Some("yellow"),
@@ -437,13 +298,44 @@ mod tests {
         let sign_parsed = BlockEntityData::from_visual_json(&sign_json).expect("Parse sign");
         assert_eq!(sign, sign_parsed);
 
-        // 5. Generic Custom
+        // 2. Generic Custom
         let generic = BlockEntityData::new_generic("custom:copper_statue", vec![1, 2, 3, 4]);
         let g_json = generic.to_visual_json();
         assert!(g_json.contains("\"generic\""));
         assert!(g_json.contains("\"custom:copper_statue\""));
         let g_parsed = BlockEntityData::from_visual_json(&g_json).expect("Parse generic");
         assert_eq!(generic, g_parsed);
+    }
+
+    #[test]
+    fn test_entity_instance_roundtrip() {
+        let painting = EntityInstance::new_painting(
+            glam::DVec3::new(10.5, 64.0, -20.5),
+            Direction::South,
+            "kebab",
+            1,
+            1,
+        );
+        let json = serde_json::to_string(&painting).expect("Serialize entity instance");
+        assert!(json.contains("\"minecraft:painting\""));
+        assert!(json.contains("\"kebab\""));
+        let parsed: EntityInstance =
+            serde_json::from_str(&json).expect("Deserialize entity instance");
+        assert_eq!(painting, parsed);
+
+        let frame = EntityInstance::new_item_frame(
+            glam::DVec3::new(5.0, 65.0, 3.0),
+            Direction::West,
+            "minecraft:diamond_sword",
+            2,
+            true,
+            false,
+            None,
+        );
+        let frame_json = serde_json::to_string(&frame).expect("Serialize item frame");
+        assert!(frame_json.contains("\"minecraft:diamond_sword\""));
+        let frame_parsed: EntityInstance = serde_json::from_str(&frame_json).expect("Parse frame");
+        assert_eq!(frame, frame_parsed);
     }
 
     #[test]
@@ -473,31 +365,15 @@ mod tests {
     #[test]
     fn test_entity_category_decoupling() {
         let pot = BlockEntityData::new_decorated_pot([Some("angler"), None, None, None]);
-        assert!(pot.is_voxel_block_entity());
-        assert!(!pot.is_continuous_space_entity());
+        assert_eq!(pot.texture_identifier(), None);
 
         let banner = BlockEntityData::new_banner("red", Vec::<(&str, &str)>::new());
-        assert!(banner.is_voxel_block_entity());
-        assert!(!banner.is_continuous_space_entity());
+        assert!(banner.texture_identifier().is_some());
 
         let skull = BlockEntityData::new_skull(SkullKind::Skeleton, None, None);
-        assert!(skull.is_voxel_block_entity());
-        assert!(!skull.is_continuous_space_entity());
+        assert!(skull.texture_identifier().is_some());
 
         let sign = BlockEntityData::new_sign(vec!["hello".to_string()], None::<&str>, false);
-        assert!(sign.is_voxel_block_entity());
-        assert!(!sign.is_continuous_space_entity());
-
-        let item_frame = BlockEntityData::new_item_frame("minecraft:compass", 1, 0, false, false);
-        assert!(!item_frame.is_voxel_block_entity());
-        assert!(item_frame.is_continuous_space_entity());
-
-        let painting = BlockEntityData::new_painting("minecraft:alban", 1, 1);
-        assert!(!painting.is_voxel_block_entity());
-        assert!(painting.is_continuous_space_entity());
-
-        let crystal = BlockEntityData::new_end_crystal(true, None);
-        assert!(!crystal.is_voxel_block_entity());
-        assert!(crystal.is_continuous_space_entity());
+        assert_eq!(sign.texture_identifier(), None);
     }
 }

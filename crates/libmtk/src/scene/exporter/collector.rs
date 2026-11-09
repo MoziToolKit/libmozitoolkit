@@ -113,9 +113,6 @@ pub fn collect_needed_assets(
                         needed_textures.insert(BlockEntityData::sherd_texture(Some(sherd)));
                     }
                 }
-                BlockEntityData::ItemFrame { item_id, .. } => {
-                    needed_textures.insert(item_id.clone());
-                }
                 BlockEntityData::Banner {
                     base_color,
                     patterns,

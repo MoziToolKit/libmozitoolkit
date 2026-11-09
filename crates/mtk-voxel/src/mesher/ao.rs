@@ -21,12 +21,12 @@ pub(crate) fn is_face_cubic(
     }
     const EPSILON: f32 = 1e-4;
     match dir {
-        Direction::Down => vertices.iter().all(|v| v.y < EPSILON),
-        Direction::Up => vertices.iter().all(|v| v.y > 1.0 - EPSILON),
-        Direction::North => vertices.iter().all(|v| v.z < EPSILON),
-        Direction::South => vertices.iter().all(|v| v.z > 1.0 - EPSILON),
-        Direction::West => vertices.iter().all(|v| v.x < EPSILON),
-        Direction::East => vertices.iter().all(|v| v.x > 1.0 - EPSILON),
+        Direction::Down => vertices.iter().all(|v| v.y.abs() < EPSILON),
+        Direction::Up => vertices.iter().all(|v| (v.y - 1.0).abs() < EPSILON),
+        Direction::North => vertices.iter().all(|v| v.z.abs() < EPSILON),
+        Direction::South => vertices.iter().all(|v| (v.z - 1.0).abs() < EPSILON),
+        Direction::West => vertices.iter().all(|v| v.x.abs() < EPSILON),
+        Direction::East => vertices.iter().all(|v| (v.x - 1.0).abs() < EPSILON),
     }
 }
 

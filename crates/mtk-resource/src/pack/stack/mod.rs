@@ -160,6 +160,22 @@ impl ResourcePackStack {
                     sprite: None,
                 });
             }
+        } else if matches!(category, crate::atlas::AtlasCategory::Paintings) {
+            // Vanilla paintings.json defines `prefix: ""` which strips category prefix.
+            // Canonicalize to `painting/` so all painting sprites are consistently
+            // namespaced (e.g. `minecraft:painting/kebab`), preventing fluid collisions
+            // and atlas stitching duplication.
+            for source in &mut def.sources {
+                if let crate::atlas::AtlasSource::Directory {
+                    source: src,
+                    prefix,
+                } = source
+                {
+                    if src == "painting" && prefix.is_empty() {
+                        *prefix = "painting/".to_string();
+                    }
+                }
+            }
         }
 
         def
