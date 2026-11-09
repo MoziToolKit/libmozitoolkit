@@ -95,19 +95,7 @@ fn test_legacy_dimension_folders_are_ignored() {
 
 #[test]
 fn test_save_loader_detects_paintings_in_entities_mca() {
-    let candidate = mtk_testkit::save_world()
-        .or_else(|| {
-            let p = std::path::PathBuf::from(
-                "/Users/jaxlocke/Library/Application Support/PrismLauncher/instances/26.2/minecraft/saves/新的世界 (1)",
-            );
-            if p.exists() {
-                Some(p)
-            } else {
-                None
-            }
-        });
-
-    let save_dir = match candidate {
+    let save_dir = match mtk_testkit::save_world() {
         Some(c) => c,
         None => {
             eprintln!("Skipping test: no test save found via mtk_testkit::save_world()");

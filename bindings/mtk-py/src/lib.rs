@@ -139,13 +139,8 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("TINT_TYPE_HARDCODED", mtk_material::TINT_TYPE_HARDCODED)?;
     m.add("TINT_TYPE_DRY_FOLIAGE", mtk_material::TINT_TYPE_DRY_FOLIAGE)?;
 
-    // 7. Model Baker & Painting
+    // 7. Model Baker
     m.add_class::<PyBakedModelDatabase>()?;
-    m.add_function(wrap_pyfunction!(model::build_painting_mesh, m)?)?;
-    m.add_function(wrap_pyfunction!(model::get_painting_dimension, m)?)?;
-    m.add_function(wrap_pyfunction!(model::get_painting_variant, m)?)?;
-    m.add_function(wrap_pyfunction!(model::get_all_painting_variants, m)?)?;
-    m.add_function(wrap_pyfunction!(model::calculate_painting_position, m)?)?;
 
     // 8. UV Geometry Algorithms & Extrude
     m.add_function(wrap_pyfunction!(uv::calculate_uv_area, m)?)?;

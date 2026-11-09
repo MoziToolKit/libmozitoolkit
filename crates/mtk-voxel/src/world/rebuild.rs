@@ -28,11 +28,7 @@ impl VoxelWorld {
                 return crate::mesher::ModelSource::Single(model);
             }
         }
-        let clean = state.strip_prefix("minecraft:").unwrap_or(state);
-        let block_name = clean.split('[').next().unwrap_or(clean);
-        if block_name == "painting"
-            || mtk_model::banner::extract_banner_color_from_state(state).is_some()
-        {
+        if mtk_model::banner::extract_banner_color_from_state(state).is_some() {
             let mut baker = ModelBaker::new();
             if let Ok(baked) = baker.bake_blockstate_with_entity(state, None, None, |_| None) {
                 return crate::mesher::ModelSource::OwnedSingle(std::sync::Arc::new(baked));

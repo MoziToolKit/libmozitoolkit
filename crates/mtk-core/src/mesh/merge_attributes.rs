@@ -203,6 +203,67 @@ fn merge_palette_attribute_pair(
 }
 
 impl MeshData {
+    /// Pads an attribute buffer up to `target_len` using its canonical schema default value.
+    pub(crate) fn pad_attribute_data_with_default(
+        name: &str,
+        data: &mut AttributeData,
+        target_len: usize,
+    ) {
+        use crate::attributes::constants::*;
+
+        if data.len() >= target_len {
+            return;
+        }
+
+        match (name, data) {
+            (ATTR_AO, AttributeData::Float(v)) => v.resize(target_len, 1.0),
+            (ATTR_BIOME_TINT_COLOR, AttributeData::Float4(v)) => {
+                v.resize(target_len, [1.0, 1.0, 1.0, 1.0])
+            }
+            (ATTR_BIOME_TINT_DATA, AttributeData::Float4(v)) => {
+                v.resize(target_len, [1.0, 1.0, 0.0, 0.0])
+            }
+            (ATTR_UV_TRANSFORM, AttributeData::Float4(v)) => {
+                v.resize(target_len, [1.0, 1.0, 0.0, 0.0])
+            }
+            (ATTR_ANIM_TIMING, AttributeData::Float3(v)) => v.resize(target_len, [1.0, 1.0, 0.0]),
+            (ATTR_ANIM_FRAME_SIZE, AttributeData::Float3(v)) => {
+                v.resize(target_len, [16.0, 16.0, 0.0])
+            }
+            (ATTR_ENTITY_IDX, AttributeData::Int32(v)) => v.resize(target_len, -1),
+            (_, AttributeData::Float(v)) => v.resize(target_len, 0.0),
+            (_, AttributeData::Float2(v)) => v.resize(target_len, [0.0; 2]),
+            (_, AttributeData::Float3(v)) => v.resize(target_len, [0.0; 3]),
+            (_, AttributeData::Float4(v)) => v.resize(target_len, [0.0; 4]),
+            (_, AttributeData::Int8(v)) => v.resize(target_len, 0),
+            (_, AttributeData::Int16(v)) => v.resize(target_len, 0),
+            (_, AttributeData::Int32(v)) => v.resize(target_len, 0),
+            (_, AttributeData::UInt8(v)) => v.resize(target_len, 0),
+            (_, AttributeData::UInt16(v)) => v.resize(target_len, 0),
+            (_, AttributeData::UInt32(v)) => v.resize(target_len, 0),
+            (_, AttributeData::Bool(v)) => v.resize(target_len, false),
+            (_, AttributeData::String(v)) => v.resize(target_len, String::new()),
+        }
+    }
+
+    /// Pads all Face, Point, and Corner attributes in `target` up to the specified domain counts.
+    pub(crate) fn pad_custom_attributes_to_counts(
+        target: &mut HashMap<String, MeshAttribute>,
+        faces: usize,
+        verts: usize,
+        corners: usize,
+    ) {
+        for (name, attr) in target.iter_mut() {
+            let expected = match attr.domain {
+                AttributeDomain::Face => faces,
+                AttributeDomain::Point => verts,
+                AttributeDomain::Corner => corners,
+                AttributeDomain::Mesh => continue,
+            };
+            Self::pad_attribute_data_with_default(name, &mut attr.data, expected);
+        }
+    }
+
     /// Helper to merge custom attributes from `other` into `target`.
     pub(crate) fn extend_custom_attributes(
         target: &mut HashMap<String, MeshAttribute>,

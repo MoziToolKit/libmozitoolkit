@@ -6,10 +6,8 @@ use std::sync::Arc;
 
 use crate::mesh::PyMeshData;
 use crate::resource::PyResourcePackStack;
-use mtk_core::Direction;
 use mtk_model::{BakedModelDatabase, BlockModelJson, BlockState, BlockStateDefinition, ModelBaker};
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
 
 /// Prebaked Model Database container.
 #[pyclass(name = "BakedModelDatabase")]
@@ -131,86 +129,4 @@ impl PyModelBaker {
 
         Ok((PyMeshData::from_mesh(mesh), textures))
     }
-}
-
-/// Builds contiguous MeshData and texture list for a Minecraft Painting.
-#[pyfunction]
-#[pyo3(signature = (variant, facing="north", offset=None))]
-pub fn build_painting_mesh(
-    variant: &str,
-    facing: &str,
-    offset: Option<[f32; 3]>,
-) -> PyResult<(PyMeshData, Vec<String>)> {
-    let dir = Direction::parse_loose(facing).unwrap_or(Direction::North);
-    let off = offset.map(|[x, y, z]| glam::Vec3::new(x, y, z));
-    let (mesh, textures) = mtk_model::painting::create_painting_mesh(variant, dir, off);
-    Ok((PyMeshData::from_mesh(mesh), textures))
-}
-
-/// Retrieves the (width, height) in integer blocks for a painting variant.
-#[pyfunction]
-pub fn get_painting_dimension(variant: &str) -> (u8, u8) {
-    mtk_model::painting::painting_dimension(variant)
-}
-
-/// Retrieves metadata dictionary for a specific painting variant.
-#[pyfunction]
-pub fn get_painting_variant<'py>(
-    py: Python<'py>,
-    variant: &str,
-) -> PyResult<Option<Bound<'py, PyDict>>> {
-    if let Some(v) = mtk_model::painting::get_painting_variant(variant) {
-        let dict = PyDict::new(py);
-        dict.set_item("name", v.name)?;
-        dict.set_item("width", v.width)?;
-        dict.set_item("height", v.height)?;
-        dict.set_item("asset_id", v.asset_id)?;
-        dict.set_item("title", v.title)?;
-        dict.set_item("author", v.author)?;
-        Ok(Some(dict))
-    } else {
-        Ok(None)
-    }
-}
-
-/// Retrieves a list of all 51 official Minecraft 1.21+ Painting Variant metadata dictionaries.
-#[pyfunction]
-pub fn get_all_painting_variants<'py>(py: Python<'py>) -> PyResult<Vec<Bound<'py, PyDict>>> {
-    let mut list = Vec::with_capacity(mtk_model::painting::PAINTING_VARIANTS.len());
-    for v in mtk_model::painting::all_painting_variants() {
-        let dict = PyDict::new(py);
-        dict.set_item("name", v.name)?;
-        dict.set_item("width", v.width)?;
-        dict.set_item("height", v.height)?;
-        dict.set_item("asset_id", v.asset_id)?;
-        dict.set_item("title", v.title)?;
-        dict.set_item("author", v.author)?;
-        list.push(dict);
-    }
-    Ok(list)
-}
-
-/// Calculates the exact 3D world center position for a painting attached to a support block.
-#[pyfunction]
-#[pyo3(signature = (support_pos, facing="north", width=None, height=None, variant=None))]
-pub fn calculate_painting_position(
-    support_pos: [i32; 3],
-    facing: &str,
-    width: Option<u8>,
-    height: Option<u8>,
-    variant: Option<&str>,
-) -> [f32; 3] {
-    let dir = Direction::parse_loose(facing).unwrap_or(Direction::North);
-    let (w, h) = match (width, height) {
-        (Some(w), Some(h)) => (w, h),
-        _ => {
-            if let Some(v) = variant {
-                mtk_model::painting::painting_dimension(v)
-            } else {
-                (1, 1)
-            }
-        }
-    };
-    let pos = mtk_model::painting::calculate_painting_world_position(support_pos, dir, w, h);
-    [pos.x, pos.y, pos.z]
 }

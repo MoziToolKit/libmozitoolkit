@@ -107,9 +107,38 @@ impl MergedMeshPrealloc {
 impl MeshData {
     /// Appends another `MeshData` into this mesh data buffer.
     pub fn append_mesh(&mut self, other: &MeshData) {
+        let prev_faces = self.face_count();
+        let prev_verts = self.vertex_count();
+        let prev_corners = self.loop_count();
+
         let base_idx = self.positions.len() as u32;
         if self.uv_layout == UvLayout::None {
             self.uv_layout = other.uv_layout;
+        }
+
+        let self_was_quad = self.positions.is_empty() || self.is_quad_topology();
+        let other_is_quad = other.positions.is_empty() || other.is_quad_topology();
+        if self_was_quad && other_is_quad {
+            if self.quad_indices.is_none()
+                && other.quad_indices.is_some()
+                && !self.indices.is_empty()
+            {
+                self.quad_indices = Some(self.reconstruct_quad_indices());
+            }
+            if let Some(ref o_quads) = other.quad_indices {
+                let quads = self.quad_indices.get_or_insert_with(Vec::new);
+                let old_quad_len = quads.len();
+                quads.extend_from_slice(o_quads);
+                for idx in &mut quads[old_quad_len..] {
+                    *idx += base_idx;
+                }
+            } else if self.quad_indices.is_some() && !other.indices.is_empty() {
+                let reconstructed = other.reconstruct_quad_indices();
+                let quads = self.quad_indices.get_or_insert_with(Vec::new);
+                quads.extend(reconstructed.into_iter().map(|idx| idx + base_idx));
+            }
+        } else {
+            self.quad_indices = None;
         }
 
         self.positions.extend_from_slice(&other.positions);
@@ -120,15 +149,6 @@ impl MeshData {
         self.indices.extend_from_slice(&other.indices);
         for idx in &mut self.indices[old_idx_len..] {
             *idx += base_idx;
-        }
-
-        if let Some(ref o_quads) = other.quad_indices {
-            let quads = self.quad_indices.get_or_insert_with(Vec::new);
-            let old_quad_len = quads.len();
-            quads.extend_from_slice(o_quads);
-            for idx in &mut quads[old_quad_len..] {
-                *idx += base_idx;
-            }
         }
 
         self.face_materials.extend_from_slice(&other.face_materials);
@@ -143,7 +163,10 @@ impl MeshData {
         if self.colors.is_some() || other.colors.is_some() {
             let col = self.colors.get_or_insert_with(Vec::new);
             let prev_target = if let Some(ref q) = self.quad_indices {
-                let other_q_len = other.quad_indices.as_ref().map_or(0, |v| v.len());
+                let other_q_len = other
+                    .quad_indices
+                    .as_ref()
+                    .map_or_else(|| other.loop_count(), |v| v.len());
                 q.len().saturating_sub(other_q_len)
             } else if !self.uvs.is_empty() {
                 self.uvs.len().saturating_sub(other.uvs.len())
@@ -168,7 +191,40 @@ impl MeshData {
             }
         }
 
+        if prev_faces > 0 || prev_verts > 0 || prev_corners > 0 {
+            for (name, attr) in &other.custom_attributes {
+                if !self.custom_attributes.contains_key(name)
+                    && attr.domain != crate::attributes::AttributeDomain::Mesh
+                {
+                    self.custom_attributes.insert(
+                        name.clone(),
+                        crate::attributes::MeshAttribute::new(
+                            name.clone(),
+                            attr.domain,
+                            attr.data.empty_with_capacity(0),
+                        ),
+                    );
+                }
+            }
+            Self::pad_custom_attributes_to_counts(
+                &mut self.custom_attributes,
+                prev_faces,
+                prev_verts,
+                prev_corners,
+            );
+        }
+
         Self::extend_custom_attributes(&mut self.custom_attributes, &other.custom_attributes);
+
+        let total_faces = self.face_count();
+        let total_verts = self.vertex_count();
+        let total_corners = self.loop_count();
+        Self::pad_custom_attributes_to_counts(
+            &mut self.custom_attributes,
+            total_faces,
+            total_verts,
+            total_corners,
+        );
     }
 
     /// Efficiently merges multiple `MeshData` references into a single unified `MeshData`,

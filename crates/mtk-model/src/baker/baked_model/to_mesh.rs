@@ -57,6 +57,7 @@ impl BakedModel {
         }
 
         let mut face_attributes_list: Vec<mtk_core::FaceAttributes> = Vec::new();
+        let all_quads = self.obj_faces.iter().all(|f| f.vertices.len() == 4);
 
         // 1. Process JSON elements
         for (el_idx, el) in self.elements.iter().enumerate() {
@@ -88,6 +89,7 @@ impl BakedModel {
                         texture_list.push(face.texture.clone());
                         id
                     });
+                let mat_slot = face.atlas_chunk_id.unwrap_or(slot);
 
                 let pieces = if options.clip_hidden_volume && !other_bounds.is_empty() {
                     clip_face_excluding_hidden_volume(
@@ -128,6 +130,17 @@ impl BakedModel {
                         }
                     }
 
+                    if all_quads {
+                        mesh.quad_indices
+                            .get_or_insert_with(Vec::new)
+                            .extend_from_slice(&[
+                                base_idx,
+                                base_idx + 1,
+                                base_idx + 2,
+                                base_idx + 3,
+                            ]);
+                    }
+
                     // Triangulate CCW quad: 0-1-2 and 0-2-3
                     mesh.indices.push(base_idx);
                     mesh.indices.push(base_idx + 1);
@@ -137,14 +150,14 @@ impl BakedModel {
                     mesh.indices.push(base_idx + 2);
                     mesh.indices.push(base_idx + 3);
 
-                    mesh.face_materials.push(slot);
+                    mesh.face_materials.push(mat_slot);
                     mesh.face_tint_indices.push(face.tint_index);
 
                     let (tint_color, tint_data) = ([1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 0.0, 0.0]);
 
                     face_attributes_list.push(mtk_core::FaceAttributes {
                         texture_key: face.texture.clone(),
-                        material_slot: slot,
+                        material_slot: mat_slot,
                         tint_index: face.tint_index,
                         is_overlay: false,
                         atlas_chunk_id: face.atlas_chunk_id.map(|c| c as u32),
@@ -201,6 +214,11 @@ impl BakedModel {
                 mesh.face_tint_indices.push(obj_f.tint_index);
                 face_attributes_list.push(face_attr);
             } else if n_verts == 4 {
+                if all_quads {
+                    mesh.quad_indices
+                        .get_or_insert_with(Vec::new)
+                        .extend_from_slice(&[base_idx, base_idx + 1, base_idx + 2, base_idx + 3]);
+                }
                 mesh.indices.push(base_idx);
                 mesh.indices.push(base_idx + 1);
                 mesh.indices.push(base_idx + 2);

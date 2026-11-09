@@ -242,24 +242,38 @@ pub fn load_and_mesh_minecraft_save(
         }
     }
 
-    let (mesh, world_profile, dynamic_entity_atlases, dynamic_entity_slots) = py
+    let (mesh, world_profile, dynamic_entity_atlases, dynamic_entity_slots, active_config) = py
         .detach(|| {
             world.ensure_dynamic_entities_resolved_sync_with_progress(progress_ref);
             let m = world.rebuild_all_with_progress(progress_ref)?.clone();
             let p = world.last_profile.clone();
             let (dyn_atlases, dyn_slots) = world.dynamic_entity_atlases_if_used();
-            Ok::<_, mtk_voxel::VoxelError>((m, p, dyn_atlases, dyn_slots))
+            Ok::<_, mtk_voxel::VoxelError>((m, p, dyn_atlases, dyn_slots, world.config.clone()))
         })
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
     let mut final_mesh = mesh;
-    if let Some(atlas_map) = config.and_then(|c| c.inner.atlas_address_map.as_deref()) {
+    if let Some(atlas_map) = active_config.atlas_address_map.as_deref() {
+        let custom_aliases = active_config.custom_aliases.as_deref();
         profiler.measure("bake_visual_entities", || {
             for ent in &loaded_entities {
-                if let Some((ent_mesh, _)) = mtk_model::EntityBaker::bake_entity_mesh(ent, |tex| {
-                    let (_, loc) = mtk_material::MaterialResolver::resolve(tex, None, atlas_map)?;
-                    Some((loc.uv_bounds, loc.chunk_id, loc.texture_id))
-                }) {
+                if let Some((mut ent_mesh, _)) =
+                    mtk_model::EntityBaker::bake_entity_mesh(ent, |tex| {
+                        let loc =
+                            mtk_material::MaterialResolver::resolve(tex, custom_aliases, atlas_map)
+                                .map(|(_, s)| s)
+                                .or_else(|| atlas_map.lookup_fallback())?;
+                        Some((loc.uv_bounds, loc.chunk_id, loc.texture_id))
+                    })
+                {
+                    for pos in &mut ent_mesh.positions {
+                        let p = active_config.transform_position(glam::Vec3::from_array(*pos));
+                        *pos = [p.x, p.y, p.z];
+                    }
+                    for norm in &mut ent_mesh.normals {
+                        let n = active_config.transform_direction(glam::Vec3::from_array(*norm));
+                        *norm = [n.x, n.y, n.z];
+                    }
                     final_mesh.append_mesh(&ent_mesh);
                 }
             }
