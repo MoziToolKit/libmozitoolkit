@@ -5,6 +5,7 @@
 //! background HTTP fetching, and 0-second indexed local cache hits.
 
 mod circuit;
+mod fetch;
 mod index;
 #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
 mod mirror;

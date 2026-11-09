@@ -4,6 +4,7 @@
 //! boundary seam dirty tracking, known empty sections, and padded boundary extraction.
 
 mod biome_meta;
+mod bounds;
 mod container;
 mod debug;
 mod manifest;

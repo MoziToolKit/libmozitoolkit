@@ -3,85 +3,26 @@
 use glam::IVec3;
 use mtk_core::Direction;
 use mtk_core::MeshData;
-use mtk_core::{
-    determine_block_offset_type, get_block_offset, mc_coordinate_seed, JavaRandom, OffsetType,
-};
-use mtk_core::{ProgressCallback, ProgressThrottler};
-use mtk_cull::{is_non_mesh_placeholder_block, BlockCullMeta, FaceCuller};
-use mtk_model::{is_block_emissive, BlockState};
+use mtk_core::{get_block_offset, OffsetType};
+use mtk_cull::{is_non_mesh_placeholder_block, FaceCuller};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::fluid::emit_fluid_geometry;
 use crate::mesher::ao::{calculate_face_ao, calculate_face_ao_float, is_face_cubic};
 use crate::storage::{padded_index, PaddedVoxelArray, SECTION_SIZE};
-use crate::types::{MesherConfig, VoxelError};
+use crate::types::MesherConfig;
 
 use super::collector::FaceAttributesCollector;
 use super::emitter::{emit_baked_face, emit_unit_cube_face};
 use super::grid_pool::UNIT_CUBE_CORNERS;
+use super::palette_entry::{
+    emit_fluid_at, quad_corner_offsets, select_variant_faces, ResolvedPaletteEntry,
+};
 use super::shading::{
     resolve_model_face_shading, resolve_palette_meshing_data_for_state,
     resolve_unit_cube_face_shading, sample_quad_corner_biome_tints, ModelSource,
     PaletteMeshingData, PreResolvedModelFace,
 };
-
-/// Pre-resolved entry bundling all per-blockstate meshing metadata, model sources, and culling data.
-#[derive(Clone)]
-pub(crate) struct ResolvedPaletteEntry {
-    pub has_model: bool,
-    pub meta: Arc<BlockCullMeta>,
-    pub is_emissive: bool,
-    pub offset_type: OffsetType,
-    pub meshing_data: Arc<PaletteMeshingData>,
-}
-
-impl ResolvedPaletteEntry {
-    pub(crate) fn resolve<'a>(
-        st: &str,
-        source: &ModelSource<'a>,
-        culler: &FaceCuller,
-        config: &MesherConfig,
-    ) -> Self {
-        let (mut meta, is_emissive) = if let Some(model) = source.primary_model() {
-            let mut meta = model.get_or_compute_cull_meta();
-            if st.contains("waterlogged=true") {
-                meta.is_waterlogged = true;
-            }
-            (Arc::new(meta), model.is_emissive)
-        } else {
-            let runtime_meta = culler.get_meta(st, None, None);
-            let parsed = BlockState::parse(st);
-            let default_state = BlockState::default();
-            let state = parsed.as_ref().unwrap_or(&default_state);
-            let emissive = is_block_emissive(state);
-            (runtime_meta, emissive)
-        };
-
-        let offset_type = if config.enable_random_offsets {
-            determine_block_offset_type(st)
-        } else {
-            OffsetType::None
-        };
-
-        let meshing_data = Arc::new(resolve_palette_meshing_data_for_state(st, source, config));
-        if matches!(*meshing_data, PaletteMeshingData::Empty) {
-            let mut empty_meta = (*meta).clone();
-            empty_meta.is_air = true;
-            empty_meta.is_full_cube = false;
-            empty_meta.is_opaque = false;
-            meta = Arc::new(empty_meta);
-        }
-
-        Self {
-            has_model: !source.is_none(),
-            meta,
-            is_emissive,
-            offset_type,
-            meshing_data,
-        }
-    }
-}
 
 /// High-performance mesh generator for individual and batch chunk sections.
 pub struct SectionMesher;
@@ -155,44 +96,7 @@ impl SectionMesher {
         };
 
         // RFC v3.2: Pre-resolve dynamic model data for any sparse block entities in this section
-        let mut entity_meshing_entries = HashMap::new();
-        if !padded.block_entities.is_empty() {
-            let mut resolved_cache: HashMap<
-                (&str, &mtk_model::BlockEntityData),
-                Arc<crate::mesher::shading::types::PaletteMeshingData>,
-            > = HashMap::new();
-
-            for (&local_idx, be) in &padded.block_entities {
-                let lx = (local_idx >> 8) as usize;
-                let ly = ((local_idx >> 4) & 15) as usize;
-                let lz = (local_idx & 15) as usize;
-                let px = lx + 1;
-                let py = ly + 1;
-                let pz = lz + 1;
-                let pal_idx = padded.get_padded_idx(px, py, pz) as usize;
-                if pal_idx < padded.palette.len() {
-                    let state_str = padded.palette[pal_idx].as_str();
-                    if let Some(cached) = resolved_cache.get(&(state_str, be)) {
-                        entity_meshing_entries.insert(local_idx, Arc::clone(cached));
-                        continue;
-                    }
-
-                    let baked = mtk_model::BuiltinModelRegistry::bake_block_entity(state_str, be);
-
-                    if let Some(baked_model) = baked {
-                        let source =
-                            crate::mesher::shading::types::ModelSource::Single(&baked_model);
-                        let m_data = Arc::new(
-                            crate::mesher::shading::palette::resolve_palette_meshing_data_for_state(
-                                state_str, &source, config,
-                            ),
-                        );
-                        resolved_cache.insert((state_str, be), Arc::clone(&m_data));
-                        entity_meshing_entries.insert(local_idx, m_data);
-                    }
-                }
-            }
-        }
+        let entity_meshing_entries = pre_resolve_block_entities(padded, config);
 
         let has_block_entities = !entity_meshing_entries.is_empty();
 
@@ -232,48 +136,17 @@ impl SectionMesher {
                     // 1. Fluid Meshing (Water, Lava, or Waterlogged)
                     if config.mesh_fluids && (meta.is_fluid || meta.is_waterlogged) {
                         has_non_grid_geometry = true;
-                        let get_state = |nx: i32, ny: i32, nz: i32| -> String {
-                            let n_px = (nx - block_pos.x + px as i32) as usize;
-                            let n_py = (ny - block_pos.y + py as i32) as usize;
-                            let n_pz = (nz - block_pos.z + pz as i32) as usize;
-                            if n_px < 18 && n_py < 18 && n_pz < 18 {
-                                padded.get_padded_state(n_px, n_py, n_pz).to_string()
-                            } else {
-                                "minecraft:air".to_string()
-                            }
-                        };
-
-                        let fluid_col = if let Some(ref biome_cols) = padded.biome_data {
-                            let col_idx = if biome_cols.len() == 1024 {
-                                let qy = (ly >> 2) & 3;
-                                (qy << 8) | ((lx & 15) << 4) | (lz & 15)
-                            } else {
-                                lx * 16 + lz
-                            };
-                            if col_idx < biome_cols.len() {
-                                Some(biome_cols[col_idx].water_color)
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        };
-
-                        emit_fluid_geometry(
+                        emit_fluid_at(
                             &mut mesh,
-                            block_pos.x,
-                            block_pos.y,
-                            block_pos.z,
-                            wx,
-                            wy,
-                            wz,
+                            padded,
+                            block_pos,
+                            (px, py, pz),
+                            (lx, ly, lz),
+                            (wx, wy, wz),
                             state_str,
-                            get_state,
                             culler,
                             config,
-                            0,
-                            Some(&mut collector),
-                            fluid_col,
+                            &mut collector,
                         );
 
                         if meta.is_fluid && !meta.is_waterlogged {
@@ -342,22 +215,12 @@ impl SectionMesher {
                                     ref variants,
                                     ref weights,
                                     total_weight,
-                                } => {
-                                    let seed =
-                                        mc_coordinate_seed(block_pos.x, block_pos.y, block_pos.z);
-                                    let mut rng = JavaRandom::new(seed);
-                                    let mut target = rng.next_int(*total_weight);
-                                    let mut chosen = 0;
-                                    for (i, &w) in weights.iter().enumerate() {
-                                        if target < w {
-                                            chosen = i;
-                                            break;
-                                        }
-                                        target = target.saturating_sub(w);
-                                    }
-                                    let b = &variants[chosen];
-                                    (&b.culled_faces, &b.unculled_faces)
-                                }
+                                } => select_variant_faces(
+                                    variants,
+                                    weights,
+                                    *total_weight,
+                                    block_pos,
+                                ),
                                 PaletteMeshingData::UnitCube { .. } | PaletteMeshingData::Empty => {
                                     unreachable!()
                                 }
@@ -394,28 +257,7 @@ impl SectionMesher {
                                 get_padded_neighbor_state,
                             );
 
-                            let corner_offsets = [
-                                [
-                                    (face.vertices[0].x.clamp(0.0, 1.0).round() as usize).min(1),
-                                    (face.vertices[0].y.clamp(0.0, 1.0).round() as usize).min(1),
-                                    (face.vertices[0].z.clamp(0.0, 1.0).round() as usize).min(1),
-                                ],
-                                [
-                                    (face.vertices[1].x.clamp(0.0, 1.0).round() as usize).min(1),
-                                    (face.vertices[1].y.clamp(0.0, 1.0).round() as usize).min(1),
-                                    (face.vertices[1].z.clamp(0.0, 1.0).round() as usize).min(1),
-                                ],
-                                [
-                                    (face.vertices[2].x.clamp(0.0, 1.0).round() as usize).min(1),
-                                    (face.vertices[2].y.clamp(0.0, 1.0).round() as usize).min(1),
-                                    (face.vertices[2].z.clamp(0.0, 1.0).round() as usize).min(1),
-                                ],
-                                [
-                                    (face.vertices[3].x.clamp(0.0, 1.0).round() as usize).min(1),
-                                    (face.vertices[3].y.clamp(0.0, 1.0).round() as usize).min(1),
-                                    (face.vertices[3].z.clamp(0.0, 1.0).round() as usize).min(1),
-                                ],
-                            ];
+                            let corner_offsets = quad_corner_offsets(&face.vertices);
 
                             let (final_tint_data, corner_tint_colors) =
                                 sample_quad_corner_biome_tints(
@@ -595,119 +437,45 @@ impl SectionMesher {
         }
         mesh
     }
+}
 
-    /// Meshes a batch of `PaddedVoxelArray`s with optional progress feedback.
-    pub(crate) fn mesh_sections_with_source_and_progress<'a, F>(
-        sections: &[PaddedVoxelArray],
-        culler: &FaceCuller,
-        model_provider: F,
-        config: &MesherConfig,
-        progress: Option<ProgressCallback>,
-    ) -> Result<Vec<(IVec3, MeshData)>, VoxelError>
-    where
-        F: Fn(&str) -> ModelSource<'a> + Sync + Send,
-    {
-        // 1. Collect all distinct blockstates across all sections
-        let mut unique_states: std::collections::HashSet<&str> = std::collections::HashSet::new();
-        for sec in sections {
-            if !sec.is_empty {
-                for st in &sec.palette {
-                    unique_states.insert(st.as_str());
-                }
+fn pre_resolve_block_entities(
+    padded: &PaddedVoxelArray,
+    config: &MesherConfig,
+) -> HashMap<u16, Arc<PaletteMeshingData>> {
+    let mut entity_meshing_entries = HashMap::new();
+    if padded.block_entities.is_empty() {
+        return entity_meshing_entries;
+    }
+
+    let mut resolved_cache: HashMap<(&str, &mtk_model::BlockEntityData), Arc<PaletteMeshingData>> =
+        HashMap::new();
+
+    for (&local_idx, be) in &padded.block_entities {
+        let lx = (local_idx >> 8) as usize;
+        let ly = ((local_idx >> 4) & 15) as usize;
+        let lz = (local_idx & 15) as usize;
+        let px = lx + 1;
+        let py = ly + 1;
+        let pz = lz + 1;
+        let pal_idx = padded.get_padded_idx(px, py, pz) as usize;
+        if pal_idx < padded.palette.len() {
+            let state_str = padded.palette[pal_idx].as_str();
+            if let Some(cached) = resolved_cache.get(&(state_str, be)) {
+                entity_meshing_entries.insert(local_idx, Arc::clone(cached));
+                continue;
+            }
+
+            let baked = mtk_model::BuiltinModelRegistry::bake_block_entity(state_str, be);
+            if let Some(baked_model) = baked {
+                let source = ModelSource::Single(&baked_model);
+                let m_data = Arc::new(resolve_palette_meshing_data_for_state(
+                    state_str, &source, config,
+                ));
+                resolved_cache.insert((state_str, be), Arc::clone(&m_data));
+                entity_meshing_entries.insert(local_idx, m_data);
             }
         }
-
-        // 2. Pre-resolve PaletteMeshingData once per unique blockstate across the thread pool
-        #[cfg(feature = "parallel")]
-        let palette_cache: std::collections::HashMap<&str, Arc<ResolvedPaletteEntry>> = {
-            use rayon::prelude::*;
-            unique_states
-                .par_iter()
-                .map(|&st| {
-                    let source = model_provider(st);
-                    let entry = ResolvedPaletteEntry::resolve(st, &source, culler, config);
-                    (st, Arc::new(entry))
-                })
-                .collect()
-        };
-
-        #[cfg(not(feature = "parallel"))]
-        let palette_cache: std::collections::HashMap<&str, Arc<ResolvedPaletteEntry>> =
-            unique_states
-                .iter()
-                .map(|&st| {
-                    let source = model_provider(st);
-                    let entry = ResolvedPaletteEntry::resolve(st, &source, culler, config);
-                    (st, Arc::new(entry))
-                })
-                .collect();
-
-        let throttler = ProgressThrottler::new("meshing_sections", sections.len(), progress)
-            .with_prefix("Meshing chunk");
-
-        #[cfg(feature = "parallel")]
-        let results = {
-            use rayon::prelude::*;
-            let results: Vec<(IVec3, MeshData)> = sections
-                .par_iter()
-                .map(|sec| {
-                    let mesh = Self::mesh_section_with_cache(
-                        sec,
-                        culler,
-                        |st| model_provider(st),
-                        config,
-                        Some(&palette_cache),
-                    );
-                    throttler.inc();
-                    (sec.coord, mesh)
-                })
-                .collect();
-            results
-        };
-
-        #[cfg(not(feature = "parallel"))]
-        let results = {
-            let results: Vec<(IVec3, MeshData)> = sections
-                .iter()
-                .map(|sec| {
-                    let mesh = Self::mesh_section_with_cache(
-                        sec,
-                        culler,
-                        |st| model_provider(st),
-                        config,
-                        Some(&palette_cache),
-                    );
-                    throttler.inc();
-                    (sec.coord, mesh)
-                })
-                .collect();
-            results
-        };
-
-        Ok(results)
     }
-
-    /// Meshes a batch of `PaddedVoxelArray`s with optional thread pool count and progress feedback.
-    pub fn mesh_sections_parallel_with_source_and_progress<'a, F>(
-        sections: &[PaddedVoxelArray],
-        culler: &FaceCuller,
-        model_provider: F,
-        config: &MesherConfig,
-        num_threads: Option<usize>,
-        progress: Option<ProgressCallback>,
-    ) -> Result<Vec<(IVec3, MeshData)>, VoxelError>
-    where
-        F: Fn(&str) -> ModelSource<'a> + Sync + Send,
-    {
-        mtk_core::constants::concurrency::execute_parallel(num_threads, || {
-            Self::mesh_sections_with_source_and_progress(
-                sections,
-                culler,
-                model_provider,
-                config,
-                progress,
-            )
-        })
-        .map_err(VoxelError::ThreadPoolError)?
-    }
+    entity_meshing_entries
 }

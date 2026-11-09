@@ -29,4 +29,3 @@ pub use types::{
     CoordinateSystem, MesherConfig, UnknownBlockStrategy, VoxelError, WorldMeshBuildResult,
 };
 pub use world::{SkinResolvedCallback, VoxelWorld};
-

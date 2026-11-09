@@ -5,11 +5,13 @@
 
 pub mod binary;
 pub mod database;
+pub mod element;
 pub mod model;
 pub mod to_mesh;
 pub mod variant_group;
 
 pub use database::*;
+pub use element::*;
 pub use model::*;
 pub use variant_group::*;
 

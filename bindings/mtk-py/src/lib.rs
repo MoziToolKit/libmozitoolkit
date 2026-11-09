@@ -188,6 +188,5 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests;
