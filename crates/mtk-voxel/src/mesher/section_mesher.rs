@@ -119,12 +119,17 @@ impl SectionMesher {
 
                     let entry = &palette_entries[pal_idx];
                     let meta = &entry.meta;
-                    if meta.is_air && !meta.is_waterlogged {
+                    let local_idx = ((lx << 8) | (ly << 4) | lz) as u16;
+                    let has_entity =
+                        has_block_entities && entity_meshing_entries.contains_key(&local_idx);
+
+                    if meta.is_air && !meta.is_waterlogged && !has_entity {
                         continue;
                     }
 
                     let state_str = &padded.palette[pal_idx];
                     if !entry.has_model
+                        && !has_entity
                         && is_non_mesh_placeholder_block(state_str)
                         && !meta.is_waterlogged
                     {

@@ -92,3 +92,71 @@ fn test_legacy_dimension_folders_are_ignored() {
 
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn test_save_loader_detects_paintings_in_entities_mca() {
+    let candidate = std::path::PathBuf::from(
+        "/Users/jaxlocke/Library/Application Support/PrismLauncher/instances/26.2/minecraft/saves/新的世界 (1)",
+    );
+    if !candidate.exists() {
+        eprintln!("Skipping user test save: path does not exist");
+        return;
+    }
+
+    let mut storage = VoxelStorage::new();
+    let min_coord = IVec3::new(-17, -61, -17);
+    let max_coord = IVec3::new(19, -48, 17);
+
+    let loaded = SaveLoader::load_box_into_storage(
+        &candidate,
+        "overworld",
+        min_coord,
+        max_coord,
+        &mut storage,
+    )
+    .expect("Failed loading user save box");
+
+    assert!(loaded > 0, "Sections should have been loaded");
+
+    // 1. Unpacked painting (4x4)
+    let block_unpacked = storage.get_block(-8, -59, 10);
+    assert_eq!(
+        block_unpacked,
+        "minecraft:painting[facing=east,variant=unpacked]"
+    );
+    let entity_unpacked = storage
+        .get_block_entity(-8, -59, 10)
+        .expect("Unpacked painting entity should exist");
+    match entity_unpacked {
+        mtk_model::BlockEntityData::Painting {
+            variant,
+            width,
+            height,
+        } => {
+            assert_eq!(variant, "unpacked");
+            assert_eq!(*width, 4);
+            assert_eq!(*height, 4);
+        }
+        _ => panic!("Expected BlockEntityData::Painting"),
+    }
+
+    // 2. Humble painting (2x2)
+    let block_humble = storage.get_block(-8, -59, 7);
+    assert_eq!(
+        block_humble,
+        "minecraft:painting[facing=east,variant=humble]"
+    );
+
+    // 3. Pool painting (2x1)
+    let block_pool = storage.get_block(-8, -57, 7);
+    assert_eq!(block_pool, "minecraft:painting[facing=east,variant=pool]");
+
+    // 4. Sunset painting (2x1)
+    let block_sunset = storage.get_block(-8, -60, 7);
+    assert_eq!(
+        block_sunset,
+        "minecraft:painting[facing=east,variant=sunset]"
+    );
+
+    println!("All 4 paintings successfully detected and loaded from user's save!");
+}

@@ -278,4 +278,20 @@ impl<'a> NbtList<'a> {
             _ => None,
         }
     }
+
+    #[inline]
+    pub fn doubles(&self) -> Option<&[f64]> {
+        match self {
+            Self::Double(v) => Some(v.as_slice()),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    pub fn floats(&self) -> Option<&[f32]> {
+        match self {
+            Self::Float(v) => Some(v.as_slice()),
+            _ => None,
+        }
+    }
 }

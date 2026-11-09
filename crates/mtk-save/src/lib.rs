@@ -12,6 +12,7 @@
 
 mod block_entity;
 mod chunk;
+mod entity;
 mod error;
 mod level;
 mod loader;
@@ -19,6 +20,7 @@ mod nbt;
 mod region;
 
 pub use block_entity::decode_block_entity_payload;
+pub use entity::ParsedEntity;
 pub use error::SaveError;
 pub use level::LevelData;
 pub use loader::SaveLoader;

@@ -4,6 +4,7 @@ use mtk_voxel::{VoxelStorage, VoxelWriter};
 use std::path::{Path, PathBuf};
 
 use crate::chunk::ChunkParser;
+use crate::entity::{EntityParser, ParsedEntity};
 use crate::error::SaveError;
 use crate::level::LevelData;
 use crate::region::RegionFile;
@@ -171,6 +172,63 @@ impl SaveLoader {
         }
     }
 
+    /// Resolves the entities directory for a given dimension name.
+    pub fn resolve_dimension_entities_dir(save_dir: &Path, dimension: &str) -> Option<PathBuf> {
+        let dim_clean = dimension.trim().to_lowercase();
+
+        // If the path itself is already an entities folder
+        if save_dir.is_dir() && save_dir.file_name().is_some_and(|f| f == "entities") {
+            return Some(save_dir.to_path_buf());
+        }
+
+        match dim_clean.as_str() {
+            "overworld" | "minecraft:overworld" => {
+                let p1 = save_dir.join("entities");
+                if p1.is_dir() {
+                    return Some(p1);
+                }
+                let p2 = save_dir.join("dimensions/minecraft/overworld/entities");
+                if p2.is_dir() {
+                    return Some(p2);
+                }
+            }
+            "nether" | "the_nether" | "minecraft:the_nether" => {
+                let p = save_dir.join("dimensions/minecraft/the_nether/entities");
+                if p.is_dir() {
+                    return Some(p);
+                }
+            }
+            "end" | "the_end" | "minecraft:the_end" => {
+                let p = save_dir.join("dimensions/minecraft/the_end/entities");
+                if p.is_dir() {
+                    return Some(p);
+                }
+            }
+            custom => {
+                let parts: Vec<&str> = custom.split(':').collect();
+                if parts.len() == 2 {
+                    let p = save_dir.join(format!("dimensions/{}/{}/entities", parts[0], parts[1]));
+                    if p.is_dir() {
+                        return Some(p);
+                    }
+                } else {
+                    let p = save_dir.join(format!("dimensions/minecraft/{}/entities", custom));
+                    if p.is_dir() {
+                        return Some(p);
+                    }
+                }
+            }
+        }
+
+        // Fallback: check direct entities folder
+        let direct_entities = save_dir.join("entities");
+        if direct_entities.is_dir() {
+            Some(direct_entities)
+        } else {
+            None
+        }
+    }
+
     /// Loads only the required chunk sections within `[min_block, max_block]` into a target `VoxelStorage`.
     ///
     /// Performs direct-seek MCA reads, uncompressing only intersecting chunks and Y sections.
@@ -198,6 +256,7 @@ impl SaveLoader {
     ) -> Result<usize, SaveError> {
         let region_dir = Self::resolve_dimension_region_dir(save_dir, dimension)
             .ok_or_else(|| SaveError::RegionDirNotFound(save_dir.to_path_buf()))?;
+        let entities_dir = Self::resolve_dimension_entities_dir(save_dir, dimension);
 
         // 1. Calculate bounding box ranges
         let true_min = min_block.min(max_block);
@@ -306,13 +365,129 @@ impl SaveLoader {
                             loaded_sections += 1;
                         }
 
+                        // Ingest legacy entities from region chunk NBT if separate entities dir is absent
+                        if entities_dir.is_none() {
+                            if let Ok(entities) =
+                                EntityParser::parse_entities(&decompressed, true_min, true_max)
+                            {
+                                for entity in entities {
+                                    match entity {
+                                        ParsedEntity::Painting {
+                                            block_pos,
+                                            facing,
+                                            variant,
+                                            width,
+                                            height,
+                                        } => {
+                                            let painting_state = format!(
+                                                "minecraft:painting[facing={},variant={}]",
+                                                facing.as_str(),
+                                                variant
+                                            );
+                                            storage.set_block(
+                                                block_pos.x,
+                                                block_pos.y,
+                                                block_pos.z,
+                                                &painting_state,
+                                                None,
+                                            );
+                                            storage.set_block_entity(
+                                                block_pos.x,
+                                                block_pos.y,
+                                                block_pos.z,
+                                                Some(mtk_model::BlockEntityData::Painting {
+                                                    variant,
+                                                    width,
+                                                    height,
+                                                }),
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         throttler.inc();
                     }
                 }
             }
         }
 
-        // 3. Set the active world bounds on VoxelStorage
+        // 3. Scan and ingest visual entities from separate entities/*.mca directory (1.17+ format)
+        if let Some(ref ent_dir) = entities_dir {
+            for rx in min_reg_x..=max_reg_x {
+                for rz in min_reg_z..=max_reg_z {
+                    let mca_path = ent_dir.join(format!("r.{}.{}.mca", rx, rz));
+                    if !mca_path.exists() {
+                        continue;
+                    }
+
+                    let mut region_file = match RegionFile::open(&mca_path) {
+                        Ok(rf) => rf,
+                        Err(_) => continue,
+                    };
+
+                    let chunk_start_x = (rx * 32).max(min_sec_x);
+                    let chunk_end_x = (rx * 32 + 31).min(max_sec_x);
+                    let chunk_start_z = (rz * 32).max(min_sec_z);
+                    let chunk_end_z = (rz * 32 + 31).min(max_sec_z);
+
+                    for cx in chunk_start_x..=chunk_end_x {
+                        for cz in chunk_start_z..=chunk_end_z {
+                            if !region_file.has_chunk(cx, cz) {
+                                continue;
+                            }
+
+                            let decompressed = match region_file.read_chunk_decompressed(cx, cz) {
+                                Ok(Some(d)) => d,
+                                _ => continue,
+                            };
+
+                            if let Ok(entities) =
+                                EntityParser::parse_entities(&decompressed, true_min, true_max)
+                            {
+                                for entity in entities {
+                                    match entity {
+                                        ParsedEntity::Painting {
+                                            block_pos,
+                                            facing,
+                                            variant,
+                                            width,
+                                            height,
+                                        } => {
+                                            let painting_state = format!(
+                                                "minecraft:painting[facing={},variant={}]",
+                                                facing.as_str(),
+                                                variant
+                                            );
+                                            storage.set_block(
+                                                block_pos.x,
+                                                block_pos.y,
+                                                block_pos.z,
+                                                &painting_state,
+                                                None,
+                                            );
+                                            storage.set_block_entity(
+                                                block_pos.x,
+                                                block_pos.y,
+                                                block_pos.z,
+                                                Some(mtk_model::BlockEntityData::Painting {
+                                                    variant,
+                                                    width,
+                                                    height,
+                                                }),
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Set the active world bounds on VoxelStorage
         let size_x = (true_max.x - true_min.x + 1).max(1);
         let size_y = (true_max.y - true_min.y + 1).max(1);
         let size_z = (true_max.z - true_min.z + 1).max(1);

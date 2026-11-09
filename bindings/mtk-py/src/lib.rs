@@ -139,8 +139,13 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("TINT_TYPE_HARDCODED", mtk_material::TINT_TYPE_HARDCODED)?;
     m.add("TINT_TYPE_DRY_FOLIAGE", mtk_material::TINT_TYPE_DRY_FOLIAGE)?;
 
-    // 7. Model Baker
+    // 7. Model Baker & Painting
     m.add_class::<PyBakedModelDatabase>()?;
+    m.add_function(wrap_pyfunction!(model::build_painting_mesh, m)?)?;
+    m.add_function(wrap_pyfunction!(model::get_painting_dimension, m)?)?;
+    m.add_function(wrap_pyfunction!(model::get_painting_variant, m)?)?;
+    m.add_function(wrap_pyfunction!(model::get_all_painting_variants, m)?)?;
+    m.add_function(wrap_pyfunction!(model::calculate_painting_position, m)?)?;
 
     // 8. UV Geometry Algorithms & Extrude
     m.add_function(wrap_pyfunction!(uv::calculate_uv_area, m)?)?;
@@ -158,6 +163,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // 9. Minecraft Save Loader
     m.add_function(wrap_pyfunction!(save::inspect_minecraft_save, m)?)?;
+    m.add_function(wrap_pyfunction!(save::load_minecraft_save_storage, m)?)?;
     m.add_function(wrap_pyfunction!(save::load_and_mesh_minecraft_save, m)?)?;
 
     // 10. Scene Interchange (.mtkscene)

@@ -112,11 +112,15 @@
   - [ ] 提供从 MI 临时参考骨骼快速重定向至 Rig2 / Ice Cube / BPS / Thomas 的向量化通道。
 
 ### 3. 原版静态与悬挂实体解析 (`mtk-save::entity`) (P1)
-- [ ] **`entities/r.X.Z.mca` 独立实体区域文件解析**
-  - [ ] 扩展 MCA 读取器，支持 Minecraft 1.17+ 独立实体区域文件；
-  - [ ] 基于选区 AABB 过滤空间相交实体。
-- [ ] **艺术画 (`PaintingEntity`) 解析**
-  - [ ] 提取 `variant`, `facing`, `pos`，内置原版 40+ 种画作尺寸表，生成带木质背板的三维画框网格。
+- [x] **`entities/r.X.Z.mca` 独立实体区域文件解析**
+  - [x] 扩展 MCA 读取器与目录发现逻辑（`resolve_dimension_entities_dir`），支持 Minecraft 1.17+ 独立实体区域文件及旧版 chunk 内嵌 `Entities` 标签；
+  - [x] 基于选区 AABB 过滤空间相交实体并注入 `VoxelStorage`。
+- [x] **艺术画 (`mtk-model::painting` / `mtk-save::entity`) 解析与程序化模型生成**
+  - [x] 内置 Minecraft 1.21 官方全部 51 种画作变种注册规格、尺寸映射与标题作者元数据；
+  - [x] 程序化生成 1/16 方块厚度的带木质背板与四边木框网格（`create_painting_baked_model` / `create_painting_mesh`）；
+  - [x] 完整支持正面多网格分段切片 UV 映射与背面/边框 UV 映射；
+  - [x] 挂接到 `mtk-py` 跨语言绑定与 Blender 前端 `bridge/entity.py` 及 `bridge/save.py`；
+  - [x] 存档导入时自动识别 `entities/*.mca` 中的艺术画并完整融入体素世界网格与点云。
 - [ ] **物品展示框 (`ItemFrameEntity`) 解析**
   - [ ] 提取展示框旋转角度、发光属性与内容物信息。
 - [ ] **原版填充地图数据解码器 (`mtk-save::map`)**

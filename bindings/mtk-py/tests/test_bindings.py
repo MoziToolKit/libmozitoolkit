@@ -212,5 +212,47 @@ class TestLibMtkPy(unittest.TestCase):
         self.assertIn("must not overlap in memory", str(ctx.exception))
 
 
+    def test_painting_variants_metadata(self):
+        all_variants = libmtk_py.get_all_painting_variants()
+        self.assertEqual(len(all_variants), 51)
+
+        dim = libmtk_py.get_painting_dimension("kebab")
+        self.assertEqual(dim, (1, 1))
+
+        dim_4x4 = libmtk_py.get_painting_dimension("minecraft:pointer")
+        self.assertEqual(dim_4x4, (4, 4))
+
+        meta = libmtk_py.get_painting_variant("kebab")
+        self.assertIsNotNone(meta)
+        self.assertEqual(meta["name"], "kebab")
+        self.assertEqual(meta["width"], 1)
+        self.assertEqual(meta["height"], 1)
+        self.assertEqual(meta["asset_id"], "minecraft:painting/kebab")
+        self.assertEqual(meta["title"], "Kebab med tre pepperoni")
+
+    def test_painting_mesh_generation(self):
+        mesh, textures = libmtk_py.build_painting_mesh("kebab", "north")
+        self.assertEqual(len(textures), 2)
+        self.assertIn("minecraft:painting/kebab", textures)
+        self.assertIn("minecraft:painting/back", textures)
+
+        self.assertEqual(mesh.vertex_count, 24)
+        self.assertEqual(mesh.triangle_count, 12)
+
+        # 4x4 segmented painting
+        mesh_4x4, textures_4x4 = libmtk_py.build_painting_mesh("pointer", "south")
+        self.assertIn("minecraft:painting/pointer", textures_4x4)
+        self.assertIn("minecraft:painting/back", textures_4x4)
+        # 16 front quads + 16 back quads + 16 perimeter edge quads = 48 quads = 96 tris
+        self.assertEqual(mesh_4x4.triangle_count, 96)
+
+    def test_painting_position_calculation(self):
+        support = [10, 64, 20]
+        pos = libmtk_py.calculate_painting_position(support, "south", variant="kebab")
+        self.assertAlmostEqual(pos[0], 10.5, places=3)
+        self.assertAlmostEqual(pos[1], 64.5, places=3)
+        self.assertAlmostEqual(pos[2], 20.03125, places=3)
+
+
 if __name__ == "__main__":
     unittest.main()

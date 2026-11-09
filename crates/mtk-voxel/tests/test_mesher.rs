@@ -2004,3 +2004,30 @@ fn test_spawner_does_not_cull_underlying_block_face() {
         "Cobblestone top face under spawner must NOT be culled (no hollow void underneath spawner)!"
     );
 }
+
+#[test]
+fn test_painting_meshing_with_block_entity() {
+    let mut world = VoxelWorld::new(None, None, None);
+    world.set_block(
+        5,
+        10,
+        5,
+        "minecraft:painting[facing=north,variant=kebab]",
+        None,
+    );
+    world.set_block_entity(
+        5,
+        10,
+        5,
+        Some(mtk_model::BlockEntityData::Painting {
+            variant: "kebab".to_string(),
+            width: 1,
+            height: 1,
+        }),
+    );
+
+    let mesh = world.rebuild_all().expect("Rebuild should succeed");
+    // 1x1 painting has 6 quads: front, back, top, bottom, left, right (welded to 8 corner vertices)
+    assert_eq!(mesh.quad_count(), 6);
+    assert_eq!(mesh.vertex_count(), 8);
+}

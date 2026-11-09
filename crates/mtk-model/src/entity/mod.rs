@@ -2,6 +2,7 @@
 
 pub mod banner;
 pub mod copper_statue;
+pub mod painting;
 pub(crate) mod pot;
 pub mod skull;
 
@@ -227,10 +228,16 @@ impl BlockEntityData {
 
     /// Constructs a canonical `Painting` data struct.
     pub fn new_painting(variant: impl Into<String>, width: u8, height: u8) -> Self {
+        let v_str = variant.into();
+        let (dim_w, dim_h) = if width == 0 || height == 0 {
+            painting::painting_dimension(&v_str)
+        } else {
+            (width, height)
+        };
         Self::Painting {
-            variant: variant.into(),
-            width: width.max(1),
-            height: height.max(1),
+            variant: v_str,
+            width: dim_w.max(1),
+            height: dim_h.max(1),
         }
     }
 

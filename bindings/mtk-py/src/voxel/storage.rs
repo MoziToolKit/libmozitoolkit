@@ -99,6 +99,13 @@ impl PyVoxelStorage {
         self.inner.get_block(x, y, z)
     }
 
+    /// Returns the JSON serialization of the block entity at world coordinate `(x, y, z)`, or None.
+    pub fn get_block_entity(&self, x: i32, y: i32, z: i32) -> Option<String> {
+        self.inner
+            .get_block_entity(x, y, z)
+            .map(|e| e.to_visual_json())
+    }
+
     /// Sets the blockstate at world coordinate `(x, y, z)` and marks dirty sections.
     #[pyo3(signature = (x, y, z, state, biome=None))]
     pub fn set_block(&mut self, x: i32, y: i32, z: i32, state: &str, biome: Option<&str>) -> bool {

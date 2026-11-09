@@ -118,6 +118,13 @@ Python 模块名：`libmtk_py`
   - `resolve_mesh_routes(face_texture_keys, atlas, aliases=None, enable_animated_textures=false)`
   - `reroute_mesh_animation(uvs, face_loop_ranges, face_texture_keys, face_old_chunk_ids, atlas, aliases=None, enable_animated_textures=false)`
 - **`GridAtlasSpec` (`PyGridAtlasSpec`)**：网格图集元数据规范。
+
+### 2.9 实体与艺术画模型生成 (`entity` & `painting`)
+- **`build_painting_mesh(variant: str, facing: str = "north", offset: Optional[Sequence[float]] = None) -> Tuple[MeshData, List[str]]`**：程序化生成 1/16 方块厚度的带木质背板与四边木框三维画框网格，输出包含画作纹理与背板纹理的连续 `MeshData` 及对应材质槽位。
+- **`get_painting_dimension(variant: str) -> Tuple[int, int]`**：获取画作在 Minecraft 中的整数方块规格 `(width, height)`。
+- **`get_painting_variant(variant: str) -> Optional[dict]`**：查询特定画作变种的完整元数据（包含 `name`、`width`、`height`、`asset_id`、`title`、`author`）。
+- **`get_all_painting_variants() -> List[dict]`**：获取 Minecraft 1.21 官方全部 51 种画作变种的元数据列表。
+- **`calculate_painting_position(support_pos: Sequence[int], facing: str = "north", width=None, height=None, variant=None) -> Tuple[float, float, float]`**：按照原版 `Painting.calculateBoundingBox` 精确计算画作在支撑方块表面的 3D 世界中心锚点坐标。
 - **缓存解析**：`resolve_active_cache_package(cache_dir, fingerprint=None)` 返回 active `.mtkcache` 路径。
 - **色彩数学与常量**：`compute_biome_tint_attributes_paletted`, `compute_mesh_biome_attributes_from_storage`, `sample_colormap_colors`, `TINT_TYPE_NONE..DRY_FOLIAGE`
 

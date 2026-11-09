@@ -117,6 +117,29 @@ pub fn inspect_minecraft_save(world_dir: &str) -> PyResult<PyLevelData> {
     })
 }
 
+/// Loads a bounded 3D selection from an Anvil save directly into a `VoxelStorage` without requiring model meshing.
+#[pyfunction]
+#[pyo3(signature = (
+    world_dir,
+    dimension="overworld",
+    min_block=(0, -64, 0),
+    max_block=(15, 64, 15),
+))]
+pub fn load_minecraft_save_storage(
+    world_dir: &str,
+    dimension: &str,
+    min_block: (i32, i32, i32),
+    max_block: (i32, i32, i32),
+) -> PyResult<PyVoxelStorage> {
+    let path = Path::new(world_dir);
+    let min_coord = IVec3::new(min_block.0, min_block.1, min_block.2);
+    let max_coord = IVec3::new(max_block.0, max_block.1, max_block.2);
+    let mut storage = VoxelStorage::new();
+    SaveLoader::load_box_into_storage(path, dimension, min_coord, max_coord, &mut storage)
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+    Ok(PyVoxelStorage { inner: storage })
+}
+
 /// End-to-end pipeline: Loads bounded 3D world selection from save, feeds into `VoxelWorld`,
 /// and meshes into `PyMeshData` with Atlas UVs and Ambient Occlusion.
 #[pyfunction]

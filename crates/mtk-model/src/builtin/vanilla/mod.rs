@@ -141,6 +141,27 @@ pub fn get_builtin_baked_model_for_state_and_entity(
         return Some(crate::entity::copper_statue::create_copper_statue_baked_model(blockstate));
     }
 
+    if clean == "painting" {
+        let facing = blockstate
+            .properties
+            .get("facing")
+            .and_then(|f| mtk_core::Direction::parse_loose(f))
+            .unwrap_or(mtk_core::Direction::North);
+
+        let variant = match entity {
+            Some(crate::entity::BlockEntityData::Painting { variant, .. }) => variant.as_str(),
+            _ => blockstate
+                .properties
+                .get("variant")
+                .map(|s| s.as_str())
+                .unwrap_or("kebab"),
+        };
+
+        return Some(crate::entity::painting::create_painting_baked_model(
+            variant, facing,
+        ));
+    }
+
     if clean == "decorated_pot" {
         if let Some(crate::entity::BlockEntityData::DecoratedPot { sherds }) = entity {
             let facing = blockstate
