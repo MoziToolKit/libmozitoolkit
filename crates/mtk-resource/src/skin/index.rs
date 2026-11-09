@@ -103,6 +103,7 @@ pub(crate) fn is_mirror_fallback_hash(hash: &str) -> bool {
 
 /// Returns true if a 32-hex UUID is formatted as a Mojang online Version 4 UUID.
 /// (13th hex character is '4').
+#[cfg(all(feature = "net", not(target_arch = "wasm32")))]
 pub(crate) fn is_mojang_online_uuid(clean_uuid: &str) -> bool {
     clean_uuid.len() == 32 && clean_uuid.as_bytes().get(12) == Some(&b'4')
 }

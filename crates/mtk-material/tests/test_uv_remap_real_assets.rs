@@ -1,7 +1,12 @@
-use mtk_material::{remap_local_to_atlas, MaterialResolver};
+use mtk_material::MaterialResolver;
 use mtk_resource::{AtlasCategory, ResourcePackStack, ZipPack};
 use mtk_testkit::{fabric_jar, read_fixture, resource_pack_zip};
-use mtk_texture::{AtlasBuilder, AtlasBuilderConfig};
+use mtk_texture::{AtlasBuilder, AtlasBuilderConfig, AtlasSpriteLocation};
+
+fn remap_local_to_atlas(u: f32, v: f32, sprite: &AtlasSpriteLocation) -> [f32; 2] {
+    let [u_min, v_min, u_max, v_max] = sprite.frame_0_uv_bounds;
+    [u_min + u * (u_max - u_min), v_min + v * (v_max - v_min)]
+}
 
 #[test]
 fn test_uv_remap_real_fabric_jar_and_spbr() {

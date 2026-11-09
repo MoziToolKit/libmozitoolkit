@@ -6,9 +6,7 @@ mod overrides;
 
 use crate::types::GridAtlasSpec;
 
-pub use self::overrides::{
-    builtin_biome_suffixes, parse_overrides, MaterialFallbackRule, ResolverOverrides,
-};
+pub use self::overrides::{builtin_biome_suffixes, parse_overrides, ResolverOverrides};
 
 /// Generic helper to clean a raw material or texture name into a normalized identifier stem.
 pub fn clean_identifier(raw: &str) -> String {

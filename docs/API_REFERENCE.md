@@ -210,9 +210,8 @@ cache_output_dir/
 - **`ScenePackageReader`**：
   - `open(path)`：快速校验头部与 CRC，加载目录表；
   - `metadata`：读取场景包 AABB 边界、体素总数与图集分辨率等元数据；
-  - `read_point_cloud() -> VoxelPointCloud`：极速解析稀疏体素列存并还原点云；
-  - `read_models() -> BakedModelDatabase`：读取已重映射 UV 的 Tree-Shaken 模型库；
-  - `read_atlas() -> BakedAtlas`：读取已打包的自包含多通道 PBR 图集。
+  - `unpack(origin_centered=True, z_up=True) -> SceneUnpackResult`：单次调用原生解码并交付全部核心组件（`point_cloud`, `models`, `atlas`, `biome_resolver`, `colormaps`, `dynamic_entity_slots`, `ctm_solver`）；
+  - `validate() -> SceneValidationReport`：执行场景包完整性与引用完整性校验。
 
 
 

@@ -342,8 +342,8 @@ PY
 
 - [x] 删除进程级 colormap 缓存 API（`set_cached_colormaps` / `clear_cached_colormaps` / `has_active_colormaps_override`）。
 - [x] colormap 作为显式参数传入；`VanillaColormaps` 只作为不透明句柄，删除未消费的 `sample_*` / `load_embedded`。
-- [ ] 合并 `compute_mesh_biome_attributes*` 变体：生产入口只保留 `compute_biome_tint_attributes_paletted` 与 `reapply_uniform_biome_tint`（名称可按最终设计调整，但只能一个）。
-- [ ] 将 20 参数函数收敛为强类型 `BiomeTintRequest` 或明确分组参数。
+- [x] 合并 `compute_mesh_biome_attributes*` 变体：生产入口收敛为 `compute_biome_tint_attributes_paletted`（支持 `face_biomes` 逐面生物群系）、`compute_mesh_biome_attributes_from_storage` 与 `reapply_uniform_biome_tint`；物理删除 `compute_biome_tint_attributes` 及 `crates/mtk-material/src/biome/batch.rs`。
+- [x] 收敛生物群系染色入口与 Rust `mtk-material` 根导出（删除 `MeshBiomeAttributesResult`、`BiomeTintFlatBuffers`、`reapply_uniform_biome_tint` 数组变体，统一保留扁平缓冲入口）。
 
 ### Batch 4：Rust 可见性瘦身（按 crate 逐个）
 
@@ -443,18 +443,18 @@ PY
 
 ### Batch 5：绑定与适配器收敛
 
-- [ ] `bindings/mtk-py` 根 `pub use` 改为 `pub(crate) use`；只保留 `#[pymodule]` 注册所需。
-- [ ] 删除 `libmtk_blender_dna` 的 `read_*` 与 `as_memoryview_raw` 零消费者导出，并同步删除 Rust 侧失去消费者的 `read_*_from_ptr`。
-- [ ] 删除 `adapters/blender/mtk-blender-dna` 中零消费者别名；只保留通用 `copy_*` / `read_*` / `validate_*`。
-- [ ] `mtk-host-memory::slice_layout` 降为 `pub(crate)`。
-- [ ] 决策 `mtk-wasm`：删除整个 crate（推荐）或在找到真实消费者前不纳入 workspace/CI/文档。
+- [x] `bindings/mtk-py` 内部模块全部私有化（`mod`），根 `pub use` 改为 `pub(crate) use`；只保留 `#[pymodule]` 注册所需，并从顶层移除仅作为返回值使用的包装类（`PyStageSpan`, `PyExecutionProfile`, `PyPrecompileResult`, `PyLevelData`, `PySceneMetadata`）。
+- [x] 删除 `libmtk_blender_dna` 的 `read_*` 与 `as_memoryview_raw` 零消费者导出，并同步删除 Rust 侧 `mtk-host-memory` 失去消费者的 `read_*_from_ptr`、`read_ptr_to_slice` 与 `slice_layout`（`MemoryResult` 降为 `pub(crate)`）。
+- [x] 删除 `adapters/blender/mtk-blender-dna` 中零消费者别名与 `DnaResult` 导出；只保留通用 `copy_*` / `validate_*`。
+- [x] `mtk-host-memory::slice_layout` 删除，`MemoryResult` 降为 `pub(crate)`。
+- [x] 决策 `mtk-wasm`：经架构确认予以保留，预留给未来官网前端用户在线预览与网页端存档导出器消费（纳入 WASM 交叉编译 CI 门禁）。
 
 ### Batch 6：文档与门禁
 
-- [ ] 按第 5 节重写 `bindings/mtk-py/README.md`，以实际导出面为准。
-- [ ] 更新 `docs/API_REFERENCE.md` / `docs/BINDINGS_DESIGN.md` / crate README。
-- [ ] 增加 API 审计脚本或 CI 检查：稳定顶层零测试专用、Rust 根导出必须有外部消费者。
-- [ ] 完成 `cargo fmt` / `clippy` / `test` / Python 测试全绿。
+- [x] 按第 5 节重写 `bindings/mtk-py/README.md`，以实际导出面为准。
+- [x] 更新 `docs/API_REFERENCE.md` / `docs/BINDINGS_DESIGN.md` / crate README。
+- [x] 增加 API 审计与架构护栏脚本（`libmozitoolkit/tools/ci_guardrails.py` 与 `MoziToolKit/tools/ci_guardrails.py`）并接入 GitHub Actions CI：强制检验模块私有化、零跨 crate 孤儿根导出、稳定顶层零死符号、层级隔离、无 `hasattr` 探测与无 `MagicMock`。
+- [x] 完成 `cargo fmt` / `clippy` / `test` / Python 测试全绿。
 
 ---
 

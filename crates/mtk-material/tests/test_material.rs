@@ -1,6 +1,5 @@
 use mtk_material::{
-    clean_identifier, remap_local_to_atlas, remap_mesh_multi_uvs_paletted_with_options,
-    GridAtlasSpec, MaterialResolver,
+    clean_identifier, remap_mesh_multi_uvs_paletted_with_options, GridAtlasSpec, MaterialResolver,
 };
 use mtk_resource::ResourceLocation;
 use mtk_texture::{AtlasAddressMap, AtlasSpriteLocation, SpriteKind};
@@ -73,10 +72,7 @@ fn test_resolver_and_atlas_projection() {
     let (res_id, sprite) = resolved.unwrap();
     assert_eq!(res_id.path, "block/stone");
     assert_eq!(sprite.chunk_id, 0);
-
-    // Project local [0.5, 0.5] to atlas
-    let projected = remap_local_to_atlas(0.5, 0.5, sprite);
-    assert_eq!(projected, [0.125, 0.125]);
+    assert_eq!(sprite.frame_0_uv_bounds, [0.0, 0.0, 0.25, 0.25]);
 }
 
 #[test]

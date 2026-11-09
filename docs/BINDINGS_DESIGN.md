@@ -47,13 +47,11 @@ bindings/
   - `normals_memoryview(py)`: 零拷贝返回 `[N, 3]` f32 法线缓冲。
   - `uvs_memoryview(py)`: 零拷贝返回 `[N, 2]` f32 主 UV 缓冲。
   - `loop_uvs_memoryview(py)`: 零拷贝返回 `[L, 2]` f32 角隅 Loop 域 UV 缓冲，彻底杜绝 Python 逐角隅数组组装开销。
-  - `loop_starts_memoryview(py)`: 零拷贝返回 `[F]` i32 Blender Polygon `loop_start` 偏移缓冲。
-  - `loop_totals_memoryview(py)`: 零拷贝返回 `[F]` i32 Blender Polygon `loop_total` 顶点数缓冲（Quad 为 4）。
   - `indices_memoryview(py)`: 零拷贝返回 `[M]` u32 三角形/多边形索引。
   - `quad_indices_memoryview(py)`: 零拷贝返回 `[Q, 4]` u32 四边形顶角索引缓冲。
   - `face_materials_memoryview(py)`: 逐面材质插槽 ID。
+  - `to_buffers(py)`: 宿主无关标准连续缓冲模型（Tier 3），返回包含 `positions`, `normals`, `uvs`, `indices`, `loop_starts`, `loop_totals` 等的 typed memoryview 字典。
   - **宿主内存适配层隔离 (`adapters/mtk-host-memory` / `adapters/blender/mtk-blender-dna`)**：通用 raw slice → pointer 复制位于 `adapters/mtk-host-memory`，Blender 语义包装位于 `adapters/blender/mtk-blender-dna`。两者都不依赖核心 crate；独立 `libmtk_blender_dna` wheel 通过 Python Buffer Protocol 接收核心 `memoryview`，并写入 Blender 指针。核心 wheel 不包含也不要求该适配器。
-  - `cull_faces(tolerance=1e-3, cull_opposite=True, cull_duplicates=True) -> PyMeshData`: 执行空间遮挡与叠面剔除，无缝保留所有自定义属性与 Quad 拓扑。
 - **高阶 Data-In Data-Out 算子**：
   - `process_flat_mesh_extrude_repair(...)`:
     使用扁平连续 1D 缓冲区（`positions`, `loop_vertices`, `loop_uvs`, `face_loop_starts`, `face_loop_totals`, `face_materials`）进行极致性能的批量挤出修复，彻底消除 Python 列表嵌套开销，完美适配 Blender `foreach_get` 与 NumPy 数组。
@@ -67,14 +65,11 @@ bindings/
   - `get_tint_info(texture_name, block_name=None, tint_index=None)`: 返回包含 `tint_type`, `tint_category`, `tint_weight`, `base_tint_weight`, `overlay_tint_weight`, `hardcoded_hex`, `is_hardcoded` 等完整元数据的字典。
   - `from_file(path)`: 从预编译的 `biome_mapping.json` 极速载入映射。
   - `to_json()` / `from_json(json_str)`: 序列化支持。
-- `blend_biome_colors(biome_weights, tint_type="grass") -> [f32; 4]`: 多群系平滑线性色彩过渡混合。
-- `sample_colormap_pixel(image_bytes, width, height, temp, hum, channels=4) -> [f32; 3]`: 原版 256x256 三角形 Colormap 像素采样。
-- `mesh_attribute_schema()` / `retired_mesh_attributes()`: 暴露 `mtk-core::attributes` 的规范属性契约（活跃与退役清单），宿主据此生成镜像并清理旧数据。
-- `compute_biome_tint_attributes(...)`: Rayon 多线程批量计算网格面的 Tint 颜色属性（支持全局预设、多群系加权及 `face_biomes` 逐面生物群系数组）。
+- `sample_colormap_colors(temp, hum, colormaps=None) -> dict`: 原版 256x256 三角形 Colormap 线性 RGBA 与十六进制采样。
+- `compute_biome_tint_attributes_paletted(...)`: Rayon 多线程批量计算网格面的 Tint 颜色属性（palette + u32 indices 输入，返回零拷贝 flat float32 `memoryview`；支持全局预设、多群系加权及 `face_biomes` 逐面生物群系数组）。
 - `compute_mesh_biome_attributes_from_storage(face_texture_keys, block_xs, block_ys, block_zs, storage, resolver=None, smooth=True)`: 按每个面的真实 3D 世界坐标从 `VoxelStorage` 查询 3D Quart Biome 并执行 5×5 (R=2) 平滑混合计算面染色属性。
 - `get_biome_meta(name)` / `get_all_biomes()`: 查询 66 原版生物群系规范参数（温度、湿度、草方块/树叶/水体颜色）。
-- `srgb_to_linear(color)` / `linear_to_srgb(color)`: 线性色彩空间数学；colormap 采样在 Rust 内完成，Python 不再暴露 UV 计算。
-- `MaterialResolver`: 材质别名解算与多通道 UV 重映射 (`remap_mesh_multi_uvs_parallel`)。
+- `MaterialResolver`: 材质别名解算与多通道 UV 重映射 (`remap_mesh_multi_uvs_paletted`)。
 
 
 ##### 3. 体素与实时同步 (`mtk.voxel` & `mtk.sync`)

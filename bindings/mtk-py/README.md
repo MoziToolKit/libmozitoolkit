@@ -45,11 +45,10 @@ Python 模块名：`libmtk_py`
 ### 2.1 几何网格与自定义属性 (`mesh` & `attributes`)
 - **`MeshData` (`PyMeshData`)**：连续内存紧凑几何网格缓冲容器。
   - 属性：`vertex_count`, `triangle_count`, `face_count`, `quad_count`, `is_empty`, `dynamic_entity_atlases` (返回 `{chunk_id: bytes}` 字典，无动态图集时返回 `{}`), `dynamic_entity_slots`
-  - 构造与修改：`MeshData()`, `MeshData.with_capacity(verts, indices, faces)`, `MeshData.from_flat_polygons(...)`, `MeshData.from_polygon_offsets(positions, loop_vertices, loop_uvs, face_offsets, normals=None, face_materials=None)`（CSR 面偏移直接构造）, `clear()`
+  - 构造与修改：`MeshData()`, `MeshData.from_flat_polygons(...)`, `MeshData.from_polygon_offsets(positions, loop_vertices, loop_uvs, face_offsets, normals=None, face_materials=None)`（CSR 面偏移直接构造）, `clear()`
   - 内存视图（标准零拷贝通道，推荐）：`positions_memoryview()`, `normals_memoryview()`, `uvs_memoryview()`, `indices_memoryview()`, `quad_indices_memoryview()`, `loop_uvs_memoryview()`, `face_materials_memoryview()`, `colors_memoryview()`
   - 宿主无关标准连续缓冲模型（Tier 3）：`to_buffers()` 零拷贝导出包含 `positions`, `normals`, `uvs`, `indices`, `loop_starts`, `loop_totals` 等的 Python typed memoryview 字典。
   - 核心 wheel 不再包含 Blender 指针写入代码。零拷贝宿主写入由独立 `libmtk_blender_dna` wheel 提供，通过 `memoryview` 接收核心 buffer，再写入 Blender 指针；核心不需要知道适配器的存在。
-  - 次级 UV / 面 tint：`get_flat_secondary_uvs()`, `face_tint_indices_memoryview()`
   - 顶点与面自定义属性：`add_string_attribute(name, domain, values)`, `add_attribute_from_buffer(name, domain, data_type, buffer)`, `get_string_attribute(name)`, `attribute_memoryview(name)`, `attribute_info(name)`, `attribute_names()`
 - **`AttributeDomain`**：属性域枚举，支持 `"point"` (顶点) 与 `"face"` (面)。
 - **`analyze_mesh_hard_edges(positions, edge_verts, face_loop_starts, face_loop_totals, loop_verts, sharp_angle_rad, explicit_sharp_edges=None) -> PyBytes`**：基于二面角与边界的高性能硬边/锐边拓扑分析算子，支持零拷贝 Buffer Protocol。
@@ -57,8 +56,7 @@ Python 模块名：`libmtk_py`
 ### 2.2 遮挡剔除与状态机 (`cull`)
 - **`FaceCuller` (`PyFaceCuller`)**：原版方块与复杂连接体遮挡状态机。
   - `FaceCuller(leaves_cull_mode=0, glass_cull_mode=0)`
-  - `is_face_occluded(block, neighbor, direction, pos_a=None, pos_b=None)`
-  - `clear_cache()`, `cache_len`
+  - `clear_cache()`
 
 ### 2.3 自适应像素网格切分 (`subdivide`)
 - **`adaptive_pixel_split_mesh(mesh, ...)`**：整网格批量自适应像素切分。
@@ -109,20 +107,19 @@ Python 模块名：`libmtk_py`
 - **`evaluate_cache_status(cache_dir, stack_pack_count, has_vanilla, expected_fingerprint=None) -> str`**：缓存状态判定门禁（返回 `"NO_PACKS"` | `"NO_VANILLA"` | `"READY"` | `"STALE"` | `"MISSING"`）。
 - **`BakedAtlas`**：烘焙图集容器；测试/开发用的 `AtlasBuilder` 位于 `libmtk_py.unstable.testing`。
 - **`precompile_all_assets(..., resolver_overrides_json=None)`**：端到端一键无头预烘焙管线；可传入 Python 维护的兼容规则 JSON。
-- **像素分析**：`batch_analyze_transparent_faces_f32`, `batch_analyze_transparent_faces_u8`；单点采样 `sample_uv_alpha_f32` 位于 `unstable.testing`。
+- **像素分析**：`batch_analyze_transparent_faces_f32`；单点采样 `sample_uv_alpha_f32` 位于 `unstable.testing`。
 
 ### 2.8 生物群系与材质解析 (`material`)
 - **`BiomeResolver` (`PyBiomeResolver`)**：原版 66 种生物群系调色板映射与混合器。
 - **`MaterialResolver` (`PyMaterialResolver`)**：着色器材质槽位与外部别名解算器。
 - **即时 Biome 重着色**：`reapply_uniform_biome_tint(base_tt, packed, old_colors, colors..., flags...)`
   返回两个零拷贝 memoryview（`packed_tint_data` / `tint_colors`），供 `foreach_set` 直接写入。
-  - `remap_mesh_multi_uvs(..., enable_animated_textures=false)` / `remap_mesh_multi_uvs_paletted(...)`
   - `remap_mesh_multi_uvs_paletted(..., palette, face_indices, ...)`：palette-native、零拷贝 id/metric buffer
   - `resolve_mesh_routes(face_texture_keys, atlas, aliases=None, enable_animated_textures=false)`
   - `reroute_mesh_animation(uvs, face_loop_ranges, face_texture_keys, face_old_chunk_ids, atlas, aliases=None, enable_animated_textures=false)`
 - **`GridAtlasSpec` (`PyGridAtlasSpec`)**：网格图集元数据规范。
 - **缓存解析**：`resolve_active_cache_package(cache_dir, fingerprint=None)` 返回 active `.mtkcache` 路径。
-- **色彩数学与常量**：`compute_biome_tint_attributes`, `compute_mesh_biome_attributes_from_storage`, `sample_colormap_colors`, `blend_biome_colors`, `sample_colormap_pixel`, `srgb_to_linear`, `linear_to_srgb`, `TINT_TYPE_NONE..DRY_FOLIAGE`
+- **色彩数学与常量**：`compute_biome_tint_attributes_paletted`, `compute_mesh_biome_attributes_from_storage`, `sample_colormap_colors`, `TINT_TYPE_NONE..DRY_FOLIAGE`
 
 ### 2.9 模型烘焙 (`model`)
 - **`BakedModelDatabase` (`PyBakedModelDatabase`)**：预编译方块几何模型库。

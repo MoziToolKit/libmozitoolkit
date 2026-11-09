@@ -11,7 +11,7 @@ mod error;
 mod identifier;
 mod meta;
 mod pack;
-pub mod probe;
+mod probe;
 pub mod skin;
 mod texture_key;
 

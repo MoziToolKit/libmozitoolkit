@@ -6,95 +6,6 @@ use crate::voxel::PyVoxelStorage;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyMemoryView};
 
-/// Standalone batch function to compute mesh biome attributes in Rust parallel Rayon.
-#[pyfunction]
-#[pyo3(signature = (
-    face_texture_keys,
-    biome_name="PLAINS",
-    multi_biomes=None,
-    resolver=None,
-    custom_temp=None,
-    custom_humidity=None,
-    custom_grass=None,
-    custom_foliage=None,
-    custom_dry_foliage=None,
-    custom_water=None,
-    has_custom_grass=false,
-    has_custom_foliage=false,
-    has_custom_dry_foliage=false,
-    face_biomes=None,
-    colormaps=None,
-))]
-pub fn compute_biome_tint_attributes(
-    py: Python<'_>,
-    face_texture_keys: Vec<String>,
-    biome_name: &str,
-    multi_biomes: Option<Vec<(String, f32)>>,
-    resolver: Option<&PyBiomeResolver>,
-    custom_temp: Option<f32>,
-    custom_humidity: Option<f32>,
-    custom_grass: Option<[f32; 4]>,
-    custom_foliage: Option<[f32; 4]>,
-    custom_dry_foliage: Option<[f32; 4]>,
-    custom_water: Option<[f32; 4]>,
-    has_custom_grass: bool,
-    has_custom_foliage: bool,
-    has_custom_dry_foliage: bool,
-    face_biomes: Option<Vec<String>>,
-    colormaps: Option<&PyVanillaColormaps>,
-) -> PyResult<Py<PyAny>> {
-    let default_resolver = mtk_material::BiomeResolver::new();
-    let res_ref = resolver.map(|r| &r.inner).unwrap_or(&default_resolver);
-    let cms_ref = colormaps.map(|c| c.inner.as_ref());
-
-    let res = py.detach(|| {
-        if let Some(ref biomes) = face_biomes {
-            mtk_material::compute_mesh_biome_attributes_per_face(
-                &face_texture_keys,
-                biomes,
-                res_ref,
-            )
-        } else if biome_name.eq_ignore_ascii_case("custom")
-            || custom_temp.is_some()
-            || custom_humidity.is_some()
-            || custom_grass.is_some()
-            || custom_foliage.is_some()
-            || custom_water.is_some()
-        {
-            let settings = mtk_material::CustomBiomeSettings {
-                temperature: custom_temp.unwrap_or(0.8),
-                humidity: custom_humidity.unwrap_or(0.4),
-                grass_color: custom_grass,
-                foliage_color: custom_foliage,
-                dry_foliage_color: custom_dry_foliage,
-                water_color: custom_water,
-                has_custom_grass,
-                has_custom_foliage,
-                has_custom_dry_foliage,
-            };
-            mtk_material::compute_mesh_biome_attributes_custom_with_colormaps(
-                &face_texture_keys,
-                &settings,
-                res_ref,
-                cms_ref,
-            )
-        } else {
-            mtk_material::compute_mesh_biome_attributes_with_colormaps(
-                &face_texture_keys,
-                biome_name,
-                multi_biomes.as_deref(),
-                res_ref,
-                cms_ref,
-            )
-        }
-    });
-
-    let dict = PyDict::new(py);
-    dict.set_item("packed_tint_data", res.packed_tint_data)?;
-    dict.set_item("tint_colors", res.tint_colors)?;
-    Ok(dict.into())
-}
-
 /// Palette-native biome tint computation returning flat float memoryviews.
 #[pyfunction]
 #[pyo3(signature = (
@@ -113,6 +24,7 @@ pub fn compute_biome_tint_attributes(
     has_custom_foliage=false,
     has_custom_dry_foliage=false,
     colormaps=None,
+    face_biomes=None,
 ))]
 pub fn compute_biome_tint_attributes_paletted<'py>(
     py: Python<'py>,
@@ -131,6 +43,7 @@ pub fn compute_biome_tint_attributes_paletted<'py>(
     has_custom_foliage: bool,
     has_custom_dry_foliage: bool,
     colormaps: Option<&PyVanillaColormaps>,
+    face_biomes: Option<Vec<String>>,
 ) -> PyResult<(Bound<'py, PyMemoryView>, Bound<'py, PyMemoryView>)> {
     let indices = BorrowedU32Buffer::extract(face_indices)?;
     let default_resolver = mtk_material::BiomeResolver::new();
@@ -175,6 +88,7 @@ pub fn compute_biome_tint_attributes_paletted<'py>(
             cf,
             cdf,
             res_ref,
+            face_biomes.as_deref(),
         )
     });
 

@@ -4,6 +4,7 @@
 //! negative caching for 404/invalid URLs, non-blocking disk/memory checks,
 //! background HTTP fetching, and 0-second indexed local cache hits.
 
+#[cfg(any(test, all(feature = "net", not(target_arch = "wasm32"))))]
 mod circuit;
 mod fetch;
 mod index;

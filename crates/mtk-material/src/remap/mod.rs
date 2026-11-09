@@ -8,7 +8,7 @@ use mtk_texture::AtlasSpriteLocation;
 
 /// Project a local [0.0..1.0] (or continuous tiled) UV coordinate into a target AtlasSprite's Frame 0 bounds.
 #[inline]
-pub fn remap_local_to_atlas(u: f32, v: f32, sprite: &AtlasSpriteLocation) -> [f32; 2] {
+pub(crate) fn remap_local_to_atlas(u: f32, v: f32, sprite: &AtlasSpriteLocation) -> [f32; 2] {
     let [u_min, v_min, u_max, v_max] = sprite.frame_0_uv_bounds;
     let width = u_max - u_min;
     let height = v_max - v_min;
@@ -148,4 +148,18 @@ pub(crate) fn normalize_face_uv_for_atlas_tiling(
     let loc_v = min_v + (safe_span_v - 1.0) * 0.5;
 
     ([scale_u, scale_v, loc_u, loc_v], true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_remap_local_to_atlas() {
+        let sprite = AtlasSpriteLocation {
+            frame_0_uv_bounds: [0.0, 0.0, 0.25, 0.25],
+            ..Default::default()
+        };
+        assert_eq!(remap_local_to_atlas(0.5, 0.5, &sprite), [0.125, 0.125]);
+    }
 }

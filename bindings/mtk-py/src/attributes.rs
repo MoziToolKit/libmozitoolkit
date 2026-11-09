@@ -3,7 +3,6 @@
 //! Provides typed attribute buffer decoding, domain mapping, and Python conversions.
 
 use pyo3::prelude::*;
-use pyo3::types::PyList;
 
 use mtk_core::{AttributeData, AttributeDomain};
 
@@ -97,27 +96,6 @@ pub fn parse_attribute_buffer(dtype: &str, raw_bytes: &[u8]) -> PyResult<Attribu
             "Unsupported attribute data type '{}'",
             dtype
         ))),
-    }
-}
-
-/// Converts `AttributeData` to a Python list.
-pub fn attribute_data_to_py_list<'py>(
-    py: Python<'py>,
-    data: &AttributeData,
-) -> PyResult<Bound<'py, PyAny>> {
-    match data {
-        AttributeData::Float(v) => Ok(PyList::new(py, v)?.into_any()),
-        AttributeData::Float2(v) => Ok(PyList::new(py, v)?.into_any()),
-        AttributeData::Float3(v) => Ok(PyList::new(py, v)?.into_any()),
-        AttributeData::Float4(v) => Ok(PyList::new(py, v)?.into_any()),
-        AttributeData::Int8(v) => Ok(PyList::new(py, v)?.into_any()),
-        AttributeData::Int16(v) => Ok(PyList::new(py, v)?.into_any()),
-        AttributeData::Int32(v) => Ok(PyList::new(py, v)?.into_any()),
-        AttributeData::UInt8(v) => Ok(PyList::new(py, v)?.into_any()),
-        AttributeData::UInt16(v) => Ok(PyList::new(py, v)?.into_any()),
-        AttributeData::UInt32(v) => Ok(PyList::new(py, v)?.into_any()),
-        AttributeData::Bool(v) => Ok(PyList::new(py, v)?.into_any()),
-        AttributeData::String(v) => Ok(PyList::new(py, v)?.into_any()),
     }
 }
 

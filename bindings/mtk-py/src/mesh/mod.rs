@@ -444,9 +444,3 @@ impl PyMeshData {
         )
     }
 }
-
-pub use crate::extrude::process_flat_mesh_extrude_repair;
-pub use crate::subdivide::{
-    adaptive_pixel_split_mesh, calculate_face_target_grid, calculate_pixel_grid_cut_factors,
-    slice_face_by_pixel_grid,
-};

@@ -3,11 +3,11 @@
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
-use super::batch::MeshBiomeAttributesResult;
 use super::color_set::BiomeColorSet;
 use super::hardcoded::{
     TINT_TYPE_DRY_FOLIAGE, TINT_TYPE_FOLIAGE, TINT_TYPE_GRASS, TINT_TYPE_HARDCODED, TINT_TYPE_WATER,
 };
+use super::palettes::get_biome_palette;
 use super::resolver::BiomeResolver;
 
 /// Flat float buffers produced by the instant uniform-biome recolor path.
@@ -98,54 +98,12 @@ pub fn reapply_uniform_biome_tint_flat(
     }
 }
 
-/// Array-of-structs variant of [`reapply_uniform_biome_tint_flat`].
-pub fn reapply_uniform_biome_tint(
-    base_tint_types: &[u8],
-    packed_tint_data: &[[f32; 4]],
-    existing_tint_colors: &[[f32; 4]],
-    colors: BiomeColorSet,
-    has_custom_grass: bool,
-    has_custom_foliage: bool,
-    has_custom_dry_foliage: bool,
-) -> MeshBiomeAttributesResult {
-    let flat = reapply_uniform_biome_tint_flat(
-        base_tint_types,
-        packed_tint_data,
-        existing_tint_colors,
-        colors,
-        has_custom_grass,
-        has_custom_foliage,
-        has_custom_dry_foliage,
-    );
-    let face_count = base_tint_types.len();
-    let mut packed_tint_data = Vec::with_capacity(face_count);
-    let mut tint_colors = Vec::with_capacity(face_count);
-    for i in 0..face_count {
-        packed_tint_data.push([
-            flat.packed_tint_data[i * 4],
-            flat.packed_tint_data[i * 4 + 1],
-            flat.packed_tint_data[i * 4 + 2],
-            flat.packed_tint_data[i * 4 + 3],
-        ]);
-        tint_colors.push([
-            flat.tint_colors[i * 4],
-            flat.tint_colors[i * 4 + 1],
-            flat.tint_colors[i * 4 + 2],
-            flat.tint_colors[i * 4 + 3],
-        ]);
-    }
-    MeshBiomeAttributesResult {
-        packed_tint_data,
-        tint_colors,
-    }
-}
-
 /// Palette-native full biome attribute computation.
 ///
 /// Resolves tint metadata once per unique palette entry, then writes flat
-/// `packed_tint_data` / `tint_colors` for every face. This is
-/// the palette counterpart of `compute_mesh_biome_attributes_custom` and avoids
-/// materializing one `String` per face.
+/// `packed_tint_data` / `tint_colors` for every face. When `face_biomes` is
+/// provided, each face resolves its own biome palette; otherwise the uniform
+/// `colors` and custom flags are applied across all faces.
 pub fn compute_mesh_biome_attributes_paletted_flat(
     palette: &[String],
     face_indices: &[u32],
@@ -154,6 +112,7 @@ pub fn compute_mesh_biome_attributes_paletted_flat(
     has_custom_foliage: bool,
     has_custom_dry_foliage: bool,
     resolver: &BiomeResolver,
+    face_biomes: Option<&[String]>,
 ) -> BiomeTintFlatBuffers {
     let face_count = face_indices.len();
     if face_count == 0 {
@@ -166,6 +125,7 @@ pub fn compute_mesh_biome_attributes_paletted_flat(
         .collect();
     let mut packed_out = vec![0.0f32; face_count * 4];
     let mut colors_out = vec![0.0f32; face_count * 4];
+    let default_biome = "plains".to_string();
 
     let compute = |i: usize| -> ([f32; 4], [f32; 4]) {
         let info = face_indices
@@ -174,10 +134,33 @@ pub fn compute_mesh_biome_attributes_paletted_flat(
             .cloned()
             .unwrap_or_default();
 
+        let (face_colors, cg, cf, cdf) = if let Some(biomes) = face_biomes {
+            let b_name = biomes.get(i).unwrap_or(&default_biome);
+            let pal = get_biome_palette(b_name);
+            (
+                BiomeColorSet {
+                    grass: pal.grass_linear(),
+                    foliage: pal.foliage_linear(),
+                    dry_foliage: pal.dry_foliage_linear(),
+                    water: pal.water_linear(),
+                },
+                pal.has_custom_grass,
+                pal.has_custom_foliage,
+                pal.has_custom_dry_foliage,
+            )
+        } else {
+            (
+                colors,
+                has_custom_grass,
+                has_custom_foliage,
+                has_custom_dry_foliage,
+            )
+        };
+
         let has_custom = match info.tint_type {
-            TINT_TYPE_GRASS => has_custom_grass,
-            TINT_TYPE_FOLIAGE => has_custom_foliage,
-            TINT_TYPE_DRY_FOLIAGE => has_custom_dry_foliage,
+            TINT_TYPE_GRASS => cg,
+            TINT_TYPE_FOLIAGE => cf,
+            TINT_TYPE_DRY_FOLIAGE => cdf,
             _ => false,
         };
         let target_tt = if info.is_hardcoded || has_custom {
@@ -192,10 +175,10 @@ pub fn compute_mesh_biome_attributes_paletted_flat(
             target_tt as f32,
         ];
         let color = match info.tint_type {
-            TINT_TYPE_GRASS => colors.grass,
-            TINT_TYPE_FOLIAGE => colors.foliage,
-            TINT_TYPE_DRY_FOLIAGE => colors.dry_foliage,
-            TINT_TYPE_WATER => colors.water,
+            TINT_TYPE_GRASS => face_colors.grass,
+            TINT_TYPE_FOLIAGE => face_colors.foliage,
+            TINT_TYPE_DRY_FOLIAGE => face_colors.dry_foliage,
+            TINT_TYPE_WATER => face_colors.water,
             TINT_TYPE_HARDCODED => info.hardcoded_color.unwrap_or([1.0, 1.0, 1.0, 1.0]),
             _ => {
                 if info.is_hardcoded {

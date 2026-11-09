@@ -5,7 +5,6 @@
 pub use mtk_host_memory::{
     copy_f32_to_ptr, copy_i32_to_ptr, copy_slice_to_ptr, copy_u32_to_ptr, copy_u8_to_ptr,
     validate_destination, validate_pointer, validate_source, MemoryError as DnaError,
-    MemoryResult as DnaResult,
 };
 
 #[cfg(test)]

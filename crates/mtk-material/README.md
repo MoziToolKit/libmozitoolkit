@@ -166,17 +166,12 @@ pub struct MeshMultiUvRemapResult {
 | `get_swamp_grass_color(x: f32, z: f32) -> [f32; 4]` | 获取沼泽草基于原版 0.0225 频率 Perlin 噪声的权威双色插值色彩 (Linear RGBA)。 |
 | `get_unit_cube_tint_indices(block_name: &str) -> [i16; 6]` | 获取单位立方体 6 个方向的面染色标记。 |
 | `get_default_colormaps() -> Arc<VanillaColormaps>` | 获取内置原版草地、树叶、干枯树叶 RGB 色图。 |
-| `compute_mesh_biome_attributes_per_face(texture_keys, face_biomes, resolver)` | Rayon 并行按逐面生物群系数组计算染色面属性与特异群系路由。 |
-| `compute_mesh_biome_attributes_with_colormaps(...)` | 显式传入 colormaps 批量计算网格染色属性。 |
-| `compute_mesh_biome_attributes_custom_with_colormaps(...)` | 自定义群系设置的染色属性计算。 |
-| `compute_mesh_biome_attributes_paletted_flat(palette, indices, ...)` | palette-native 全量群系属性计算，避免逐面 `String`。 |
+| `compute_mesh_biome_attributes_paletted_flat(palette, indices, ...)` | palette-native 全量群系属性计算（支持统一调色板与可选 `face_biomes` 逐面群系），避免逐面 `String`。 |
 | `reapply_uniform_biome_tint_flat(base_tt, packed, old_colors, colors, flags)` | 即时统一群系重着色：并行输出扁平 tint data/color，不重新解析贴图键。 |
-| `reapply_uniform_biome_tint(...)` | 同上，返回 array-of-structs 形式，便于非 Python 宿主。 |
 
 ### 3.2 材质与 UV 重映射
 | 函数签名 | 描述 |
 | :--- | :--- |
-| `remap_local_to_atlas(u, v, sprite) -> [f32; 2]` | 将 [0, 1] 局部 UV 映射到图集 Sprite 的 Frame 0 区域。 |
 | `MaterialResolver::resolve(mat_name, aliases, address_map)` | 多级匹配解析材质名称到 `AtlasSpriteLocation`（静态 Frame 0 优先）。 |
 | `resolve_animated_sprite(mat_name, aliases, address_map)` | 仅查找专用动画 sprite（`anim_sprites`），支持原生别名/清理名/用户别名。 |
 | `extract_animation_metrics(sprite) -> ([frames, frametime, interpolate], [w, h, 0])` | 统一提取动画调度器所需元数据；静态 sprite 返回安全默认值。 |
@@ -184,7 +179,6 @@ pub struct MeshMultiUvRemapResult {
 | `resolve_mesh_material_routes(keys, aliases, address_map, enable_animated)` | 只解析逐面 chunk/texture/动画路由，不触碰 UV。 |
 | `reroute_mesh_animation(uvs, ranges, keys, old_chunk_ids, atlas, aliases, enable_animated)` | 将已有 Atlas UV 从旧 sprite 反解并投影到新 sprite，支持静态↔动画幂等切换。 |
 | `decode_baked_atlas(atlas: &mut BakedAtlas) -> Result<PbrDecodeSummary, MaterialError>` | 将烘焙图集中各分块的 LabPBR 伴生贴图解码为规范 MtkPackedV1 缓冲，并自动注入水体/玻璃/冰块等内置物理预设。 |
-| `get_physical_preset(path: &str) -> Option<PhysicalMaterialPreset>` | 查询水体/玻璃/冰块/蜂蜜/史莱姆等材质的内置物理预设（透射、IOR、粗糙度）。 |
 
 
 
@@ -192,7 +186,7 @@ pub struct MeshMultiUvRemapResult {
 
 ### 示例 1：查询权威生物群系调色板与色彩空间转换
 ```rust
-use mtk_material::biome::{get_biome_palette, hex_to_linear_rgba, srgb_to_linear};
+use mtk_material::{get_biome_palette, hex_to_linear_rgba};
 
 fn main() {
     // 1. 查询樱花树林 (Cherry Grove) 调色板
@@ -208,66 +202,70 @@ fn main() {
 }
 ```
 
-### 示例 2：Rayon 并行计算网格面生物群系着色属性
+### 示例 2：Rayon 并行计算网格面生物群系着色属性 (Palette-Native)
 ```rust
-use mtk_material::biome::{compute_mesh_biome_attributes, BiomeResolver};
+use mtk_material::{
+    compute_mesh_biome_attributes_paletted_flat, resolve_biome_color_set_with_colormaps,
+    BiomeResolver,
+};
 
 fn main() {
     let resolver = BiomeResolver::new();
-
-    // 模拟来自网格各面的材质/纹理标识符
-    let face_texture_keys = vec![
+    let palette = vec![
         "minecraft:block/grass_block_top".to_string(),
         "minecraft:block/oak_leaves".to_string(),
         "minecraft:block/stone".to_string(),
-        "minecraft:block/dead_bush".to_string(),
     ];
+    let face_indices = vec![0u32, 1, 2, 0];
 
-    // 计算平原生物群系下的面属性
-    let attrs = compute_mesh_biome_attributes(
-        &face_texture_keys,
-        "plains",
-        None,
+    let (colors, cg, cf, cdf) =
+        resolve_biome_color_set_with_colormaps("plains", None, None, None);
+    let attrs = compute_mesh_biome_attributes_paletted_flat(
+        &palette,
+        &face_indices,
+        colors,
+        cg,
+        cf,
+        cdf,
         &resolver,
+        None,
     );
 
-    for i in 0..face_texture_keys.len() {
-        println!(
-            "Face {}: Tint Data: {:?}, Color: {:?}",
-            face_texture_keys[i],
-            attrs.packed_tint_data[i],
-            attrs.tint_colors[i],
-        );
-    }
+    println!("Computed {} floats of tint data", attrs.packed_tint_data.len());
 }
 ```
 
 ### 示例 3：全网格多通道 UV 并行重映射 (Atlas UV + Local UV)
 ```rust
-use mtk_material::remap_mesh_multi_uvs_parallel;
+use mtk_material::remap_mesh_multi_uvs_paletted_with_options;
 use mtk_texture::AtlasAddressMap;
 
 fn main() {
     let address_map = AtlasAddressMap::new(); // 从 atlas_mapping.json 加载...
 
-    let mut source_uvs = vec![
+    let source_uvs = vec![
         [0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], // Face 0 (Quad)
     ];
-    let face_materials = vec!["block/oak_planks".to_string()];
-    let face_loop_ranges = vec![(0u32, 4u32)];
+    let face_material_palette = vec!["block/oak_planks".to_string()];
+    let face_material_indices = vec![0u32];
+    let face_loop_ranges = vec![(0usize, 4usize)];
 
-    let result = remap_mesh_multi_uvs_parallel(
+    let result = remap_mesh_multi_uvs_paletted_with_options(
         &source_uvs,
-        &face_materials,
+        &face_material_palette,
+        &face_material_indices,
         &face_loop_ranges,
         &address_map,
         None,
         None,
+        None,
+        None,
+        false,
     );
 
-    println!("Remapped {} faces ({} loops)", result.face_count, result.loop_count);
-    println!("Atlas UVs: {:?}", result.atlas_uvs);
-    println!("Local UVs: {:?}", result.local_uvs);
+    println!("Remapped {} faces ({} loops)", result.mesh.face_count, result.mesh.loop_count);
+    println!("Atlas UVs: {:?}", result.mesh.atlas_uvs);
+    println!("Local UVs: {:?}", result.mesh.local_uvs);
 }
 ```
 

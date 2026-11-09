@@ -8,8 +8,7 @@ use mtk_core::UvLayout;
 use super::PyMeshData;
 use crate::buffer::{
     create_owned_f32_memoryview, create_owned_i32_memoryview, create_owned_u32_memoryview,
-    create_zerocopy_f32_memoryview, create_zerocopy_i16_memoryview, create_zerocopy_u16_memoryview,
-    create_zerocopy_u32_memoryview,
+    create_zerocopy_f32_memoryview, create_zerocopy_u16_memoryview, create_zerocopy_u32_memoryview,
 };
 
 /// Read-only memoryview of vertex positions (`float32 * 3` per vertex).
@@ -41,29 +40,6 @@ pub fn uvs_memoryview<'py>(mesh: &Bound<'py, PyMeshData>) -> PyResult<Bound<'py,
     let ptr = inner.uvs.as_ptr() as *const f32;
     let count = inner.uvs.len() * 2;
     create_zerocopy_f32_memoryview(py, ptr, count, mesh.as_any())
-}
-
-/// Read-only memoryview of secondary normalized [0, 1] vertex UVs (if generated).
-pub fn secondary_uvs_memoryview<'py>(
-    mesh: &Bound<'py, PyMeshData>,
-) -> PyResult<Option<Bound<'py, PyMemoryView>>> {
-    let py = mesh.py();
-    let inner = &mesh.borrow().inner;
-    if let Some(ref sec_uvs) = inner.secondary_uvs {
-        if sec_uvs.is_empty() {
-            return Ok(None);
-        }
-        let ptr = sec_uvs.as_ptr() as *const f32;
-        let count = sec_uvs.len() * 2;
-        Ok(Some(create_zerocopy_f32_memoryview(
-            py,
-            ptr,
-            count,
-            mesh.as_any(),
-        )?))
-    } else {
-        Ok(None)
-    }
 }
 
 /// Read-only memoryview of triangle indices (`uint32` per index).
@@ -164,17 +140,6 @@ pub fn face_materials_memoryview<'py>(
     let ptr = inner.face_materials.as_ptr();
     let count = inner.face_materials.len();
     create_zerocopy_u16_memoryview(py, ptr, count, mesh.as_any())
-}
-
-/// Read-only memoryview of face tint indices (`int16` per face).
-pub fn face_tint_indices_memoryview<'py>(
-    mesh: &Bound<'py, PyMeshData>,
-) -> PyResult<Bound<'py, PyMemoryView>> {
-    let py = mesh.py();
-    let inner = &mesh.borrow().inner;
-    let ptr = inner.face_tint_indices.as_ptr();
-    let count = inner.face_tint_indices.len();
-    create_zerocopy_i16_memoryview(py, ptr, count, mesh.as_any())
 }
 
 /// Read-only memoryview of vertex RGBA colors (`float32 * 4` per vertex) if present.
