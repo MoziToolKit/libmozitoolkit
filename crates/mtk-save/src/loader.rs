@@ -16,7 +16,7 @@ pub struct SaveLoader;
 
 impl SaveLoader {
     /// Attempts to locate `level.dat` given a root directory or child path.
-    pub fn find_level_dat(path: &Path) -> Option<PathBuf> {
+    pub(crate) fn find_level_dat(path: &Path) -> Option<PathBuf> {
         if path.is_file() {
             if path.file_name().is_some_and(|f| f == "level.dat") {
                 return Some(path.to_path_buf());
@@ -117,7 +117,10 @@ impl SaveLoader {
     }
 
     /// Resolves the region directory for a given dimension name.
-    pub fn resolve_dimension_region_dir(save_dir: &Path, dimension: &str) -> Option<PathBuf> {
+    pub(crate) fn resolve_dimension_region_dir(
+        save_dir: &Path,
+        dimension: &str,
+    ) -> Option<PathBuf> {
         let dim_clean = dimension.trim().to_lowercase();
 
         // If the path itself is already a region folder
@@ -174,7 +177,10 @@ impl SaveLoader {
     }
 
     /// Resolves the entities directory for a given dimension name.
-    pub fn resolve_dimension_entities_dir(save_dir: &Path, dimension: &str) -> Option<PathBuf> {
+    pub(crate) fn resolve_dimension_entities_dir(
+        save_dir: &Path,
+        dimension: &str,
+    ) -> Option<PathBuf> {
         let dim_clean = dimension.trim().to_lowercase();
 
         // If the path itself is already an entities folder
@@ -474,5 +480,34 @@ impl SaveLoader {
         }
 
         Ok((loaded_sections, loaded_entities))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_dimension_dirs() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("mtk_save_loader_unit_{}", unique));
+        std::fs::create_dir_all(root.join("DIM-1/region")).unwrap();
+        std::fs::create_dir_all(root.join("DIM1/region")).unwrap();
+
+        assert!(SaveLoader::resolve_dimension_region_dir(&root, "the_nether").is_none());
+        assert!(SaveLoader::resolve_dimension_region_dir(&root, "the_end").is_none());
+
+        std::fs::create_dir_all(root.join("region")).unwrap();
+        std::fs::create_dir_all(root.join("entities")).unwrap();
+        assert!(SaveLoader::resolve_dimension_region_dir(&root, "overworld").is_some());
+        assert!(SaveLoader::resolve_dimension_entities_dir(&root, "overworld").is_some());
+
+        std::fs::create_dir_all(root.join("dimensions/minecraft/the_nether/region")).unwrap();
+        assert!(SaveLoader::resolve_dimension_region_dir(&root, "the_nether").is_some());
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

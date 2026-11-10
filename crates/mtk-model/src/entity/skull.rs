@@ -16,20 +16,6 @@ pub enum SkullKind {
 }
 
 impl SkullKind {
-    /// Maps vanilla legacy `SkullType` integer (0..6) to `SkullKind`.
-    pub fn from_type_id(type_id: u8) -> Self {
-        match type_id {
-            0 => Self::Skeleton,
-            1 => Self::WitherSkeleton,
-            2 => Self::Zombie,
-            3 => Self::Player,
-            4 => Self::Creeper,
-            5 => Self::Dragon,
-            6 => Self::Piglin,
-            _ => Self::Skeleton,
-        }
-    }
-
     /// Resolves `SkullKind` from a blockstate or item name (e.g. "player_head", "skeleton_skull").
     pub fn from_block_name(name: &str) -> Option<Self> {
         let clean = name.strip_prefix("minecraft:").unwrap_or(name);
@@ -129,11 +115,6 @@ impl PlayerProfileData {
 pub use mtk_resource::skin::{
     derive_skin_key, extract_skin_url_from_property_base64 as extract_skin_url_from_base64,
 };
-
-/// Zero-dependency URL-safe / standard Base64 decoder.
-pub fn decode_base64(input: &str) -> Option<Vec<u8>> {
-    mtk_resource::skin::decode_base64(input.as_bytes())
-}
 
 /// Extracts the final URL segment hash from a skin URL.
 pub fn extract_skin_hash(url: &str) -> Option<&str> {

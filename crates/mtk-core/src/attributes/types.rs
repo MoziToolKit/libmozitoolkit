@@ -10,27 +10,6 @@ pub type TintIndex = i16;
 /// Material slot identifier, mapped to shader material or atlas slice.
 pub type MaterialSlotId = u16;
 
-/// Light level encoding block light (0..15) and sky light (0..15).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct LightLevel {
-    pub block: u8,
-    pub sky: u8,
-}
-
-impl LightLevel {
-    pub const ZERO: Self = Self { block: 0, sky: 0 };
-    pub const MAX: Self = Self { block: 15, sky: 15 };
-
-    #[inline]
-    pub const fn new(block: u8, sky: u8) -> Self {
-        Self {
-            block: if block > 15 { 15 } else { block },
-            sky: if sky > 15 { 15 } else { sky },
-        }
-    }
-}
-
 /// Standard geometric attribute domain corresponding to modern DCC & USD standards.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -217,8 +196,6 @@ pub struct FaceAttributes {
     pub biome_tint_data: [f32; 4],
     /// Minecraft absolute block coordinate [x, y, z].
     pub block_pos: [i32; 3],
-    /// Light level.
-    pub light_level: LightLevel,
 }
 
 impl Default for FaceAttributes {
@@ -236,7 +213,6 @@ impl Default for FaceAttributes {
             biome_tint_color: [1.0, 1.0, 1.0, 1.0],
             biome_tint_data: [1.0, 1.0, 0.0, 0.0],
             block_pos: [0, 0, 0],
-            light_level: LightLevel::ZERO,
         }
     }
 }

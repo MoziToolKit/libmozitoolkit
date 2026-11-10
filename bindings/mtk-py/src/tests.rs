@@ -94,7 +94,6 @@ fn test_python_voxel_storage_and_world_mesher() {
         assert!(stage_names
             .iter()
             .any(|name| name == "parallel_section_meshing"));
-        assert!(world.last_profile().is_some());
 
         let mut unwelded_config = PyMesherConfig::default();
         unwelded_config.inner.weld_vertices = false;
@@ -116,7 +115,7 @@ fn test_python_ctm_bindings() {
         let stack = PyResourcePackStack::new();
         assert_eq!(stack.get_ctm_rule_count(), 0);
         let solver = stack.build_ctm_solver();
-        assert_eq!(solver.rule_count(), 0);
+        assert_eq!(solver.inner.rules.len(), 0);
 
         let mut config = PyMesherConfig::default();
         assert!(config.inner.ctm_solver.is_none());
@@ -151,8 +150,8 @@ fn test_python_live_sync_session_and_protocol() {
 }
 
 #[test]
-fn test_python_version_string() {
-    assert_eq!(version(), env!("CARGO_PKG_VERSION"));
+fn test_python_api_version() {
+    assert_eq!(api_version(), 2);
 }
 
 #[test]

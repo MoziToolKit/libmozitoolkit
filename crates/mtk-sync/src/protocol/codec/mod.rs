@@ -6,5 +6,7 @@ mod decode;
 mod decode_baseline;
 mod encode;
 
-pub use decode::{compute_delta_batch_hash, decode_packet};
+#[cfg(test)]
+pub use decode::compute_delta_batch_hash;
+pub use decode::decode_packet;
 pub use encode::encode_packet;

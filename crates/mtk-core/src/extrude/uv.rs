@@ -9,7 +9,7 @@ use crate::geometry::Aabb2d;
 /// Computes reconstructed 4 UV corner coordinates for an extruded side quad with advanced topological awareness.
 ///
 /// Order of returned UVs matches `[uv_base_a, uv_base_b, uv_top_b, uv_top_a]`.
-pub fn repair_extruded_side_uv_advanced(
+pub(crate) fn repair_extruded_side_uv_advanced(
     uv_base_a: [f32; 2],
     uv_base_b: [f32; 2],
     top_normal: [f32; 3],

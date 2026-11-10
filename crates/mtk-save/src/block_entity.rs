@@ -272,25 +272,6 @@ fn decode_profile(comp: &NbtCompound) -> Option<PlayerProfileData> {
     None
 }
 
-/// Universal decoder for raw byte payloads (JSON visual NBT or binary NBT compound).
-pub fn decode_block_entity_payload(bytes: &[u8]) -> Option<BlockEntityData> {
-    if bytes.is_empty() {
-        return None;
-    }
-    // 1. JSON path
-    if bytes[0] == b'{' {
-        if let Ok(data) = serde_json::from_slice::<BlockEntityData>(bytes) {
-            return Some(data);
-        }
-    }
-    // 2. Binary NBT Compound path
-    let mut cursor = std::io::Cursor::new(bytes);
-    if let Ok(crate::nbt::Nbt::Some(base)) = crate::nbt::read(&mut cursor) {
-        return decode_block_entity(base.as_compound());
-    }
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

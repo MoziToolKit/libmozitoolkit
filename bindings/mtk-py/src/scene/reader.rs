@@ -31,12 +31,6 @@ impl PyScenePackageReader {
         })
     }
 
-    /// Absolute path of the opened package.
-    #[getter]
-    pub fn package_path(&self) -> &str {
-        &self.package_path
-    }
-
     /// Returns the global scene metadata.
     #[getter]
     pub fn metadata(&self) -> PySceneMetadata {
@@ -114,29 +108,6 @@ impl PyScenePackageReader {
         dict.set_item("ctm_solver", solver_val)?;
 
         Ok(dict)
-    }
-
-    /// Performs an integrity check on models, atlas, colormaps, and CTM rules, returning a dict.
-    pub fn validate<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let report = self
-            .inner
-            .validate()
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-        let dict = PyDict::new(py);
-        dict.set_item("is_valid", report.is_valid)?;
-        dict.set_item("errors", report.errors)?;
-        dict.set_item("warnings", report.warnings)?;
-        Ok(dict)
-    }
-
-    /// Returns list of all texture chunk identifiers stored in the package.
-    pub fn get_atlas_texture_names(&self) -> Vec<String> {
-        self.inner
-            .inner_reader()
-            .iter_chunk_identifiers(*b"ATLS")
-            .filter(|id| id.starts_with("atlas/textures/"))
-            .map(|id| id.to_string())
-            .collect()
     }
 
     /// Reads and decodes a texture chunk (PNG) directly in memory into RGBA8 bytes: `(width, height, memoryview)`.

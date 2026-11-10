@@ -1,34 +1,5 @@
 use mtk_resource::ResourceLocation;
-use mtk_texture::{
-    create_fallback_checkerboard_buffer, AtlasBuilderConfig, DecodedSprite, RgbaBuffer,
-    FALLBACK_TEXTURE_KEY,
-};
-
-#[test]
-fn test_fallback_checkerboard_buffer_pattern() {
-    let buf = create_fallback_checkerboard_buffer();
-    assert_eq!(buf.width, 16);
-    assert_eq!(buf.height, 16);
-
-    // Verify 4x4 checkerboard tiles
-    // Magenta: [255, 0, 255, 255], Dark gray/black: [24, 24, 24, 255]
-    let magenta = [255, 0, 255, 255];
-    let dark = [24, 24, 24, 255];
-
-    // (0, 0) tile is magenta: ((0/4) + (0/4)) % 2 == 0
-    assert_eq!(buf.get_pixel(0, 0), magenta);
-    assert_eq!(buf.get_pixel(3, 3), magenta);
-
-    // (4, 0) tile is dark: ((4/4) + (0/4)) % 2 == 1
-    assert_eq!(buf.get_pixel(4, 0), dark);
-    assert_eq!(buf.get_pixel(7, 3), dark);
-
-    // (0, 4) tile is dark: ((0/4) + (4/4)) % 2 == 1
-    assert_eq!(buf.get_pixel(0, 4), dark);
-
-    // (4, 4) tile is magenta: ((4/4) + (4/4)) % 2 == 0
-    assert_eq!(buf.get_pixel(4, 4), magenta);
-}
+use mtk_texture::{AtlasBuilderConfig, DecodedSprite, RgbaBuffer, FALLBACK_TEXTURE_KEY};
 
 #[test]
 fn test_fallback_sprite_pinned_at_chunk0_slot0() {

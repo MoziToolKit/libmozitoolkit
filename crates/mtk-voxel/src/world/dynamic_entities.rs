@@ -279,11 +279,6 @@ impl VoxelWorld {
         self.ensure_dynamic_entities_resolved_sync_for_sections_with_progress(&coords, progress)
     }
 
-    /// Synchronous variant for specific sections: waits for network if uncached.
-    pub fn ensure_dynamic_entities_resolved_sync_for_sections(&mut self, coords: &[IVec3]) -> bool {
-        self.ensure_dynamic_entities_resolved_sync_for_sections_with_progress(coords, None)
-    }
-
     /// Synchronous variant for specific sections with batch parallel resolving and progress reporting.
     pub fn ensure_dynamic_entities_resolved_sync_for_sections_with_progress(
         &mut self,

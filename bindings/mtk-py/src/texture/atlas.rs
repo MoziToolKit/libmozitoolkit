@@ -220,14 +220,6 @@ impl PyBakedAtlas {
         }
     }
 
-    /// Serializes the atlas address map into a JSON string.
-    pub fn to_mapping_json(&self) -> PyResult<String> {
-        self.inner
-            .address_map
-            .to_json()
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
-    }
-
     fn __repr__(&self) -> String {
         format!(
             "<BakedAtlas chunks={} sprites={}>",

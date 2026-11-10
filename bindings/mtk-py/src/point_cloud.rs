@@ -78,11 +78,6 @@ impl PyVoxelPointCloud {
         }
     }
 
-    /// Returns the total number of voxel points stored in this cloud.
-    pub fn len(&self) -> usize {
-        self.inner.len()
-    }
-
     pub fn __len__(&self) -> usize {
         self.inner.len()
     }
@@ -321,7 +316,7 @@ impl PyVoxelPointCloud {
         let py = slf.py();
         let this = slf.borrow();
         let dict = pyo3::types::PyDict::new(py);
-        dict.set_item("count", this.len())?;
+        dict.set_item("count", this.inner.len())?;
         dict.set_item("positions", Self::positions_memoryview(slf)?)?;
         dict.set_item("block_x", Self::block_x_memoryview(slf)?)?;
         dict.set_item("block_y", Self::block_y_memoryview(slf)?)?;

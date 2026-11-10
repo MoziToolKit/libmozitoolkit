@@ -49,17 +49,6 @@ impl VoxelStorage {
         }
     }
 
-    /// Returns the selection bounding box if size is positive, in `([min_x, min_y, min_z], [size_x, size_y, size_z])` format.
-    #[inline]
-    pub fn default_selection_bounds(&self) -> Option<([i32; 3], [i32; 3])> {
-        let (min_x, min_y, min_z, sz_x, sz_y, sz_z) = self.get_bounds();
-        if sz_x > 0 && sz_y > 0 && sz_z > 0 {
-            Some(([min_x, min_y, min_z], [sz_x, sz_y, sz_z]))
-        } else {
-            None
-        }
-    }
-
     /// Updates selection bounding box with incremental pruning and boundary seam dirtying.
     pub fn set_bounds(
         &mut self,

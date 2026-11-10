@@ -44,15 +44,9 @@ impl PyVoxelWorld {
         let cul = culler.map(|c| c.inner.clone());
         let mdb = model_db.map(|db| db.inner.clone());
         let threads = num_threads.or_else(|| config.and_then(|c| c.num_threads));
-        Self {
-            inner: mtk_voxel::VoxelWorld::from_storage_with_threads(
-                storage.inner.clone(),
-                cfg,
-                cul,
-                mdb,
-                threads,
-            ),
-        }
+        let mut inner = mtk_voxel::VoxelWorld::from_storage(storage.inner.clone(), cfg, cul, mdb);
+        inner.num_threads = threads;
+        Self { inner }
     }
 
     /// Loads or generates the canonical Minecraft debug world into a new `VoxelWorld`.
@@ -130,12 +124,6 @@ impl PyVoxelWorld {
         })
     }
 
-    /// Execution profile of the most recent rebuild operation.
-    #[getter]
-    pub fn last_profile(&self) -> Option<crate::profile::PyExecutionProfile> {
-        self.inner.last_profile.clone().map(Into::into)
-    }
-
     /// Incrementally rebuilds only the modified/dirty sections and returns a dict mapping (sx, sy, sz) to PyMeshData.
     pub fn rebuild_dirty<'py>(
         &mut self,
@@ -167,16 +155,6 @@ impl PyVoxelWorld {
             dynamic_entity_atlases,
             dynamic_entity_slots,
         }
-    }
-
-    /// Returns the list of unique Atlas Chunk IDs used by the active world mesh.
-    pub fn used_chunk_ids(&self) -> Vec<u32> {
-        self.inner.used_chunk_ids().to_vec()
-    }
-
-    /// Updates mesher configuration.
-    pub fn set_config(&mut self, config: &PyMesherConfig) {
-        self.inner.set_config(config.inner.clone());
     }
 
     /// Returns a copy of the underlying VoxelStorage.
@@ -230,11 +208,6 @@ impl PyVoxelWorld {
             let _ = dict.set_item(chunk_id, PyBytes::new(py, buf));
         }
         dict
-    }
-
-    /// Returns the dynamic entity key to (chunk_id, slot_index) mapping.
-    pub fn get_dynamic_entity_slots(&self) -> std::collections::HashMap<String, (u16, u16)> {
-        self.inner.dynamic_entity_slots()
     }
 
     /// Sets the on-disk cache directory for downloaded player skins.

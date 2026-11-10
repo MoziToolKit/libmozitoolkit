@@ -7,15 +7,6 @@ pub mod voxel {
     /// Dimension size of a Minecraft chunk section along each axis (X, Y, Z).
     pub const SECTION_SIZE: usize = 16;
 
-    /// Bitmask for coordinates within a 16-wide section (`15` or `0b1111`).
-    pub const SECTION_MASK: usize = 15;
-
-    /// Bit-shift count for 16-wide section divisions (`4`).
-    pub const SECTION_SHIFT: usize = 4;
-
-    /// 2D area (number of blocks) in a single horizontal slice of a section (`16 * 16 = 256`).
-    pub const SECTION_AREA: usize = SECTION_SIZE * SECTION_SIZE;
-
     /// Total voxel volume within a single 16x16x16 chunk section (`4096`).
     pub const SECTION_VOLUME: usize = SECTION_SIZE * SECTION_SIZE * SECTION_SIZE;
 
@@ -55,9 +46,6 @@ pub mod geometry {
     /// Fine numerical tolerance (`1e-6`).
     pub const TOLERANCE: f32 = 1e-6;
 
-    /// Standard texture UV mapping space scale per block face (`16.0`).
-    pub const BLOCK_UV_SIZE: f32 = 16.0;
-
     /// Canonical full-face 2D bounding rectangle in `[0.0..1.0, 0.0..1.0]` normalized space.
     pub const FULL_FACE_RECT: Aabb2d = Aabb2d::UNIT;
 
@@ -69,17 +57,6 @@ pub mod geometry {
 pub mod fluid {
     /// Maximum height of a standard Minecraft still fluid block: `8/9` (~`0.8888889`).
     pub const MAX_FLUID_HEIGHT: f32 = 8.0 / 9.0;
-}
-
-/// Lighting, ambient occlusion, and brightness constants.
-pub mod lighting {
-    /// Linear brightness multipliers for ambient occlusion discrete levels `0..=3`.
-    ///
-    /// - Level 0: `0.2`
-    /// - Level 1: `0.466`
-    /// - Level 2: `0.733`
-    /// - Level 3: `1.0`
-    pub const AO_LEVEL_MULTIPLIERS: [f32; 4] = [0.2, 0.466, 0.733, 1.0];
 }
 
 /// Concurrency, thread pool, and parallel scheduling constants & helpers.
@@ -205,9 +182,8 @@ mod tests {
     }
 
     #[test]
-    fn test_fluid_and_lighting_constants() {
+    fn test_fluid_constants() {
         assert!((fluid::MAX_FLUID_HEIGHT - 8.0 / 9.0).abs() < 1e-6);
-        assert_eq!(lighting::AO_LEVEL_MULTIPLIERS.len(), 4);
     }
 
     #[test]

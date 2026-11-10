@@ -119,17 +119,6 @@ impl VoxelWorld {
         culler: Option<FaceCuller>,
         model_db: Option<Arc<BakedModelDatabase>>,
     ) -> Self {
-        Self::from_storage_with_threads(storage, config, culler, model_db, None)
-    }
-
-    /// Creates a `VoxelWorld` taking ownership of an existing `VoxelStorage` with explicit thread configuration.
-    pub fn from_storage_with_threads(
-        storage: VoxelStorage,
-        config: Option<MesherConfig>,
-        culler: Option<FaceCuller>,
-        model_db: Option<Arc<BakedModelDatabase>>,
-        num_threads: Option<usize>,
-    ) -> Self {
         let cfg = config.unwrap_or_default();
         let banner_baker = cfg
             .banner_baker
@@ -145,7 +134,7 @@ impl VoxelWorld {
             config: cfg,
             culler: culler.unwrap_or_default(),
             model_db,
-            num_threads,
+            num_threads: None,
             section_mesh_cache: HashMap::new(),
             world_mesh: None,
             used_chunk_ids: Vec::new(),

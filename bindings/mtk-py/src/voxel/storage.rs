@@ -135,11 +135,6 @@ impl PyVoxelStorage {
         self.inner.size_z
     }
 
-    /// Checks if world coordinate `(x, y, z)` falls within the active selection bounds.
-    pub fn contains(&self, x: i32, y: i32, z: i32) -> bool {
-        self.inner.contains(x, y, z)
-    }
-
     /// Returns the biome registry identifier for block coordinate `(x, y, z)`.
     pub fn get_biome(&self, x: i32, y: i32, z: i32) -> &str {
         self.inner.get_biome(x, y, z)
@@ -154,14 +149,6 @@ impl PyVoxelStorage {
         let mesher_cfg = config.map(|c| c.inner.clone()).unwrap_or_default();
         crate::point_cloud::PyVoxelPointCloud {
             inner: self.inner.to_point_cloud(&mesher_cfg),
-        }
-    }
-
-    /// Reconstructs a `VoxelStorage` from an unculled point cloud.
-    #[staticmethod]
-    pub fn from_point_cloud(point_cloud: &crate::point_cloud::PyVoxelPointCloud) -> Self {
-        Self {
-            inner: VoxelStorage::from_point_cloud(&point_cloud.inner),
         }
     }
 

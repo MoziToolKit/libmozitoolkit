@@ -13,8 +13,8 @@ pub use baker::{
 };
 pub use builtin::BuiltinModelRegistry;
 pub use entity::{
-    banner, copper_statue, painting, skull, ArmorStandData, BlockEntityData, EntityBaker,
-    EntityInstance, EntityKindData, ItemFrameData, PaintingData,
+    banner, painting, skull, ArmorStandData, BlockEntityData, EntityBaker, EntityInstance,
+    EntityKindData, ItemFrameData, PaintingData,
 };
 pub use error::ModelError;
 pub use parser::{

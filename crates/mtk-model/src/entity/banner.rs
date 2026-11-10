@@ -24,11 +24,6 @@ impl BannerPatternLayer {
         }
     }
 
-    /// Returns the dye ID (0..15).
-    pub fn dye_id(&self) -> u8 {
-        name_to_dye_id(&self.color).unwrap_or(0)
-    }
-
     /// Resolves the static sprite path in the `banner_patterns` atlas category.
     pub fn sprite_path(&self) -> String {
         format!("entity/banner/{}", normalize_banner_pattern(&self.pattern))

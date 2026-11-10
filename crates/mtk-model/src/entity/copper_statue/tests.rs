@@ -1,5 +1,5 @@
-use mtk_model::copper_statue::{CopperOxidation, CopperStatuePose};
-use mtk_model::{BlockStateDefinition, ModelBaker};
+use super::{CopperOxidation, CopperStatuePose};
+use crate::{BlockStateDefinition, ModelBaker};
 
 #[test]
 fn test_copper_statue_oxidation_and_textures() {

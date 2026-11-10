@@ -14,9 +14,7 @@ mod mod_api;
 mod resolver;
 
 pub use index::{clean_player_name, clean_uuid};
-pub use mod_api::{
-    default_player_skin_texture, derive_skin_key, VANILLA_ALEX_TEXTURE, VANILLA_STEVE_TEXTURE,
-};
+pub use mod_api::derive_skin_key;
 pub use resolver::{decode_base64, extract_skin_url_from_property_base64, SkinResolver};
 
 #[cfg(test)]
@@ -66,16 +64,6 @@ mod tests {
     }
 
     #[test]
-    fn test_default_player_skin_texture() {
-        assert_eq!(
-            default_player_skin_texture(None),
-            "minecraft:entity/player/wide/steve"
-        );
-        let path = default_player_skin_texture(Some("00000000-0000-0000-0000-000000000001"));
-        assert!(path == VANILLA_STEVE_TEXTURE || path == VANILLA_ALEX_TEXTURE);
-    }
-
-    #[test]
     fn test_memory_cache_registration() {
         let resolver = SkinResolver::new(None);
         let fake_png = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x01];
@@ -87,7 +75,7 @@ mod tests {
 
     #[test]
     fn test_negative_cache_and_resolution() {
-        let resolver = SkinResolver::new(None).with_negative_cache_ttl(1);
+        let resolver = SkinResolver::new(None);
         let invalid_url = "http://127.0.0.1:59996/invalid_skin.png";
         let png = resolver.resolve_skin_png(Some(invalid_url), None, None);
         assert!(png.is_none());
@@ -97,9 +85,9 @@ mod tests {
             .try_resolve_cached(Some(invalid_url), None, None)
             .is_none());
 
-        // Fast-forward negative cache failure timestamp by 10s to simulate TTL expiration without thread::sleep
+        // Fast-forward negative cache failure timestamp by 400s to simulate TTL expiration without thread::sleep
         let key = derive_skin_key(Some(invalid_url), None, None);
-        resolver.backdate_negative_cache_entry_for_test(&key, 10);
+        resolver.backdate_negative_cache_entry_for_test(&key, 400);
 
         // After TTL expired, negative cache allows retry
         assert!(resolver

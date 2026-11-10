@@ -386,27 +386,12 @@ impl PyBiomeResolver {
         Ok(Self { inner })
     }
 
-    /// Load BiomeResolver from a JSON string.
-    #[staticmethod]
-    pub fn from_json(json_str: &str) -> PyResult<Self> {
-        let inner = mtk_material::BiomeResolver::from_json(json_str)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-        Ok(Self { inner })
-    }
-
     /// Load BiomeResolver from a JSON file path.
     #[staticmethod]
     pub fn from_file(file_path: &str) -> PyResult<Self> {
         let inner = mtk_material::BiomeResolver::from_file(file_path)
             .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
         Ok(Self { inner })
-    }
-
-    /// Export mapping table to JSON string.
-    pub fn to_json(&self) -> PyResult<String> {
-        self.inner
-            .to_json()
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
     }
 
     /// Load block models from a ResourcePackStack.

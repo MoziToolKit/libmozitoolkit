@@ -3,10 +3,6 @@
 use super::index::{clean_player_name, clean_uuid};
 use xxhash_rust::xxh64::xxh64;
 
-/// Canonical entity atlas paths for fallback player skins in prebaked assets.
-pub const VANILLA_STEVE_TEXTURE: &str = "minecraft:entity/player/wide/steve";
-pub const VANILLA_ALEX_TEXTURE: &str = "minecraft:entity/player/slim/alex";
-
 /// Derives a stable, filesystem-safe canonical cache key for a skin reference.
 pub fn derive_skin_key(skin_url: Option<&str>, uuid: Option<&str>, name: Option<&str>) -> String {
     if let Some(url) = skin_url {
@@ -37,15 +33,4 @@ pub fn derive_skin_key(skin_url: Option<&str>, uuid: Option<&str>, name: Option<
     }
 
     "default_steve".to_string()
-}
-
-/// Chooses deterministic Steve (wide) vs Alex (slim) fallback path in the prebaked entity atlas.
-pub fn default_player_skin_texture(key_or_uuid: Option<&str>) -> &'static str {
-    if let Some(s) = key_or_uuid {
-        let clean = s.replace('-', "");
-        if !clean.is_empty() && (xxh64(clean.as_bytes(), 0) % 2 == 1) {
-            return VANILLA_ALEX_TEXTURE;
-        }
-    }
-    VANILLA_STEVE_TEXTURE
 }

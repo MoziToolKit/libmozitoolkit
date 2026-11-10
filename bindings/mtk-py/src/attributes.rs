@@ -6,16 +6,6 @@ use pyo3::prelude::*;
 
 use mtk_core::{AttributeData, AttributeDomain};
 
-/// Supported attribute domains matching modern DCC & OpenUSD standards.
-#[pyclass(name = "AttributeDomain", eq, eq_int)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PyAttributeDomain {
-    Point,
-    Corner,
-    Face,
-    Mesh,
-}
-
 /// Parses a domain string into an `AttributeDomain`.
 pub fn parse_domain_str(domain: &str) -> PyResult<AttributeDomain> {
     match domain.trim().to_lowercase().as_str() {

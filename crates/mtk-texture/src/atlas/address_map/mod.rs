@@ -5,7 +5,8 @@ pub mod sprite;
 mod tests;
 
 pub use chunk::{AtlasChunkMeta, AtlasTextureSlot};
-pub use sprite::{AtlasKeySource, AtlasSpriteLocation, SpriteKind};
+pub(crate) use sprite::AtlasKeySource;
+pub use sprite::{AtlasSpriteLocation, SpriteKind};
 
 use mtk_resource::{ResourceLocation, TextureKeyVariants};
 use serde::{Deserialize, Serialize};
@@ -25,7 +26,7 @@ pub struct AtlasAddressMap {
     pub anim_sprites: HashMap<ResourceLocation, AtlasSpriteLocation>,
     /// Source priority records per sprite key (Static vs Dynamic).
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub sprite_sources: HashMap<ResourceLocation, AtlasKeySource>,
+    pub(crate) sprite_sources: HashMap<ResourceLocation, AtlasKeySource>,
     /// Optional CTM rules associated with this address map.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ctm_rules: Vec<mtk_resource::CtmRule>,
@@ -145,7 +146,7 @@ impl AtlasAddressMap {
     /// Static sprites take precedence over dynamic sprites. If an alias already resolves
     /// to a static chunk (`chunk_id < DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID`), a dynamic insertion
     /// will not override it and returns `false`.
-    pub fn insert_with_source(
+    pub(crate) fn insert_with_source(
         &mut self,
         key: ResourceLocation,
         loc: AtlasSpriteLocation,

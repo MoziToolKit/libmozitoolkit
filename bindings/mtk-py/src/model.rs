@@ -29,19 +29,6 @@ impl PyBakedModelDatabase {
     pub fn __len__(&self) -> usize {
         self.inner.len()
     }
-
-    /// Retrieves baked mesh geometry and texture list for a given canonical blockstate string.
-    #[pyo3(signature = (state_str, clip_hidden=true))]
-    pub fn get_mesh(
-        &self,
-        state_str: &str,
-        clip_hidden: bool,
-    ) -> Option<(PyMeshData, Vec<String>)> {
-        self.inner.get(state_str).map(|baked| {
-            let (mesh, textures) = baked.to_mesh_with_textures(clip_hidden);
-            (PyMeshData::from_mesh(mesh), textures)
-        })
-    }
 }
 
 /// Headless Minecraft Model Baker for BlockStates and custom models.

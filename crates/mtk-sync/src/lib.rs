@@ -15,14 +15,18 @@ mod session;
 #[cfg(test)]
 mod test_baseline_alignment;
 #[cfg(test)]
+mod test_decode_stress;
+#[cfg(test)]
 mod test_delta_seam_welding;
+#[cfg(test)]
+mod test_protocol;
+#[cfg(test)]
+mod test_sync_session;
 
 pub use events::{normalize_stream_progress, SyncEvent};
 pub use protocol::{
-    compute_canonical_state_hash, compute_delta_batch_hash, compute_sparse_state_hash,
-    compute_sparse_state_hash_for_point_cloud, compute_sparse_state_hash_for_storage,
-    decode_packet, encode_packet, BaselineAckResult, CancelReason, DeltaChangeEntry, ErrorCode,
-    Opcode, Packet, ProtocolError, ResyncReason, SparseBlockEntry, SyncDecision, PROTOCOL_MAGIC,
-    PROTOCOL_VERSION, SPARSE_CANONICAL_VERSION,
+    compute_sparse_state_hash, compute_sparse_state_hash_for_point_cloud,
+    compute_sparse_state_hash_for_storage, decode_packet, encode_packet, DeltaChangeEntry, Opcode,
+    Packet, SyncDecision, PROTOCOL_MAGIC, PROTOCOL_VERSION,
 };
 pub use session::{LiveSyncSession, SyncLifecycle};

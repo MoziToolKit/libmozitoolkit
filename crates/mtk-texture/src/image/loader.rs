@@ -156,19 +156,6 @@ impl DecodedSprite {
         }
     }
 
-    /// Attaches canonical pre-decoded PBR layers (`normal_gl`, `orm`, `aux`).
-    pub fn with_canonical_pbr(
-        mut self,
-        normal_gl: Option<RgbaBuffer>,
-        orm: Option<RgbaBuffer>,
-        aux: Option<RgbaBuffer>,
-    ) -> Self {
-        self.normal_gl = normal_gl;
-        self.orm = orm;
-        self.aux = aux;
-        self
-    }
-
     /// Parallel or sequential batch decode of discovered sprites.
     pub fn decode_batch(
         sprites: Vec<DiscoveredSprite>,

@@ -84,54 +84,6 @@ impl FlatPolygonMesh {
         }
     }
 
-    /// Constructs a `FlatPolygonMesh` by flattening nested face collections.
-    pub fn from_nested(
-        positions: Vec<[f32; 3]>,
-        face_vertices: &[Vec<u32>],
-        face_uvs: &[Vec<[f32; 2]>],
-        face_materials: &[u32],
-    ) -> Self {
-        let face_count = face_vertices.len();
-        let total_loops: usize = face_vertices.iter().map(|f| f.len()).sum();
-
-        let mut loop_vertices = Vec::with_capacity(total_loops);
-        let mut loop_uvs = Vec::with_capacity(total_loops);
-        let mut face_loop_starts = Vec::with_capacity(face_count);
-        let mut face_loop_totals = Vec::with_capacity(face_count);
-
-        let mut current_offset = 0u32;
-        for (i, f_verts) in face_vertices.iter().enumerate() {
-            let total = f_verts.len() as u32;
-            face_loop_starts.push(current_offset);
-            face_loop_totals.push(total);
-
-            loop_vertices.extend_from_slice(f_verts);
-
-            if let Some(uvs) = face_uvs.get(i) {
-                if uvs.len() == f_verts.len() {
-                    loop_uvs.extend_from_slice(uvs);
-                } else {
-                    for j in 0..f_verts.len() {
-                        loop_uvs.push(uvs.get(j).copied().unwrap_or([0.0, 0.0]));
-                    }
-                }
-            } else {
-                loop_uvs.resize(loop_uvs.len() + f_verts.len(), [0.0, 0.0]);
-            }
-
-            current_offset += total;
-        }
-
-        Self {
-            positions,
-            loop_vertices,
-            loop_uvs,
-            face_loop_starts,
-            face_loop_totals,
-            face_materials: face_materials.to_vec(),
-        }
-    }
-
     /// Constructs a `FlatPolygonMesh` from raw contiguous 1D slices (e.g. from NumPy or C-ABI).
     pub fn from_flat_buffers(
         positions_flat: &[f32],

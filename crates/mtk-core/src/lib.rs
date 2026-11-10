@@ -28,8 +28,8 @@ pub use direction::{DirMask, Direction};
 // 3. Extrusion & Side UV Repair
 pub use extrude::{
     generate_extrude_heights, perlin_noise_3d, process_flat_mesh_extrude_repair,
-    repair_extruded_side_uv, repair_extruded_side_uv_advanced, ExtrudeMeshOutput, ExtrudeNoiseType,
-    ExtrudeUvMode, MeshExtrudeRepairConfig,
+    repair_extruded_side_uv, ExtrudeMeshOutput, ExtrudeNoiseType, ExtrudeUvMode,
+    MeshExtrudeRepairConfig,
 };
 
 // 4. Geometry & Math
@@ -58,9 +58,9 @@ pub use subdivide::{
 
 // 10. UV Geometry & Analysis
 pub use uv::{
-    calculate_uv_area, calculate_uv_area_2d, detect_uv_rotation, get_uv_bounds, get_uv_center,
-    is_orthogonal_angle, is_uv_collapsed, is_uv_collapsed_2d, normalize_uv_for_atlas_tiling,
-    restore_atlas_tiling_uv, scale_uv, straighten_uv, uv_requires_atlas_tiling,
+    calculate_uv_area, detect_uv_rotation, get_uv_bounds, get_uv_center, is_orthogonal_angle,
+    is_uv_collapsed, normalize_uv_for_atlas_tiling, restore_atlas_tiling_uv, scale_uv,
+    straighten_uv, uv_requires_atlas_tiling,
 };
 
 // Re-export glam types for convenience

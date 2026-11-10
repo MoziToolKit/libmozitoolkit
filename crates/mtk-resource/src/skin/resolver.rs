@@ -90,13 +90,6 @@ impl SkinResolver {
         }
     }
 
-    /// Configures the circuit breaker threshold and cooldown period in seconds.
-    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
-    pub fn with_circuit_breaker(mut self, threshold: u32, cooldown_secs: u64) -> Self {
-        self.circuit = SkinCircuitBreaker::new(threshold, cooldown_secs);
-        self
-    }
-
     /// Returns true if the circuit breaker is currently tripped (fast-fail mode).
     #[inline]
     pub fn is_circuit_tripped(&self) -> bool {
@@ -108,28 +101,6 @@ impl SkinResolver {
         {
             false
         }
-    }
-
-    /// Sets the HTTP request timeout in seconds.
-    pub fn with_timeout(mut self, timeout_secs: u64) -> Self {
-        self.timeout_secs = timeout_secs;
-        #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
-        {
-            self.agent = Arc::new(Self::build_agent(timeout_secs));
-        }
-        self
-    }
-
-    /// Sets the online skin validation interval TTL in seconds.
-    pub fn with_validation_interval(mut self, secs: u64) -> Self {
-        self.validation_interval_secs = secs;
-        self
-    }
-
-    /// Sets the negative cache failure cooldown TTL in seconds.
-    pub fn with_negative_cache_ttl(mut self, secs: u64) -> Self {
-        self.negative_cache_ttl_secs = secs;
-        self
     }
 
     #[cfg(test)]

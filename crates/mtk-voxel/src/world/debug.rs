@@ -38,13 +38,9 @@ impl VoxelWorld {
         } else {
             VoxelStorage::create_debug_world()?
         };
-        Ok(Self::from_storage_with_threads(
-            storage,
-            config,
-            culler,
-            model_db,
-            num_threads,
-        ))
+        let mut world = Self::from_storage(storage, config, culler, model_db);
+        world.num_threads = num_threads;
+        Ok(world)
     }
 
     /// Creates a debug `VoxelWorld` from an explicit list of blockstate strings.
@@ -56,13 +52,9 @@ impl VoxelWorld {
         num_threads: Option<usize>,
     ) -> Result<Self, VoxelError> {
         let storage = VoxelStorage::create_debug_world_from_states(states)?;
-        Ok(Self::from_storage_with_threads(
-            storage,
-            config,
-            culler,
-            model_db,
-            num_threads,
-        ))
+        let mut world = Self::from_storage(storage, config, culler, model_db);
+        world.num_threads = num_threads;
+        Ok(world)
     }
 
     /// Creates a debug `VoxelWorld` by enumerating blockstates across a `ResourcePackStack`.
@@ -74,12 +66,8 @@ impl VoxelWorld {
         num_threads: Option<usize>,
     ) -> Result<Self, VoxelError> {
         let storage = VoxelStorage::create_debug_world_from_pack_stack(stack)?;
-        Ok(Self::from_storage_with_threads(
-            storage,
-            config,
-            culler,
-            model_db,
-            num_threads,
-        ))
+        let mut world = Self::from_storage(storage, config, culler, model_db);
+        world.num_threads = num_threads;
+        Ok(world)
     }
 }

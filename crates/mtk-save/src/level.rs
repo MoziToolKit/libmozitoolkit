@@ -34,7 +34,7 @@ pub struct LevelData {
 
 impl LevelData {
     /// Reads and parses `level.dat` from a file path.
-    pub fn read_from_file(file_path: &Path) -> Result<Self, SaveError> {
+    pub(crate) fn read_from_file(file_path: &Path) -> Result<Self, SaveError> {
         if !file_path.exists() {
             return Err(SaveError::LevelDatNotFound(file_path.to_path_buf()));
         }
@@ -50,7 +50,7 @@ impl LevelData {
     }
 
     /// Parses decompressed bytes of `level.dat` via lightweight NBT decoder.
-    pub fn read_from_bytes(bytes: &[u8]) -> Result<Self, SaveError> {
+    pub(crate) fn read_from_bytes(bytes: &[u8]) -> Result<Self, SaveError> {
         let nbt = crate::nbt::read(&mut Cursor::new(bytes))?;
         let base = match nbt {
             Nbt::Some(b) => b,

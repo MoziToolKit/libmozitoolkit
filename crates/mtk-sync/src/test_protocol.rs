@@ -1,5 +1,5 @@
+use crate::protocol::*;
 use glam::IVec3;
-use mtk_sync::*;
 
 #[test]
 fn test_hello_and_welcome_codec_roundtrip() {

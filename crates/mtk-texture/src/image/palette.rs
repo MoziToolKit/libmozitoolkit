@@ -26,7 +26,7 @@ fn extract_palette_colors(palette_img: &RgbaBuffer) -> Vec<[u8; 4]> {
 
 /// Apply a single paletted color permutation to a base texture in-memory.
 /// Non-zero alpha pixels of `base_image` matching `key_palette` are replaced with corresponding colors from `perm_palette`.
-pub fn bake_paletted_permutation(
+pub(crate) fn bake_paletted_permutation(
     base_image: &RgbaBuffer,
     key_palette: &RgbaBuffer,
     perm_palette: &RgbaBuffer,
@@ -66,4 +66,32 @@ pub fn bake_paletted_permutation(
     }
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_paletted_permutation_baking() {
+        let mut key_pal = RgbaBuffer::new(2, 1);
+        key_pal.set_pixel(0, 0, [255, 0, 0, 255]);
+        key_pal.set_pixel(1, 0, [0, 255, 0, 255]);
+
+        let mut perm_pal = RgbaBuffer::new(2, 1);
+        perm_pal.set_pixel(0, 0, [0, 0, 255, 255]);
+        perm_pal.set_pixel(1, 0, [255, 255, 0, 255]);
+
+        let mut base = RgbaBuffer::new(2, 2);
+        base.set_pixel(0, 0, [255, 0, 0, 255]);
+        base.set_pixel(1, 0, [0, 255, 0, 255]);
+        base.set_pixel(0, 1, [255, 255, 255, 255]);
+        base.set_pixel(1, 1, [0, 0, 0, 0]);
+
+        let baked = bake_paletted_permutation(&base, &key_pal, &perm_pal).unwrap();
+        assert_eq!(baked.get_pixel(0, 0), [0, 0, 255, 255]);
+        assert_eq!(baked.get_pixel(1, 0), [255, 255, 0, 255]);
+        assert_eq!(baked.get_pixel(0, 1), [255, 255, 255, 255]);
+        assert_eq!(baked.get_pixel(1, 1), [0, 0, 0, 0]);
+    }
 }

@@ -7,10 +7,10 @@
 use std::collections::HashMap;
 
 use glam::{Mat4, Vec2, Vec3};
-use mtk_core::{Direction, MeshData};
+use mtk_core::Direction;
 use serde::{Deserialize, Serialize};
 
-use crate::baker::baked_model::model::{BakedElement, BakedFace, BakedModel, ModelMeshOptions};
+use crate::baker::baked_model::model::{BakedElement, BakedFace, BakedModel};
 
 /// Total physical thickness of a painting frame in blocks (1/16th block, or 1 pixel).
 pub const PAINTING_DEPTH: f32 = 0.0625;
@@ -489,11 +489,6 @@ pub fn painting_texture_id(name: &str) -> String {
     format!("minecraft:painting/{}", norm)
 }
 
-/// Returns a slice containing all 51 official Minecraft 1.21+ Painting Variant definitions.
-pub fn all_painting_variants() -> &'static [PaintingVariantDef] {
-    &PAINTING_VARIANTS
-}
-
 /// Returns horizontal counter-clockwise direction around +Y (North -> West -> South -> East).
 #[inline]
 pub fn counter_clockwise(facing: Direction) -> Direction {
@@ -560,16 +555,6 @@ fn closest_direction(normal: Vec3) -> Direction {
         }
     }
     best_dir
-}
-
-/// Creates a procedural `BakedModel` for a painting with the given variant and horizontal facing.
-///
-/// Generates 1x1 segmented grid geometry matching Minecraft's `PaintingRenderer`:
-/// - Front faces: texture coordinate slices of the main painting image.
-/// - Back faces: tiled wooden `back.png` per 1x1 block.
-/// - Border faces: 1/16 block wooden rim slices along outer perimeter only.
-pub fn create_painting_baked_model(variant_name: &str, facing: Direction) -> BakedModel {
-    create_painting_baked_model_with_size(variant_name, facing, 0, 0)
 }
 
 /// Creates a procedural `BakedModel` for a painting with explicit dimensions or registry fallback.
@@ -916,33 +901,6 @@ pub fn create_painting_baked_model_with_size(
     model
 }
 
-/// Creates flat, contiguous `MeshData` buffer along with ordered texture identifiers
-/// for a painting variant with the given horizontal facing and optional offset.
-pub fn create_painting_mesh(
-    variant_name: &str,
-    facing: Direction,
-    offset: Option<Vec3>,
-) -> (MeshData, Vec<String>) {
-    let model = create_painting_baked_model(variant_name, facing);
-    let options = ModelMeshOptions {
-        clip_hidden_volume: false,
-        cull_duplicates: true,
-        cull_coplanar_opposite: true,
-        tolerance: 1e-4,
-    };
-    let (mut mesh, textures) = model.to_mesh_with_options(&options);
-
-    if let Some(off) = offset {
-        for pos in &mut mesh.positions {
-            pos[0] += off.x;
-            pos[1] += off.y;
-            pos[2] += off.z;
-        }
-    }
-
-    (mesh, textures)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -950,8 +908,6 @@ mod tests {
     #[test]
     fn test_all_51_variants_registered() {
         assert_eq!(PAINTING_VARIANTS.len(), 51);
-        let all = all_painting_variants();
-        assert_eq!(all.len(), 51);
 
         // Verify key canonical sizes
         assert_eq!(painting_dimension("kebab"), (1, 1));
@@ -981,7 +937,7 @@ mod tests {
 
     #[test]
     fn test_1x1_kebab_baked_model() {
-        let model = create_painting_baked_model("kebab", Direction::North);
+        let model = create_painting_baked_model_with_size("kebab", Direction::North, 0, 0);
         assert_eq!(model.elements.len(), 1);
         let el = &model.elements[0];
         // 1x1 has front, back, top, bottom, left, right (6 faces)
@@ -996,7 +952,7 @@ mod tests {
 
     #[test]
     fn test_4x4_pointer_segmentation() {
-        let model = create_painting_baked_model("pointer", Direction::North);
+        let model = create_painting_baked_model_with_size("pointer", Direction::North, 0, 0);
         // 4x4 has 16 segments
         assert_eq!(model.elements.len(), 16);
 
@@ -1010,23 +966,9 @@ mod tests {
     }
 
     #[test]
-    fn test_painting_mesh_generation_and_materials() {
-        let (mesh, textures) = create_painting_mesh("kebab", Direction::North, None);
-        assert_eq!(textures.len(), 2);
-        assert!(textures.contains(&"minecraft:painting/kebab".to_string()));
-        assert!(textures.contains(&"minecraft:painting/back".to_string()));
-
-        // 6 faces * 2 triangles = 12 triangles = 36 indices
-        assert_eq!(mesh.indices.len(), 36);
-        assert_eq!(mesh.positions.len(), 24);
-        assert_eq!(mesh.uvs.len(), 24);
-        assert_eq!(mesh.normals.len(), 24);
-    }
-
-    #[test]
     fn test_painting_uv_alignment_with_vanilla() {
         // 1x1 painting
-        let model = create_painting_baked_model("kebab", Direction::North);
+        let model = create_painting_baked_model_with_size("kebab", Direction::North, 0, 0);
         let el = &model.elements[0];
         let front = el.faces.get(&Direction::North).expect("Front face");
         // pt0 (x0, y1) bottom-left: u=0.0, v=1.0
@@ -1048,7 +990,7 @@ mod tests {
         // 2x1 painting: sx=0 (right segment of world, left segment of texture is sx=1)
         // For sx=width-1 (sx=1), U ranges from 0.0 to 0.5 (left slice of texture)
         // For sx=0, U ranges from 0.5 to 1.0 (right slice of texture)
-        let model_2x1 = create_painting_baked_model("pool", Direction::North);
+        let model_2x1 = create_painting_baked_model_with_size("pool", Direction::North, 0, 0);
         // segment 0 is sx=0, sy=0
         let seg_right_world = &model_2x1.elements[0];
         let front_right = seg_right_world.faces.get(&Direction::North).unwrap();

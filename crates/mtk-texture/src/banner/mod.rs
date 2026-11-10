@@ -37,12 +37,6 @@ impl BannerBaker {
         }
     }
 
-    /// Sets or replaces the base cloth buffer (must be 64x64).
-    pub fn set_base_cloth(&mut self, cloth: RgbaBuffer) {
-        self.base_cloth = cloth;
-        self.cache.clear();
-    }
-
     /// Registers a pattern sprite by name (e.g. "stripe_top", "flower", "creeper").
     pub fn register_pattern_sprite(&mut self, name: &str, sprite: RgbaBuffer) {
         let norm = normalize_pattern_stem(name);

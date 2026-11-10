@@ -165,17 +165,6 @@ impl DynamicAtlasManager {
         )
     }
 
-    /// Allocates and blits a skin PNG in one call.
-    pub fn add_skin_png(
-        &mut self,
-        skin_key: &str,
-        png_bytes: &[u8],
-    ) -> Result<(u16, DynamicSlotInfo), TextureError> {
-        let (chunk_id, slot_idx) = self.allocate_slot(skin_key);
-        let info = self.blit_skin_png_bytes(chunk_id, slot_idx, png_bytes)?;
-        Ok((chunk_id, info))
-    }
-
     /// Associates an alias key with an already allocated skin key.
     pub fn add_alias(&mut self, alias_key: &str, target_key: &str) {
         if let Some(&(chunk_id, slot_idx)) = self.key_to_location.get(target_key) {
@@ -226,14 +215,6 @@ impl DynamicAtlasManager {
         } else {
             None
         }
-    }
-
-    /// Returns RGBA bytes of a specific dynamic chunk ID if present.
-    pub fn chunk_rgba_buffer(&self, chunk_id: u16) -> Option<&[u8]> {
-        self.chunks
-            .iter()
-            .find(|c| c.chunk_id == chunk_id)
-            .map(|c| c.rgba_buffer.as_slice())
     }
 
     /// Returns all allocated chunk IDs and their RGBA byte buffers.

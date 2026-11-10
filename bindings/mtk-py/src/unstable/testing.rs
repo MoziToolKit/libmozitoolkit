@@ -212,6 +212,52 @@ pub fn voxel_world_ensure_dynamic_entities_resolved_sync(
     world.inner.ensure_dynamic_entities_resolved_sync()
 }
 
+/// Performs an integrity check on models, atlas, colormaps, and CTM rules (test helper).
+#[pyfunction]
+pub fn validate_scene_package<'py>(
+    py: Python<'py>,
+    reader: &crate::scene::reader::PyScenePackageReader,
+) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+    let report = reader
+        .inner
+        .validate()
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+    let dict = pyo3::types::PyDict::new(py);
+    dict.set_item("is_valid", report.is_valid)?;
+    dict.set_item("errors", report.errors)?;
+    dict.set_item("warnings", report.warnings)?;
+    Ok(dict)
+}
+
+/// Constructs colormaps with optional PNG byte overrides for grass, foliage, and dry_foliage (test helper).
+#[pyfunction]
+#[pyo3(signature = (grass=None, foliage=None, dry_foliage=None))]
+pub fn create_colormaps_from_bytes(
+    grass: Option<&[u8]>,
+    foliage: Option<&[u8]>,
+    dry_foliage: Option<&[u8]>,
+) -> PyResult<crate::material::PyVanillaColormaps> {
+    let cms = mtk_material::VanillaColormaps::with_overrides(grass, foliage, dry_foliage)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    Ok(crate::material::PyVanillaColormaps {
+        inner: std::sync::Arc::new(cms),
+    })
+}
+
+/// Test helper to retrieve baked mesh geometry and texture list for a given canonical blockstate string.
+#[pyfunction]
+#[pyo3(signature = (db, state_str, clip_hidden=true))]
+pub fn model_database_get_mesh(
+    db: &PyBakedModelDatabase,
+    state_str: &str,
+    clip_hidden: bool,
+) -> Option<(crate::mesh::PyMeshData, Vec<String>)> {
+    db.inner.get(state_str).map(|baked| {
+        let (mesh, textures) = baked.to_mesh_with_textures(clip_hidden);
+        (crate::mesh::PyMeshData::from_mesh(mesh), textures)
+    })
+}
+
 /// Registers the `testing` module on `parent_module`.
 pub fn register_submodule(py: Python<'_>, parent_module: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(py, "testing")?;
@@ -264,6 +310,7 @@ pub fn register_submodule(py: Python<'_>, parent_module: &Bound<'_, PyModule>) -
     // Model database helpers
     sub.add_function(wrap_pyfunction!(model_database_get_states, &sub)?)?;
     sub.add_function(wrap_pyfunction!(model_database_remap_to_atlas, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(model_database_get_mesh, &sub)?)?;
 
     // Voxel storage testing helpers
     sub.add_function(wrap_pyfunction!(voxel_dirty_section_count, &sub)?)?;
@@ -278,6 +325,10 @@ pub fn register_submodule(py: Python<'_>, parent_module: &Bound<'_, PyModule>) -
         voxel_world_ensure_dynamic_entities_resolved_sync,
         &sub
     )?)?;
+
+    // Scene & Colormaps helpers
+    sub.add_function(wrap_pyfunction!(validate_scene_package, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(create_colormaps_from_bytes, &sub)?)?;
 
     parent_module.add_submodule(&sub)?;
     Ok(())

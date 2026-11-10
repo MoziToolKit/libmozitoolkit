@@ -3,7 +3,7 @@ use glam::IVec3;
 use mtk_core::Direction;
 
 /// Solves full 47-tile CTM pattern using explicit 2D face tangents `(up, left)`.
-pub fn solve_full_ctm_with_tangents<F>(
+pub(crate) fn solve_full_ctm_with_tangents<F>(
     face: Direction,
     tangents: (Direction, Direction),
     inner_seams: bool,

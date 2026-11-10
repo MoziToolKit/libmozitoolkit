@@ -68,15 +68,6 @@ impl CopperStatuePose {
             _ => Self::Standing,
         }
     }
-
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Standing => "standing",
-            Self::Sitting => "sitting",
-            Self::Running => "running",
-            Self::Star => "star",
-        }
-    }
 }
 
 fn closest_direction(normal: Vec3) -> Direction {
@@ -379,3 +370,6 @@ pub fn create_copper_statue_baked_model(blockstate: &BlockState) -> BakedModel {
     model.rebuild_face_buckets();
     model
 }
+
+#[cfg(test)]
+mod tests;

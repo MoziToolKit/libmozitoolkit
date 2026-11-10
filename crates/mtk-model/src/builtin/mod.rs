@@ -20,11 +20,6 @@ use crate::parser::model_json::BlockModelJson;
 pub struct BuiltinModelRegistry;
 
 impl BuiltinModelRegistry {
-    /// Attempts to provide a builtin fallback `BlockModelJson` using upstream MiEx JSON templates.
-    pub fn get_builtin_model(blockstate: &BlockState) -> Option<BlockModelJson> {
-        Self::get_builtin_model_with_entity(blockstate, None)
-    }
-
     /// Attempts to provide an optimized pre-baked model for an entity block.
     pub fn get_builtin_baked_model_with_entity(
         blockstate: &BlockState,

@@ -63,21 +63,6 @@ pub struct PyVanillaColormaps {
 
 #[pymethods]
 impl PyVanillaColormaps {
-    /// Constructs colormaps with optional PNG byte overrides for grass, foliage, and dry_foliage.
-    #[staticmethod]
-    #[pyo3(signature = (grass=None, foliage=None, dry_foliage=None))]
-    pub fn from_bytes(
-        grass: Option<&[u8]>,
-        foliage: Option<&[u8]>,
-        dry_foliage: Option<&[u8]>,
-    ) -> PyResult<Self> {
-        let cms = mtk_material::VanillaColormaps::with_overrides(grass, foliage, dry_foliage)
-            .map_err(pyo3::exceptions::PyValueError::new_err)?;
-        Ok(Self {
-            inner: Arc::new(cms),
-        })
-    }
-
     fn __repr__(&self) -> String {
         format!(
             "<VanillaColormaps grass={}x{} foliage={}x{} dry_foliage={}x{}>",

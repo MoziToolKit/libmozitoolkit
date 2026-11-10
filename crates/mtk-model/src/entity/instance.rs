@@ -78,27 +78,6 @@ impl EntityInstance {
             }),
         }
     }
-
-    /// Creates a new Armor Stand entity instance.
-    pub fn new_armor_stand(
-        position: DVec3,
-        yaw_radians: f32,
-        show_arms: bool,
-        no_base_plate: bool,
-        is_small: bool,
-    ) -> Self {
-        Self {
-            id: "minecraft:armor_stand".to_string(),
-            position,
-            facing: None,
-            rotation: Vec3::new(0.0, yaw_radians, 0.0),
-            kind: EntityKindData::ArmorStand(ArmorStandData {
-                show_arms,
-                no_base_plate,
-                is_small,
-            }),
-        }
-    }
 }
 
 /// Strongly-typed payload for visual entities.

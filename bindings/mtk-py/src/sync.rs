@@ -35,11 +35,6 @@ impl PyLiveSyncSession {
         self.inner.clear_cache();
     }
 
-    /// Sets or updates the active mesher configuration on the underlying VoxelWorld.
-    pub fn set_config(&self, config: &PyMesherConfig) {
-        self.inner.set_config(config.inner.clone());
-    }
-
     /// Hot-reloads mesher configuration and model database on the underlying VoxelWorld.
     #[pyo3(signature = (config=None, model_db=None))]
     pub fn hot_reload(
@@ -77,11 +72,6 @@ impl PyLiveSyncSession {
             let _ = dict.set_item(chunk_id, PyBytes::new(py, &buf));
         }
         dict
-    }
-
-    /// Returns dynamic entity slot allocations `key -> (chunk_id, slot_idx)`.
-    pub fn get_dynamic_entity_slots(&self) -> std::collections::HashMap<String, (u16, u16)> {
-        self.inner.dynamic_entity_slots()
     }
 
     /// Sets the on-disk cache directory for downloaded player skins.

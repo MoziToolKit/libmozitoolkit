@@ -8,16 +8,17 @@ mod error;
 mod hasher;
 mod packet;
 
-pub use codec::{compute_delta_batch_hash, decode_packet, encode_packet};
+#[cfg(test)]
+pub(crate) use codec::compute_delta_batch_hash;
+pub use codec::{decode_packet, encode_packet};
 pub(crate) use constants::*;
-pub use constants::{
-    BaselineAckResult, CancelReason, ErrorCode, Opcode, ResyncReason, SyncDecision, PROTOCOL_MAGIC,
-    PROTOCOL_VERSION,
-};
-pub use error::ProtocolError;
+pub use constants::{Opcode, SyncDecision, PROTOCOL_MAGIC, PROTOCOL_VERSION};
+#[cfg(test)]
+pub(crate) use error::ProtocolError;
+#[cfg(test)]
+pub(crate) use hasher::SparseBlockEntry;
 pub use hasher::{
-    compute_canonical_state_hash, compute_sparse_state_hash,
-    compute_sparse_state_hash_for_point_cloud, compute_sparse_state_hash_for_storage,
-    SparseBlockEntry, SPARSE_CANONICAL_VERSION,
+    compute_sparse_state_hash, compute_sparse_state_hash_for_point_cloud,
+    compute_sparse_state_hash_for_storage,
 };
 pub use packet::{DeltaChangeEntry, Packet};

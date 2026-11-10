@@ -9,7 +9,7 @@ use mtk_core::Direction;
 /// increases along the tangent pointing *right* (opposite of `left`), and the row index
 /// `v` increases *downward* (opposite of `up`), matching standard top-left image origin
 /// and OptiFine/Continuity repeat semantics. Returns `v * width + u`.
-pub fn solve_repeat_with_tangents(
+pub(crate) fn solve_repeat_with_tangents(
     _face: Direction,
     tangents: (Direction, Direction),
     world_pos: IVec3,
@@ -48,7 +48,7 @@ pub fn solve_repeat_with_tangents(
     Some((v * width + u) as usize)
 }
 
-pub fn solve_random<F, S>(
+pub(crate) fn solve_random<F, S>(
     state: &str,
     face: Direction,
     world_pos: IVec3,
@@ -112,7 +112,7 @@ where
     chosen_idx
 }
 
-pub fn solve_overlay_with_tangents<F>(
+pub(crate) fn solve_overlay_with_tangents<F>(
     _face: Direction,
     tangents: (Direction, Direction),
     check_connect: &F,

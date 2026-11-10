@@ -148,22 +148,6 @@ impl MesherConfig {
     }
 }
 
-/// Statistics and metrics returned after a world mesh assembly pass.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct WorldMeshBuildResult {
-    /// Total number of vertices generated.
-    pub vertex_count: usize,
-    /// Total number of polygon faces (quads/triangles) generated.
-    pub face_count: usize,
-    /// Number of full solid cube blocks meshed.
-    pub cubes_count: usize,
-    /// Number of partial/non-cube models meshed.
-    pub props_count: usize,
-    /// Number of fluid block faces meshed.
-    pub fluids_count: usize,
-}
-
 /// Errors that can occur during voxel storage or meshing operations.
 #[derive(Debug, Error)]
 pub enum VoxelError {

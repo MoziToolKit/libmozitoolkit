@@ -37,7 +37,7 @@ pub(crate) use material::{
     reapply_uniform_biome_tint, PyBiomeResolver, PyGridAtlasSpec, PyMaterialResolver,
     PyVanillaColormaps,
 };
-pub(crate) use mesh::{PyAttributeDomain, PyMeshData};
+pub(crate) use mesh::PyMeshData;
 pub(crate) use model::PyBakedModelDatabase;
 pub(crate) use point_cloud::PyVoxelPointCloud;
 pub(crate) use resource::{
@@ -47,12 +47,6 @@ pub(crate) use resource::{
 pub(crate) use sync::PyLiveSyncSession;
 pub(crate) use texture::PyBakedAtlas;
 pub(crate) use voxel::{PyMesherConfig, PyVoxelStorage, PyVoxelWorld};
-
-/// Returns libmtk version string.
-#[pyfunction]
-pub fn version() -> &'static str {
-    env!("CARGO_PKG_VERSION")
-}
 
 /// Returns the integer API contract version expected by the Blender glue layer.
 #[pyfunction]
@@ -82,7 +76,6 @@ pub fn builtin_biome_suffixes() -> Vec<String> {
 #[pymodule]
 fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // 1. Mesh & Core
-    m.add_class::<PyAttributeDomain>()?;
     m.add_class::<PyMeshData>()?;
     m.add_function(wrap_pyfunction!(subdivide::adaptive_pixel_split_mesh, m)?)?;
     m.add_function(wrap_pyfunction!(mesh::analyze_mesh_hard_edges, m)?)?;
@@ -165,7 +158,6 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(scene::export_scene_package, m)?)?;
 
     // 11. Metadata
-    m.add_function(wrap_pyfunction!(version, m)?)?;
     m.add_function(wrap_pyfunction!(api_version, m)?)?;
 
     // 12. Unstable and experimental APIs

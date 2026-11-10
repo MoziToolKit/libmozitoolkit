@@ -9,7 +9,7 @@ use mtk_resource::banner::VANILLA_BANNER_DYES;
 /// Standard dimensions of a dynamic skin atlas chunk.
 pub const DYNAMIC_ATLAS_WIDTH: u32 = 1024;
 pub const DYNAMIC_ATLAS_HEIGHT: u32 = 1024;
-pub const DYNAMIC_SLOT_SIZE: u32 = 64;
+pub(crate) const DYNAMIC_SLOT_SIZE: u32 = 64;
 pub const DYNAMIC_SLOTS_PER_ROW: u32 = 16;
 pub const DYNAMIC_TOTAL_SLOTS: usize = 256;
 
@@ -261,16 +261,6 @@ impl DynamicAtlasChunk {
                 self.slot_map.insert(alias.to_string(), slot_idx);
             }
         }
-        self.blit_skin_png_bytes(slot_idx, png_bytes)
-    }
-
-    /// Convenience helper to allocate and blit a skin in one step.
-    pub fn add_skin_png(
-        &mut self,
-        skin_key: &str,
-        png_bytes: &[u8],
-    ) -> Result<DynamicSlotInfo, TextureError> {
-        let slot_idx = self.allocate_slot(skin_key);
         self.blit_skin_png_bytes(slot_idx, png_bytes)
     }
 

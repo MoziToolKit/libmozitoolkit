@@ -81,8 +81,6 @@ fn test_legacy_dimension_folders_are_ignored() {
 
     let dims = SaveLoader::discover_dimensions(&root);
     assert!(!dims.iter().any(|d| d == "the_nether" || d == "the_end"));
-    assert!(SaveLoader::resolve_dimension_region_dir(&root, "the_nether").is_none());
-    assert!(SaveLoader::resolve_dimension_region_dir(&root, "the_end").is_none());
 
     std::fs::create_dir_all(root.join("dimensions/minecraft/the_nether/region")).unwrap();
     std::fs::create_dir_all(root.join("dimensions/minecraft/the_end/region")).unwrap();

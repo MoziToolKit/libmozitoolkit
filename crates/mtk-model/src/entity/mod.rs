@@ -2,7 +2,7 @@
 
 pub mod baker;
 pub mod banner;
-pub mod copper_statue;
+pub(crate) mod copper_statue;
 pub mod instance;
 pub mod painting;
 pub(crate) mod pot;

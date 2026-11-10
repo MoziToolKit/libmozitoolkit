@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 /// Source priority level for atlas address map keys.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum AtlasKeySource {
+pub(crate) enum AtlasKeySource {
     /// Authoritative prebaked static asset from resource packs (higher priority).
     Static = 0,
     /// Procedurally registered dynamic entity sprite (e.g. skin, banner).

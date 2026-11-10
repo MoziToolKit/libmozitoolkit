@@ -11,16 +11,14 @@ mod image;
 mod stitcher;
 
 pub use atlas::{
-    create_fallback_checkerboard_buffer, create_fallback_sprite, AtlasAddressMap, AtlasBuilder,
-    AtlasBuilderConfig, AtlasChunkMeta, AtlasKeySource, AtlasSpriteLocation, AtlasTextureSlot,
-    BakedAtlas, BakedAtlasChunk, DynamicAtlasChunk, DynamicAtlasManager, DynamicSlotInfo,
-    IorEncoding, NormalConvention, PbrLayout, PbrMeta, PbrSourceFormat, RoughnessSpace, SpriteKind,
-    DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID, DYNAMIC_ATLAS_HEIGHT, DYNAMIC_ATLAS_WIDTH,
-    DYNAMIC_CHUNK_START, DYNAMIC_SLOT_SIZE, FALLBACK_TEXTURE_KEY,
+    AtlasAddressMap, AtlasBuilder, AtlasBuilderConfig, AtlasChunkMeta, AtlasSpriteLocation,
+    AtlasTextureSlot, BakedAtlas, BakedAtlasChunk, DynamicAtlasChunk, DynamicAtlasManager,
+    DynamicSlotInfo, IorEncoding, NormalConvention, PbrLayout, PbrMeta, PbrSourceFormat,
+    RoughnessSpace, SpriteKind, DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID, DYNAMIC_ATLAS_HEIGHT,
+    DYNAMIC_ATLAS_WIDTH, DYNAMIC_CHUNK_START, FALLBACK_TEXTURE_KEY,
 };
 pub use banner::BannerBaker;
 pub use error::TextureError;
 pub use image::{
-    bake_paletted_permutation, batch_analyze_transparent_faces_f32, sample_alpha_f32,
-    DecodedSprite, RgbaBuffer, SampleMode,
+    batch_analyze_transparent_faces_f32, sample_alpha_f32, DecodedSprite, RgbaBuffer, SampleMode,
 };

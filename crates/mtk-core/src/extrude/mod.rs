@@ -12,7 +12,7 @@ mod uv;
 pub use noise::{generate_extrude_heights, perlin_noise_3d};
 pub use repair::process_flat_mesh_extrude_repair;
 pub use types::{ExtrudeMeshOutput, ExtrudeNoiseType, ExtrudeUvMode, MeshExtrudeRepairConfig};
-pub use uv::{repair_extruded_side_uv, repair_extruded_side_uv_advanced};
+pub use uv::repair_extruded_side_uv;
 
 #[cfg(test)]
 mod tests {

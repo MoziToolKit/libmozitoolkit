@@ -317,13 +317,6 @@ impl RgbaBuffer {
         }
     }
 
-    /// Returns a vertically flipped copy of the buffer.
-    pub fn to_flipped_v(&self) -> Self {
-        let mut cloned = self.clone();
-        cloned.flip_v();
-        cloned
-    }
-
     /// Converts the RGBA8 buffer to a normalized [0.0, 1.0] float32 buffer (`width * height * 4`).
     /// If `flip_v` is true, rows are streamed bottom-to-top (Blender native Image.pixels coordinate system).
     pub fn to_f32_buffer(&self, flip_v: bool) -> Vec<f32> {

@@ -1,7 +1,7 @@
 use glam::IVec3;
 use mtk_core::Direction;
 
-pub fn solve_horizontal_with_tangents<F>(
+pub(crate) fn solve_horizontal_with_tangents<F>(
     _face: Direction,
     tangents: (Direction, Direction),
     check_connect: &F,
@@ -22,7 +22,7 @@ where
     }
 }
 
-pub fn solve_vertical_with_tangents<F>(
+pub(crate) fn solve_vertical_with_tangents<F>(
     _face: Direction,
     tangents: (Direction, Direction),
     check_connect: &F,
@@ -43,7 +43,7 @@ where
     }
 }
 
-pub fn solve_horizontal_vertical_with_tangents<F>(
+pub(crate) fn solve_horizontal_vertical_with_tangents<F>(
     _face: Direction,
     tangents: (Direction, Direction),
     check_connect: &F,
@@ -76,7 +76,7 @@ where
     tile_idx
 }
 
-pub fn solve_vertical_horizontal_with_tangents<F>(
+pub(crate) fn solve_vertical_horizontal_with_tangents<F>(
     _face: Direction,
     tangents: (Direction, Direction),
     check_connect: &F,
@@ -109,7 +109,7 @@ where
     tile_idx
 }
 
-pub fn solve_top_with_tangents<F>(
+pub(crate) fn solve_top_with_tangents<F>(
     _face: Direction,
     tangents: (Direction, Direction),
     check_connect: &F,

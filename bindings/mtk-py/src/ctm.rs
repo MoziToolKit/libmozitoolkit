@@ -20,12 +20,6 @@ impl PyCtmSolver {
         }
     }
 
-    /// Number of active CTM rules loaded in this solver.
-    #[getter]
-    pub fn rule_count(&self) -> usize {
-        self.inner.rules.len()
-    }
-
     fn __repr__(&self) -> String {
         format!("<CtmSolver rules={}>", self.inner.rules.len())
     }

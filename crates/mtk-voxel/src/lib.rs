@@ -25,7 +25,5 @@ pub use storage::{
     block_index, BlockEntityData, PaddedVoxelArray, PointCloudVoxelSource, SectionBiomes,
     SectionStorage, SparseVoxelColumns, SparseVoxelPayload, VoxelPointCloud, VoxelStorage,
 };
-pub use types::{
-    CoordinateSystem, MesherConfig, UnknownBlockStrategy, VoxelError, WorldMeshBuildResult,
-};
+pub use types::{CoordinateSystem, MesherConfig, UnknownBlockStrategy, VoxelError};
 pub use world::{SkinResolvedCallback, VoxelWorld};

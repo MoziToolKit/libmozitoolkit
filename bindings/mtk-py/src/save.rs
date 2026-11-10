@@ -229,8 +229,8 @@ pub fn load_and_mesh_minecraft_save(
     let cul = culler.map(|c| c.inner.clone());
     let mdb = model_db.map(|db| db.inner.clone());
     let threads = num_threads.or_else(|| config.and_then(|c| c.num_threads));
-
-    let mut world = VoxelWorld::from_storage_with_threads(storage.clone(), cfg, cul, mdb, threads);
+    let mut world = VoxelWorld::from_storage(storage.clone(), cfg, cul, mdb);
+    world.num_threads = threads;
     if let Some(ref dir) = skin_cache_dir {
         world.set_skin_cache_dir(Some(std::path::PathBuf::from(dir)));
     }

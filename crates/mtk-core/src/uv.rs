@@ -10,7 +10,7 @@ use crate::geometry::Aabb2d;
 
 /// Calculate 2D signed area of a polygon loop in UV space ([f32; 2]) using the Shoelace formula.
 #[inline]
-pub fn calculate_uv_area_2d(uvs: &[[f32; 2]]) -> f32 {
+pub(crate) fn calculate_uv_area_2d(uvs: &[[f32; 2]]) -> f32 {
     let n = uvs.len();
     if n < 3 {
         return 0.0;
@@ -76,7 +76,7 @@ pub fn get_uv_center(uvs: &[Vec2]) -> Vec2 {
 
 /// Check if face UVs ([f32; 2]) are collapsed to a point, line segment, or near zero 2D area.
 #[inline]
-pub fn is_uv_collapsed_2d(uvs: &[[f32; 2]], pixel_step: Option<[f32; 2]>) -> bool {
+pub(crate) fn is_uv_collapsed_2d(uvs: &[[f32; 2]], pixel_step: Option<[f32; 2]>) -> bool {
     if uvs.len() < 3 {
         return true;
     }

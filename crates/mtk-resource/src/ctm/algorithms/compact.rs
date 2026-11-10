@@ -2,7 +2,7 @@ use glam::IVec3;
 use mtk_core::Direction;
 
 /// Solves 5-tile compact CTM pattern using explicit 2D face tangents `(up, left)`.
-pub fn solve_compact_ctm_with_tangents<F>(
+pub(crate) fn solve_compact_ctm_with_tangents<F>(
     _face: Direction,
     tangents: (Direction, Direction),
     check_connect: &F,

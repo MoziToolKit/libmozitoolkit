@@ -15,8 +15,6 @@ use pyo3::types::PyMemoryView;
 use mtk_core::FlatPolygonMesh;
 use mtk_core::MeshData;
 
-pub use crate::attributes::PyAttributeDomain;
-
 /// Python-facing wrapper around contiguous `MeshData`.
 #[pyclass(name = "MeshData")]
 #[derive(Debug, Clone, Default)]
@@ -321,11 +319,6 @@ impl PyMeshData {
     /// Returns a list of unique material slot IDs present across all faces in this mesh.
     pub fn used_materials(&self) -> Vec<u16> {
         self.inner.used_materials()
-    }
-
-    /// Compacts face material slot IDs into contiguous 0..N-1 and returns original mapping.
-    pub fn compact_materials(&mut self) -> Vec<u16> {
-        self.inner.compact_materials()
     }
 
     // -------------------------------------------------------------------------

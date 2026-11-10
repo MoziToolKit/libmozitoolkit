@@ -1,31 +1,6 @@
 use super::*;
 
 #[test]
-fn test_canonical_hash_deterministic() {
-    let min_pos = IVec3::new(0, 64, 0);
-    let size = IVec3::new(2, 2, 2);
-
-    let h1 = compute_canonical_state_hash(
-        min_pos,
-        size,
-        "minecraft:overworld",
-        |_, _, _| "minecraft:stone".to_string(),
-        |_, _, _| "minecraft:plains".to_string(),
-    );
-
-    let h2 = compute_canonical_state_hash(
-        min_pos,
-        size,
-        "minecraft:overworld",
-        |_, _, _| "minecraft:stone".to_string(),
-        |_, _, _| "minecraft:plains".to_string(),
-    );
-
-    assert_eq!(h1, h2);
-    assert_ne!(h1, 0);
-}
-
-#[test]
 fn test_air_family_normalization_matches_java_ssot() {
     // Air family states collapse to canonical "minecraft:air"
     for raw in [
