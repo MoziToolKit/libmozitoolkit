@@ -185,6 +185,12 @@ pub fn as_memoryview_u8<'py>(
     )
 }
 
+/// Returns the standalone adapter package semantic version string.
+#[pyfunction]
+pub fn version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
 /// Returns the standalone adapter API version.
 #[pyfunction]
 pub fn api_version() -> u32 {
@@ -201,6 +207,8 @@ fn libmtk_blender_dna(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(as_memoryview_i32, m)?)?;
     m.add_function(wrap_pyfunction!(as_memoryview_u32, m)?)?;
     m.add_function(wrap_pyfunction!(as_memoryview_u8, m)?)?;
+    m.add_function(wrap_pyfunction!(version, m)?)?;
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_function(wrap_pyfunction!(api_version, m)?)?;
     Ok(())
 }

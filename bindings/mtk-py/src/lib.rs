@@ -48,6 +48,12 @@ pub(crate) use sync::PyLiveSyncSession;
 pub(crate) use texture::PyBakedAtlas;
 pub(crate) use voxel::{PyMesherConfig, PyVoxelStorage, PyVoxelWorld};
 
+/// Returns the native core package semantic version string.
+#[pyfunction]
+pub fn version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
 /// Returns the integer API contract version expected by the Blender glue layer.
 #[pyfunction]
 pub fn api_version() -> u32 {
@@ -158,6 +164,8 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(scene::export_scene_package, m)?)?;
 
     // 11. Metadata
+    m.add_function(wrap_pyfunction!(version, m)?)?;
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_function(wrap_pyfunction!(api_version, m)?)?;
 
     // 12. Unstable and experimental APIs

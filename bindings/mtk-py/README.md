@@ -39,6 +39,7 @@
 
 Python 模块名：`libmtk_py`
 
+- `version() -> str`：原生扩展包语义版本（如 `"0.1.0"`，同时支持属性 `__version__`）。
 - `api_version() -> int`：与 Blender 胶水层握手的整数 API 版本（当前 `2`）。
 
 ### 2.1 几何网格与自定义属性 (`mesh` & `attributes`)

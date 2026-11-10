@@ -6,8 +6,10 @@ import libmtk_blender_dna as dna
 
 
 class TestBlenderDna(unittest.TestCase):
-    def test_api_version(self):
+    def test_version(self):
         self.assertEqual(dna.api_version(), 2)
+        self.assertTrue(len(dna.version()) > 0)
+        self.assertEqual(dna.version(), dna.__version__)
 
     def test_copy_f32_typed_and_raw(self):
         src = array.array("f", [1.0, 2.0, 3.0, 4.0])

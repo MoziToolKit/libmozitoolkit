@@ -5,6 +5,7 @@ Standalone ABI3 wheel exposing generic raw-memory copy, direct-read, and zero-co
 ```python
 import libmtk_blender_dna as dna
 
+dna.version()      # "0.1.0"
 dna.api_version()  # 2
 
 # Direct copy to Blender memory
