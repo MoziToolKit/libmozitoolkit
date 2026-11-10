@@ -137,7 +137,14 @@ Python 模块名：`libmtk_py`
 - **稀疏体素数据结构 (`mtk_voxel`)**：
   - `SparseVoxelPayload` / `SparseVoxelColumns`：正交离散调色板（`state_palette`, `biome_palette`, `entity_palette`）与紧凑 SoA 列存布局，实现与伴生体素点云的 1:1 零拷贝互转。
 
-### 2.11 测试 / 开发专用 API (`unstable.testing`)
+### 2.11 性能探针与执行耗时审计 (`profile`)
+- **`ExecutionProfile` (`PyExecutionProfile`)**：端到端操作规范性能报告对象。
+  - 属性：`total_duration_ms`（总壁钟耗时）, `accounted_duration_ms`（顶层阶段累计耗时）, `unaccounted_duration_ms`（未统计工作耗时盲区）, `stages`（层级阶段列表）。
+  - 方法：`to_dict()` 转换为包含 `name`, `category`, `depth`, `start_offset_ms`, `duration_ms`, `items_count` 的结构化字典。
+- **`StageSpan` (`PyStageSpan`)**：规范化阶段跨度。
+  - 属性：`name`（阶段名）, `category`（命名空间/类别如 `"mesh"`, `"io"`, `"bake"`, `"cull"`, `"host"`）, `depth`（层级深度，0=顶层，1=子阶段）, `start_offset_us`, `start_offset_ms`（相对启动时刻偏移）, `duration_ms`, `items_count`。
+
+### 2.12 测试 / 开发专用 API (`unstable.testing`)
 以下低阶算子不属于稳定生产 API，仅供测试验证与开发工具调用：
 `AtlasBuilder`, `ModelBaker`, `calculate_face_target_grid`, `calculate_pixel_grid_cut_factors`,
 `slice_face_by_pixel_grid`, `is_uv_collapsed`, `is_orthogonal_angle`, `detect_uv_rotation`,

@@ -125,7 +125,7 @@ fn precompile_all_assets_inner(
     }
 
     let biome_resolver =
-        profiler.measure("prebake_biome", || -> Result<BiomeResolver, MtkError> {
+        profiler.measure("biome", "bake", |_| -> Result<BiomeResolver, MtkError> {
             let mut biome_resolver = BiomeResolver::new();
             biome_resolver.load_from_pack_stack(stack);
             if let Some(overrides) = config.resolver_overrides.as_ref() {
@@ -197,7 +197,7 @@ fn precompile_all_assets_inner(
             ));
         }
 
-        let baked_atlas = profiler.measure("prebake_atlas", || -> Result<_, MtkError> {
+        let baked_atlas = profiler.measure("atlas", "bake", |p| -> Result<_, MtkError> {
             let mut def_list: Vec<(String, mtk_resource::AtlasDefinition)> = Vec::new();
             let mut seen_cats = std::collections::HashSet::new();
 
@@ -253,30 +253,25 @@ fn precompile_all_assets_inner(
                 padding: 0,
             };
             let atlas_builder = AtlasBuilder::new(atlas_cfg);
-            let mut baked_atlas = atlas_builder.build_categories(stack, &def_list)?;
+            let mut baked_atlas = p.measure("atlas_stitch", "bake", |_| {
+                atlas_builder.build_categories(stack, &def_list)
+            })?;
 
             // Decode raw LabPBR companions into canonical MtkPackedV1 channels before the
             // address map is serialized, so has_orm/has_aux/pbr metadata is authoritative.
-            mtk_material::decode_baked_atlas(&mut baked_atlas)?;
+            p.measure("labpbr_decode", "bake", |_| {
+                mtk_material::decode_baked_atlas(&mut baked_atlas)
+            })?;
 
             // Determine authoritative has_tint for each chunk
-            for chunk_meta in &mut baked_atlas.address_map.chunks {
-                if chunk_meta.category != "blocks" {
-                    chunk_meta.has_tint = false;
-                    continue;
-                }
-                let mut chunk_has_tint = false;
-                for (res, loc) in &baked_atlas.address_map.sprites {
-                    if loc.chunk_id == chunk_meta.chunk_id {
-                        let tint_info = biome_resolver.get_tint_info(&res.path, None, None);
-                        if tint_info.tint_type != mtk_material::TINT_TYPE_NONE {
-                            chunk_has_tint = true;
-                            break;
-                        }
+            p.measure("tint_flags", "bake", |_| {
+                for chunk_meta in &mut baked_atlas.address_map.chunks {
+                    if chunk_meta.category != "blocks" {
+                        chunk_meta.has_tint = false;
+                        continue;
                     }
-                }
-                if !chunk_has_tint {
-                    for (res, loc) in &baked_atlas.address_map.anim_sprites {
+                    let mut chunk_has_tint = false;
+                    for (res, loc) in &baked_atlas.address_map.sprites {
                         if loc.chunk_id == chunk_meta.chunk_id {
                             let tint_info = biome_resolver.get_tint_info(&res.path, None, None);
                             if tint_info.tint_type != mtk_material::TINT_TYPE_NONE {
@@ -285,9 +280,20 @@ fn precompile_all_assets_inner(
                             }
                         }
                     }
+                    if !chunk_has_tint {
+                        for (res, loc) in &baked_atlas.address_map.anim_sprites {
+                            if loc.chunk_id == chunk_meta.chunk_id {
+                                let tint_info = biome_resolver.get_tint_info(&res.path, None, None);
+                                if tint_info.tint_type != mtk_material::TINT_TYPE_NONE {
+                                    chunk_has_tint = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    chunk_meta.has_tint = chunk_has_tint;
                 }
-                chunk_meta.has_tint = chunk_has_tint;
-            }
+            });
 
             let total_chunks = baked_atlas.chunks.len();
 
@@ -322,29 +328,35 @@ fn precompile_all_assets_inner(
                 }
             }
 
-            #[cfg(feature = "parallel")]
-            let encoded_results: Result<Vec<(String, Vec<u8>)>, MtkError> = texture_tasks
-                .into_par_iter()
-                .map(|(path, buf)| {
-                    let bytes = buf.to_png_bytes().map_err(MtkError::Texture)?;
-                    Ok((path, bytes))
-                })
-                .collect();
+            let encoded_textures = p.measure("png_encode", "bake", |_| -> Result<_, MtkError> {
+                #[cfg(feature = "parallel")]
+                let encoded_results: Result<Vec<(String, Vec<u8>)>, MtkError> = texture_tasks
+                    .into_par_iter()
+                    .map(|(path, buf)| {
+                        let bytes = buf.to_png_bytes().map_err(MtkError::Texture)?;
+                        Ok((path, bytes))
+                    })
+                    .collect();
 
-            #[cfg(not(feature = "parallel"))]
-            let encoded_results: Result<Vec<(String, Vec<u8>)>, MtkError> = texture_tasks
-                .into_iter()
-                .map(|(path, buf)| {
-                    let bytes = buf.to_png_bytes().map_err(MtkError::Texture)?;
-                    Ok((path, bytes))
-                })
-                .collect();
+                #[cfg(not(feature = "parallel"))]
+                let encoded_results: Result<Vec<(String, Vec<u8>)>, MtkError> = texture_tasks
+                    .into_iter()
+                    .map(|(path, buf)| {
+                        let bytes = buf.to_png_bytes().map_err(MtkError::Texture)?;
+                        Ok((path, bytes))
+                    })
+                    .collect();
 
-            let encoded_textures = encoded_results?;
-            for (path, bytes) in encoded_textures {
-                writer.add_chunk(*b"ATLS", path, &bytes, &ChunkWriteOptions::raw())?;
-                atlas_throttler.inc();
-            }
+                encoded_results
+            })?;
+
+            p.measure("atlas_write", "bake", |_| -> Result<_, MtkError> {
+                for (path, bytes) in encoded_textures {
+                    writer.add_chunk(*b"ATLS", path, &bytes, &ChunkWriteOptions::raw())?;
+                    atlas_throttler.inc();
+                }
+                Ok(())
+            })?;
 
             Ok(baked_atlas)
         })?;
@@ -356,7 +368,7 @@ fn precompile_all_assets_inner(
     // 2. Full-Scale Model Baking & Postcard Packaging (Zstd compressed)
     if config.compile_models {
         let atlas_map = baked_atlas_opt.as_ref().map(|a| &a.address_map);
-        let model_db = profiler.measure("prebake_models", || {
+        let model_db = profiler.measure("models", "bake", |_| {
             prebake_all_models_with_progress(stack, atlas_map, progress_callback)
         })?;
         baked_count = model_db.len();
@@ -370,29 +382,32 @@ fn precompile_all_assets_inner(
     }
 
     // 3. Package Banner Patterns and Base Cloth into BANR chunks for runtime Dynamic Entity Atlas synthesis
-    let mut banner_baker = mtk_texture::BannerBaker::default();
-    let _ = banner_baker.load_from_pack_stack(stack);
-    if let Ok(base_bytes) = banner_baker.base_cloth_png_bytes() {
-        writer.add_chunk(
-            *b"BANR",
-            "banner/base",
-            &base_bytes,
-            &ChunkWriteOptions::raw(),
-        )?;
-    }
-    let pattern_map = banner_baker.all_pattern_png_bytes();
-    if !pattern_map.is_empty() {
-        if let Ok(pattern_bytes) = postcard::to_allocvec(&pattern_map) {
+    profiler.measure("banner", "bake", |_| -> Result<_, MtkError> {
+        let mut banner_baker = mtk_texture::BannerBaker::default();
+        let _ = banner_baker.load_from_pack_stack(stack);
+        if let Ok(base_bytes) = banner_baker.base_cloth_png_bytes() {
             writer.add_chunk(
                 *b"BANR",
-                "banner/patterns",
-                &pattern_bytes,
-                &ChunkWriteOptions::zstd_fast(),
+                "banner/base",
+                &base_bytes,
+                &ChunkWriteOptions::raw(),
             )?;
         }
-    }
+        let pattern_map = banner_baker.all_pattern_png_bytes();
+        if !pattern_map.is_empty() {
+            if let Ok(pattern_bytes) = postcard::to_allocvec(&pattern_map) {
+                writer.add_chunk(
+                    *b"BANR",
+                    "banner/patterns",
+                    &pattern_bytes,
+                    &ChunkWriteOptions::zstd_fast(),
+                )?;
+            }
+        }
+        Ok(())
+    })?;
 
-    // 4. Save Cache Manifest inside package
+    // 4. Save Cache Manifest inside package & finalize container
     let epoch_now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -406,15 +421,16 @@ fn precompile_all_assets_inner(
         baked_models: baked_count,
         created_at_epoch_secs: epoch_now,
     };
-    writer.add_json_chunk(
-        *b"META",
-        "manifest",
-        &manifest,
-        &ChunkWriteOptions::zstd_fast(),
-    )?;
 
-    // 4. Finalize container
-    profiler.measure("finalize_package", || writer.finish())?;
+    profiler.measure("finalize", "bake", |_| -> Result<_, MtkError> {
+        writer.add_json_chunk(
+            *b"META",
+            "manifest",
+            &manifest,
+            &ChunkWriteOptions::zstd_fast(),
+        )?;
+        Ok(writer.finish()?)
+    })?;
 
     if let Some(cb) = progress_callback {
         cb(ProgressReport::new(

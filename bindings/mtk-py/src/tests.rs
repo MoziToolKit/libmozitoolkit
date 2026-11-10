@@ -82,18 +82,21 @@ fn test_python_voxel_storage_and_world_mesher() {
         // Verify execution profile attached to mesh and world
         assert!(mesh.profile().is_some());
         let profile = mesh.profile().unwrap();
-        let stage_names: Vec<String> = profile
-            .stages()
+        let stages = profile.stages();
+        assert!(!stages.is_empty());
+        assert!(stages.iter().all(|s| s.category() == "mesh"));
+        assert!(stages
             .iter()
-            .map(|stage| stage.name().to_string())
-            .collect();
-        assert!(!stage_names.is_empty());
-        assert!(stage_names
+            .any(|s| s.name() == "extract_padded" && s.depth() == 0));
+        assert!(stages
             .iter()
-            .any(|name| name == "padded_array_extraction"));
-        assert!(stage_names
+            .any(|s| s.name() == "parallel_meshing" && s.depth() == 0));
+        assert!(stages
             .iter()
-            .any(|name| name == "parallel_section_meshing"));
+            .any(|s| s.name() == "assemble" && s.depth() == 0));
+        assert!(stages
+            .iter()
+            .any(|s| s.name() == "merge_welded_seams" && s.depth() == 1));
 
         let mut unwelded_config = PyMesherConfig::default();
         unwelded_config.inner.weld_vertices = false;

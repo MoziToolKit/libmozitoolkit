@@ -83,23 +83,27 @@ pub fn adaptive_pixel_split_mesh(
     let mut profiler = mtk_core::ExecutionProfiler::start();
     let output_mesh = py.detach(|| {
         let face_count = mesh.inner.indices.len() / 6;
-        let mut split =
-            profiler.measure_with_count("split_faces_to_pixel_grid", face_count, || {
-                mtk_core::adaptive_pixel_split_mesh(
-                    &mesh.inner,
-                    res_slice,
-                    default_resolution,
-                    pixels_per_face,
-                    max_subdivisions,
-                    0.0,
-                )
-            });
+        let mut split = profiler.measure_with_count("split_faces", "subdivide", face_count, |_| {
+            mtk_core::adaptive_pixel_split_mesh(
+                &mesh.inner,
+                res_slice,
+                default_resolution,
+                pixels_per_face,
+                max_subdivisions,
+                0.0,
+            )
+        });
 
         if weld_dist > 0.0 {
-            profiler.measure_with_count("weld_subdivided_vertices", split.positions.len(), || {
-                split.uv_layout = mtk_core::UvLayout::PerLoop;
-                split.weld_vertices(weld_dist);
-            });
+            profiler.measure_with_count(
+                "weld_vertices",
+                "subdivide",
+                split.positions.len(),
+                |_| {
+                    split.uv_layout = mtk_core::UvLayout::PerLoop;
+                    split.weld_vertices(weld_dist);
+                },
+            );
         }
 
         split

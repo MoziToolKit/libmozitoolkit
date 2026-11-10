@@ -152,7 +152,7 @@ pub fn load_and_mesh_minecraft_save(
     let mut profiler = mtk_core::ExecutionProfiler::start();
 
     let path = Path::new(world_dir);
-    let (level_data, dimensions) = profiler.measure("read_level_metadata", || {
+    let (level_data, dimensions) = profiler.measure("read_level_metadata", "io", |_| {
         let ld = SaveLoader::read_level_data(path)
             .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
         let dims = SaveLoader::discover_dimensions(path);
@@ -181,17 +181,18 @@ pub fn load_and_mesh_minecraft_save(
         .map(|f| f as &(dyn Fn(mtk_core::ProgressReport) + Send + Sync));
 
     let mut storage = VoxelStorage::new();
-    let (loaded_sections, loaded_entities) = profiler.measure("load_region_chunks", || {
-        SaveLoader::load_box_with_entities(
-            path,
-            dimension,
-            min_coord,
-            max_coord,
-            &mut storage,
-            progress_ref,
-        )
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
-    })?;
+    let (_loaded_sections, loaded_entities) =
+        profiler.measure("load_region_chunks", "io", |_| {
+            SaveLoader::load_box_with_entities(
+                path,
+                dimension,
+                min_coord,
+                max_coord,
+                &mut storage,
+                progress_ref,
+            )
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+        })?;
 
     // Asset cache input gate: valid model database and atlas mapping are strictly required
     if model_db.is_none() {
@@ -242,20 +243,35 @@ pub fn load_and_mesh_minecraft_save(
         }
     }
 
-    let (mesh, world_profile, dynamic_entity_atlases, dynamic_entity_slots, active_config) = py
-        .detach(|| {
-            world.ensure_dynamic_entities_resolved_sync_with_progress(progress_ref);
-            let m = world.rebuild_all_with_progress(progress_ref)?.clone();
-            let p = world.last_profile.clone();
-            let (dyn_atlases, dyn_slots) = world.dynamic_entity_atlases_if_used();
-            Ok::<_, mtk_voxel::VoxelError>((m, p, dyn_atlases, dyn_slots, world.config.clone()))
-        })
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+    let (mesh, _world_profile, dynamic_entity_atlases, dynamic_entity_slots, active_config) =
+        profiler.measure("mesh_voxel_world", "mesh", |p| {
+            let res = py
+                .detach(|| {
+                    world.ensure_dynamic_entities_resolved_sync_with_progress(progress_ref);
+                    let m = world.rebuild_all_with_progress(progress_ref)?.clone();
+                    let prof = world.last_profile.clone();
+                    let (dyn_atlases, dyn_slots) = world.dynamic_entity_atlases_if_used();
+                    Ok::<_, mtk_voxel::VoxelError>((
+                        m,
+                        prof,
+                        dyn_atlases,
+                        dyn_slots,
+                        world.config.clone(),
+                    ))
+                })
+                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+            if let Some(wp) = res.1.clone() {
+                p.attach_sub_profile(wp, Some("mesh"));
+            }
+
+            Ok::<_, PyErr>(res)
+        })?;
 
     let mut final_mesh = mesh;
     if let Some(atlas_map) = active_config.atlas_address_map.as_deref() {
         let custom_aliases = active_config.custom_aliases.as_deref();
-        profiler.measure("bake_visual_entities", || {
+        profiler.measure("bake_visual_entities", "mesh", |_| {
             for ent in &loaded_entities {
                 if let Some((mut ent_mesh, _)) =
                     mtk_model::EntityBaker::bake_entity_mesh(ent, |tex| {
@@ -278,14 +294,6 @@ pub fn load_and_mesh_minecraft_save(
                 }
             }
         });
-    }
-
-    if let Some(wp) = world_profile {
-        for stage in wp.stages {
-            profiler.record_stage(stage.name, stage.duration_us, stage.items_count);
-        }
-    } else {
-        profiler.record_stage("mesh_voxel_world", 0, Some(loaded_sections));
     }
 
     let final_profile = profiler.finish();

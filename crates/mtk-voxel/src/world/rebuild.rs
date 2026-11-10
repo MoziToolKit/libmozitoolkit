@@ -49,11 +49,8 @@ impl VoxelWorld {
     ) -> Result<&MeshData, VoxelError> {
         let mut profiler = mtk_core::ExecutionProfiler::start();
 
-        profiler.measure("sync_selection_bounds", || {
+        profiler.measure("prep", "mesh", |_| {
             self.sync_selection_bounds();
-        });
-
-        profiler.measure("ensure_dynamic_entities_resolved", || {
             self.ensure_dynamic_entities_resolved();
         });
 
@@ -78,7 +75,7 @@ impl VoxelWorld {
 
         #[cfg(feature = "parallel")]
         let padded_sections: Vec<_> = profiler
-            .measure_with_count("padded_array_extraction", non_empty.len(), || {
+            .measure_with_count("extract_padded", "mesh", non_empty.len(), |_| {
                 use rayon::prelude::*;
                 mtk_core::constants::concurrency::execute_parallel(self.num_threads, || {
                     non_empty
@@ -91,7 +88,7 @@ impl VoxelWorld {
 
         #[cfg(not(feature = "parallel"))]
         let padded_sections: Vec<_> =
-            profiler.measure_with_count("padded_array_extraction", non_empty.len(), || {
+            profiler.measure_with_count("extract_padded", "mesh", non_empty.len(), |_| {
                 non_empty
                     .iter()
                     .map(|&coord| self.storage.get_section_padded_array(coord))
@@ -102,7 +99,7 @@ impl VoxelWorld {
         let model_lookup = |state: &str| Self::model_source_for_state(db_opt, state);
 
         let results =
-            profiler.measure_with_count("parallel_section_meshing", non_empty.len(), || {
+            profiler.measure_with_count("parallel_meshing", "mesh", non_empty.len(), |_| {
                 SectionMesher::mesh_sections_parallel_with_source_and_progress(
                     &padded_sections,
                     &self.culler,
@@ -113,7 +110,7 @@ impl VoxelWorld {
                 )
             })?;
 
-        profiler.measure("section_cache_insertion", || {
+        profiler.measure("cache_insertion", "mesh", |_| {
             self.section_mesh_cache.clear();
             for (coord, mesh) in results {
                 if !mesh.is_empty() {
@@ -132,7 +129,9 @@ impl VoxelWorld {
             ));
         }
 
-        self.assemble_world_mesh(true, Some(&mut profiler));
+        profiler.measure("assemble", "mesh", |p| {
+            self.assemble_world_mesh(true, Some(p));
+        });
         self.storage.clear_dirty_sections();
 
         self.last_profile = Some(profiler.finish());
@@ -152,11 +151,8 @@ impl VoxelWorld {
 
         let mut profiler = mtk_core::ExecutionProfiler::start();
 
-        profiler.measure("sync_selection_bounds", || {
+        profiler.measure("prep", "mesh", |_| {
             self.sync_selection_bounds();
-        });
-
-        profiler.measure("ensure_dynamic_entities_resolved", || {
             let dirty: Vec<glam::IVec3> = self.storage.dirty_sections.iter().copied().collect();
             self.ensure_dynamic_entities_resolved_for_sections(&dirty);
         });
@@ -165,17 +161,18 @@ impl VoxelWorld {
         let model_lookup = |state: &str| Self::model_source_for_state(db_opt, state);
 
         let dirty_count = self.storage.dirty_sections.len();
-        let rebuilt = profiler.measure_with_count("rebuild_dirty_sections", dirty_count, || {
-            DeltaMesher::rebuild_dirty_sections_with_source(
-                &mut self.storage,
-                &self.culler,
-                model_lookup,
-                &self.config,
-            )
-        });
+        let rebuilt =
+            profiler.measure_with_count("rebuild_dirty_sections", "mesh", dirty_count, |_| {
+                DeltaMesher::rebuild_dirty_sections_with_source(
+                    &mut self.storage,
+                    &self.culler,
+                    model_lookup,
+                    &self.config,
+                )
+            });
 
         let rebuilt_count = rebuilt.len();
-        profiler.measure("section_cache_insertion", || {
+        profiler.measure("cache_insertion", "mesh", |_| {
             for (coord, mesh) in rebuilt {
                 if mesh.is_empty() {
                     self.section_mesh_cache.remove(&coord);
@@ -185,7 +182,9 @@ impl VoxelWorld {
             }
         });
 
-        self.assemble_world_mesh(false, Some(&mut profiler));
+        profiler.measure("assemble", "mesh", |p| {
+            self.assemble_world_mesh(false, Some(p));
+        });
 
         self.last_profile = Some(profiler.finish());
 
@@ -201,11 +200,8 @@ impl VoxelWorld {
 
         let mut profiler = mtk_core::ExecutionProfiler::start();
 
-        profiler.measure("sync_selection_bounds", || {
+        profiler.measure("prep", "mesh", |_| {
             self.sync_selection_bounds();
-        });
-
-        profiler.measure("ensure_dynamic_entities_resolved", || {
             let dirty: Vec<glam::IVec3> = self.storage.dirty_sections.iter().copied().collect();
             self.ensure_dynamic_entities_resolved_for_sections(&dirty);
         });
@@ -214,16 +210,17 @@ impl VoxelWorld {
         let model_lookup = |state: &str| Self::model_source_for_state(db_opt, state);
 
         let dirty_count = self.storage.dirty_sections.len();
-        let rebuilt = profiler.measure_with_count("rebuild_dirty_sections", dirty_count, || {
-            DeltaMesher::rebuild_dirty_sections_with_source(
-                &mut self.storage,
-                &self.culler,
-                model_lookup,
-                &self.config,
-            )
-        });
+        let rebuilt =
+            profiler.measure_with_count("rebuild_dirty_sections", "mesh", dirty_count, |_| {
+                DeltaMesher::rebuild_dirty_sections_with_source(
+                    &mut self.storage,
+                    &self.culler,
+                    model_lookup,
+                    &self.config,
+                )
+            });
 
-        profiler.measure("section_cache_insertion", || {
+        profiler.measure("cache_insertion", "mesh", |_| {
             for (coord, mesh) in &rebuilt {
                 if mesh.is_empty() {
                     self.section_mesh_cache.remove(coord);
@@ -233,7 +230,9 @@ impl VoxelWorld {
             }
         });
 
-        self.assemble_world_mesh(false, Some(&mut profiler));
+        profiler.measure("assemble", "mesh", |p| {
+            self.assemble_world_mesh(false, Some(p));
+        });
 
         self.last_profile = Some(profiler.finish());
 

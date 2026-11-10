@@ -213,6 +213,30 @@ cache_output_dir/
   - `unpack(origin_centered=True, z_up=True) -> SceneUnpackResult`：单次调用原生解码并交付全部核心组件（`point_cloud`, `models`, `atlas`, `biome_resolver`, `colormaps`, `dynamic_entity_slots`, `ctm_solver`）；
   - `validate() -> SceneValidationReport`：执行场景包完整性与引用完整性校验。
 
+---
+
+### 2.12 性能探针与耗时审计契约 (Execution Profiling Contracts)
+为确保全流水线端到端耗时测量精确、可解释、无暗箱盲区，`mtk-core` 建立了通用的性能探针基础设施与形式化时间线契约：
+- **`StageSpan` 规范模型**：
+  - `name`: 阶段名称（如 `"prep"`, `"extract_padded"`, `"parallel_meshing"`, `"assemble"`）；
+  - `category`: 领域类别命名空间（`"mesh"`, `"io"`, `"bake"`, `"cull"`, `"subdivide"`, `"host"`）；
+  - `depth`: 层级深度（`0` = 顶层阶段，`1` = 子阶段，`2` = 微步骤，由 Profiler 活跃栈自动推导）；
+  - `start_offset_us`: 相对 Profiler 启动时刻的微秒绝对偏移；
+  - `duration_us`: 该阶段壁钟耗时；
+  - `items_count`: 处理图元/区块/实体数量（可选）。
+- **时间线不变量 (Timeline Invariants)**：
+  1. **顶层阶段顺序不重叠**：$\forall s_i, s_{i+1} \in \text{stages}$ (where $\text{depth}=0$), $s_i.\text{start\_offset\_us} + s_i.\text{duration\_us} \le s_{i+1}.\text{start\_offset\_us}$；
+  2. **绝对时间线闭环**：$\forall s \in \text{stages}, \; s.\text{start\_offset\_us} + s.\text{duration\_us} \le \text{total\_duration\_us}$；
+  3. **显式盲区审计**：`accounted_duration_us` 仅统计 $\text{depth} == 0$ 的顶层阶段和；未被埋点的系统盲区显式呈现为 `unaccounted_duration_us = total_duration_us - accounted_duration_us`，由 `debug_assert!` 守护 $\text{accounted} \le \text{total}$。
+- **调用契约与子 Profile 规范挂载 (`ExecutionProfiler`)**：
+  - 自动推导深度：通过 `profiler.measure(name, category, |p| { ... })` 维护活动栈，禁止手动指定 `depth`，彻底物理删除松散的 `record_stage` 方法；
+  - `attach_sub_profile(sub_profile, category_override)` 四点语义：
+    1. `category_override` 仅覆盖子 Profile 中 $\text{depth} == 0$ 的顶层阶段，保留其原有子阶段的细分类别；
+    2. 绝不修改父级自身的 `total_duration_us`；
+    3. 强制在父级活跃的 `measure` 作用域内调用（否则 panic）；
+    4. 严格按照父阶段的绝对偏移平移时间线：`child.start_offset_us = parent.start_offset_us + child.start_offset_us`，且 `child.depth = parent.depth + 1 + child.depth`。
+
+
 
 
 

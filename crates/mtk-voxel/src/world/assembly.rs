@@ -49,9 +49,10 @@ impl VoxelWorld {
     ) {
         let meshes: Vec<&MeshData> = match profiler.as_deref_mut() {
             Some(p) => p.measure_with_count(
-                "collect_section_mesh_refs",
+                "collect_refs",
+                "mesh",
                 self.section_mesh_cache.len(),
-                || self.section_mesh_cache.values().collect(),
+                |_| self.section_mesh_cache.values().collect(),
             ),
             None => self.section_mesh_cache.values().collect(),
         };
@@ -68,7 +69,7 @@ impl VoxelWorld {
             }
         };
         let mut merged = match profiler.as_deref_mut() {
-            Some(p) => p.measure("merge_welded_seams", merge),
+            Some(p) => p.measure("merge_welded_seams", "mesh", |_| merge()),
             None => merge(),
         };
         prune_static_animation_attributes(&mut merged);
@@ -82,7 +83,7 @@ impl VoxelWorld {
             this.world_mesh = Some(merged);
         };
         match profiler {
-            Some(p) => p.measure("compact_material_slots", || compact(self, merged)),
+            Some(p) => p.measure("compact_material_slots", "mesh", |_| compact(self, merged)),
             None => compact(self, merged),
         }
     }

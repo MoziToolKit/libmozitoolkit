@@ -61,10 +61,9 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
     let poly_step = if is_quad_mesh { 6 } else { 3 };
     let face_count = mesh.indices.len() / poly_step;
 
-    let faces_to_cull =
-        profiler.measure_with_count("spatial_plane_bucketing_and_search", face_count, || {
-            find_faces_to_cull(mesh, face_count, poly_step, is_quad_mesh, config)
-        });
+    let faces_to_cull = profiler.measure_with_count("spatial_search", "cull", face_count, |_| {
+        find_faces_to_cull(mesh, face_count, poly_step, is_quad_mesh, config)
+    });
 
     if faces_to_cull.is_empty() {
         return MeshCullResult {
@@ -76,7 +75,7 @@ pub fn cull_mesh_faces(mesh: &MeshData, config: &MeshCullConfig) -> MeshCullResu
         };
     }
 
-    let (out, remaining_faces) = profiler.measure("rebuild_culled_mesh", || {
+    let (out, remaining_faces) = profiler.measure("rebuild_mesh", "cull", |_| {
         rebuild_culled_mesh(mesh, face_count, poly_step, is_quad_mesh, &faces_to_cull)
     });
 
