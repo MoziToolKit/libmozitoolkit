@@ -39,7 +39,6 @@
 
 Python 模块名：`libmtk_py`
 
-- `version() -> str`：原生扩展版本。
 - `api_version() -> int`：与 Blender 胶水层握手的整数 API 版本（当前 `2`）。
 
 ### 2.1 几何网格与自定义属性 (`mesh` & `attributes`)
@@ -50,7 +49,6 @@ Python 模块名：`libmtk_py`
   - 宿主无关标准连续缓冲模型（Tier 3）：`to_buffers()` 零拷贝导出包含 `positions`, `normals`, `uvs`, `indices`, `loop_starts`, `loop_totals` 等的 Python typed memoryview 字典。
   - 核心 wheel 不再包含 Blender 指针写入代码。零拷贝宿主写入由独立 `libmtk_blender_dna` wheel 提供，通过 `memoryview` 接收核心 buffer，再写入 Blender 指针；核心不需要知道适配器的存在。
   - 顶点与面自定义属性：`add_string_attribute(name, domain, values)`, `add_attribute_from_buffer(name, domain, data_type, buffer)`, `get_string_attribute(name)`, `attribute_memoryview(name)`, `attribute_info(name)`, `attribute_names()`
-- **`AttributeDomain`**：属性域枚举，支持 `"point"` (顶点) 与 `"face"` (面)。
 - **`analyze_mesh_hard_edges(positions, edge_verts, face_loop_starts, face_loop_totals, loop_verts, sharp_angle_rad, explicit_sharp_edges=None) -> PyBytes`**：基于二面角与边界的高性能硬边/锐边拓扑分析算子，支持零拷贝 Buffer Protocol。
 
 ### 2.2 遮挡剔除与状态机 (`cull`)
@@ -77,7 +75,7 @@ Python 模块名：`libmtk_py`
   - `positions_memoryview()`, `block_x_memoryview()`, `block_y_memoryview()`, `block_z_memoryview()`
   - `get_state_palette()`, `get_biome_palette()`, `state_indices_memoryview()`, `biome_indices_memoryview()`：点云只存 palette + 索引，不再逐点物化字符串。
 - **`VoxelStorage` (`PyVoxelStorage`)**：16x16x16 稀疏 Chunk Section 体素容器，带脏标记追踪。
-  - `to_point_cloud(config=None) -> VoxelPointCloud`, `from_point_cloud(cloud) -> VoxelStorage`, `load_from_point_cloud(cloud)`
+  - `to_point_cloud(config=None) -> VoxelPointCloud`, `load_from_point_cloud(cloud)`
   - `create_debug_world()`：一键加载内置嵌入的原版调试世界快照（529 sections, 32,539 blocks）。
   - `set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)`, `set_block(x, y, z, state, tint)`
 - **`VoxelWorld` (`PyVoxelWorld`)**：统一 3D 场景引擎，支持增量区块缓存与全量世界网格管理。
@@ -92,12 +90,11 @@ Python 模块名：`libmtk_py`
     两端令牌会各自 trim 后比较），启用 Yefira `authToken` 时必须传入。
   - `poll_events(coalesce_meshes=False)`：`True` 时只保留最新 `WORLD_MESH_READY` generation
   - `get_dynamic_entity_atlases()`：`{chunk_id: RGBA bytes}` 动态实体图集映射（无单数访问器）
-  - `get_dynamic_entity_slots()`：`{key: (chunk_id, slot_idx)}` 动态实体槽位索引映射
   - 持久化握手入口（`start_with_persisted_state` / `export_persisted_state_json` /
     `start()` 的 `cached_*` 参数）已物理删除：Blender 侧 `VoxelStorage` 无法持久化，
     该路径始终不可达。
   - `client_generation`, `current_sequence`, `current_epoch`, `state_hash`, `server_uuid`
-  - `clear_cache()`, `set_config(config)`, `hot_reload(config=None, model_db=None)`, `request_resync()`
+  - `clear_cache()`, `hot_reload(config=None, model_db=None)`, `request_resync()`
   - `STREAM_PROGRESS.percent` 已由 Rust 归一化为 0..100；`HANDSHAKE.decision_code` 为 RFC v3.1 原始值
 
 ### 2.7 资源包预烘焙与图集 (`resource` & `texture`)
@@ -123,15 +120,12 @@ Python 模块名：`libmtk_py`
 
 ### 2.9 模型烘焙 (`model`)
 - **`BakedModelDatabase` (`PyBakedModelDatabase`)**：预编译方块几何模型库。
-  - `get_mesh(state_str, clip_hidden=true)`
 
 ### 2.10 场景交换包与 Mini-Atlas (`scene`)
 - **`ScenePackageReader`**：`.mtkscene` 单文件中间交换容器读取器（只读无副作用设计，构造时不污染全局进程状态）。
   - `open(path)`：快速打开并校验场景元数据；
   - `unpack(origin_centered=True, z_up=True) -> dict`：**高阶解包门面**，单次调用原生解码并交付全部核心组件（`metadata`, `point_cloud`, `models`, `atlas`, `atlas_mapping_json`, `texture_names`, `biome_resolver`, `colormaps`, `dynamic_entity_slots`, `ctm_solver`）；
-  - `validate() -> dict`：执行场景包完整性与引用完整性校验（校验模型贴图是否已映射到 mini-atlas、CTM 规则纹理是否存在、色盘 PNG 是否合法、动态实体槽位是否有效等），返回包含 `{"is_valid": bool, "errors": list[str], "warnings": list[str]}` 的字典；
   - `metadata -> SceneMetadata`：获取场景元数据对象；
-  - `get_atlas_texture_names() -> list[str]`：获取所有内嵌图集切片文件名列表；
   - `read_texture_rgba(chunk_id, flip_v=False) -> (width, height, memoryview)`：直接解压缩并读取单张图集切片为连续 RGBA 内存视图；
   - `read_texture_f32(chunk_id, flip_v=False) -> (width, height, memoryview)`：直接解压缩并读取单张图集切片为 [0.0, 1.0] 浮点连续缓冲。
 - **`SceneMetadata`**：场景包元数据对象。
@@ -152,9 +146,10 @@ Python 模块名：`libmtk_py`
 `encode_baseline_begin`, `encode_baseline_chunk`, `encode_baseline_end`, `encode_delta_op`,
 `encode_palette_update`, `mesh_attribute_schema`, `retired_mesh_attributes`,
 `extract_cache_atlas_texture`, `model_database_get_states`, `model_database_remap_to_atlas`,
-`voxel_storage_get_non_empty_sections`, `voxel_storage_get_block_entity_json`,
+`model_database_get_mesh`, `voxel_storage_get_non_empty_sections`, `voxel_storage_get_block_entity_json`,
 `voxel_storage_set_block_entity_json`, `voxel_world_ensure_dynamic_entities_resolved_sync`,
-`voxel_dirty_section_count`, `voxel_set_section_snapshot`。
+`voxel_dirty_section_count`, `voxel_set_section_snapshot`, `validate_scene_package`,
+`create_colormaps_from_bytes`。
 
 ---
 

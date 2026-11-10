@@ -57,7 +57,7 @@
 
 ### 7. DNA 双向零拷贝适配与状态自愈跃迁 (2026-11-01 ~ 2026-11-03 ✅ 全部完成)
 - [x] **DNA 直写与直读双向适配 (`mtk-blender-dna-py`)**：通过 Python Buffer Protocol 扩展 `read_mesh_geometry` 与 `read_point_cloud_attributes`，实现 Blender 网格拓扑、面材质、循环 UV 与点云属性的零拷贝直接读取，彻底消除 Python 包装对象中转开销。
-- [x] **RFC v3.1 稀疏状态哈希与 0ms 重连 (`mtk-sync`)**：打通 `compute_canonical_state_hash` 与客户端握手状态自愈，实现基于体素哈希指纹的 0ms 零几何重建秒级恢复。
+- [x] **RFC v3.1 稀疏状态哈希与 0ms 重连 (`mtk-sync`)**：打通 `compute_sparse_state_hash` 与客户端握手状态自愈，实现基于体素哈希指纹的 0ms 零几何重建秒级恢复。
 - [x] **自包含场景交换容器 (`.mtkscene` / `libmtk::scene`)**：实现 `SparseVoxelPayload` 列存体素格式、Tree-shaken 模型闭包裁剪、内存微型图集 (Mini-Atlas) 烘焙与 UV 自动重映射。
 
 ---

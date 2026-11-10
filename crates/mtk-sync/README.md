@@ -55,8 +55,8 @@
 | **进度归一** | `normalize_stream_progress` | 权威两阶段进度归一化算子（将 download 与 meshing 阶段平滑映射至单调 0..100%）。 |
 | **协议模型** | `Packet`, `DeltaChangeEntry` | 强类型 RFC v3.1 二进制通信数据包枚举与增量修改条目。 |
 | **协议编解码** | `decode_packet`, `encode_packet` | 零拷贝二进制数据包解码与小端序封包。 |
-| **哈希校验 SSOT**| `compute_sparse_state_hash`, `compute_sparse_state_hash_for_storage`, `compute_sparse_state_hash_for_point_cloud`, `compute_delta_batch_hash`, `compute_canonical_state_hash` | 基于 xxHash64 的权威 3D 稀疏世界指纹计算，保障 0ms 重连与一致性自愈。 |
-| **协议常量与枚举**| `Opcode`, `SyncDecision`, `BaselineAckResult`, `CancelReason`, `ResyncReason`, `ErrorCode`, `ProtocolError`, `PROTOCOL_MAGIC`, `PROTOCOL_VERSION` | RFC v3.1 协议规范常量、指令码与错误枚举。 |
+| **哈希校验 SSOT**| `compute_sparse_state_hash`, `compute_sparse_state_hash_for_storage`, `compute_sparse_state_hash_for_point_cloud` | 基于 xxHash64 的权威 3D 稀疏世界指纹计算，保障 0ms 重连与一致性自愈。 |
+| **协议常量与枚举**| `Opcode`, `SyncDecision`, `PROTOCOL_MAGIC`, `PROTOCOL_VERSION` | RFC v3.1 协议规范常量与指令码。 |
 
 ---
 

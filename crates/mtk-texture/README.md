@@ -200,7 +200,6 @@ pub struct BakedAtlas {
 ### 3.2 图像与调色板工具
 | 函数签名 | 描述 |
 | :--- | :--- |
-| `bake_paletted_permutation(base, key_pal, perm_pal) -> Result<RgbaBuffer, TextureError>` | 调色板颜色置换烘焙。 |
 | `sample_alpha_f32(w, h, pixels, u, v, invert_y) -> f32` | 采样指定 UV 处的透明度 (0.0~1.0)。 |
 | `batch_analyze_transparent_faces_f32(faces_uvs, w, h, pixels, mode, threshold, invert_y) -> Vec<bool>` | Rayon 并行批量分析网格面透明度。 |
 
@@ -250,29 +249,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mapping_json = baked.address_map.to_json()?;
     std::fs::write("atlas_mapping.json", mapping_json)?;
 
-    Ok(())
-}
-```
-
-### 示例 2：实时烘焙盔甲纹饰调色板 (Armor Trim Permutation)
-```rust
-use mtk_texture::{bake_paletted_permutation, RgbaBuffer};
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 1. 读取基础灰色 Trim 纹理
-    let base_trim = RgbaBuffer::from_png_bytes(&std::fs::read("sentry.png")?)?;
-
-    // 2. 读取原版 trim_palette.png 键（8 色阶）
-    let key_palette = RgbaBuffer::from_png_bytes(&std::fs::read("trim_palette.png")?)?;
-
-    // 3. 读取目标材质调色板（例如 amethyst.png 紫水晶色）
-    let amethyst_palette = RgbaBuffer::from_png_bytes(&std::fs::read("amethyst.png")?)?;
-
-    // 4. 实时烘焙得到紫水晶色的 sentry 纹饰
-    let baked_trim = bake_paletted_permutation(&base_trim, &key_palette, &amethyst_palette)?;
-
-    // 保存为 PNG
-    std::fs::write("sentry_amethyst.png", baked_trim.to_png_bytes()?)?;
     Ok(())
 }
 ```

@@ -92,8 +92,6 @@ pub struct LevelData {
     pub game_type: i32,
 }
 ```
-- `LevelData::read_from_file(file_path: &Path) -> Result<Self, SaveError>`: 读取并解包 `level.dat`。
-- `LevelData::read_from_bytes(bytes: &[u8]) -> Result<Self, SaveError>`: 基于内置轻量 NBT 从解压字节流解析。
 
 ---
 
@@ -104,18 +102,8 @@ pub struct SaveLoader;
 ```
 - `SaveLoader::read_level_data(save_dir: &Path) -> Result<LevelData, SaveError>`: 快速定位并读取世界配置。
 - `SaveLoader::discover_dimensions(save_dir: &Path) -> Vec<String>`: 发现可用维度（`overworld`, `the_nether`, `the_end`, 自定义命名空间维度）。
-- `SaveLoader::resolve_dimension_region_dir(save_dir: &Path, dimension: &str) -> Option<PathBuf>`: 解析指定维度的 `region/` 目录。
 - `SaveLoader::load_box_into_storage(...) -> Result<usize, SaveError>`: 给定世界目录、维度名称与 3D 轴对齐空间范围 $[P_{\min}, P_{\max}]$，精确裁剪提取相交区块并灌入 `VoxelStorage`。
 - `SaveLoader::load_box_into_storage_with_progress(..., progress: Option<ProgressCallback>) -> Result<usize, SaveError>`: 带实时物理进度节流汇报的空间切片加载器。
-
----
-
-### 3.3 方块实体负载解码 (`block_entity.rs`)
-
-```rust
-pub fn decode_block_entity_payload(bytes: &[u8]) -> Option<BlockEntityData>;
-```
-- 支持 JSON 格式与二进制 NBT Compound 格式的通用方块实体负载解码（Banner 纹饰、Decorated Pot 陶片、Player Head 皮肤）。
 
 ---
 
@@ -125,11 +113,8 @@ pub fn decode_block_entity_payload(bytes: &[u8]) -> Option<BlockEntityData>;
 | :--- | :--- |
 | `SaveLoader::read_level_data` | `(save_dir: &Path) -> Result<LevelData, SaveError>`：读取世界元数据。 |
 | `SaveLoader::discover_dimensions` | `(save_dir: &Path) -> Vec<String>`：发现存档中的可用维度。 |
-| `SaveLoader::resolve_dimension_region_dir` | `(save_dir: &Path, dimension: &str) -> Option<PathBuf>`：定位维度区域目录。 |
 | `SaveLoader::load_box_into_storage` | `(save_dir, dimension, min_coord, max_coord, &mut storage) -> Result<usize, SaveError>`：按 3D 边界范围切片加载体素。 |
 | `SaveLoader::load_box_into_storage_with_progress` | `(..., &mut storage, progress: Option<ProgressCallback>) -> Result<usize, SaveError>`：带进度汇报的切片加载。 |
-| `decode_block_entity_payload` | `(bytes: &[u8]) -> Option<BlockEntityData>`：通用方块实体数据解码。 |
-| `LevelData::read_from_file` | `(file_path: &Path) -> Result<LevelData, SaveError>`：直接读取 `level.dat`。 |
 
 ---
 

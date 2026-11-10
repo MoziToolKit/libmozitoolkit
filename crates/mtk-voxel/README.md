@@ -77,7 +77,7 @@
 | **`fluid`**                 | 流体类型枚举 (`FluidType`) 与流体 UV 修复算子 (`repair_quad_fluid_uv`, `batch_repair_fluid_uv`, `repair_mesh_fluid_uv_inplace`, `get_fluid_top_uvs`, `get_fluid_side_uvs`)。 |
 | **`biome`**                 | 5×5 (R=2) 盒式平滑生物群系柱计算 (`SmoothedBiomeColumn`)、`get_smoothed_column_biome` 与 `get_point_column_biome`。 |
 | **`world`**                 | 统一 3D 场景引擎 (`VoxelWorld`)，封装存储管理、Rayon 并行重建、物理进度实时汇报 (`rebuild_all_with_progress`)、显式线程池配置 (`num_threads`)、单阶段流式跨区块缝合 (`merge_welded_sections`)、增量重建的 Section 边界缝合 (`merge_welded_sections_filtered`，保证 `rebuild_dirty` 与 `rebuild_all` 拓扑一致)、Section 增量网格缓存与清空 (`clear_cache`)、动态资产热重载 (`hot_reload_assets`)、使用图集 Chunk 追踪 (`used_chunk_ids`) 与多源摄取。 |
-| **`types`**                 | 配置参数 `MesherConfig`、坐标系枚举 `CoordinateSystem`、统计结果 `WorldMeshBuildResult` 与错误类型 `VoxelError`。 |
+| **`types`**                 | 配置参数 `MesherConfig`、坐标系枚举 `CoordinateSystem` 与错误类型 `VoxelError`。 |
 
 ---
 
@@ -443,7 +443,7 @@ serde = ["dep:serde", "dep:serde_json", "mtk-core/serde", "mtk-cull/serde"]
 ```
 
 - **`parallel`** (默认开启)：引入 `rayon` 启用多区块切片并行网格化 (`SectionMesher::mesh_sections_parallel_with_source_and_progress`)。
-- **`serde`** (默认开启)：为 `SectionStorage`、`VoxelStorage`、`MesherConfig`、`WorldMeshBuildResult` 等结构体提供序列化与反序列化支持。
+- **`serde`** (默认开启)：为 `SectionStorage`、`VoxelStorage`、`MesherConfig` 等结构体提供序列化与反序列化支持。
 
 ---
 
