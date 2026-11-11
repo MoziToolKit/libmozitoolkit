@@ -165,6 +165,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<entity::PyEntityRenderNode>()?;
     m.add_class::<entity::PyEntityRenderPlan>()?;
     m.add_function(wrap_pyfunction!(entity::build_entity_render_plan, m)?)?;
+    m.add_function(wrap_pyfunction!(entity::host_transform_to_mc, m)?)?;
 
     // 11. Scene Interchange (.mtkscene)
     m.add_class::<scene::PyScenePackageReader>()?;

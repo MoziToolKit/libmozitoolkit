@@ -18,7 +18,7 @@ pub struct PyMesherConfig {
 #[pymethods]
 impl PyMesherConfig {
     #[new]
-    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_vertices=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None, enable_alternate_blocks=true, enable_random_offsets=true, ctm_solver=None, enable_animated_textures=true, colormaps=None, unknown_block_strategy=None, smooth_biome_blend=true))]
+    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_vertices=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None, enable_alternate_blocks=true, enable_random_offsets=true, ctm_solver=None, enable_animated_textures=true, colormaps=None, unknown_block_strategy=None, smooth_biome_blend=true, coordinate_system=None))]
     pub fn new(
         enable_ao: bool,
         mesh_fluids: bool,
@@ -36,23 +36,37 @@ impl PyMesherConfig {
         colormaps: Option<&PyVanillaColormaps>,
         unknown_block_strategy: Option<&str>,
         smooth_biome_blend: bool,
-    ) -> Self {
+        coordinate_system: Option<&str>,
+    ) -> PyResult<Self> {
         let strategy = match unknown_block_strategy {
             Some("IGNORE_AS_AIR") | Some("ignore_as_air") | Some("air") => {
                 mtk_voxel::UnknownBlockStrategy::IgnoreAsAir
             }
             _ => mtk_voxel::UnknownBlockStrategy::FallbackCube,
         };
+        let coord_sys = if let Some(sys) = coordinate_system {
+            match sys.to_ascii_lowercase().as_str() {
+                "minecraft" => CoordinateSystem::Minecraft,
+                "y_up" => CoordinateSystem::YUpRightHanded,
+                "z_up" => CoordinateSystem::ZUpRightHanded,
+                other => {
+                    return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                        "Invalid coordinate_system '{}', expected 'z_up', 'minecraft', or 'y_up'",
+                        other
+                    )));
+                }
+            }
+        } else if z_up_coordinates {
+            CoordinateSystem::ZUpRightHanded
+        } else {
+            CoordinateSystem::Minecraft
+        };
         let config = MesherConfig {
             enable_ao,
             mesh_fluids,
             origin_centered,
             weld_vertices,
-            coordinate_system: if z_up_coordinates {
-                CoordinateSystem::ZUpRightHanded
-            } else {
-                CoordinateSystem::Minecraft
-            },
+            coordinate_system: coord_sys,
             atlas_address_map: atlas.map(|a| Arc::new(a.inner.address_map.clone())),
             biome_resolver: biome_resolver.map(|r| Arc::new(r.inner.clone())),
             custom_aliases: custom_aliases.map(Arc::new),
@@ -66,10 +80,10 @@ impl PyMesherConfig {
             smooth_biome_blend,
             ..Default::default()
         };
-        Self {
+        Ok(Self {
             inner: config,
             num_threads,
-        }
+        })
     }
 
     /// Sets or clears colormaps.
@@ -113,6 +127,15 @@ impl PyMesherConfig {
             self.inner.coordinate_system,
             CoordinateSystem::ZUpRightHanded
         )
+    }
+
+    #[getter]
+    pub fn coordinate_system(&self) -> &'static str {
+        match self.inner.coordinate_system {
+            CoordinateSystem::Minecraft => "minecraft",
+            CoordinateSystem::ZUpRightHanded => "z_up",
+            CoordinateSystem::YUpRightHanded => "y_up",
+        }
     }
 
     #[getter]

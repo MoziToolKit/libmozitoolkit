@@ -261,3 +261,66 @@ def test_storage_and_cloud_entities_palette_build_entity_render_plan():
     )
     assert plan_cloud.node_count == 1
     assert plan_cloud.nodes[0].key == "uuid:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+
+def test_host_transform_to_mc_python_binding():
+    # 1. Roundtrip with origin centered and bounds in Z-Up
+    bounds = [0, 0, 0, 16, 16, 16]
+    orig_pos = (10.5, 64.0, -20.5)
+    orig_rot = (0.2, -0.4, 0.6)
+    orig_scale = (1.0, 1.0, 1.0)
+
+    entities = [
+        {
+            "id": "minecraft:painting",
+            "position": list(orig_pos),
+            "rotation": list(orig_rot),
+            "scale": list(orig_scale),
+            "kind": {"type": "minecraft:painting", "variant": "kebab", "width": 1, "height": 1},
+        }
+    ]
+    plan = libmtk_py.build_entity_render_plan(
+        entities,
+        bounds=bounds,
+        origin_centered=True,
+        coordinate_system="z_up",
+    )
+    node = plan.nodes[0]
+    loc = node.location
+    rot = node.rotation_euler
+    scale = node.scale
+
+    back_pos, back_rot, back_scale = libmtk_py.host_transform_to_mc(
+        loc,
+        rot,
+        scale,
+        bounds=bounds,
+        origin_centered=True,
+        coordinate_system="z_up",
+    )
+
+    assert abs(back_pos[0] - orig_pos[0]) < 1e-4
+    assert abs(back_pos[1] - orig_pos[1]) < 1e-4
+    assert abs(back_pos[2] - orig_pos[2]) < 1e-4
+    assert abs(back_rot[0] - orig_rot[0]) < 1e-4
+    assert abs(back_rot[1] - orig_rot[1]) < 1e-4
+    assert abs(back_rot[2] - orig_rot[2]) < 1e-4
+    assert abs(back_scale[0] - orig_scale[0]) < 1e-4
+
+
+def test_mesher_config_coordinate_system_options():
+    cfg_z = libmtk_py.MesherConfig(coordinate_system="z_up")
+    assert cfg_z.coordinate_system == "z_up"
+    assert cfg_z.z_up_coordinates is True
+
+    cfg_y = libmtk_py.MesherConfig(coordinate_system="y_up")
+    assert cfg_y.coordinate_system == "y_up"
+    assert cfg_y.z_up_coordinates is False
+
+    cfg_mc = libmtk_py.MesherConfig(coordinate_system="minecraft")
+    assert cfg_mc.coordinate_system == "minecraft"
+    assert cfg_mc.z_up_coordinates is False
+
+    with pytest.raises(ValueError):
+        libmtk_py.MesherConfig(coordinate_system="invalid_sys")
+

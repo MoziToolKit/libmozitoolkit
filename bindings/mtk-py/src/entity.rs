@@ -431,3 +431,60 @@ pub fn build_entity_render_plan(
     plan.inner.warnings.extend(parse_warnings);
     Ok(plan)
 }
+
+/// Inverts host transform (location, rotation_euler, scale) back into canonical Minecraft world coordinates.
+/// Returns `((pos_x, pos_y, pos_z), (rot_pitch, rot_yaw, rot_roll), (scale_x, scale_y, scale_z))`.
+#[pyfunction]
+#[pyo3(signature = (
+    location,
+    rotation_euler,
+    scale,
+    bounds=None,
+    origin_centered=true,
+    coordinate_system="z_up"
+))]
+pub fn host_transform_to_mc(
+    location: (f32, f32, f32),
+    rotation_euler: (f32, f32, f32),
+    scale: (f32, f32, f32),
+    bounds: Option<[i32; 6]>,
+    origin_centered: bool,
+    coordinate_system: Option<&str>,
+) -> PyResult<((f64, f64, f64), (f32, f32, f32), (f32, f32, f32))> {
+    let cs = match coordinate_system
+        .unwrap_or("z_up")
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "minecraft" => mtk_core::CoordinateSystem::Minecraft,
+        "y_up" => mtk_core::CoordinateSystem::YUpRightHanded,
+        "z_up" => mtk_core::CoordinateSystem::ZUpRightHanded,
+        other => {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Invalid coordinate_system '{}', expected 'z_up', 'minecraft', or 'y_up'",
+                other
+            )));
+        }
+    };
+
+    let config = mtk_model::EntityRenderConfig {
+        revision: 0,
+        authoritative: true,
+        bounds,
+        origin_centered,
+        coordinate_system: cs,
+    };
+
+    let (pos, rot, s) = mtk_model::host_transform_to_mc(
+        [location.0, location.1, location.2],
+        [rotation_euler.0, rotation_euler.1, rotation_euler.2],
+        [scale.0, scale.1, scale.2],
+        &config,
+    );
+
+    Ok((
+        (pos.x, pos.y, pos.z),
+        (rot.x, rot.y, rot.z),
+        (s.x, s.y, s.z),
+    ))
+}

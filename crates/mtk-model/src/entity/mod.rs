@@ -16,9 +16,9 @@ pub use instance::{
     PaintingData,
 };
 pub use render::{
-    build_entity_render_plan, entity_render_key, EntityMaterialRoute, EntityRenderConfig,
-    EntityRenderNode, EntityRenderPlan, EntityRenderTransform, EntityRenderWarning,
-    ENTITY_RENDER_SCHEMA_VERSION,
+    build_entity_render_plan, entity_render_key, host_transform_to_mc, EntityMaterialRoute,
+    EntityRenderConfig, EntityRenderNode, EntityRenderPlan, EntityRenderTransform,
+    EntityRenderWarning, ENTITY_RENDER_SCHEMA_VERSION,
 };
 pub use skull::{PlayerProfileData, SkullKind};
 

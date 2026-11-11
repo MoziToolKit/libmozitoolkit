@@ -10,7 +10,8 @@ use std::collections::{BTreeMap, HashMap};
 
 use glam::{EulerRot, Mat4, Quat, Vec3};
 use mtk_core::{
-    mc_rotation_to_z_up, mc_scale_to_z_up, mc_world_to_z_up, CoordinateSystem, MeshData,
+    mc_rotation_to_z_up, mc_scale_to_z_up, mc_world_to_z_up, z_up_rotation_to_mc, z_up_scale_to_mc,
+    z_up_to_mc_world, CoordinateSystem, MeshData,
 };
 use serde::{Deserialize, Serialize};
 
@@ -114,6 +115,59 @@ impl EntityRenderTransform {
             scale: [scale_vec.x, scale_vec.y, scale_vec.z],
             matrix: mat.to_cols_array(),
         }
+    }
+
+    /// Converts a host-space rigid transform (location, rotation Euler XYZ in radians, scale)
+    /// back into canonical Minecraft world coordinates `(position: DVec3, rotation: Vec3, scale: Vec3)`
+    /// according to the active `EntityRenderConfig`.
+    pub fn to_canonical(
+        location: [f32; 3],
+        rotation_euler: [f32; 3],
+        scale: [f32; 3],
+        config: &EntityRenderConfig,
+    ) -> (glam::DVec3, Vec3, Vec3) {
+        let loc_v = Vec3::from_array(location);
+        let rot_v = Vec3::from_array(rotation_euler);
+        let scale_v = Vec3::from_array(scale);
+
+        let centered_mc_pos = match config.coordinate_system {
+            CoordinateSystem::Minecraft | CoordinateSystem::YUpRightHanded => {
+                glam::DVec3::new(loc_v.x as f64, loc_v.y as f64, loc_v.z as f64)
+            }
+            CoordinateSystem::ZUpRightHanded => {
+                let mc = z_up_to_mc_world(loc_v.x, loc_v.y, loc_v.z);
+                glam::DVec3::new(mc.x as f64, mc.y as f64, mc.z as f64)
+            }
+        };
+
+        let position = if config.origin_centered {
+            if let Some(bounds) = config.bounds {
+                let cx = bounds[0] as f64 + bounds[3] as f64 / 2.0;
+                let by = bounds[1] as f64;
+                let cz = bounds[2] as f64 + bounds[5] as f64 / 2.0;
+                glam::DVec3::new(
+                    centered_mc_pos.x + cx,
+                    centered_mc_pos.y + by,
+                    centered_mc_pos.z + cz,
+                )
+            } else {
+                centered_mc_pos
+            }
+        } else {
+            centered_mc_pos
+        };
+
+        let rotation = match config.coordinate_system {
+            CoordinateSystem::Minecraft | CoordinateSystem::YUpRightHanded => rot_v,
+            CoordinateSystem::ZUpRightHanded => z_up_rotation_to_mc(rot_v),
+        };
+
+        let scale = match config.coordinate_system {
+            CoordinateSystem::Minecraft | CoordinateSystem::YUpRightHanded => scale_v,
+            CoordinateSystem::ZUpRightHanded => z_up_scale_to_mc(scale_v),
+        };
+
+        (position, rotation, scale)
     }
 }
 
@@ -288,6 +342,17 @@ where
     F: FnMut(&str) -> Option<([f32; 4], u16, u32)>,
 {
     EntityRenderPlan::build(entities, config, atlas_lookup)
+}
+
+/// Inverts host-space transform (location, rotation_euler, scale) back into canonical Minecraft world coordinates.
+#[inline]
+pub fn host_transform_to_mc(
+    location: [f32; 3],
+    rotation_euler: [f32; 3],
+    scale: [f32; 3],
+    config: &EntityRenderConfig,
+) -> (glam::DVec3, Vec3, Vec3) {
+    EntityRenderTransform::to_canonical(location, rotation_euler, scale, config)
 }
 
 /// Returns a stable identity key for host-side create/update/delete diffing.
@@ -533,5 +598,77 @@ mod tests {
         let parsed: EntityRenderPlan =
             serde_json::from_str(&json).expect("deserialize render plan");
         assert_eq!(plan, parsed);
+    }
+
+    #[test]
+    fn test_host_transform_to_mc_roundtrip() {
+        let ent = painting(Some("uuid-test"), "kebab", 1, 1);
+        let test_configs = [
+            EntityRenderConfig {
+                bounds: Some([0, 0, 0, 16, 16, 16]),
+                origin_centered: true,
+                coordinate_system: CoordinateSystem::ZUpRightHanded,
+                ..Default::default()
+            },
+            EntityRenderConfig {
+                bounds: Some([0, 0, 0, 16, 16, 16]),
+                origin_centered: false,
+                coordinate_system: CoordinateSystem::ZUpRightHanded,
+                ..Default::default()
+            },
+            EntityRenderConfig {
+                bounds: None,
+                origin_centered: false,
+                coordinate_system: CoordinateSystem::Minecraft,
+                ..Default::default()
+            },
+            EntityRenderConfig {
+                bounds: Some([10, 60, -30, 20, 40, 20]),
+                origin_centered: true,
+                coordinate_system: CoordinateSystem::YUpRightHanded,
+                ..Default::default()
+            },
+        ];
+
+        for cfg in &test_configs {
+            let host_transform = EntityRenderTransform::from_entity(&ent, cfg);
+            let (back_pos, back_rot, back_scale) = EntityRenderTransform::to_canonical(
+                host_transform.location,
+                host_transform.rotation_euler,
+                host_transform.scale,
+                cfg,
+            );
+
+            assert!(
+                (back_pos - ent.position).length() < 1e-4,
+                "Position roundtrip failed for cfg {:?}",
+                cfg
+            );
+            assert!(
+                (back_rot - ent.rotation).length() < 1e-4,
+                "Rotation roundtrip failed for cfg {:?}: back_rot={:?}, ent.rotation={:?}",
+                cfg,
+                back_rot,
+                ent.rotation
+            );
+            let q_back =
+                glam::Quat::from_euler(glam::EulerRot::XYZ, back_rot.x, back_rot.y, back_rot.z);
+            let q_orig = glam::Quat::from_euler(
+                glam::EulerRot::XYZ,
+                ent.rotation.x,
+                ent.rotation.y,
+                ent.rotation.z,
+            );
+            assert!(
+                (q_back.dot(q_orig).abs() - 1.0).abs() < 1e-4,
+                "Orientation mismatch for cfg {:?}",
+                cfg
+            );
+            assert!(
+                (back_scale - ent.scale).length() < 1e-4,
+                "Scale roundtrip failed for cfg {:?}",
+                cfg
+            );
+        }
     }
 }

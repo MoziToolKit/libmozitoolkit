@@ -26,12 +26,12 @@ pub enum CoordinateSystem {
 
 /// Change of basis matrix from Minecraft coordinates (+X East, +Y Up, +Z South)
 /// to standard Z-up right-handed coordinates (+X East, +Y North, +Z Up):
-/// v_bl = M * v_mc = (x, -z, y).
+/// v_z_up = M * v_mc = (x, -z, y).
 pub const MC_TO_Z_UP_BASIS: Mat3 = Mat3::from_cols(Vec3::X, Vec3::Z, Vec3::new(0.0, -1.0, 0.0));
 
 /// Change of basis matrix from standard Z-up right-handed coordinates (+X East, +Y North, +Z Up)
 /// to Minecraft coordinates (+X East, +Y Up, +Z South):
-/// v_mc = M^T * v_bl = (x, z, -y).
+/// v_mc = M^T * v_z_up = (x, z, -y).
 pub const Z_UP_TO_MC_BASIS: Mat3 = Mat3::from_cols(Vec3::X, Vec3::new(0.0, 0.0, -1.0), Vec3::Y);
 
 /// 2D Axis-Aligned Bounding Box (AABB) in normalized [0, 1] or pixel space.
@@ -265,24 +265,71 @@ pub fn z_up_to_mc_world(bx: f32, by: f32, bz: f32) -> Vec3 {
     Vec3::new(bx, bz, -by)
 }
 
+/// Canonicalizes Euler XYZ angles to minimize the L1 norm (|pitch| + |yaw| + |roll|),
+/// matching Blender's `mat3_normalized_to_eulO` dual-solution resolution.
+#[inline]
+pub fn canonicalize_euler_xyz(rotation: Vec3) -> Vec3 {
+    let x = rotation.x;
+    let y = rotation.y;
+    let z = rotation.z;
+
+    let d1 = x.abs() + y.abs() + z.abs();
+
+    let x2 = if x > 0.0 {
+        x - std::f32::consts::PI
+    } else {
+        x + std::f32::consts::PI
+    };
+    let y2 = if y > 0.0 {
+        std::f32::consts::PI - y
+    } else {
+        -std::f32::consts::PI - y
+    };
+    let z2 = if z > 0.0 {
+        z - std::f32::consts::PI
+    } else {
+        z + std::f32::consts::PI
+    };
+
+    let d2 = x2.abs() + y2.abs() + z2.abs();
+    let mut out = if d2 < d1 - 1e-5 {
+        Vec3::new(x2, y2, z2)
+    } else {
+        rotation
+    };
+
+    // Standardize boundary values: prefer +PI over -PI for Euler yaw/pitch/roll
+    if (out.x + std::f32::consts::PI).abs() < 1e-5 {
+        out.x = std::f32::consts::PI;
+    }
+    if (out.y + std::f32::consts::PI).abs() < 1e-5 {
+        out.y = std::f32::consts::PI;
+    }
+    if (out.z + std::f32::consts::PI).abs() < 1e-5 {
+        out.z = std::f32::consts::PI;
+    }
+
+    out
+}
+
 /// Converts canonical Minecraft local-model Euler rotation (pitch, yaw, roll in radians, XYZ convention)
 /// into standard Z-up right-handed Euler XYZ (in radians) via change-of-basis matrix conjugation:
-/// R_bl = M * R_mc * M^T.
+/// R_z_up = M * R_mc * M^T.
 pub fn mc_rotation_to_z_up(rotation: Vec3) -> Vec3 {
     let r_mc = Mat3::from_euler(EulerRot::XYZ, rotation.x, rotation.y, rotation.z);
-    let r_bl = MC_TO_Z_UP_BASIS * r_mc * Z_UP_TO_MC_BASIS;
-    let (pitch, yaw, roll) = r_bl.to_euler(EulerRot::XYZ);
-    Vec3::new(pitch, yaw, roll)
+    let r_z_up = MC_TO_Z_UP_BASIS * r_mc * Z_UP_TO_MC_BASIS;
+    let (pitch, yaw, roll) = r_z_up.to_euler(EulerRot::XYZ);
+    canonicalize_euler_xyz(Vec3::new(pitch, yaw, roll))
 }
 
 /// Converts standard Z-up right-handed Euler XYZ (in radians) into canonical Minecraft
 /// local-model Euler rotation (pitch, yaw, roll in radians, XYZ convention) via inverse conjugation:
-/// R_mc = M^T * R_bl * M.
+/// R_mc = M^T * R_z_up * M.
 pub fn z_up_rotation_to_mc(rotation: Vec3) -> Vec3 {
-    let r_bl = Mat3::from_euler(EulerRot::XYZ, rotation.x, rotation.y, rotation.z);
-    let r_mc = Z_UP_TO_MC_BASIS * r_bl * MC_TO_Z_UP_BASIS;
+    let r_z_up = Mat3::from_euler(EulerRot::XYZ, rotation.x, rotation.y, rotation.z);
+    let r_mc = Z_UP_TO_MC_BASIS * r_z_up * MC_TO_Z_UP_BASIS;
     let (pitch, yaw, roll) = r_mc.to_euler(EulerRot::XYZ);
-    Vec3::new(pitch, yaw, roll)
+    canonicalize_euler_xyz(Vec3::new(pitch, yaw, roll))
 }
 
 /// Converts scale factors from Minecraft local axes [x, y, z] to Z-up right-handed axes [x, -z, y] -> [x, z, y].
@@ -415,8 +462,8 @@ mod tests {
         ];
 
         for r_mc in test_rotations {
-            let r_bl = mc_rotation_to_z_up(r_mc);
-            let roundtrip = z_up_rotation_to_mc(r_bl);
+            let r_z_up = mc_rotation_to_z_up(r_mc);
+            let roundtrip = z_up_rotation_to_mc(r_z_up);
             let m_orig = Mat3::from_euler(EulerRot::XYZ, r_mc.x, r_mc.y, r_mc.z);
             let m_roundtrip =
                 Mat3::from_euler(EulerRot::XYZ, roundtrip.x, roundtrip.y, roundtrip.z);
@@ -432,9 +479,9 @@ mod tests {
     #[test]
     fn test_scale_basis_transformation() {
         let s_mc = Vec3::new(1.0, 2.0, 3.0);
-        let s_bl = mc_scale_to_z_up(s_mc);
-        assert_eq!(s_bl, Vec3::new(1.0, 3.0, 2.0));
-        assert_eq!(z_up_scale_to_mc(s_bl), s_mc);
+        let s_z_up = mc_scale_to_z_up(s_mc);
+        assert_eq!(s_z_up, Vec3::new(1.0, 3.0, 2.0));
+        assert_eq!(z_up_scale_to_mc(s_z_up), s_mc);
     }
 
     #[test]
