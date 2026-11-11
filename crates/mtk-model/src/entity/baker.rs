@@ -3,7 +3,7 @@
 //!
 //! Converts high-level `EntityInstance` items (Paintings, Item Frames, Armor Stands)
 //! into standalone local-space `MeshData` buffers, completely decoupled from
-//! discrete voxel block grids and SectionMesher.
+//! discrete voxel block grids and chunk meshing.
 
 use mtk_core::MeshData;
 

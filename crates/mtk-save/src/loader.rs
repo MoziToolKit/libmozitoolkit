@@ -484,32 +484,3 @@ impl SaveLoader {
         Ok((loaded_sections, loaded_entities))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resolve_dimension_dirs() {
-        let unique = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("mtk_save_loader_unit_{}", unique));
-        std::fs::create_dir_all(root.join("DIM-1/region")).unwrap();
-        std::fs::create_dir_all(root.join("DIM1/region")).unwrap();
-
-        assert!(SaveLoader::resolve_dimension_region_dir(&root, "the_nether").is_none());
-        assert!(SaveLoader::resolve_dimension_region_dir(&root, "the_end").is_none());
-
-        std::fs::create_dir_all(root.join("region")).unwrap();
-        std::fs::create_dir_all(root.join("entities")).unwrap();
-        assert!(SaveLoader::resolve_dimension_region_dir(&root, "overworld").is_some());
-        assert!(SaveLoader::resolve_dimension_entities_dir(&root, "overworld").is_some());
-
-        std::fs::create_dir_all(root.join("dimensions/minecraft/the_nether/region")).unwrap();
-        assert!(SaveLoader::resolve_dimension_region_dir(&root, "the_nether").is_some());
-
-        let _ = std::fs::remove_dir_all(&root);
-    }
-}

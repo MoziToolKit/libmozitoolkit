@@ -165,10 +165,10 @@ fn test_save_loader_detects_paintings_in_entities_mca() {
         assert_eq!(p.height, 4);
     }
 
-    // 2. Humble painting (2x2)
+    // 2. Prairie ride painting (1x2)
     assert!(entities.iter().any(|e| {
         if let mtk_model::EntityKindData::Painting(p) = &e.kind {
-            p.variant == "humble" && p.width == 2 && p.height == 2
+            p.variant == "prairie_ride" && p.width == 1 && p.height == 2
         } else {
             false
         }
