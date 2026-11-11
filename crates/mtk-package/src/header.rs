@@ -12,7 +12,7 @@ pub(crate) const MAGIC_MTKP: [u8; 4] = [0x4D, 0x54, 0x4B, 0x50];
 pub const CURRENT_VERSION_MAJOR: u16 = 1;
 
 /// Current minor version of MTK package format.
-pub(crate) const CURRENT_VERSION_MINOR: u16 = 0;
+pub(crate) const CURRENT_VERSION_MINOR: u16 = 1;
 
 /// Package profile representing the purpose and layout rules.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -275,7 +275,7 @@ mod tests {
         let parsed = PackageHeader::from_bytes(&bytes).expect("Failed to parse valid header");
         assert_eq!(parsed.magic, MAGIC_MTKP);
         assert_eq!(parsed.version_major, 1);
-        assert_eq!(parsed.version_minor, 0);
+        assert_eq!(parsed.version_minor, 1);
         assert_eq!(parsed.profile, PackageProfile::AssetCache);
         assert_eq!(parsed.fingerprint, [42u8; 16]);
         assert_eq!(parsed.toc_offset, 1024);

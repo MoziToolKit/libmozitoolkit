@@ -24,6 +24,10 @@ pub struct SparseBlockEntry<'a> {
 ///
 /// Only non-air blocks are hashed. Air blocks and empty spaces are completely ignored.
 /// Non-air blocks MUST be provided in canonical (Y-slowest, Z-next, X-fastest) order.
+///
+/// Note: Visual entities (paintings, item frames, armor stands) belong to scene packages (.mtkscene)
+/// and DCC representations, not discrete block voxel state synchronized via RFC v3.1 block delta streams.
+/// Therefore they do not affect `compute_sparse_state_hash`.
 pub fn compute_sparse_state_hash<'a, I>(
     min_pos: IVec3,
     size: IVec3,

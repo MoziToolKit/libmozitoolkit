@@ -22,6 +22,9 @@ pub struct SceneCapabilities {
     /// Whether dynamic entity slots or textures (skins, banners) are bundled.
     #[serde(default)]
     pub has_dynamic_entities: bool,
+    /// Whether continuous visual entities (paintings, item frames, armor stands) are bundled.
+    #[serde(default)]
+    pub has_visual_entities: bool,
 }
 
 /// Global metadata manifest for `.mtkscene` scene interchange packages.
@@ -41,8 +44,11 @@ pub struct SceneMetadata {
     pub unique_states_count: usize,
     /// Number of distinct biomes present in the palette.
     pub unique_biomes_count: usize,
-    /// Number of block entities / hanging entities present in the palette.
+    /// Number of block entities present in the sparse voxel palette.
     pub unique_entities_count: usize,
+    /// Number of continuous visual entities (paintings, item frames, armor stands) bundled.
+    #[serde(default)]
+    pub visual_entities_count: usize,
     /// Resolution of the accompanying scene mini-atlas [width, height] (or [0, 0] if none).
     pub atlas_resolution: [u32; 2],
     /// Whether the package contains dedicated animated atlas chunks for fluid/fire playback.
@@ -73,6 +79,7 @@ impl SceneMetadata {
             unique_states_count: 0,
             unique_biomes_count: 0,
             unique_entities_count: 0,
+            visual_entities_count: 0,
             atlas_resolution: [0, 0],
             has_animated_atlas: false,
             capabilities: SceneCapabilities::default(),

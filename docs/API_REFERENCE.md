@@ -173,7 +173,8 @@ cache_output_dir/
 - **`RegionFile`**: 针对 32x32 区块 Anvil `.mca` 文件直接寻址 4096 字节 Location Table，按扇区偏移直接 Seek 并仅解压目标区块。
 - **`ChunkParser`**: 解密现代 Section 结构，对紧凑长整型数组（`bits_per_block >= 4`）进行纯位解包并将 Palette 状态规范化为唯一排序属性字符串（如 `minecraft:oak_stairs[facing=north,half=bottom]`）；同时解包 `biomes` 调色板与 4x4x4 quart 3D 生物群系，产出 `ParsedChunk`。
 - **按需切片加载器 (`SaveLoader`)**:
-  - `load_box_into_storage(save_dir, dimension, min_block, max_block, &mut storage)`: 依据用户 3D 边界盒直接定位所需相交的 Region / Chunk / Section，仅加载并填充所选区域进入 `VoxelStorage`，彻底杜绝数十 GB 全图扫描；解析完整 4×4×4 Section 群系后统一调用 `VoxelStorage::finalize_biome_metadata()` 派生地表列群系 `biome_column_map` 与主导 `primary_biome`（与实时同步、点云重建共用同一实现）。
+  - `load_box_into_storage(save_dir, dimension, min_block, max_block, &mut storage)`: 依据用户 3D 边界盒直接定位所需相交的 Region / Chunk / Section，仅加载并填充所选区域进入 `VoxelStorage`（并自动填充 `storage.entities` 视觉实体），彻底杜绝数十 GB 全图扫描；解析完整 4×4×4 Section 群系后统一调用 `VoxelStorage::finalize_biome_metadata()` 派生地表列群系 `biome_column_map` 与主导 `primary_biome`（与实时同步、点云重建共用同一实现）。
+  - `load_box_with_entities(save_dir, dimension, min_block, max_block, &mut storage, progress)`: 加载选区切片体素并同时提取解耦的连续视觉实体列表 `(sections, entities)`，亦填充 `storage.entities`。
 
 ---
 
@@ -235,6 +236,21 @@ cache_output_dir/
     2. 绝不修改父级自身的 `total_duration_us`；
     3. 强制在父级活跃的 `measure` 作用域内调用（否则 panic）；
     4. 严格按照父阶段的绝对偏移平移时间线：`child.start_offset_us = parent.start_offset_us + child.start_offset_us`，且 `child.depth = parent.depth + 1 + child.depth`。
+
+---
+
+### 2.13 视觉实体渲染计划契约 (Visual Entity Render Plan Contract)
+为解决画作、展示框、盔甲架等视觉实体的全链路 SSOT 治理与极速渲染装配，系统采用单一规范的渲染计划架构：
+- **核心原则与职责划分**：
+  - 核心（Rust）全权负责实体的规范命名、唯一稳定键生成（`uuid:...` 或 `synth:...`）、局部几何烘焙、UV/材质槽位路由、以及空间变换求解（坐标系变换、归零平移与欧拉角矩阵共轭计算）；
+  - 宿主（DCC）作为纯声明式场景协调器（Reconciler），根据 `EntityRenderPlan` 返回的不可变节点列表执行 $O(N)$ 状态比对与就地装配，直接赋值 `obj.location`、`obj.rotation_euler` 与 `obj.scale`，彻底避免跨语言频繁交互与前端繁重矩阵解算。
+- **核心数据结构**：
+  - `EntityRenderTransform`：不可变空间变换 DTO，提供 `location: (f32, f32, f32)`、`rotation_euler: (f32, f32, f32)`、`scale: (f32, f32, f32)` 以及 `matrix: List[float]`（4x4 列主序变换矩阵）。
+  - `EntityRenderNode`：单个实体渲染节点，提供 `key: str`、`display_name: str`、`transform: EntityRenderTransform`、`mesh: MeshData` 以及 `material_routes: List[dict]`（包含 `texture_key` 与 `material_slot`）。
+  - `EntityRenderPlan`：完整渲染计划，包含 `nodes: List[EntityRenderNode]`、`node_count: int`、`warnings: List[dict]`、`revision: int` 与 `authoritative: bool`。
+- **规范入口**：
+  - `libmtk_py.build_entity_render_plan(entities, atlas_mapping_json=None, bounds=None, origin_centered=True, coordinate_system="z_up", revision=0, authoritative=True)`：顶层通用构建算子。
+
 
 
 

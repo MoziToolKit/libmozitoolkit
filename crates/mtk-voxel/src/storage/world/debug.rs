@@ -7,6 +7,7 @@
 //! - Grid bounds are computed as `GRID_WIDTH = ceil(sqrt(N))`, `GRID_HEIGHT = ceil(N / GRID_WIDTH)`.
 //! - Supports modded blocks out-of-the-box via `ResourcePackStack`.
 
+#[cfg(feature = "serde")]
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::RwLock;
@@ -85,39 +86,52 @@ impl VoxelStorage {
     pub fn create_debug_world_from_pack_stack(
         stack: &mtk_resource::ResourcePackStack,
     ) -> Result<Self, VoxelError> {
-        if stack.is_empty() || !stack.has_vanilla_client_base() {
-            return Err(VoxelError::MissingVanillaBasePack(
-                "Cannot generate debug world: active resource pack stack must contain a valid Minecraft Vanilla Client base pack".into(),
-            ));
-        }
+        #[cfg(feature = "serde")]
+        {
+            if stack.is_empty() || !stack.has_vanilla_client_base() {
+                return Err(VoxelError::MissingVanillaBasePack(
+                    "Cannot generate debug world: active resource pack stack must contain a valid Minecraft Vanilla Client base pack".into(),
+                ));
+            }
 
-        let locs = stack.list_all_blockstate_locations();
-        let mut all_states = Vec::new();
-        let mut seen = HashSet::new();
+            let locs = stack.list_all_blockstate_locations();
+            let mut all_states: Vec<String> = Vec::new();
+            let mut seen = HashSet::new();
 
-        for loc in &locs {
-            let path = loc.to_asset_path("blockstates", "json");
-            if let Some(bytes) = stack.open_asset_raw(&path) {
-                if let Ok(def) = serde_json::from_slice::<mtk_model::BlockStateDefinition>(&bytes) {
-                    let states = def.enumerate_all_states(&loc.as_string());
-                    for st in states {
-                        if seen.insert(st.clone()) {
-                            all_states.push(st);
+            for loc in &locs {
+                let path = loc.to_asset_path("blockstates", "json");
+                if let Some(bytes) = stack.open_asset_raw(&path) {
+                    if let Ok(def) =
+                        serde_json::from_slice::<mtk_model::BlockStateDefinition>(&bytes)
+                    {
+                        let states = def.enumerate_all_states(&loc.as_string());
+                        for st in states {
+                            if seen.insert(st.clone()) {
+                                all_states.push(st);
+                            }
                         }
                     }
                 }
             }
-        }
 
-        if all_states.is_empty() {
-            return Err(VoxelError::MissingAssets(
-                "Cannot generate debug world: no blockstates discovered across resource pack stack"
+            if all_states.is_empty() {
+                return Err(VoxelError::MissingAssets(
+                    "Cannot generate debug world: no blockstates discovered across resource pack stack"
+                        .into(),
+                ));
+            }
+
+            all_states.sort();
+            Self::create_debug_world_from_states(&all_states)
+        }
+        #[cfg(not(feature = "serde"))]
+        {
+            let _ = stack;
+            Err(VoxelError::MissingAssets(
+                "Cannot generate debug world from pack stack without the `serde` feature in mtk-voxel"
                     .into(),
-            ));
+            ))
         }
-
-        all_states.sort();
-        Self::create_debug_world_from_states(&all_states)
     }
 
     /// Pure-code generation of a canonical Minecraft debug world from a `BakedModelDatabase`.

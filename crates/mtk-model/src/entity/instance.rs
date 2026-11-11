@@ -9,74 +9,241 @@
 use glam::{DVec3, Vec3};
 use mtk_core::Direction;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+/// Validation failures for a canonical `EntityInstance`.
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
+pub enum EntityValidationError {
+    #[error("Entity position contains non-finite values")]
+    NonFinitePosition,
+    #[error("Entity rotation contains non-finite values")]
+    NonFiniteRotation,
+    #[error("Entity scale must be finite and non-zero")]
+    InvalidScale,
+    #[error("Entity UUID must not be empty when present")]
+    EmptyUuid,
+    #[error("Entity id '{id}' does not match payload kind '{kind}'")]
+    IdKindMismatch { id: String, kind: &'static str },
+    #[error("Painting variant must not be empty")]
+    EmptyPaintingVariant,
+    #[error("Painting dimensions must be at least 1x1, got {width}x{height}")]
+    InvalidPaintingDimensions { width: u8, height: u8 },
+    #[error("Painting facing must be horizontal, got {0:?}")]
+    NonHorizontalPaintingFacing(Direction),
+    #[error("Item frame rotation step {0} is outside 0..=7")]
+    InvalidItemFrameRotation(u8),
+    #[error("Generic entity custom_id must not be empty")]
+    EmptyGenericId,
+}
+
+/// Returns the lower-case path portion of an entity identifier.
+pub(crate) fn entity_family(id: &str) -> String {
+    id.rsplit(':').next().unwrap_or(id).to_ascii_lowercase()
+}
 
 /// High-level entity instance living in continuous 3D space.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EntityInstance {
+    /// Optional canonical UUID string of the entity (e.g. "e53d5a41-b841-4770-985d-857c3e5a5961").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uuid: Option<String>,
     /// Canonical entity identifier, e.g. "minecraft:painting", "minecraft:item_frame", "minecraft:armor_stand".
     pub id: String,
-    /// Continuous world position [x, y, z].
+    /// Optional custom display name (from game CustomName tag).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_name: Option<String>,
+    /// Continuous world-space position [x, y, z].
+    ///
+    /// For paintings this is the world-space **center** of the painting, not the
+    /// support block. `PaintingData::anchor_block` retains the original support block.
     pub position: DVec3,
-    /// Outward or orientation direction (if applicable, e.g. hanging entities).
+    /// Outward/orientation direction metadata (e.g. hanging entity wall facing).
+    ///
+    /// Hosts must not apply this as an extra rotation; `rotation` is authoritative.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub facing: Option<Direction>,
-    /// Continuous Euler rotation (pitch, yaw, roll) in radians.
+    /// Local-model-space Euler rotation `(pitch, yaw, roll)` in radians.
+    ///
+    /// Canonical convention: yaw `0.0` points North, matching the entity model
+    /// front being local `-Z`. This is intentionally not Minecraft's raw yaw
+    /// convention (where `0.0` points South); parsers are responsible for converting.
     #[serde(default)]
     pub rotation: Vec3,
-    /// Strong-typed entity payload data.
+    /// Scale factor `[scale_x, scale_y, scale_z]` in Minecraft local axes.
+    #[serde(default = "default_scale")]
+    pub scale: Vec3,
+    /// Strongly-typed entity payload data.
     pub kind: EntityKindData,
 }
 
 impl EntityInstance {
     /// Creates a new hanging Painting entity instance.
     pub fn new_painting(
+        uuid: Option<String>,
         position: DVec3,
         facing: Direction,
+        rotation: Vec3,
         variant: impl Into<String>,
         width: u8,
         height: u8,
+        anchor_block: Option<[i32; 3]>,
     ) -> Self {
         let v = variant.into();
         Self {
+            uuid,
             id: "minecraft:painting".to_string(),
+            custom_name: None,
             position,
             facing: Some(facing),
-            rotation: Vec3::ZERO,
+            rotation,
+            scale: Vec3::ONE,
             kind: EntityKindData::Painting(PaintingData {
                 variant: v,
                 width: width.max(1),
                 height: height.max(1),
+                anchor_block,
             }),
         }
     }
 
     /// Creates a new hanging Item Frame entity instance.
     pub fn new_item_frame(
+        uuid: Option<String>,
         position: DVec3,
         facing: Direction,
+        rotation_euler: Vec3,
         item_id: impl Into<String>,
-        rotation: u8,
+        count: u8,
+        item_rotation: u8,
         is_glowing: bool,
         is_invisible: bool,
         map_id: Option<i32>,
     ) -> Self {
         Self {
+            uuid,
             id: if is_glowing {
                 "minecraft:glow_item_frame".to_string()
             } else {
                 "minecraft:item_frame".to_string()
             },
+            custom_name: None,
             position,
             facing: Some(facing),
-            rotation: Vec3::ZERO,
+            rotation: rotation_euler,
+            scale: Vec3::ONE,
             kind: EntityKindData::ItemFrame(ItemFrameData {
                 item_id: item_id.into(),
-                count: 1,
-                rotation: rotation & 7,
+                count: if count == 0 { 1 } else { count },
+                rotation: item_rotation & 7,
                 is_glowing,
                 is_invisible,
                 map_id,
             }),
         }
+    }
+
+    /// Validates the canonical entity contract before baking, exporting, or persisting.
+    ///
+    /// The most important invariant is that `id` and `kind` describe the same
+    /// entity family. Derived fields such as painting dimensions and item-frame
+    /// rotation steps are validated as well.
+    pub fn validate(&self) -> Result<(), EntityValidationError> {
+        if !self.position.is_finite() {
+            return Err(EntityValidationError::NonFinitePosition);
+        }
+        if !self.rotation.is_finite() {
+            return Err(EntityValidationError::NonFiniteRotation);
+        }
+        if !self.scale.is_finite()
+            || self.scale.x.abs() <= f32::EPSILON
+            || self.scale.y.abs() <= f32::EPSILON
+            || self.scale.z.abs() <= f32::EPSILON
+        {
+            return Err(EntityValidationError::InvalidScale);
+        }
+        if let Some(uuid) = &self.uuid {
+            if uuid.trim().is_empty() {
+                return Err(EntityValidationError::EmptyUuid);
+            }
+        }
+
+        let family = entity_family(&self.id);
+        match &self.kind {
+            EntityKindData::Painting(p) => {
+                if family != "painting" {
+                    return Err(EntityValidationError::IdKindMismatch {
+                        id: self.id.clone(),
+                        kind: "painting",
+                    });
+                }
+                if p.variant.trim().is_empty() {
+                    return Err(EntityValidationError::EmptyPaintingVariant);
+                }
+                if p.width == 0 || p.height == 0 {
+                    return Err(EntityValidationError::InvalidPaintingDimensions {
+                        width: p.width,
+                        height: p.height,
+                    });
+                }
+                if let Some(facing) = self.facing {
+                    if matches!(facing, Direction::Up | Direction::Down) {
+                        return Err(EntityValidationError::NonHorizontalPaintingFacing(facing));
+                    }
+                }
+            }
+            EntityKindData::ItemFrame(f) => {
+                if family != "item_frame" && family != "glow_item_frame" {
+                    return Err(EntityValidationError::IdKindMismatch {
+                        id: self.id.clone(),
+                        kind: "item_frame",
+                    });
+                }
+                if f.rotation > 7 {
+                    return Err(EntityValidationError::InvalidItemFrameRotation(f.rotation));
+                }
+            }
+            EntityKindData::ArmorStand(_) => {
+                if family != "armor_stand" {
+                    return Err(EntityValidationError::IdKindMismatch {
+                        id: self.id.clone(),
+                        kind: "armor_stand",
+                    });
+                }
+            }
+            EntityKindData::Generic { custom_id, .. } => {
+                if custom_id.trim().is_empty() {
+                    return Err(EntityValidationError::EmptyGenericId);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Collects all texture asset locations required to render this entity,
+    /// enabling scene package exporters to tree-shake and crop sprites into Mini-Atlas.
+    pub fn required_textures(&self) -> Vec<String> {
+        match &self.kind {
+            EntityKindData::Painting(p) => {
+                vec![
+                    crate::entity::painting::painting_texture_id(&p.variant),
+                    crate::entity::painting::PAINTING_BACK_TEXTURE.to_string(),
+                ]
+            }
+            EntityKindData::ItemFrame(_) => {
+                // ItemFrame baking is not yet implemented; full item model -> texture resolution
+                // will be handled when the ItemFrame baker is introduced. Return empty to avoid
+                // polluting the mini-atlas texture set with unresolvable item IDs.
+                Vec::new()
+            }
+            EntityKindData::ArmorStand(_) => Vec::new(),
+            EntityKindData::Generic { .. } => Vec::new(),
+        }
+    }
+
+    /// Collects all unique blockstate strings required to render this entity.
+    pub fn required_blockstates(&self) -> Vec<String> {
+        Vec::new()
     }
 }
 
@@ -107,6 +274,9 @@ pub struct PaintingData {
     pub width: u8,
     /// Height in blocks.
     pub height: u8,
+    /// Optional block coordinate of the support/anchor block (if loaded from save).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor_block: Option<[i32; 3]>,
 }
 
 /// Data payload for an Item Frame entity.
@@ -147,4 +317,127 @@ pub struct ArmorStandData {
 
 fn default_one() -> u8 {
     1
+}
+
+fn default_scale() -> Vec3 {
+    Vec3::ONE
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn valid_painting() -> EntityInstance {
+        EntityInstance::new_painting(
+            Some("12345678-1234-1234-1234-123456789abc".to_string()),
+            DVec3::new(10.5, 64.0, -20.5),
+            Direction::South,
+            Vec3::new(0.0, std::f32::consts::PI, 0.0),
+            "kebab",
+            1,
+            1,
+            Some([10, 64, -20]),
+        )
+    }
+
+    #[test]
+    fn test_valid_entities_pass_validation() {
+        valid_painting().validate().expect("valid painting");
+        EntityInstance::new_item_frame(
+            None,
+            DVec3::new(5.0, 65.0, 3.0),
+            Direction::West,
+            Vec3::ZERO,
+            "minecraft:diamond_sword",
+            1,
+            2,
+            false,
+            false,
+            None,
+        )
+        .validate()
+        .expect("valid item frame");
+    }
+
+    #[test]
+    fn test_validation_rejects_id_kind_mismatch() {
+        let mut painting = valid_painting();
+        painting.id = "minecraft:item_frame".to_string();
+        assert!(matches!(
+            painting.validate(),
+            Err(EntityValidationError::IdKindMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn test_validation_rejects_invalid_painting_fields() {
+        let mut painting = valid_painting();
+        if let EntityKindData::Painting(p) = &mut painting.kind {
+            p.width = 0;
+        }
+        assert!(matches!(
+            painting.validate(),
+            Err(EntityValidationError::InvalidPaintingDimensions { .. })
+        ));
+
+        let mut painting = valid_painting();
+        painting.facing = Some(Direction::Up);
+        assert!(matches!(
+            painting.validate(),
+            Err(EntityValidationError::NonHorizontalPaintingFacing(_))
+        ));
+    }
+
+    #[test]
+    fn test_validation_rejects_bad_scale_and_rotation() {
+        let mut painting = valid_painting();
+        painting.scale = Vec3::ZERO;
+        assert!(matches!(
+            painting.validate(),
+            Err(EntityValidationError::InvalidScale)
+        ));
+
+        let mut painting = valid_painting();
+        painting.rotation.x = f32::NAN;
+        assert!(matches!(
+            painting.validate(),
+            Err(EntityValidationError::NonFiniteRotation)
+        ));
+    }
+
+    #[test]
+    fn test_validation_rejects_item_frame_rotation_step() {
+        let mut frame = EntityInstance::new_item_frame(
+            None,
+            DVec3::new(5.0, 65.0, 3.0),
+            Direction::West,
+            Vec3::ZERO,
+            "minecraft:diamond_sword",
+            1,
+            2,
+            false,
+            false,
+            None,
+        );
+        if let EntityKindData::ItemFrame(f) = &mut frame.kind {
+            f.rotation = 8;
+        }
+        assert!(matches!(
+            frame.validate(),
+            Err(EntityValidationError::InvalidItemFrameRotation(8))
+        ));
+    }
+
+    #[test]
+    fn test_required_textures_normalizes_painting_variant() {
+        let mut painting = valid_painting();
+        if let EntityKindData::Painting(p) = &mut painting.kind {
+            p.variant = "minecraft:kebab".to_string();
+        }
+        let textures = painting.required_textures();
+        assert!(textures.contains(&"minecraft:painting/kebab".to_string()));
+        assert!(!textures
+            .iter()
+            .any(|t| t.contains("minecraft:painting/minecraft:")));
+    }
 }

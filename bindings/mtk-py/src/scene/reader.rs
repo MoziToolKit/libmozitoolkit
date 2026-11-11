@@ -35,7 +35,7 @@ impl PyScenePackageReader {
     #[getter]
     pub fn metadata(&self) -> PySceneMetadata {
         PySceneMetadata {
-            inner: self.inner.metadata().clone(),
+            inner: self.inner.effective_metadata(),
         }
     }
 
@@ -68,7 +68,8 @@ impl PyScenePackageReader {
             },
             ..Default::default()
         };
-        let cloud = bundle.sparse_voxels.to_point_cloud(Some(&config));
+        let mut cloud = bundle.sparse_voxels.to_point_cloud(Some(&config));
+        cloud.entities = bundle.entities.clone();
         dict.set_item("point_cloud", PyVoxelPointCloud { inner: cloud })?;
 
         let models_val: Option<PyBakedModelDatabase> =
@@ -145,6 +146,25 @@ impl PyScenePackageReader {
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         let memview = crate::buffer::create_owned_f32_memoryview(py, f32_pixels)?;
         Ok((width, height, memview))
+    }
+
+    /// Checks whether continuous visual entities (paintings, item frames, etc.) are present in the package.
+    pub fn has_visual_entities(&self) -> bool {
+        self.inner.has_visual_entities()
+    }
+
+    /// Reads and deserializes continuous visual entities as a list of compact JSON strings.
+    pub fn read_entities(&self) -> PyResult<Vec<String>> {
+        let ents = self
+            .inner
+            .read_entities()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        ents.iter()
+            .map(|e| {
+                serde_json::to_string(e)
+                    .map_err(|err| pyo3::exceptions::PyValueError::new_err(err.to_string()))
+            })
+            .collect()
     }
 
     fn __repr__(&self) -> String {

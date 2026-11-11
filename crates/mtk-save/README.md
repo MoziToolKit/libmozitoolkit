@@ -102,8 +102,9 @@ pub struct SaveLoader;
 ```
 - `SaveLoader::read_level_data(save_dir: &Path) -> Result<LevelData, SaveError>`: 快速定位并读取世界配置。
 - `SaveLoader::discover_dimensions(save_dir: &Path) -> Vec<String>`: 发现可用维度（`overworld`, `the_nether`, `the_end`, 自定义命名空间维度）。
-- `SaveLoader::load_box_into_storage(...) -> Result<usize, SaveError>`: 给定世界目录、维度名称与 3D 轴对齐空间范围 $[P_{\min}, P_{\max}]$，精确裁剪提取相交区块并灌入 `VoxelStorage`。
-- `SaveLoader::load_box_into_storage_with_progress(..., progress: Option<ProgressCallback>) -> Result<usize, SaveError>`: 带实时物理进度节流汇报的空间切片加载器。
+- `SaveLoader::load_box_into_storage(...) -> Result<usize, SaveError>`: 给定世界目录、维度名称与 3D 轴对齐空间范围 $[P_{\min}, P_{\max}]$，精确裁剪提取相交区块并灌入 `VoxelStorage`（同步填充 `storage.entities` 视觉实体）。
+- `SaveLoader::load_box_into_storage_with_progress(..., progress: Option<ProgressCallback>) -> Result<usize, SaveError>`: 带实时物理进度节流汇报的空间切片加载器（同步填充 `storage.entities`）。
+- `SaveLoader::load_box_with_entities(...) -> Result<(usize, Vec<EntityInstance>), SaveError>`: 空间切片加载器，同时返回加载区块段数与视觉实体列表（并填充 `storage.entities`）。
 
 ---
 
@@ -113,8 +114,9 @@ pub struct SaveLoader;
 | :--- | :--- |
 | `SaveLoader::read_level_data` | `(save_dir: &Path) -> Result<LevelData, SaveError>`：读取世界元数据。 |
 | `SaveLoader::discover_dimensions` | `(save_dir: &Path) -> Vec<String>`：发现存档中的可用维度。 |
-| `SaveLoader::load_box_into_storage` | `(save_dir, dimension, min_coord, max_coord, &mut storage) -> Result<usize, SaveError>`：按 3D 边界范围切片加载体素。 |
+| `SaveLoader::load_box_into_storage` | `(save_dir, dimension, min_coord, max_coord, &mut storage) -> Result<usize, SaveError>`：按 3D 边界范围切片加载体素与视觉实体。 |
 | `SaveLoader::load_box_into_storage_with_progress` | `(..., &mut storage, progress: Option<ProgressCallback>) -> Result<usize, SaveError>`：带进度汇报的切片加载。 |
+| `SaveLoader::load_box_with_entities` | `(..., &mut storage, progress: Option<ProgressCallback>) -> Result<(usize, Vec<EntityInstance>), SaveError>`：切片加载体素并提取视觉实体列表。 |
 
 ---
 

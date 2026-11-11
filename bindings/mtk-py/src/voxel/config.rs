@@ -143,6 +143,20 @@ impl PyMesherConfig {
         self.inner.smooth_biome_blend = enabled;
     }
 
+    /// Transforms a 3D coordinate (e.g. entity world position) according to this config's coordinate system and centering.
+    pub fn transform_position(&self, x: f64, y: f64, z: f64) -> (f64, f64, f64) {
+        let p = self
+            .inner
+            .transform_position(glam::Vec3::new(x as f32, y as f32, z as f32));
+        (p.x as f64, p.y as f64, p.z as f64)
+    }
+
+    /// Transforms a direction vector according to this config's coordinate system.
+    pub fn transform_direction(&self, dx: f32, dy: f32, dz: f32) -> (f32, f32, f32) {
+        let d = self.inner.transform_direction(glam::Vec3::new(dx, dy, dz));
+        (d.x, d.y, d.z)
+    }
+
     #[getter]
     pub fn num_threads(&self) -> Option<usize> {
         self.num_threads

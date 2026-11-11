@@ -194,6 +194,8 @@ pub fn load_and_mesh_minecraft_save(
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
         })?;
 
+    storage.entities = loaded_entities;
+
     // Asset cache input gate: valid model database and atlas mapping are strictly required
     if model_db.is_none() {
         return Err(pyo3::exceptions::PyValueError::new_err(
@@ -243,7 +245,7 @@ pub fn load_and_mesh_minecraft_save(
         }
     }
 
-    let (mesh, _world_profile, dynamic_entity_atlases, dynamic_entity_slots, active_config) =
+    let (mesh, _world_profile, dynamic_entity_atlases, dynamic_entity_slots, _active_config) =
         profiler.measure("mesh_voxel_world", "mesh", |p| {
             let res = py
                 .detach(|| {
@@ -268,39 +270,11 @@ pub fn load_and_mesh_minecraft_save(
             Ok::<_, PyErr>(res)
         })?;
 
-    let mut final_mesh = mesh;
-    if let Some(atlas_map) = active_config.atlas_address_map.as_deref() {
-        let custom_aliases = active_config.custom_aliases.as_deref();
-        profiler.measure("bake_visual_entities", "mesh", |_| {
-            for ent in &loaded_entities {
-                if let Some((mut ent_mesh, _)) =
-                    mtk_model::EntityBaker::bake_entity_mesh(ent, |tex| {
-                        let loc =
-                            mtk_material::MaterialResolver::resolve(tex, custom_aliases, atlas_map)
-                                .map(|(_, s)| s)
-                                .or_else(|| atlas_map.lookup_fallback())?;
-                        Some((loc.uv_bounds, loc.chunk_id, loc.texture_id))
-                    })
-                {
-                    for pos in &mut ent_mesh.positions {
-                        let p = active_config.transform_position(glam::Vec3::from_array(*pos));
-                        *pos = [p.x, p.y, p.z];
-                    }
-                    for norm in &mut ent_mesh.normals {
-                        let n = active_config.transform_direction(glam::Vec3::from_array(*norm));
-                        *norm = [n.x, n.y, n.z];
-                    }
-                    final_mesh.append_mesh(&ent_mesh);
-                }
-            }
-        });
-    }
-
     let final_profile = profiler.finish();
 
     Ok((
         PyMeshData {
-            inner: final_mesh,
+            inner: mesh,
             profile: Some(final_profile),
             dynamic_entity_atlases,
             dynamic_entity_slots,

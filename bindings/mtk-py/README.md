@@ -74,9 +74,10 @@ Python 模块名：`libmtk_py`
 - **`VoxelPointCloud` (`PyVoxelPointCloud`)**：全量无剔除 3D 体素点云容器，支持 Blender 点网格 attributes 往返和零拷贝内存视图。
   - `to_storage() -> VoxelStorage`, `to_buffers() -> dict`, `from_indexed_arrays(...)`
   - `positions_memoryview()`, `block_x_memoryview()`, `block_y_memoryview()`, `block_z_memoryview()`
-  - `get_state_palette()`, `get_biome_palette()`, `state_indices_memoryview()`, `biome_indices_memoryview()`：点云只存 palette + 索引，不再逐点物化字符串。
+  - `get_state_palette()`, `get_biome_palette()`, `get_visual_entities_palette()`, `set_visual_entities_palette(palette)`, `state_indices_memoryview()`, `biome_indices_memoryview()`：点云只存 palette + 索引，视觉实体以紧凑 JSON 调色板数组传递，不在前端暴露裸编辑框。
 - **`VoxelStorage` (`PyVoxelStorage`)**：16x16x16 稀疏 Chunk Section 体素容器，带脏标记追踪。
   - `to_point_cloud(config=None) -> VoxelPointCloud`, `load_from_point_cloud(cloud)`
+  - `bounds` (getter), `get_visual_entities_palette()`, `set_visual_entities_palette(palette)`
   - `create_debug_world()`：一键加载内置嵌入的原版调试世界快照（529 sections, 32,539 blocks）。
   - `set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)`, `set_block(x, y, z, state, tint)`
 - **`VoxelWorld` (`PyVoxelWorld`)**：统一 3D 场景引擎，支持增量区块缓存与全量世界网格管理。
@@ -130,21 +131,32 @@ Python 模块名：`libmtk_py`
   - `read_texture_rgba(chunk_id, flip_v=False) -> (width, height, memoryview)`：直接解压缩并读取单张图集切片为连续 RGBA 内存视图；
   - `read_texture_f32(chunk_id, flip_v=False) -> (width, height, memoryview)`：直接解压缩并读取单张图集切片为 [0.0, 1.0] 浮点连续缓冲。
 - **`SceneMetadata`**：场景包元数据对象。
-  - 属性：`format_version`, `bounds`, `voxel_count`, `unique_states_count`, `unique_biomes_count`, `unique_entities_count`, `atlas_resolution`, `has_animated_atlas`, `generator`, `created_at_epoch_secs`；
+  - 属性：`format_version`, `bounds`, `voxel_count`, `unique_states_count`, `unique_biomes_count`, `unique_entities_count`, `visual_entities_count`, `atlas_resolution`, `has_animated_atlas`, `generator`, `created_at_epoch_secs`；
   - `to_dict() -> dict`：快速转化为 Python 字典（包含嵌套的 `capabilities` 字典）。
 - **`export_scene_package(path, point_cloud, cache, options=None, **kwargs) -> SceneMetadata`**：
   端到端场景交换导出算子：支持传入结构化 `options` 字典或关键字参数（`max_atlas_size`, `mip_level`, `dynamic_entity_atlases`, `ctm_solver`, `enable_ctm`, `dynamic_entity_slots`）。自动扫描伴生体素点云、执行模型树剪枝、从激活缓存裁剪贴图、自适应缝合动态实体皮肤与旗帜纹理、剪枝并嵌入 CTM 规则与子贴图、自包含打包 Biome 色盘与 Resolver、拼接微型多通道图集、并行重映射模型 UV 并压缩打包为 `.mtkscene`。
 - **稀疏体素数据结构 (`mtk_voxel`)**：
   - `SparseVoxelPayload` / `SparseVoxelColumns`：正交离散调色板（`state_palette`, `biome_palette`, `entity_palette`）与紧凑 SoA 列存布局，实现与伴生体素点云的 1:1 零拷贝互转。
 
-### 2.11 性能探针与执行耗时审计 (`profile`)
+### 2.11 视觉实体与渲染计划 (`entity`)
+- **连续视觉实体格式**：通用连续视觉实体（涵盖 Painting、ItemFrame 以及未来 Mob、Display 等）在 Python 层统一以规范 JSON 字典 / 字符串或紧凑离散调色板传递：
+  - 规范字段：`id`, `uuid`, `custom_name`, `kind`, `position`, `rotation`（权威 Euler XYZ 弧度，局部模型空间，yaw 0 = North / 朝向 -Z）, `scale`, `facing`（只作为元数据供参考，宿主严禁重复旋转）
+  - 点云 / 存储通过 `get_visual_entities_palette()`, `set_visual_entities_palette(palette)` 访问。
+- **`build_entity_render_plan(entities, atlas=None, config=None, atlas_mapping_json=None, bounds=None, origin_centered=True, coordinate_system="z_up", revision=0, authoritative=True) -> EntityRenderPlan`**：批量编译视觉实体渲染计划，一次性完成实体验证、确定性唯一键分配、局部空间网格烘焙、图集槽位分配以及宿主空间几何变换计算（$O(1)$ 跨语言 FFI 通信）。
+- **`EntityRenderPlan`**：纯数据契约 DTO。
+  - 属性：`schema_version`, `revision`, `authoritative`, `bounds`, `node_count`, `nodes`, `warnings`
+  - 方法：`to_json() -> str`
+- **`EntityRenderNode`**：单一实体渲染节点。
+  - 属性：`key` (稳定唯一键), `display_name` (规范命名), `location` ((x, y, z)), `rotation_euler` ((pitch, yaw, roll)), `scale` ((sx, sy, sz)), `matrix` ([f32; 16]), `mesh` (局部空间 `PyMeshData`), `material_routes` (材质槽位列表), `metadata` (元数据字典), `entity_json` (原始实体 JSON 描述)。
+
+### 2.12 性能探针与执行耗时审计 (`profile`)
 - **`ExecutionProfile` (`PyExecutionProfile`)**：端到端操作规范性能报告对象。
   - 属性：`total_duration_ms`（总壁钟耗时）, `accounted_duration_ms`（顶层阶段累计耗时）, `unaccounted_duration_ms`（未统计工作耗时盲区）, `stages`（层级阶段列表）。
   - 方法：`to_dict()` 转换为包含 `name`, `category`, `depth`, `start_offset_ms`, `duration_ms`, `items_count` 的结构化字典。
 - **`StageSpan` (`PyStageSpan`)**：规范化阶段跨度。
   - 属性：`name`（阶段名）, `category`（命名空间/类别如 `"mesh"`, `"io"`, `"bake"`, `"cull"`, `"host"`）, `depth`（层级深度，0=顶层，1=子阶段）, `start_offset_us`, `start_offset_ms`（相对启动时刻偏移）, `duration_ms`, `items_count`。
 
-### 2.12 测试 / 开发专用 API (`unstable.testing`)
+### 2.13 测试 / 开发专用 API (`unstable.testing`)
 以下低阶算子不属于稳定生产 API，仅供测试验证与开发工具调用：
 `AtlasBuilder`, `ModelBaker`, `calculate_face_target_grid`, `calculate_pixel_grid_cut_factors`,
 `slice_face_by_pixel_grid`, `is_uv_collapsed`, `is_orthogonal_angle`, `detect_uv_rotation`,

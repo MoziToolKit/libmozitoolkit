@@ -53,7 +53,7 @@
 | :--- | :--- | :--- | :--- |
 | `0x00` | `[u8; 4]` | `magic` | 固定魔数，ASCII `b"MTKP"` (`0x4D, 0x54, 0x4B, 0x50`) |
 | `0x04` | `u16` | `version_major` | 主版本号（格式发生非兼容性结构调整时递增，当前为 `1`） |
-| `0x06` | `u16` | `version_minor` | 次版本号（新增可选 Chunk 或向前兼容字段时递增，当前为 `0`） |
+| `0x06` | `u16` | `version_minor` | 次版本号（新增可选 Chunk 或向前兼容字段时递增，当前为 `1`） |
 | `0x08` | `u16` | `profile` | 包类型：`0 = AssetCache`, `1 = SceneInterchange` |
 | `0x0A` | `u16` | `flags` | 特性位标志：<br>• Bit 0: LittleEndian (固定为 1)<br>• Bit 1: TOC 经 Zstd 压缩<br>• Bit 2: 完全自包含 (Self-Contained)<br>• Bit 3..15: 保留 |
 | `0x0C` | `u8` | `compression` | 默认分块压缩算法：`0 = None`, `1 = Zstd` |
@@ -114,7 +114,7 @@ pub struct ChunkEntry {
   * **正交离散调色板 (Orthogonal Palettes)**：
     * `state_palette: Vec<String>`：不重复方块状态标识符（如 `minecraft:stone`）。
     * `biome_palette: Vec<String>`：不重复生物群系标识符（如 `minecraft:plains`）。
-    * `entity_palette: Vec<BlockEntityData>`：附着方块实体（箱子、告示牌、画、展示框等），内含 `entity_type` 与保留原生 Visual NBT JSON 字符串，实现前瞻兼容。
+    * `entity_palette: Vec<BlockEntityData>`：附着方块实体（箱子、告示牌、头颅、饰纹陶罐、旗帜等离散网格方块实体），内含 `entity_type` 与保留原生 Visual NBT JSON 字符串，实现前瞻兼容（注：画作、展示框等连续自由空间实体存储于可选的 `ENTI` 块）。
   * 与 DCC 宿主的伴生体素点云（`VoxelPointCloud`）支持 1:1 零拷贝直接映射与极速互转。
 
 ### 5.3 `MODL` - 模型定义与几何块
@@ -148,6 +148,13 @@ pub struct ChunkEntry {
   * 仅剪枝打包当前场景实际方块状态或其关联贴图所命中的 CTM 规则（`CtmRule::applies_to_scene`），同时将规则展开引用的 CTM 变体子贴图（如 `optifine/ctm/.../0.png`）自动装箱进伴生的 Scene Mini-Atlas。
   * 读取端可通过 `unpack()` 零外部依赖现场复原带优先级倒序索引的 `CtmSolver`，使跨设备脱机场景在重构几何时保持 100% 精确的连通纹理外观。
 
+### 5.8 `ENTI` - 连续视觉实体分块
+* **存储内容**：
+  * `entities/instances`：紧凑序列化后的场景连续视觉实体列表（如艺术画 Painting、展示框 ItemFrame 等，采用 JSON + Zstandard 压缩）。
+* **使用契约**：
+  * 场景包导出时自动收集场景中所有视觉实体，并将其所需贴图（如 `minecraft:painting/*` 正反面纹理）纳入 Scene Mini-Atlas 统一裁剪装箱。
+  * 读取端通过 `unpack()` 或 `read_entities()` 直接解包为 `Vec<EntityInstance>`，并在 Blender 宿主中装配为独立子物体，实现独立于体素网格的无损存取与完全自包含渲染。
+
 ---
 
 ## 6. 两大业务 Profile 规范对照
@@ -156,7 +163,8 @@ pub struct ChunkEntry {
 | :--- | :--- | :--- |
 | **应用场景** | 全量材质包预编译缓存、本地资产库 | 用户工程分享、跨机器/跨 DCC 场景交换 |
 | **体素数据 (`VOXL`)** | ❌ 无 | ✅ 稀疏列存体素与方块实体 (`SparseVoxelPayload`) |
-| **贴图策略 (`ATLS`)** | ✅ 包含完整多通道全量 Atlas 与全局映射 | ✅ **自包含 Scene Mini-Atlas**（仅包含场景引用的裁剪图集与 CTM 子贴图） |
+| **视觉实体 (`ENTI`)** | ❌ 无 | ✅ **连续视觉实体集合**（Painting/ItemFrame 等，伴生贴图已入 Mini-Atlas） |
+| **贴图策略 (`ATLS`)** | ✅ 包含完整多通道全量 Atlas 与全局映射 | ✅ **自包含 Scene Mini-Atlas**（包含场景引用的裁剪图集、CTM 子贴图及实体贴图） |
 | **模型策略 (`MODL`)** | ✅ 包含全局所有方块的完整模型数据库 | ✅ **Tree-Shaken 模型闭包**（模型 UV 已预映射至 Mini-Atlas） |
 | **网格模型数据** | ❌ 不存烘焙的世界大网格 | ❌ **不存全量网格**，现场根据体素+剪枝模型极速重构 |
 | **CTM 连通规则 (`CTMR`)** | ✅ 包含全局解析规则与完整子贴图集 | ✅ **Tree-Shaken 规则集**（仅保留场景引用的规则与子贴图） |

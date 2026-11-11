@@ -120,6 +120,28 @@ fn test_save_loader_detects_paintings_in_entities_mca() {
         entities.len() >= 4,
         "Should have extracted at least 4 visual entities"
     );
+    assert_eq!(
+        storage.entities.len(),
+        entities.len(),
+        "storage.entities must be populated by load_box_with_entities"
+    );
+
+    // Verify load_box_into_storage also populates storage.entities without dropping
+    let mut storage2 = VoxelStorage::new();
+    let loaded2 = SaveLoader::load_box_into_storage(
+        &save_dir,
+        "overworld",
+        min_coord,
+        max_coord,
+        &mut storage2,
+    )
+    .expect("Failed loading user save box via load_box_into_storage");
+    assert_eq!(loaded2, loaded);
+    assert_eq!(
+        storage2.entities.len(),
+        entities.len(),
+        "storage2.entities must be populated by load_box_into_storage"
+    );
 
     // 1. Unpacked painting (4x4)
     let unpacked = entities
@@ -133,7 +155,11 @@ fn test_save_loader_detects_paintings_in_entities_mca() {
         })
         .expect("Unpacked painting entity should exist");
     assert_eq!(unpacked.facing, Some(mtk_core::Direction::East));
-    assert_eq!(unpacked.position, glam::DVec3::new(-8.0, -59.0, 10.0));
+    assert_eq!(
+        unpacked.position,
+        glam::DVec3::new(-7.96875, -58.0, 10.0),
+        "Painting position must be the calculated world-space center, not the support block"
+    );
     if let mtk_model::EntityKindData::Painting(p) = &unpacked.kind {
         assert_eq!(p.width, 4);
         assert_eq!(p.height, 4);

@@ -23,6 +23,7 @@ pub(crate) struct SceneWriteRequest<'a> {
     pub(crate) biome_resolver_json: Option<&'a str>,
     pub(crate) ctm_rules: Option<&'a [mtk_resource::CtmRule]>,
     pub(crate) dynamic_entity_slots: Option<&'a HashMap<String, (u16, u16)>>,
+    pub(crate) entities: Option<&'a [mtk_model::EntityInstance]>,
 }
 
 impl<'a> SceneWriteRequest<'a> {
@@ -42,6 +43,7 @@ impl<'a> SceneWriteRequest<'a> {
             biome_resolver_json: None,
             ctm_rules: None,
             dynamic_entity_slots: None,
+            entities: None,
         }
     }
 }
@@ -71,6 +73,19 @@ pub(crate) fn write_scene_package(
         &voxl_bytes,
         &ChunkWriteOptions::zstd_fast(),
     )?;
+
+    // 2.1 Visual Entities (optional)
+    if let Some(entities) = req.entities {
+        if !entities.is_empty() {
+            let enti_bytes = serde_json::to_vec(entities)?;
+            writer.add_chunk(
+                *b"ENTI",
+                "entities/instances",
+                &enti_bytes,
+                &ChunkWriteOptions::zstd_fast(),
+            )?;
+        }
+    }
 
     // 3. Models (optional)
     if let Some(db) = req.models {

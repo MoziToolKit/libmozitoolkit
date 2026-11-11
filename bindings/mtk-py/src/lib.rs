@@ -5,6 +5,7 @@
 mod attributes;
 mod ctm;
 mod cull;
+mod entity;
 mod extrude;
 mod material;
 mod mesh;
@@ -159,11 +160,17 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(save::inspect_minecraft_save, m)?)?;
     m.add_function(wrap_pyfunction!(save::load_and_mesh_minecraft_save, m)?)?;
 
-    // 10. Scene Interchange (.mtkscene)
+    // 10. Visual Entities & Entity Render Plan
+    m.add_class::<entity::PyEntityRenderTransform>()?;
+    m.add_class::<entity::PyEntityRenderNode>()?;
+    m.add_class::<entity::PyEntityRenderPlan>()?;
+    m.add_function(wrap_pyfunction!(entity::build_entity_render_plan, m)?)?;
+
+    // 11. Scene Interchange (.mtkscene)
     m.add_class::<scene::PyScenePackageReader>()?;
     m.add_function(wrap_pyfunction!(scene::export_scene_package, m)?)?;
 
-    // 11. Metadata
+    // 12. Metadata
     m.add_function(wrap_pyfunction!(version, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_function(wrap_pyfunction!(api_version, m)?)?;

@@ -300,3 +300,20 @@ fn test_mesh_merge_palette_attribute_remap() {
     // m2 face 1 was dirt (idx 1 in m2) -> remapped to 2 in merged
     assert_eq!(indices, &[1, 1, 2]);
 }
+
+#[test]
+fn test_mesh_data_transform_coordinate_system() {
+    let mut mesh = MeshData::new();
+    mesh.positions.push([1.0, 2.0, 3.0]);
+    mesh.normals.push([0.0, 1.0, 0.0]); // +Y normal
+
+    // 1. Minecraft / Y-up leaves positions and normals intact
+    mesh.transform_coordinate_system(CoordinateSystem::Minecraft);
+    assert_eq!(mesh.positions[0], [1.0, 2.0, 3.0]);
+    assert_eq!(mesh.normals[0], [0.0, 1.0, 0.0]);
+
+    // 2. Z-up right-handed transforms (x, y, z) -> (x, -z, y)
+    mesh.transform_coordinate_system(CoordinateSystem::ZUpRightHanded);
+    assert_eq!(mesh.positions[0], [1.0, -3.0, 2.0]);
+    assert_eq!(mesh.normals[0], [0.0, 0.0, 1.0]); // +Y becomes +Z
+}

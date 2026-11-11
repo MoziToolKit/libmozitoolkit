@@ -242,6 +242,7 @@ impl VoxelPointCloud {
             entity_indices,
             light_levels,
             bounds,
+            entities: Vec::new(),
         })
     }
 }

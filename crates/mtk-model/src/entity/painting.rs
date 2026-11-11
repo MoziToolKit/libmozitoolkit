@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use glam::{Mat4, Vec2, Vec3};
+use glam::{Vec2, Vec3};
 use mtk_core::Direction;
 use serde::{Deserialize, Serialize};
 
@@ -531,9 +531,48 @@ pub fn calculate_painting_world_position(
     attached_to_wall + left.normal() * horizontal_offset + Vec3::Y * vertical_offset
 }
 
+/// Calculates the exact world position and Euler rotation for a painting attached to a support block.
+///
+/// * `support_pos`: The block coordinates of the support/anchor block.
+/// * `facing`: Horizontal direction pointing outwards from the wall into open air.
+/// * `width`: Painting width in blocks.
+/// * `height`: Painting height in blocks.
+///
+/// Returns `(position: glam::DVec3, rotation: glam::Vec3)`.
+pub fn calculate_painting_world_transform(
+    support_pos: [i32; 3],
+    facing: Direction,
+    width: u8,
+    height: u8,
+) -> (glam::DVec3, glam::Vec3) {
+    let center = glam::DVec3::new(
+        support_pos[0] as f64 + 0.5,
+        support_pos[1] as f64 + 0.5,
+        support_pos[2] as f64 + 0.5,
+    );
+    let facing_norm = glam::DVec3::new(
+        facing.normal().x as f64,
+        facing.normal().y as f64,
+        facing.normal().z as f64,
+    );
+    let attached_to_wall = center - facing_norm * 0.46875;
+    let horizontal_offset = if width % 2 == 0 { 0.5 } else { 0.0 };
+    let vertical_offset = if height % 2 == 0 { 0.5 } else { 0.0 };
+
+    let left = counter_clockwise(facing);
+    let left_norm = glam::DVec3::new(
+        left.normal().x as f64,
+        left.normal().y as f64,
+        left.normal().z as f64,
+    );
+    let pos = attached_to_wall + left_norm * horizontal_offset + glam::DVec3::Y * vertical_offset;
+    let y_rot = facing_to_y_rot(facing);
+    (pos, glam::Vec3::new(0.0, y_rot, 0.0))
+}
+
 /// Rotation angle around Y axis for horizontal facing (North, East, South, West).
 #[inline]
-fn facing_to_y_rot(facing: Direction) -> f32 {
+pub fn facing_to_y_rot(facing: Direction) -> f32 {
     match facing {
         Direction::North => 0.0,
         Direction::East => -std::f32::consts::FRAC_PI_2,
@@ -543,27 +582,8 @@ fn facing_to_y_rot(facing: Direction) -> f32 {
     }
 }
 
-/// Helper function to transform a face's normal to match the rotated direction.
-fn closest_direction(normal: Vec3) -> Direction {
-    let mut best_dir = Direction::Up;
-    let mut best_dot = -999.0f32;
-    for candidate in Direction::ALL {
-        let dot = normal.dot(candidate.normal());
-        if dot > best_dot {
-            best_dot = dot;
-            best_dir = candidate;
-        }
-    }
-    best_dir
-}
-
-/// Creates a procedural `BakedModel` for a painting with explicit dimensions or registry fallback.
-pub fn create_painting_baked_model_with_size(
-    variant_name: &str,
-    facing: Direction,
-    custom_w: u32,
-    custom_h: u32,
-) -> BakedModel {
+/// Creates a procedural `BakedModel` for a painting in local model space (centered at (0,0,0)).
+pub fn create_painting_baked_model(variant_name: &str, custom_w: u32, custom_h: u32) -> BakedModel {
     let (width, height) = if custom_w > 0 && custom_h > 0 {
         (custom_w as u8, custom_h as u8)
     } else {
@@ -577,12 +597,6 @@ pub fn create_painting_baked_model_with_size(
     let w = width as f32;
     let h = height as f32;
 
-    let y_rot = facing_to_y_rot(facing);
-    let rot_mat = Mat4::from_rotation_y(y_rot);
-    let anchor_offset = calculate_painting_world_position([0, 0, 0], facing, width, height);
-
-    let transform_point = |p: Vec3| -> Vec3 { rot_mat.transform_point3(p) + anchor_offset };
-
     let mut elements = Vec::with_capacity((width as usize) * (height as usize));
 
     for sy in 0..height {
@@ -595,27 +609,17 @@ pub fn create_painting_baked_model_with_size(
             let z_front = -PAINTING_HALF_DEPTH;
             let z_back = PAINTING_HALF_DEPTH;
 
-            // Element bounds in local space
-            let el_from = transform_point(Vec3::new(x1, y1, z_front));
-            let el_to = transform_point(Vec3::new(x0, y0, z_back));
             let mut faces = HashMap::new();
 
-            // 1. Front face (pointing towards facing)
+            // 1. Front face (pointing towards -Z / North in local space)
             {
-                let raw_pts = [
+                let verts = [
                     Vec3::new(x0, y1, z_front),
                     Vec3::new(x1, y1, z_front),
                     Vec3::new(x1, y0, z_front),
                     Vec3::new(x0, y0, z_front),
                 ];
-                let mut verts = [Vec3::ZERO; 4];
-                for (i, p) in raw_pts.iter().enumerate() {
-                    verts[i] = transform_point(*p);
-                }
 
-                // Vanilla PaintingRenderer UV alignment:
-                // frontU0 = (width - sx) / w; frontU1 = (width - (sx + 1)) / w
-                // frontV0 = (height - sy) / h; frontV1 = (height - (sy + 1)) / h
                 let u0 = (width - sx) as f32 / w;
                 let u1 = (width - (sx + 1)) as f32 / w;
                 let v0 = (height - sy) as f32 / h;
@@ -628,15 +632,10 @@ pub fn create_painting_baked_model_with_size(
                     Vec2::new(u1, v1),
                 ];
 
-                let norm = rot_mat
-                    .transform_vector3(Vec3::new(0.0, 0.0, -1.0))
-                    .normalize();
-                let dir = closest_direction(norm);
-
                 faces.insert(
-                    dir,
+                    Direction::North,
                     BakedFace {
-                        direction: dir,
+                        direction: Direction::North,
                         texture: front_texture.clone(),
                         uv_rot: 0.0,
                         uv_bounds: [u1, v1, u0, v0],
@@ -644,7 +643,7 @@ pub fn create_painting_baked_model_with_size(
                         cullface: None,
                         vertices: verts,
                         uvs,
-                        normal: norm,
+                        normal: Vec3::new(0.0, 0.0, -1.0),
                         atlas_uvs: None,
                         atlas_chunk_id: None,
                         atlas_texture_id: None,
@@ -652,20 +651,15 @@ pub fn create_painting_baked_model_with_size(
                 );
             }
 
-            // 2. Back face (pointing towards wall surface)
+            // 2. Back face (pointing towards +Z / South in local space)
             {
-                let raw_pts = [
+                let verts = [
                     Vec3::new(x0, y0, z_back),
                     Vec3::new(x1, y0, z_back),
                     Vec3::new(x1, y1, z_back),
                     Vec3::new(x0, y1, z_back),
                 ];
-                let mut verts = [Vec3::ZERO; 4];
-                for (i, p) in raw_pts.iter().enumerate() {
-                    verts[i] = transform_point(*p);
-                }
 
-                // Vanilla PaintingRenderer back quad: (x0,y0)->(1,0), (x1,y0)->(0,0), (x1,y1)->(0,1), (x0,y1)->(1,1)
                 let uvs = [
                     Vec2::new(1.0, 0.0),
                     Vec2::new(0.0, 0.0),
@@ -673,15 +667,10 @@ pub fn create_painting_baked_model_with_size(
                     Vec2::new(1.0, 1.0),
                 ];
 
-                let norm = rot_mat
-                    .transform_vector3(Vec3::new(0.0, 0.0, 1.0))
-                    .normalize();
-                let dir = closest_direction(norm);
-
                 faces.insert(
-                    dir,
+                    Direction::South,
                     BakedFace {
-                        direction: dir,
+                        direction: Direction::South,
                         texture: back_texture.to_string(),
                         uv_rot: 0.0,
                         uv_bounds: [0.0, 0.0, 1.0, 1.0],
@@ -689,7 +678,7 @@ pub fn create_painting_baked_model_with_size(
                         cullface: None,
                         vertices: verts,
                         uvs,
-                        normal: norm,
+                        normal: Vec3::new(0.0, 0.0, 1.0),
                         atlas_uvs: None,
                         atlas_chunk_id: None,
                         atlas_texture_id: None,
@@ -697,18 +686,14 @@ pub fn create_painting_baked_model_with_size(
                 );
             }
 
-            // 3. Top rim border (outer perimeter only)
+            // 3. Top rim border (outer perimeter only, +Y / Up)
             if sy == height - 1 {
-                let raw_pts = [
+                let verts = [
                     Vec3::new(x0, y0, z_front),
                     Vec3::new(x1, y0, z_front),
                     Vec3::new(x1, y0, z_back),
                     Vec3::new(x0, y0, z_back),
                 ];
-                let mut verts = [Vec3::ZERO; 4];
-                for (i, p) in raw_pts.iter().enumerate() {
-                    verts[i] = transform_point(*p);
-                }
 
                 let uvs = [
                     Vec2::new(0.0, 0.0),
@@ -717,13 +702,10 @@ pub fn create_painting_baked_model_with_size(
                     Vec2::new(0.0, PAINTING_RIM_UV_THICKNESS),
                 ];
 
-                let norm = rot_mat.transform_vector3(Vec3::Y).normalize();
-                let dir = closest_direction(norm);
-
                 faces.insert(
-                    dir,
+                    Direction::Up,
                     BakedFace {
-                        direction: dir,
+                        direction: Direction::Up,
                         texture: back_texture.to_string(),
                         uv_rot: 0.0,
                         uv_bounds: [0.0, 0.0, 1.0, PAINTING_RIM_UV_THICKNESS],
@@ -731,7 +713,7 @@ pub fn create_painting_baked_model_with_size(
                         cullface: None,
                         vertices: verts,
                         uvs,
-                        normal: norm,
+                        normal: Vec3::Y,
                         atlas_uvs: None,
                         atlas_chunk_id: None,
                         atlas_texture_id: None,
@@ -739,18 +721,14 @@ pub fn create_painting_baked_model_with_size(
                 );
             }
 
-            // 4. Bottom rim border (outer perimeter only)
+            // 4. Bottom rim border (outer perimeter only, -Y / Down)
             if sy == 0 {
-                let raw_pts = [
+                let verts = [
                     Vec3::new(x0, y1, z_back),
                     Vec3::new(x1, y1, z_back),
                     Vec3::new(x1, y1, z_front),
                     Vec3::new(x0, y1, z_front),
                 ];
-                let mut verts = [Vec3::ZERO; 4];
-                for (i, p) in raw_pts.iter().enumerate() {
-                    verts[i] = transform_point(*p);
-                }
 
                 let uvs = [
                     Vec2::new(0.0, 0.0),
@@ -759,13 +737,10 @@ pub fn create_painting_baked_model_with_size(
                     Vec2::new(0.0, PAINTING_RIM_UV_THICKNESS),
                 ];
 
-                let norm = rot_mat.transform_vector3(Vec3::NEG_Y).normalize();
-                let dir = closest_direction(norm);
-
                 faces.insert(
-                    dir,
+                    Direction::Down,
                     BakedFace {
-                        direction: dir,
+                        direction: Direction::Down,
                         texture: back_texture.to_string(),
                         uv_rot: 0.0,
                         uv_bounds: [0.0, 0.0, 1.0, PAINTING_RIM_UV_THICKNESS],
@@ -773,7 +748,7 @@ pub fn create_painting_baked_model_with_size(
                         cullface: None,
                         vertices: verts,
                         uvs,
-                        normal: norm,
+                        normal: Vec3::NEG_Y,
                         atlas_uvs: None,
                         atlas_chunk_id: None,
                         atlas_texture_id: None,
@@ -781,18 +756,14 @@ pub fn create_painting_baked_model_with_size(
                 );
             }
 
-            // 5. Right rim border (outer perimeter only, x0 side)
+            // 5. Right rim border (outer perimeter only, x0 side, +X / East)
             if sx == width - 1 {
-                let raw_pts = [
+                let verts = [
                     Vec3::new(x0, y0, z_back),
                     Vec3::new(x0, y1, z_back),
                     Vec3::new(x0, y1, z_front),
                     Vec3::new(x0, y0, z_front),
                 ];
-                let mut verts = [Vec3::ZERO; 4];
-                for (i, p) in raw_pts.iter().enumerate() {
-                    verts[i] = transform_point(*p);
-                }
 
                 let uvs = [
                     Vec2::new(PAINTING_RIM_UV_THICKNESS, 0.0),
@@ -801,13 +772,10 @@ pub fn create_painting_baked_model_with_size(
                     Vec2::new(0.0, 0.0),
                 ];
 
-                let norm = rot_mat.transform_vector3(Vec3::X).normalize();
-                let dir = closest_direction(norm);
-
                 faces.insert(
-                    dir,
+                    Direction::East,
                     BakedFace {
-                        direction: dir,
+                        direction: Direction::East,
                         texture: back_texture.to_string(),
                         uv_rot: 0.0,
                         uv_bounds: [0.0, 0.0, PAINTING_RIM_UV_THICKNESS, 1.0],
@@ -815,7 +783,7 @@ pub fn create_painting_baked_model_with_size(
                         cullface: None,
                         vertices: verts,
                         uvs,
-                        normal: norm,
+                        normal: Vec3::X,
                         atlas_uvs: None,
                         atlas_chunk_id: None,
                         atlas_texture_id: None,
@@ -823,18 +791,14 @@ pub fn create_painting_baked_model_with_size(
                 );
             }
 
-            // 6. Left rim border (outer perimeter only, x1 side)
+            // 6. Left rim border (outer perimeter only, x1 side, -X / West)
             if sx == 0 {
-                let raw_pts = [
+                let verts = [
                     Vec3::new(x1, y0, z_front),
                     Vec3::new(x1, y1, z_front),
                     Vec3::new(x1, y1, z_back),
                     Vec3::new(x1, y0, z_back),
                 ];
-                let mut verts = [Vec3::ZERO; 4];
-                for (i, p) in raw_pts.iter().enumerate() {
-                    verts[i] = transform_point(*p);
-                }
 
                 let uvs = [
                     Vec2::new(PAINTING_RIM_UV_THICKNESS, 0.0),
@@ -843,13 +807,10 @@ pub fn create_painting_baked_model_with_size(
                     Vec2::new(0.0, 0.0),
                 ];
 
-                let norm = rot_mat.transform_vector3(Vec3::NEG_X).normalize();
-                let dir = closest_direction(norm);
-
                 faces.insert(
-                    dir,
+                    Direction::West,
                     BakedFace {
-                        direction: dir,
+                        direction: Direction::West,
                         texture: back_texture.to_string(),
                         uv_rot: 0.0,
                         uv_bounds: [0.0, 0.0, PAINTING_RIM_UV_THICKNESS, 1.0],
@@ -857,7 +818,7 @@ pub fn create_painting_baked_model_with_size(
                         cullface: None,
                         vertices: verts,
                         uvs,
-                        normal: norm,
+                        normal: Vec3::NEG_X,
                         atlas_uvs: None,
                         atlas_chunk_id: None,
                         atlas_texture_id: None,
@@ -866,27 +827,15 @@ pub fn create_painting_baked_model_with_size(
             }
 
             elements.push(BakedElement {
-                from_pos: [
-                    el_from.x.min(el_to.x),
-                    el_from.y.min(el_to.y),
-                    el_from.z.min(el_to.z),
-                ],
-                to_pos: [
-                    el_from.x.max(el_to.x),
-                    el_from.y.max(el_to.y),
-                    el_from.z.max(el_to.z),
-                ],
+                from_pos: [x1, y1, z_front],
+                to_pos: [x0, y0, z_back],
                 faces,
             });
         }
     }
 
     let mut model = BakedModel {
-        block_state: format!(
-            "minecraft:painting[facing={},variant={}]",
-            facing.as_str(),
-            variant_name
-        ),
+        block_state: format!("minecraft:painting[variant={}]", variant_name),
         elements,
         obj_faces: Vec::new(),
         faces: Default::default(),
@@ -937,7 +886,7 @@ mod tests {
 
     #[test]
     fn test_1x1_kebab_baked_model() {
-        let model = create_painting_baked_model_with_size("kebab", Direction::North, 0, 0);
+        let model = create_painting_baked_model("kebab", 0, 0);
         assert_eq!(model.elements.len(), 1);
         let el = &model.elements[0];
         // 1x1 has front, back, top, bottom, left, right (6 faces)
@@ -952,7 +901,7 @@ mod tests {
 
     #[test]
     fn test_4x4_pointer_segmentation() {
-        let model = create_painting_baked_model_with_size("pointer", Direction::North, 0, 0);
+        let model = create_painting_baked_model("pointer", 0, 0);
         // 4x4 has 16 segments
         assert_eq!(model.elements.len(), 16);
 
@@ -968,7 +917,7 @@ mod tests {
     #[test]
     fn test_painting_uv_alignment_with_vanilla() {
         // 1x1 painting
-        let model = create_painting_baked_model_with_size("kebab", Direction::North, 0, 0);
+        let model = create_painting_baked_model("kebab", 0, 0);
         let el = &model.elements[0];
         let front = el.faces.get(&Direction::North).expect("Front face");
         // pt0 (x0, y1) bottom-left: u=0.0, v=1.0
@@ -990,7 +939,7 @@ mod tests {
         // 2x1 painting: sx=0 (right segment of world, left segment of texture is sx=1)
         // For sx=width-1 (sx=1), U ranges from 0.0 to 0.5 (left slice of texture)
         // For sx=0, U ranges from 0.5 to 1.0 (right slice of texture)
-        let model_2x1 = create_painting_baked_model_with_size("pool", Direction::North, 0, 0);
+        let model_2x1 = create_painting_baked_model("pool", 0, 0);
         // segment 0 is sx=0, sy=0
         let seg_right_world = &model_2x1.elements[0];
         let front_right = seg_right_world.faces.get(&Direction::North).unwrap();

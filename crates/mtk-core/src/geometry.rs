@@ -1,9 +1,38 @@
-use glam::{Vec2, Vec3};
+use glam::{EulerRot, Mat3, Vec2, Vec3};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 use crate::direction::Direction;
+
+/// Target 3D coordinate system convention.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum CoordinateSystem {
+    /// Canonical Minecraft coordinate system: +X East, +Y Up, +Z South.
+    #[default]
+    Minecraft,
+    /// Standard Z-up right-handed coordinate system: +X East, +Y North (-Z_mc), +Z Up (+Y_mc).
+    /// Used by Unreal Engine, Blender, 3ds Max, etc.
+    ZUpRightHanded,
+    /// Standard Y-up right-handed coordinate system: +X East, +Y Up (+Y_mc), +Z South (+Z_mc).
+    /// Matches the glTF / Godot / Three.js / WebGPU convention (+Z forward, camera looking down -Z).
+    ///
+    /// Note: Minecraft's native world space already satisfies this convention, so this variant is
+    /// numerically identical to [`CoordinateSystem::Minecraft`]. It exists to make the target
+    /// convention explicit at call sites.
+    YUpRightHanded,
+}
+
+/// Change of basis matrix from Minecraft coordinates (+X East, +Y Up, +Z South)
+/// to standard Z-up right-handed coordinates (+X East, +Y North, +Z Up):
+/// v_bl = M * v_mc = (x, -z, y).
+pub const MC_TO_Z_UP_BASIS: Mat3 = Mat3::from_cols(Vec3::X, Vec3::Z, Vec3::new(0.0, -1.0, 0.0));
+
+/// Change of basis matrix from standard Z-up right-handed coordinates (+X East, +Y North, +Z Up)
+/// to Minecraft coordinates (+X East, +Y Up, +Z South):
+/// v_mc = M^T * v_bl = (x, z, -y).
+pub const Z_UP_TO_MC_BASIS: Mat3 = Mat3::from_cols(Vec3::X, Vec3::new(0.0, 0.0, -1.0), Vec3::Y);
 
 /// 2D Axis-Aligned Bounding Box (AABB) in normalized [0, 1] or pixel space.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -229,6 +258,45 @@ pub fn mc_world_to_z_up(wx: f32, wy: f32, wz: f32) -> Vec3 {
     Vec3::new(wx, -wz, wy)
 }
 
+/// Transforms a 3D vertex from standard Z-up right-hand coordinates (+X East, +Y North, +Z Up)
+/// back to Minecraft world coordinates (+X East, +Y Up, +Z South).
+#[inline]
+pub fn z_up_to_mc_world(bx: f32, by: f32, bz: f32) -> Vec3 {
+    Vec3::new(bx, bz, -by)
+}
+
+/// Converts canonical Minecraft local-model Euler rotation (pitch, yaw, roll in radians, XYZ convention)
+/// into standard Z-up right-handed Euler XYZ (in radians) via change-of-basis matrix conjugation:
+/// R_bl = M * R_mc * M^T.
+pub fn mc_rotation_to_z_up(rotation: Vec3) -> Vec3 {
+    let r_mc = Mat3::from_euler(EulerRot::XYZ, rotation.x, rotation.y, rotation.z);
+    let r_bl = MC_TO_Z_UP_BASIS * r_mc * Z_UP_TO_MC_BASIS;
+    let (pitch, yaw, roll) = r_bl.to_euler(EulerRot::XYZ);
+    Vec3::new(pitch, yaw, roll)
+}
+
+/// Converts standard Z-up right-handed Euler XYZ (in radians) into canonical Minecraft
+/// local-model Euler rotation (pitch, yaw, roll in radians, XYZ convention) via inverse conjugation:
+/// R_mc = M^T * R_bl * M.
+pub fn z_up_rotation_to_mc(rotation: Vec3) -> Vec3 {
+    let r_bl = Mat3::from_euler(EulerRot::XYZ, rotation.x, rotation.y, rotation.z);
+    let r_mc = Z_UP_TO_MC_BASIS * r_bl * MC_TO_Z_UP_BASIS;
+    let (pitch, yaw, roll) = r_mc.to_euler(EulerRot::XYZ);
+    Vec3::new(pitch, yaw, roll)
+}
+
+/// Converts scale factors from Minecraft local axes [x, y, z] to Z-up right-handed axes [x, -z, y] -> [x, z, y].
+#[inline]
+pub fn mc_scale_to_z_up(scale: Vec3) -> Vec3 {
+    Vec3::new(scale.x, scale.z, scale.y)
+}
+
+/// Converts scale factors from Z-up right-handed axes [x, y, z] to Minecraft local axes [x, z, y].
+#[inline]
+pub fn z_up_scale_to_mc(scale: Vec3) -> Vec3 {
+    Vec3::new(scale.x, scale.z, scale.y)
+}
+
 /// Derives the discrete 3D cardinal tangent directions `(up, left)` from a quad's 3D positions and 2D UVs.
 /// Supports both standard 3D UVs (V=0 at bottom, V=1 at top) and Minecraft FaceBakery UVs (V=0 at top, V=1 at bottom) via `is_minecraft_uv`.
 pub fn derive_quad_face_tangents(
@@ -315,6 +383,58 @@ mod tests {
     fn test_mc_to_z_up_transforms() {
         let w = mc_world_to_z_up(10.0, 64.0, -20.0);
         assert_eq!(w, Vec3::new(10.0, 20.0, 64.0));
+        let back = z_up_to_mc_world(w.x, w.y, w.z);
+        assert_eq!(back, Vec3::new(10.0, 64.0, -20.0));
+    }
+
+    fn mat3_diff_sq(a: Mat3, b: Mat3) -> f32 {
+        (a.x_axis - b.x_axis).length_squared()
+            + (a.y_axis - b.y_axis).length_squared()
+            + (a.z_axis - b.z_axis).length_squared()
+    }
+
+    #[test]
+    fn test_basis_matrices_orthogonality_and_invertibility() {
+        assert!((MC_TO_Z_UP_BASIS.determinant() - 1.0).abs() < 1e-6);
+        assert!((Z_UP_TO_MC_BASIS.determinant() - 1.0).abs() < 1e-6);
+        let id1 = MC_TO_Z_UP_BASIS * Z_UP_TO_MC_BASIS;
+        let id2 = Z_UP_TO_MC_BASIS * MC_TO_Z_UP_BASIS;
+        assert!(mat3_diff_sq(id1, Mat3::IDENTITY) < 1e-6);
+        assert!(mat3_diff_sq(id2, Mat3::IDENTITY) < 1e-6);
+    }
+
+    #[test]
+    fn test_rotation_basis_transformation_roundtrip() {
+        use std::f32::consts::PI;
+        let test_rotations = [
+            Vec3::ZERO,
+            Vec3::new(PI / 2.0, 0.0, 0.0),
+            Vec3::new(0.0, PI, 0.0),
+            Vec3::new(0.0, 0.0, PI / 4.0),
+            Vec3::new(0.3, -0.7, 1.2),
+        ];
+
+        for r_mc in test_rotations {
+            let r_bl = mc_rotation_to_z_up(r_mc);
+            let roundtrip = z_up_rotation_to_mc(r_bl);
+            let m_orig = Mat3::from_euler(EulerRot::XYZ, r_mc.x, r_mc.y, r_mc.z);
+            let m_roundtrip =
+                Mat3::from_euler(EulerRot::XYZ, roundtrip.x, roundtrip.y, roundtrip.z);
+            assert!(
+                mat3_diff_sq(m_orig, m_roundtrip) < 1e-4,
+                "Rotation mismatch for original {:?}, got roundtrip {:?}",
+                r_mc,
+                roundtrip
+            );
+        }
+    }
+
+    #[test]
+    fn test_scale_basis_transformation() {
+        let s_mc = Vec3::new(1.0, 2.0, 3.0);
+        let s_bl = mc_scale_to_z_up(s_mc);
+        assert_eq!(s_bl, Vec3::new(1.0, 3.0, 2.0));
+        assert_eq!(z_up_scale_to_mc(s_bl), s_mc);
     }
 
     #[test]

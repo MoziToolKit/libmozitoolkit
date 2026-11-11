@@ -48,6 +48,9 @@ pub struct VoxelPointCloud {
     pub light_levels: Vec<u8>,
     /// Optional bounding box `[min_x, min_y, min_z, size_x, size_y, size_z]` to preserve origin alignment.
     pub bounds: Option<[i32; 6]>,
+    /// Visual entities (such as Paintings, Item Frames, Armor Stands) in continuous 3D space.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub entities: Vec<mtk_model::EntityInstance>,
 }
 
 impl VoxelPointCloud {
@@ -71,6 +74,7 @@ impl VoxelPointCloud {
             entity_indices: Vec::new(),
             light_levels: Vec::with_capacity(capacity),
             bounds: None,
+            entities: Vec::new(),
         }
     }
 
@@ -90,6 +94,45 @@ impl VoxelPointCloud {
     #[inline]
     pub fn has_entities(&self) -> bool {
         !self.entity_palette.is_empty()
+    }
+
+    /// Checks if this point cloud carries any continuous visual entities.
+    #[inline]
+    pub fn has_visual_entities(&self) -> bool {
+        !self.entities.is_empty()
+    }
+
+    /// Exports continuous visual entities as a list of compact JSON strings (discrete palette format).
+    ///
+    /// Note on naming: While named `visual_entities_palette` to conform with the DCC bridge
+    /// property schema where string array attributes are termed 'palettes', continuous visual
+    /// entities do not share coordinates on the voxel grid. Instead, each entry in this list is
+    /// an independent canonical JSON serialization of a distinct `EntityInstance`.
+    #[cfg(feature = "serde")]
+    pub fn visual_entities_palette(&self) -> Result<Vec<String>, serde_json::Error> {
+        self.entities.iter().map(serde_json::to_string).collect()
+    }
+
+    /// Deserializes and updates visual entities from a discrete palette list atomically.
+    #[cfg(feature = "serde")]
+    pub fn set_visual_entities_palette(
+        &mut self,
+        palette: &[String],
+    ) -> Result<(), serde_json::Error> {
+        let mut temp = Vec::with_capacity(palette.len());
+        for item in palette {
+            if !item.trim().is_empty() {
+                let ent: mtk_model::EntityInstance = serde_json::from_str(item)?;
+                ent.validate().map_err(|e| {
+                    <serde_json::Error as serde::de::Error>::custom(format!(
+                        "validation failed: {e}"
+                    ))
+                })?;
+                temp.push(ent);
+            }
+        }
+        self.entities = temp;
+        Ok(())
     }
 
     /// Appends a single voxel point into the flat arrays without block entity.
@@ -205,6 +248,7 @@ impl VoxelPointCloud {
         bounds: Option<[i32; 6]>,
         entity_indices: Option<&[i32]>,
         entity_palette: Option<&[String]>,
+        visual_entities: Option<&[String]>,
     ) -> Result<Self, VoxelError> {
         let count = block_x.len();
         if positions.len() != count * 3
@@ -258,6 +302,36 @@ impl VoxelPointCloud {
             _ => (Vec::new(), Vec::new()),
         };
 
+        #[allow(unused_mut)]
+        let mut parsed_entities = Vec::new();
+        if let Some(vis) = visual_entities {
+            #[cfg(feature = "serde")]
+            {
+                for item in vis {
+                    if !item.trim().is_empty() {
+                        let ent: mtk_model::EntityInstance =
+                            serde_json::from_str(item).map_err(|e| {
+                                VoxelError::InvalidPointCloud(format!(
+                                    "failed to parse visual entity: {e}"
+                                ))
+                            })?;
+                        ent.validate().map_err(|e| {
+                            VoxelError::InvalidPointCloud(format!("invalid visual entity: {e}"))
+                        })?;
+                        parsed_entities.push(ent);
+                    }
+                }
+            }
+            #[cfg(not(feature = "serde"))]
+            {
+                if !vis.is_empty() {
+                    return Err(VoxelError::InvalidPointCloud(
+                        "visual_entities requires the `serde` feature in mtk-voxel".to_string(),
+                    ));
+                }
+            }
+        }
+
         Ok(Self {
             positions,
             block_x,
@@ -271,6 +345,7 @@ impl VoxelPointCloud {
             entity_indices,
             light_levels: light_levels.unwrap_or_else(|| vec![0u8; count]),
             bounds,
+            entities: parsed_entities,
         })
     }
 

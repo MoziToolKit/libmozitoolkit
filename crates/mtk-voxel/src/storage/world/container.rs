@@ -60,6 +60,9 @@ pub struct VoxelStorage {
     pub generation: AtomicU64,
     /// Indicates whether bounds were explicitly established (e.g. by set_bounds / set_full_snapshot).
     pub has_explicit_bounds: bool,
+    /// Visual entities (such as Paintings, Item Frames, Armor Stands) in continuous 3D space.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub entities: Vec<mtk_model::EntityInstance>,
 }
 
 impl Clone for VoxelStorage {
@@ -78,6 +81,7 @@ impl Clone for VoxelStorage {
             known_empty_sections: self.known_empty_sections.clone(),
             generation: AtomicU64::new(self.generation.load(Ordering::Relaxed)),
             has_explicit_bounds: self.has_explicit_bounds,
+            entities: self.entities.clone(),
         }
     }
 }
@@ -98,6 +102,7 @@ impl Default for VoxelStorage {
             known_empty_sections: HashSet::new(),
             generation: AtomicU64::new(0),
             has_explicit_bounds: false,
+            entities: Vec::new(),
         }
     }
 }
@@ -133,6 +138,7 @@ impl VoxelStorage {
         self.dirty_sections.clear();
         self.known_empty_sections.clear();
         self.primary_biome = None;
+        self.entities.clear();
         self.min_x = 0;
         self.min_y = 0;
         self.min_z = 0;
@@ -141,6 +147,62 @@ impl VoxelStorage {
         self.size_z = 0;
         self.has_explicit_bounds = false;
         self.advance_generation();
+    }
+
+    /// Checks whether this storage contains any continuous visual entities.
+    pub fn has_visual_entities(&self) -> bool {
+        !self.entities.is_empty()
+    }
+
+    /// Explicit bounding box `[min_x, min_y, min_z, size_x, size_y, size_z]`, if configured.
+    #[inline]
+    pub fn bounds(&self) -> Option<[i32; 6]> {
+        if self.has_explicit_bounds {
+            Some([
+                self.min_x,
+                self.min_y,
+                self.min_z,
+                self.size_x,
+                self.size_y,
+                self.size_z,
+            ])
+        } else {
+            None
+        }
+    }
+
+    /// Exports continuous visual entities as a list of compact JSON strings (discrete palette format).
+    ///
+    /// Note on naming: While named `visual_entities_palette` to conform with the DCC bridge
+    /// property schema where string array attributes are termed 'palettes', continuous visual
+    /// entities do not share coordinates on the voxel grid. Instead, each entry in this list is
+    /// an independent canonical JSON serialization of a distinct `EntityInstance`.
+    #[cfg(feature = "serde")]
+    pub fn visual_entities_palette(&self) -> Result<Vec<String>, serde_json::Error> {
+        self.entities.iter().map(serde_json::to_string).collect()
+    }
+
+    /// Deserializes and updates visual entities from a discrete palette list atomically, advancing generation.
+    #[cfg(feature = "serde")]
+    pub fn set_visual_entities_palette(
+        &mut self,
+        palette: &[String],
+    ) -> Result<(), serde_json::Error> {
+        let mut temp = Vec::with_capacity(palette.len());
+        for item in palette {
+            if !item.trim().is_empty() {
+                let ent: mtk_model::EntityInstance = serde_json::from_str(item)?;
+                ent.validate().map_err(|e| {
+                    <serde_json::Error as serde::de::Error>::custom(format!(
+                        "validation failed: {e}"
+                    ))
+                })?;
+                temp.push(ent);
+            }
+        }
+        self.entities = temp;
+        self.advance_generation();
+        Ok(())
     }
 
     /// Gets the blockstate string at world coordinate `(x, y, z)`.

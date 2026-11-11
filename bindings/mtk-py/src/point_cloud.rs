@@ -128,7 +128,7 @@ impl PyVoxelPointCloud {
 
     /// High-performance batch constructor from palette indices using buffer protocol / memoryview.
     #[staticmethod]
-    #[pyo3(signature = (positions, block_x, block_y, block_z, state_indices, state_palette, biome_indices=None, biome_palette=None, light_levels=None, bounds=None, entity_indices=None, entity_palette=None))]
+    #[pyo3(signature = (positions, block_x, block_y, block_z, state_indices, state_palette, biome_indices=None, biome_palette=None, light_levels=None, bounds=None, entity_indices=None, entity_palette=None, visual_entities=None))]
     pub fn from_indexed_arrays(
         positions: &Bound<'_, PyAny>,
         block_x: &Bound<'_, PyAny>,
@@ -142,6 +142,7 @@ impl PyVoxelPointCloud {
         bounds: Option<[i32; 6]>,
         entity_indices: Option<&Bound<'_, PyAny>>,
         entity_palette: Option<Vec<String>>,
+        visual_entities: Option<Vec<String>>,
     ) -> PyResult<Self> {
         let pos_buf = BorrowedF32Buffer::extract(positions)?;
         let bx_buf = BorrowedI32Buffer::extract(block_x)?;
@@ -180,6 +181,7 @@ impl PyVoxelPointCloud {
             bounds,
             ent_slice,
             entity_palette.as_deref(),
+            visual_entities.as_deref(),
         )
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
@@ -252,6 +254,30 @@ impl PyVoxelPointCloud {
     /// Returns the unique canonical block entity (Visual NBT JSON) palette.
     pub fn get_entity_palette(&self) -> Vec<String> {
         self.inner.entity_palette.clone()
+    }
+
+    /// Checks whether this point cloud carries any continuous visual entities.
+    pub fn has_visual_entities(&self) -> bool {
+        self.inner.has_visual_entities()
+    }
+
+    /// Returns visual entities carried in this point cloud as a discrete palette (list of compact JSON strings).
+    pub fn get_visual_entities_palette(&self) -> PyResult<Vec<String>> {
+        self.inner
+            .visual_entities_palette()
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    }
+
+    /// Replaces visual entities in this point cloud from a discrete palette (list of JSON strings).
+    pub fn set_visual_entities_palette(&mut self, palette: Vec<String>) -> PyResult<()> {
+        self.inner
+            .set_visual_entities_palette(&palette)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    }
+
+    /// Returns the count of visual entities carried in this point cloud.
+    pub fn visual_entities_count(&self) -> usize {
+        self.inner.entities.len()
     }
 
     /// Read-only memoryview of per-point block entity palette indices (`int32`, -1 for none).
@@ -330,6 +356,10 @@ impl PyVoxelPointCloud {
                 dict.set_item("entity_indices", ent_mv)?;
                 dict.set_item("entity_palette", this.get_entity_palette())?;
             }
+        }
+        let vis_palette = this.get_visual_entities_palette()?;
+        if !vis_palette.is_empty() {
+            dict.set_item("visual_entities", vis_palette)?;
         }
         Ok(dict)
     }

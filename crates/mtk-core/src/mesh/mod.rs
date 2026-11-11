@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::attributes::{FaceAttributes, MaterialSlotId, MeshAttribute, TintIndex};
-use crate::geometry::Quad;
+use crate::geometry::{mc_world_to_z_up, CoordinateSystem, Quad};
 
 mod attributes;
 mod from_flat;
@@ -271,6 +271,25 @@ impl MeshData {
             quads.clear();
         }
         self.custom_attributes.clear();
+    }
+
+    /// Transforms all vertex positions and normals in place according to the target coordinate system.
+    ///
+    /// Minecraft local/world geometry is converted to the requested target basis (e.g. Z-up right-handed).
+    pub fn transform_coordinate_system(&mut self, target: CoordinateSystem) {
+        match target {
+            CoordinateSystem::Minecraft | CoordinateSystem::YUpRightHanded => {}
+            CoordinateSystem::ZUpRightHanded => {
+                for pos in &mut self.positions {
+                    let v = mc_world_to_z_up(pos[0], pos[1], pos[2]);
+                    *pos = [v.x, v.y, v.z];
+                }
+                for norm in &mut self.normals {
+                    let n = mc_world_to_z_up(norm[0], norm[1], norm[2]);
+                    *norm = [n.x, n.y, n.z];
+                }
+            }
+        }
     }
 
     /// Appends a quad (4 vertices, 2 triangles: 0-1-2 and 0-2-3) and its face attributes.

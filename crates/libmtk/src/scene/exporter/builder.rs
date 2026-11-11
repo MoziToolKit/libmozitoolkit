@@ -90,6 +90,7 @@ pub fn build_scene_atlas_and_models(
     colormaps: Vec<(String, Vec<u8>)>,
     biome_resolver_json: Option<String>,
     ctm_rules: Vec<mtk_resource::CtmRule>,
+    entities: Option<&[mtk_model::EntityInstance]>,
 ) -> Result<SceneExportResult, MtkError> {
     let sprite_count = crops.len();
 
@@ -223,15 +224,31 @@ pub fn build_scene_atlas_and_models(
             || c.key.starts_with("banner/")
             || c.key.starts_with("minecraft:banner/")
     });
+    let has_visual_entities = entities.is_some_and(|e| !e.is_empty());
+    metadata.visual_entities_count = entities.map_or(0, |e| e.len());
 
     metadata.capabilities = crate::scene::metadata::SceneCapabilities {
         has_colormaps: !colormaps.is_empty(),
         has_ctm: !ctm_rules.is_empty(),
         has_pbr,
         has_dynamic_entities,
+        has_visual_entities,
     };
 
     let mut warnings = Vec::new();
+    if let Some(ents) = entities {
+        for ent in ents {
+            for req_tex in ent.required_textures() {
+                if mini_atlas_map.resolve_texture_key(&req_tex).is_none() {
+                    warnings.push(format!(
+                        "Visual entity '{}' ({}) requires texture '{req_tex}' which was not found or could not be cropped into mini-atlas",
+                        ent.id,
+                        ent.uuid.as_deref().unwrap_or("unnamed")
+                    ));
+                }
+            }
+        }
+    }
     for rule in &ctm_rules {
         for tile in rule.tiles.iter().flatten() {
             if mini_atlas_map.lookup(tile).is_none() {

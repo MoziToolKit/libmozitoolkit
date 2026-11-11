@@ -261,9 +261,10 @@ impl SaveLoader {
         storage: &mut VoxelStorage,
         progress: Option<ProgressCallback>,
     ) -> Result<usize, SaveError> {
-        let (sections, _) = Self::load_box_with_entities(
+        let (sections, entities) = Self::load_box_with_entities(
             save_dir, dimension, min_block, max_block, storage, progress,
         )?;
+        storage.entities = entities;
         Ok(sections)
     }
 
@@ -479,6 +480,7 @@ impl SaveLoader {
             ));
         }
 
+        storage.entities = loaded_entities.clone();
         Ok((loaded_sections, loaded_entities))
     }
 }

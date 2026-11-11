@@ -121,6 +121,7 @@ fn test_export_dynamic_entity_atlas_stitching() {
         dynamic_entity_atlases: Some(&dynamic_entity_atlases),
         dynamic_entity_slots: None,
         ctm_mode: CtmMode::Disabled,
+        entities: None,
     })
     .expect("Build scene interchange with dynamic entities");
 
@@ -223,6 +224,7 @@ fn test_export_scene_package_file_roundtrip() {
             dynamic_entity_atlases: None,
             dynamic_entity_slots: Some(&fake_slots),
             ctm_mode: CtmMode::Disabled,
+            entities: None,
         },
     )
     .expect("Export scene package file");
@@ -264,6 +266,143 @@ fn test_export_scene_package_file_roundtrip() {
 
     let read_textures = reader.read_atlas_textures().expect("Read atlas textures");
     assert_eq!(read_textures.len(), 1);
+
+    let _ = std::fs::remove_file(&temp_path);
+}
+
+#[test]
+fn test_export_visual_entities_painting_roundtrip() {
+    use mtk_resource::ResourceLocation;
+    use mtk_texture::{AtlasChunkMeta, AtlasSpriteLocation, RgbaBuffer};
+
+    let mut source_map = AtlasAddressMap::new();
+    let mut source_images = HashMap::new();
+
+    // 1. Base stone block chunk meta
+    let stone_meta = AtlasChunkMeta {
+        chunk_id: 0,
+        category: "blocks".to_string(),
+        is_animated: false,
+        category_chunk_index: 0,
+        width: 64,
+        height: 64,
+        has_normal: false,
+        has_specular: false,
+        has_overlay: false,
+        has_orm: false,
+        has_aux: false,
+        has_tint: false,
+        pbr: None,
+        textures: Vec::new(),
+    };
+    source_map.chunks.push(stone_meta);
+
+    source_map.sprites.insert(
+        ResourceLocation::new("minecraft", "block/stone"),
+        AtlasSpriteLocation {
+            chunk_id: 0,
+            pixel_rect: [0, 0, 16, 16],
+            frame_0_uv_bounds: [0.0, 0.0, 0.25, 0.25],
+            ..Default::default()
+        },
+    );
+    // 2. Painting sprites: kebab and back
+    source_map.sprites.insert(
+        ResourceLocation::new("minecraft", "painting/kebab"),
+        AtlasSpriteLocation {
+            chunk_id: 0,
+            pixel_rect: [16, 0, 16, 16],
+            frame_0_uv_bounds: [0.25, 0.0, 0.5, 0.25],
+            ..Default::default()
+        },
+    );
+    source_map.sprites.insert(
+        ResourceLocation::new("minecraft", "painting/back"),
+        AtlasSpriteLocation {
+            chunk_id: 0,
+            pixel_rect: [32, 0, 16, 16],
+            frame_0_uv_bounds: [0.5, 0.0, 0.75, 0.25],
+            ..Default::default()
+        },
+    );
+    source_images.insert(
+        "blocks_chunk_000.png".to_string(),
+        RgbaBuffer::solid(64, 64, 200, 200, 200, 255),
+    );
+
+    let mut source_models = BakedModelDatabase::new();
+    source_models.insert(
+        "minecraft:stone".to_string(),
+        create_sample_cube("minecraft:stone", "minecraft:block/stone"),
+    );
+
+    let mut voxels = SparseVoxelPayload::new();
+    voxels.push(0, 0, 0, "minecraft:stone", "minecraft:plains", None, None);
+
+    let painting = mtk_model::EntityInstance::new_painting(
+        Some("12345678-1234-1234-1234-123456789abc".to_string()),
+        glam::DVec3::new(10.5, 64.0, -20.5),
+        mtk_core::Direction::South,
+        glam::Vec3::new(0.0, std::f32::consts::PI, 0.0),
+        "kebab",
+        1,
+        1,
+        Some([10, 64, -20]),
+    );
+    let entities = vec![painting.clone()];
+
+    let temp_path = std::env::temp_dir().join(format!(
+        "test_painting_scene_{}.mtkscene",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+
+    let config = SceneExporterConfig::default();
+    let export_res = export_scene_package(
+        &temp_path,
+        SceneExportRequest {
+            voxels: &voxels,
+            source_models: &source_models,
+            source_atlas_map: &source_map,
+            atlas_source: &mut source_images,
+            config: &config,
+            dynamic_entity_atlases: None,
+            dynamic_entity_slots: None,
+            ctm_mode: CtmMode::Disabled,
+            entities: Some(&entities),
+        },
+    )
+    .expect("Export scene package with painting");
+
+    assert!(export_res.metadata.capabilities.has_visual_entities);
+    assert_eq!(export_res.metadata.visual_entities_count, 1);
+    assert_eq!(export_res.metadata.unique_entities_count, 0);
+    // Painting front and back sprites must be collected into mini-atlas!
+    assert!(export_res
+        .mini_atlas_map
+        .lookup_str("minecraft:painting/kebab")
+        .is_some());
+    assert!(export_res
+        .mini_atlas_map
+        .lookup_str("minecraft:painting/back")
+        .is_some());
+
+    // Read back and unpack
+    let reader = crate::scene::ScenePackageReader::open_file(&temp_path).expect("Open package");
+    assert!(reader.has_visual_entities());
+    let read_ents = reader.read_entities().expect("Read entities");
+    assert_eq!(read_ents.len(), 1);
+    assert_eq!(read_ents[0], painting);
+
+    let report = reader.validate().expect("Validation");
+    assert!(report.is_valid, "Validation failed: {:?}", report.errors);
+    assert!(report.errors.is_empty());
+
+    let bundle = reader.unpack().expect("Unpack bundle");
+    assert_eq!(bundle.entities.len(), 1);
+    assert_eq!(bundle.entities[0], painting);
 
     let _ = std::fs::remove_file(&temp_path);
 }

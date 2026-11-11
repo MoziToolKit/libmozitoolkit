@@ -45,6 +45,16 @@ impl PySceneMetadata {
     }
 
     #[getter]
+    pub fn visual_entities_count(&self) -> usize {
+        self.inner.visual_entities_count
+    }
+
+    #[getter]
+    pub fn has_visual_entities(&self) -> bool {
+        self.inner.capabilities.has_visual_entities
+    }
+
+    #[getter]
     pub fn atlas_resolution(&self) -> [u32; 2] {
         self.inner.atlas_resolution
     }
@@ -73,6 +83,7 @@ impl PySceneMetadata {
         dict.set_item("unique_states_count", self.inner.unique_states_count)?;
         dict.set_item("unique_biomes_count", self.inner.unique_biomes_count)?;
         dict.set_item("unique_entities_count", self.inner.unique_entities_count)?;
+        dict.set_item("visual_entities_count", self.inner.visual_entities_count)?;
         dict.set_item("atlas_resolution", self.inner.atlas_resolution)?;
         dict.set_item("has_animated_atlas", self.inner.has_animated_atlas)?;
         dict.set_item("generator", &self.inner.generator)?;
@@ -85,6 +96,10 @@ impl PySceneMetadata {
         cap_dict.set_item(
             "has_dynamic_entities",
             self.inner.capabilities.has_dynamic_entities,
+        )?;
+        cap_dict.set_item(
+            "has_visual_entities",
+            self.inner.capabilities.has_visual_entities,
         )?;
         dict.set_item("capabilities", cap_dict)?;
         Ok(dict)

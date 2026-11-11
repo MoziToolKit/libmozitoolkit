@@ -177,6 +177,54 @@ pub fn validate_scene_package(pkg: &ScenePackageReader) -> Result<ValidationRepo
         }
     }
 
+    // 9. Check Visual Entities and Block Entities counts
+    if pkg.has_visual_entities() {
+        match pkg.read_entities() {
+            Ok(ents) => {
+                if ents.len() != pkg.metadata().visual_entities_count {
+                    report.errors.push(format!(
+                        "Visual entities count mismatch: metadata says {}, but chunk contains {}",
+                        pkg.metadata().visual_entities_count,
+                        ents.len()
+                    ));
+                }
+                if let Some(ref map) = maybe_atlas_map {
+                    for ent in &ents {
+                        for tex in ent.required_textures() {
+                            if map.resolve_texture_key(&tex).is_none() {
+                                report.warnings.push(format!(
+                                    "Visual entity '{}' ({}) references texture '{tex}' not found in mini-atlas",
+                                    ent.id,
+                                    ent.uuid.as_deref().unwrap_or("unnamed")
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                report
+                    .errors
+                    .push(format!("Corrupted entities/instances in package: {e}"));
+            }
+        }
+    } else if pkg.metadata().visual_entities_count > 0 {
+        report.errors.push(format!(
+            "Metadata declares visual_entities_count = {}, but package has no entities/instances chunk",
+            pkg.metadata().visual_entities_count
+        ));
+    }
+
+    if let Ok(voxels) = pkg.read_sparse_voxels() {
+        if voxels.entity_palette.len() != pkg.metadata().unique_entities_count {
+            report.errors.push(format!(
+                "Block entities count mismatch: metadata says {}, but sparse voxels palette contains {}",
+                pkg.metadata().unique_entities_count,
+                voxels.entity_palette.len()
+            ));
+        }
+    }
+
     report.is_valid = report.errors.is_empty();
     Ok(report)
 }

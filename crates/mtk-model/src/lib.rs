@@ -13,8 +13,11 @@ pub use baker::{
 };
 pub use builtin::BuiltinModelRegistry;
 pub use entity::{
-    banner, painting, skull, ArmorStandData, BlockEntityData, EntityBaker, EntityInstance,
-    EntityKindData, ItemFrameData, PaintingData,
+    banner, build_entity_render_plan, entity_render_key, painting, skull, ArmorStandData,
+    BlockEntityData, EntityBaker, EntityInstance, EntityKindData, EntityMaterialRoute,
+    EntityRenderConfig, EntityRenderNode, EntityRenderPlan, EntityRenderTransform,
+    EntityRenderWarning, EntityValidationError, ItemFrameData, PaintingData,
+    ENTITY_RENDER_SCHEMA_VERSION,
 };
 pub use error::ModelError;
 pub use parser::{

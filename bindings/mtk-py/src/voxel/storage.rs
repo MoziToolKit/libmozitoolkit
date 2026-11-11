@@ -152,6 +152,36 @@ impl PyVoxelStorage {
         }
     }
 
+    /// Explicit bounding box `(min_x, min_y, min_z, size_x, size_y, size_z)`, if configured.
+    #[getter]
+    pub fn bounds(&self) -> Option<[i32; 6]> {
+        self.inner.bounds()
+    }
+
+    /// Checks whether this storage carries any continuous visual entities.
+    pub fn has_visual_entities(&self) -> bool {
+        self.inner.has_visual_entities()
+    }
+
+    /// Returns the count of visual entities carried in this storage.
+    pub fn visual_entities_count(&self) -> usize {
+        self.inner.entities.len()
+    }
+
+    /// Returns visual entities carried in this storage as a discrete palette (list of compact JSON strings).
+    pub fn get_visual_entities_palette(&self) -> PyResult<Vec<String>> {
+        self.inner
+            .visual_entities_palette()
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    }
+
+    /// Replaces visual entities in this storage from a discrete palette (list of JSON strings).
+    pub fn set_visual_entities_palette(&mut self, palette: Vec<String>) -> PyResult<()> {
+        self.inner
+            .set_visual_entities_palette(&palette)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    }
+
     /// Computes the authoritative sparse state hash (xxHash64) for this storage.
     #[pyo3(signature = (min_pos=(0, 0, 0), size=(0, 0, 0), dimension="minecraft:overworld"))]
     pub fn compute_sparse_state_hash(

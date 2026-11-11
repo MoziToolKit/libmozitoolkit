@@ -1,29 +1,11 @@
 use glam::Vec3;
+pub use mtk_core::CoordinateSystem;
 use mtk_resource::CtmSolver;
 use mtk_texture::AtlasAddressMap;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use thiserror::Error;
-
-/// Coordinate space transformation mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum CoordinateSystem {
-    /// Canonical Minecraft coordinate system: +X East, +Y Up, +Z South.
-    #[default]
-    Minecraft,
-    /// Standard Z-up right-handed coordinate system: +X East, +Y North (-Z_mc), +Z Up (+Y_mc).
-    /// Used by Unreal Engine, Blender, 3ds Max, etc.
-    ZUpRightHanded,
-    /// Standard Y-up right-handed coordinate system: +X East, +Y Up (+Y_mc), +Z South (+Z_mc).
-    /// Matches the glTF / Godot / Three.js / WebGPU convention (+Z forward, camera looking down -Z).
-    ///
-    /// Note: Minecraft's native world space already satisfies this convention, so this variant is
-    /// numerically identical to [`CoordinateSystem::Minecraft`]. It exists to make the target
-    /// convention explicit at call sites. (Unity uses a left-handed Y-up space and needs an extra mirror.)
-    YUpRightHanded,
-}
 
 /// Strategy for handling unknown blocks (blocks without models or textures in model_db/atlas).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

@@ -122,6 +122,11 @@ pub fn export_scene_package<'py>(
         dynamic_entity_atlases: dynamic_entity_atlases.as_ref(),
         dynamic_entity_slots: dynamic_entity_slots.as_ref(),
         ctm_mode: resolved_ctm_mode,
+        entities: if point_cloud.inner.entities.is_empty() {
+            None
+        } else {
+            Some(&point_cloud.inner.entities)
+        },
     };
 
     let result = libmtk_export_scene(output_path, request)

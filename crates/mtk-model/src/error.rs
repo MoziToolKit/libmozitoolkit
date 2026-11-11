@@ -23,6 +23,9 @@ pub enum ModelError {
     #[error("Postcard serialization error: {0}")]
     Postcard(#[from] postcard::Error),
 
+    #[error("Entity validation error: {0}")]
+    EntityValidation(#[from] crate::entity::EntityValidationError),
+
     #[error("Compression error: {0}")]
     Compression(String),
 
