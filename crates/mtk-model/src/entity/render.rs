@@ -36,6 +36,8 @@ pub struct EntityRenderConfig {
     pub origin_centered: bool,
     /// Target coordinate system convention (defaults to Z-up right-handed for Blender/DCC).
     pub coordinate_system: CoordinateSystem,
+    /// Explicit keys or UUIDs of entities that should be deleted by the host (primarily used when authoritative is false).
+    pub deleted_keys: Vec<String>,
 }
 
 impl Default for EntityRenderConfig {
@@ -46,6 +48,7 @@ impl Default for EntityRenderConfig {
             bounds: None,
             origin_centered: true,
             coordinate_system: CoordinateSystem::ZUpRightHanded,
+            deleted_keys: Vec::new(),
         }
     }
 }
@@ -227,6 +230,9 @@ pub struct EntityRenderPlan {
     pub bounds: Option<[i32; 6]>,
     /// Desired entity nodes.
     pub nodes: Vec<EntityRenderNode>,
+    /// Explicit keys or UUIDs of entities to delete (used when authoritative is false for delta updates).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deleted_keys: Vec<String>,
     /// Non-fatal issues (unsupported/invalid entities, failed bakes).
     pub warnings: Vec<EntityRenderWarning>,
 }
@@ -327,6 +333,7 @@ impl EntityRenderPlan {
             authoritative: config.authoritative,
             bounds: config.bounds,
             nodes,
+            deleted_keys: config.deleted_keys,
             warnings,
         }
     }
@@ -472,6 +479,7 @@ mod tests {
             bounds: Some([0, 0, 0, 16, 16, 16]),
             origin_centered: true,
             coordinate_system: CoordinateSystem::ZUpRightHanded,
+            ..Default::default()
         };
         let plan = EntityRenderPlan::build(&entities, config, |_texture| {
             Some(([0.0, 0.0, 0.5, 0.5], 7, 9))
@@ -598,6 +606,50 @@ mod tests {
         let parsed: EntityRenderPlan =
             serde_json::from_str(&json).expect("deserialize render plan");
         assert_eq!(plan, parsed);
+        assert!(parsed.deleted_keys.is_empty());
+    }
+
+    #[test]
+    fn test_entity_render_plan_delta_with_deleted_keys() {
+        let entities = vec![painting(Some("uuid-survivor"), "kebab", 1, 1)];
+        let config = EntityRenderConfig {
+            revision: 42,
+            authoritative: false,
+            deleted_keys: vec!["uuid:dead-entity-1".to_string(), "synth:old:2".to_string()],
+            ..Default::default()
+        };
+
+        let plan = EntityRenderPlan::build(&entities, config, |_texture| {
+            Some(([0.0, 0.0, 0.5, 0.5], 1, 2))
+        });
+
+        assert_eq!(plan.revision, 42);
+        assert!(!plan.authoritative);
+        assert_eq!(plan.nodes.len(), 1);
+        assert_eq!(plan.deleted_keys.len(), 2);
+        assert_eq!(plan.deleted_keys[0], "uuid:dead-entity-1");
+
+        // Serialize and assert deleted_keys presence
+        let json = serde_json::to_string(&plan).expect("serialize delta render plan");
+        assert!(json.contains("deleted_keys"));
+        assert!(json.contains("uuid:dead-entity-1"));
+
+        let parsed: EntityRenderPlan =
+            serde_json::from_str(&json).expect("deserialize delta render plan");
+        assert_eq!(plan, parsed);
+
+        // Backward compatibility: JSON with no deleted_keys field defaults to empty vec
+        let legacy_json = r#"{
+            "schema_version": 1,
+            "revision": 1,
+            "authoritative": true,
+            "bounds": null,
+            "nodes": [],
+            "warnings": []
+        }"#;
+        let legacy_plan: EntityRenderPlan =
+            serde_json::from_str(legacy_json).expect("deserialize legacy plan");
+        assert!(legacy_plan.deleted_keys.is_empty());
     }
 
     #[test]

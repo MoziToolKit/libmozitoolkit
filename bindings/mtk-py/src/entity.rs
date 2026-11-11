@@ -203,6 +203,11 @@ impl PyEntityRenderPlan {
     }
 
     #[getter]
+    pub fn deleted_keys(&self) -> Vec<String> {
+        self.inner.deleted_keys.clone()
+    }
+
+    #[getter]
     pub fn bounds(&self) -> Option<[i32; 6]> {
         self.inner.bounds
     }
@@ -258,6 +263,7 @@ pub(crate) fn build_plan_from_entities_with_map(
     explicit_bounds: Option<[i32; 6]>,
     revision: u64,
     authoritative: bool,
+    deleted_keys: Option<Vec<String>>,
 ) -> PyResult<PyEntityRenderPlan> {
     let active_config = config.map(|c| c.inner.clone()).unwrap_or_default();
     let custom_aliases = active_config.custom_aliases.as_deref();
@@ -274,6 +280,7 @@ pub(crate) fn build_plan_from_entities_with_map(
         bounds: eff_bounds,
         origin_centered: active_config.origin_centered,
         coordinate_system: active_config.coordinate_system,
+        deleted_keys: deleted_keys.unwrap_or_default(),
     };
 
     let plan = mtk_model::build_entity_render_plan(entities, render_config, |tex| {
@@ -298,6 +305,7 @@ pub(crate) fn build_plan_from_entities(
     explicit_bounds: Option<[i32; 6]>,
     revision: u64,
     authoritative: bool,
+    deleted_keys: Option<Vec<String>>,
 ) -> PyResult<PyEntityRenderPlan> {
     let active_config = config.map(|c| c.inner.clone()).unwrap_or_default();
 
@@ -324,13 +332,14 @@ pub(crate) fn build_plan_from_entities(
         explicit_bounds,
         revision,
         authoritative,
+        deleted_keys,
     )
 }
 
 /// Bakes and compiles a batch of visual entities into a unified `EntityRenderPlan`.
 #[pyfunction]
 #[pyo3(signature = (
-    entities,
+    entities=None,
     atlas=None,
     config=None,
     atlas_mapping_json=None,
@@ -338,10 +347,11 @@ pub(crate) fn build_plan_from_entities(
     origin_centered=None,
     coordinate_system=None,
     revision=0,
-    authoritative=true
+    authoritative=true,
+    deleted_keys=None
 ))]
 pub fn build_entity_render_plan(
-    entities: &Bound<'_, PyAny>,
+    entities: Option<&Bound<'_, PyAny>>,
     atlas: Option<&PyBakedAtlas>,
     config: Option<&PyMesherConfig>,
     atlas_mapping_json: Option<&str>,
@@ -350,51 +360,59 @@ pub fn build_entity_render_plan(
     coordinate_system: Option<&str>,
     revision: u64,
     authoritative: bool,
+    deleted_keys: Option<Vec<String>>,
 ) -> PyResult<PyEntityRenderPlan> {
     let mut parsed_entities: Vec<mtk_model::EntityInstance> = Vec::new();
     let mut parse_warnings: Vec<mtk_model::EntityRenderWarning> = Vec::new();
-    let py = entities.py();
 
-    if let Ok(list) = entities.cast::<PyList>() {
-        for (idx, item) in list.iter().enumerate() {
-            if let Ok(s) = item.extract::<String>() {
-                match serde_json::from_str::<mtk_model::EntityInstance>(&s) {
-                    Ok(ent) => parsed_entities.push(ent),
-                    Err(e) => {
-                        parse_warnings.push(mtk_model::EntityRenderWarning {
-                            key: format!("invalid_entity_{idx}"),
-                            code: "invalid_entity".to_string(),
-                            message: format!("Invalid entity JSON: {e}"),
-                        });
+    if let Some(ent_val) = entities {
+        if !ent_val.is_none() {
+            let py = ent_val.py();
+            if let Ok(list) = ent_val.cast::<PyList>() {
+                for (idx, item) in list.iter().enumerate() {
+                    if let Ok(s) = item.extract::<String>() {
+                        match serde_json::from_str::<mtk_model::EntityInstance>(&s) {
+                            Ok(ent) => parsed_entities.push(ent),
+                            Err(e) => {
+                                parse_warnings.push(mtk_model::EntityRenderWarning {
+                                    key: format!("invalid_entity_{idx}"),
+                                    code: "invalid_entity".to_string(),
+                                    message: format!("Invalid entity JSON: {e}"),
+                                });
+                            }
+                        }
+                    } else if let Ok(dict) = item.cast::<PyDict>() {
+                        let json_mod = py.import("json")?;
+                        let json_str: String =
+                            json_mod.call_method1("dumps", (dict,))?.extract()?;
+                        match serde_json::from_str::<mtk_model::EntityInstance>(&json_str) {
+                            Ok(ent) => parsed_entities.push(ent),
+                            Err(e) => {
+                                parse_warnings.push(mtk_model::EntityRenderWarning {
+                                    key: format!("invalid_entity_{idx}"),
+                                    code: "invalid_entity".to_string(),
+                                    message: format!("Invalid entity dict: {e}"),
+                                });
+                            }
+                        }
+                    } else {
+                        return Err(pyo3::exceptions::PyTypeError::new_err(
+                            "entities list items must be JSON strings or dicts",
+                        ));
                     }
                 }
-            } else if let Ok(dict) = item.cast::<PyDict>() {
-                let json_mod = py.import("json")?;
-                let json_str: String = json_mod.call_method1("dumps", (dict,))?.extract()?;
-                match serde_json::from_str::<mtk_model::EntityInstance>(&json_str) {
-                    Ok(ent) => parsed_entities.push(ent),
-                    Err(e) => {
-                        parse_warnings.push(mtk_model::EntityRenderWarning {
-                            key: format!("invalid_entity_{idx}"),
-                            code: "invalid_entity".to_string(),
-                            message: format!("Invalid entity dict: {e}"),
-                        });
-                    }
-                }
+            } else if let Ok(s) = ent_val.extract::<String>() {
+                parsed_entities = serde_json::from_str(&s).map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "Invalid entity JSON array: {e}"
+                    ))
+                })?;
             } else {
                 return Err(pyo3::exceptions::PyTypeError::new_err(
-                    "entities list items must be JSON strings or dicts",
+                    "entities must be a list of JSON strings/dicts or a JSON array string",
                 ));
             }
         }
-    } else if let Ok(s) = entities.extract::<String>() {
-        parsed_entities = serde_json::from_str(&s).map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("Invalid entity JSON array: {e}"))
-        })?;
-    } else {
-        return Err(pyo3::exceptions::PyTypeError::new_err(
-            "entities must be a list of JSON strings/dicts or a JSON array string",
-        ));
     }
 
     let mut active_config = config.map(|c| c.inner.clone()).unwrap_or_default();
@@ -427,6 +445,7 @@ pub fn build_entity_render_plan(
         bounds,
         revision,
         authoritative,
+        deleted_keys,
     )?;
     plan.inner.warnings.extend(parse_warnings);
     Ok(plan)
@@ -473,6 +492,7 @@ pub fn host_transform_to_mc(
         bounds,
         origin_centered,
         coordinate_system: cs,
+        ..Default::default()
     };
 
     let (pos, rot, s) = mtk_model::host_transform_to_mc(

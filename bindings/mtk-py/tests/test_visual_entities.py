@@ -324,3 +324,50 @@ def test_mesher_config_coordinate_system_options():
     with pytest.raises(ValueError):
         libmtk_py.MesherConfig(coordinate_system="invalid_sys")
 
+
+def test_build_entity_render_plan_delta_and_deleted_keys():
+    entities = [
+        {
+            "id": "minecraft:painting",
+            "uuid": "survivor-1111",
+            "position": [10.5, 64.0, -20.5],
+            "facing": "south",
+            "rotation": [0.0, 3.14159265, 0.0],
+            "kind": {"type": "minecraft:painting", "variant": "kebab", "width": 1, "height": 1},
+        }
+    ]
+
+    # 1. Delta plan with 1 node and 2 deleted keys
+    plan = libmtk_py.build_entity_render_plan(
+        entities,
+        deleted_keys=["uuid:dead-1", "uuid:dead-2"],
+        authoritative=False,
+        revision=101,
+    )
+    assert plan.authoritative is False
+    assert plan.revision == 101
+    assert plan.node_count == 1
+    assert plan.deleted_keys == ["uuid:dead-1", "uuid:dead-2"]
+
+    # 2. Deletion-only delta plan with entities=None
+    plan_del_none = libmtk_py.build_entity_render_plan(
+        None,
+        deleted_keys=["uuid:dead-1"],
+        authoritative=False,
+        revision=102,
+    )
+    assert plan_del_none.authoritative is False
+    assert plan_del_none.node_count == 0
+    assert plan_del_none.deleted_keys == ["uuid:dead-1"]
+
+    # 3. Deletion-only delta plan with entities=[]
+    plan_del_empty = libmtk_py.build_entity_render_plan(
+        [],
+        deleted_keys=["uuid:dead-3"],
+        authoritative=False,
+    )
+    assert plan_del_empty.authoritative is False
+    assert plan_del_empty.node_count == 0
+    assert plan_del_empty.deleted_keys == ["uuid:dead-3"]
+
+

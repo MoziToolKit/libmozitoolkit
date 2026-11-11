@@ -142,10 +142,10 @@ Python 模块名：`libmtk_py`
 - **连续视觉实体格式**：通用连续视觉实体（涵盖 Painting、ItemFrame 以及未来 Mob、Display 等）在 Python 层统一以规范 JSON 字典 / 字符串或紧凑离散调色板传递：
   - 规范字段：`id`, `uuid`, `custom_name`, `kind`, `position`, `rotation`（权威 Euler XYZ 弧度，局部模型空间，yaw 0 = North / 朝向 -Z）, `scale`, `facing`（只作为元数据供参考，宿主严禁重复旋转）
   - 点云 / 存储通过 `get_visual_entities_palette()`, `set_visual_entities_palette(palette)` 访问。
-- **`build_entity_render_plan(entities, atlas=None, config=None, atlas_mapping_json=None, bounds=None, origin_centered=True, coordinate_system="z_up", revision=0, authoritative=True) -> EntityRenderPlan`**：批量编译视觉实体渲染计划，一次性完成实体验证、确定性唯一键分配、局部空间网格烘焙、图集槽位分配以及宿主空间几何变换计算（$O(1)$ 跨语言 FFI 通信）。
+- **`build_entity_render_plan(entities=None, atlas=None, config=None, atlas_mapping_json=None, bounds=None, origin_centered=True, coordinate_system="z_up", revision=0, authoritative=True, deleted_keys=None) -> EntityRenderPlan`**：批量编译视觉实体渲染计划，一次性完成实体验证、确定性唯一键分配、局部空间网格烘焙、图集槽位分配以及宿主空间几何变换计算（$O(1)$ 跨语言 FFI 通信）。支持传入 `deleted_keys` 配合 `authoritative=False` 构造增量局部重构计划。
 - **`host_transform_to_mc(location, rotation_euler, scale, bounds=None, origin_centered=True, coordinate_system="z_up") -> (pos, rot, scale)`**：反向逆变换算子，将宿主视口刚体变换还原为规范 Minecraft 世界坐标 `((pos_x, pos_y, pos_z), (pitch, yaw, roll), (sx, sy, sz))`，实现视口提取时的前后端单一事实源（SSOT）。
 - **`EntityRenderPlan`**：纯数据契约 DTO。
-  - 属性：`schema_version`, `revision`, `authoritative`, `bounds`, `node_count`, `nodes`, `warnings`
+  - 属性：`schema_version`, `revision`, `authoritative`, `bounds`, `node_count`, `nodes`, `deleted_keys`, `warnings`
   - 方法：`to_json() -> str`
 - **`EntityRenderNode`**：单一实体渲染节点。
   - 属性：`key` (稳定唯一键), `display_name` (规范命名), `location` ((x, y, z)), `rotation_euler` ((pitch, yaw, roll)), `scale` ((sx, sy, sz)), `matrix` ([f32; 16]), `mesh` (局部空间 `PyMeshData`), `material_routes` (材质槽位列表), `metadata` (元数据字典), `entity_json` (原始实体 JSON 描述)。

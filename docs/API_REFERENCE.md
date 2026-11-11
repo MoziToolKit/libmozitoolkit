@@ -243,13 +243,13 @@ cache_output_dir/
 为解决画作、展示框、盔甲架等视觉实体的全链路 SSOT 治理与极速渲染装配，系统采用单一规范的渲染计划架构：
 - **核心原则与职责划分**：
   - 核心（Rust）全权负责实体的规范命名、唯一稳定键生成（`uuid:...` 或 `synth:...`）、局部几何烘焙、UV/材质槽位路由、以及空间变换求解（坐标系变换、归零平移与欧拉角矩阵共轭计算）；
-  - 宿主（DCC）作为纯声明式场景协调器（Reconciler），根据 `EntityRenderPlan` 返回的不可变节点列表执行 $O(N)$ 状态比对与就地装配，直接赋值 `obj.location`、`obj.rotation_euler` 与 `obj.scale`，彻底避免跨语言频繁交互与前端繁重矩阵解算。
+  - 宿主（DCC）作为纯声明式场景协调器（Reconciler），根据 `EntityRenderPlan` 返回的不可变节点列表执行 $O(K)$ 状态比对与就地装配，直接赋值 `obj.location`、`obj.rotation_euler` 与 `obj.scale`，彻底避免跨语言频繁交互与前端繁重矩阵解算。
 - **核心数据结构**：
   - `EntityRenderTransform`：不可变空间变换 DTO，提供 `location: (f32, f32, f32)`、`rotation_euler: (f32, f32, f32)`、`scale: (f32, f32, f32)` 以及 `matrix: List[float]`（4x4 列主序变换矩阵）。
   - `EntityRenderNode`：单个实体渲染节点，提供 `key: str`、`display_name: str`、`transform: EntityRenderTransform`、`mesh: MeshData` 以及 `material_routes: List[dict]`（包含 `texture_key` 与 `material_slot`）。
-  - `EntityRenderPlan`：完整渲染计划，包含 `nodes: List[EntityRenderNode]`、`node_count: int`、`warnings: List[dict]`、`revision: int` 与 `authoritative: bool`。
+  - `EntityRenderPlan`：完整渲染计划，包含 `nodes: List[EntityRenderNode]`、`node_count: int`、`deleted_keys: List[str]`、`warnings: List[dict]`、`revision: int` 与 `authoritative: bool`。
 - **规范入口**：
-  - `libmtk_py.build_entity_render_plan(entities, atlas_mapping_json=None, bounds=None, origin_centered=True, coordinate_system="z_up", revision=0, authoritative=True)`：顶层通用构建算子。
+  - `libmtk_py.build_entity_render_plan(entities=None, atlas_mapping_json=None, bounds=None, origin_centered=True, coordinate_system="z_up", revision=0, authoritative=True, deleted_keys=None)`：顶层通用构建算子，支持全量对账与局部增量重构。
   - `libmtk_py.host_transform_to_mc(location, rotation_euler, scale, bounds=None, origin_centered=True, coordinate_system="z_up")`：反向逆变换算子，将宿主刚体变换还原为规范 Minecraft 空间参数。
 
 
