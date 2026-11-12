@@ -7,19 +7,20 @@ mod constants;
 mod error;
 mod hasher;
 mod packet;
+mod quart;
 
-#[cfg(test)]
-pub(crate) use codec::compute_delta_batch_hash;
-pub use codec::{decode_packet, encode_packet};
+pub use codec::compute_delta_batch_hash;
+pub use codec::{
+    choose_bits_per_item, decode_packet, encode_packet, pack_lsb_indices, unpack_lsb_indices,
+};
 pub(crate) use constants::*;
 pub use constants::{
-    Opcode, SyncDecision, DELTA_VISUAL_ACTION_REMOVE, DELTA_VISUAL_ACTION_UPSERT, PROTOCOL_MAGIC,
-    PROTOCOL_VERSION,
+    BaselineAckResult, CancelReason, ErrorCode, Opcode, ResyncReason, SyncDecision,
+    DELTA_VISUAL_ACTION_REMOVE, DELTA_VISUAL_ACTION_UPSERT, MAX_DELTA_BATCH_CHANGES,
+    MAX_SELECTION_VOLUME, PROTOCOL_MAGIC, PROTOCOL_VERSION,
 };
-#[cfg(test)]
-pub(crate) use error::ProtocolError;
-#[cfg(test)]
-pub(crate) use hasher::SparseBlockEntry;
+pub use error::ProtocolError;
+pub use hasher::SparseBlockEntry;
 pub use hasher::{
     compute_sparse_state_hash, compute_sparse_state_hash_for_point_cloud,
     compute_sparse_state_hash_for_storage, compute_visual_entities_hash,
@@ -28,3 +29,4 @@ pub(crate) use hasher::{
     direction_to_facing_byte, facing_byte_to_direction, format_uuid, parse_uuid_bits,
 };
 pub use packet::{DeltaChangeEntry, Packet, VisualEntityDelta};
+pub use quart::QuartGrid;

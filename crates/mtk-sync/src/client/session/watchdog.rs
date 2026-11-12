@@ -4,8 +4,8 @@ use crossbeam_channel::Sender;
 
 use super::state::{SessionState, SyncLifecycle};
 use crate::client::ClientCommand;
-use crate::events::SyncEvent;
 use crate::protocol::{encode_packet, Packet, ResyncReason};
+use crate::SyncEvent;
 
 /// Sends a `RESYNC_REQUEST` at most once per second, preventing livelock storms
 /// when a corrupt or stale baseline keeps arriving.

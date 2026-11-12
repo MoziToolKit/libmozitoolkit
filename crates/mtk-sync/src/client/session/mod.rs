@@ -14,9 +14,10 @@ use mtk_model::BakedModelDatabase;
 use mtk_voxel::{MesherConfig, VoxelStorage, VoxelWorld};
 
 use crate::client::{ClientCommand, SyncClient};
-use crate::events::SyncEvent;
+use crate::SyncEvent;
 
-mod assembler;
+pub mod assembler;
+pub use assembler::BaselineAssembler;
 mod connection;
 mod dispatcher;
 mod handlers_baseline;
@@ -30,11 +31,8 @@ mod watchdog;
 #[cfg(test)]
 mod tests;
 
-#[cfg(test)]
-pub(crate) use assembler::BaselineAssembler;
-#[cfg(test)]
-pub(crate) use dispatcher::check_debounced_remesh;
-pub(crate) use state::SessionState;
+pub use dispatcher::check_debounced_remesh;
+pub use state::SessionState;
 pub use state::SyncLifecycle;
 
 /// High-level Live Sync Session managing WebSocket streaming, VoxelWorld scene synchronization, and event queues.
@@ -99,7 +97,7 @@ impl LiveSyncSession {
     pub fn subscribed_entities(&self) -> Vec<String> {
         self.subscribed_entities
             .clone()
-            .unwrap_or_else(crate::session::hello::default_subscribed_visual_entities)
+            .unwrap_or_else(hello::default_subscribed_visual_entities)
     }
 
     /// Sets the shared secret attached to every HELLO handshake (RFC v3.1 §4.1).

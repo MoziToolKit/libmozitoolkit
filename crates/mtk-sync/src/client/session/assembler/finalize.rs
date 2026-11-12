@@ -8,7 +8,7 @@ use crate::protocol::*;
 
 impl BaselineAssembler {
     /// Validates BASELINE_END, reconstructs VoxelStorage, and verifies state_hash SSOT.
-    pub(crate) fn finalize(&self, end_pkt: &Packet) -> Result<VoxelStorage, ResyncReason> {
+    pub fn finalize(&self, end_pkt: &Packet) -> Result<VoxelStorage, ResyncReason> {
         let (epoch, snapshot_uuid, snapshot_seq, total_chunks_sent, final_state_hash, status) =
             match end_pkt {
                 Packet::BaselineEnd {

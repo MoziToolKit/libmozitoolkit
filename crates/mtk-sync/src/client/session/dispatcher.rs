@@ -14,8 +14,8 @@ use mtk_voxel::VoxelWorld;
 use super::state::{SessionState, SyncLifecycle};
 use super::watchdog::{check_baseline_watchdog, send_resync_request};
 use crate::client::{ClientCommand, ClientMessage};
-use crate::events::SyncEvent;
 use crate::protocol::*;
+use crate::SyncEvent;
 
 /// Acquires the session state mutex, transparently recovering from a poisoned lock
 /// (a single malformed packet must never permanently wedge the session).
@@ -246,7 +246,8 @@ fn dispatch_single_client_message(
 }
 
 /// Checks and performs debounced incremental dirty remeshing.
-pub(crate) fn check_debounced_remesh(
+#[doc(hidden)]
+pub fn check_debounced_remesh(
     state: &mut SessionState,
     world: &Arc<RwLock<VoxelWorld>>,
     event_sender: &Sender<SyncEvent>,

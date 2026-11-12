@@ -16,6 +16,7 @@ members = [
     "crates/mtk-cli",
     "crates/mtk-testkit",
     "bindings/mtk-py",
+    "bindings/mtk-jni",
     "bindings/mtk-wasm",
     "adapters/mtk-host-memory",
     "adapters/blender/mtk-blender-dna",
@@ -43,6 +44,7 @@ rayon = { version = "1.12.0", default-features = false }
 zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 pyo3 = { version = "0.30.1", default-features = false, features = ["macros"] }
+jni = { version = "0.21", default-features = false }
 wasm-bindgen = "0.2.129"
 js-sys = "0.3.106"
 console_error_panic_hook = { version = "0.1.7", default-features = false }

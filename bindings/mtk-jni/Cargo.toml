@@ -1,0 +1,25 @@
+[package]
+name = "mtk-jni"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "High-performance Java Native Interface (JNI) bindings for libmtk (Live Sync server encoder, state hash SSOT)."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+mtk-sync = { workspace = true }
+jni = { workspace = true }
+glam = { workspace = true }
+
+[features]
+default = ["sync-server"]
+sync-server = []
+sync-client = []
+
+[lints]
+workspace = true

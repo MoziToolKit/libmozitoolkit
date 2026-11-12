@@ -1,5 +1,5 @@
-use crate::protocol::*;
 use glam::IVec3;
+use mtk_sync::protocol::*;
 
 #[test]
 fn test_hello_and_welcome_codec_roundtrip() {
@@ -428,7 +428,7 @@ fn test_visual_entities_codec_roundtrip() {
     );
 
     let entities = vec![painting.clone(), item_frame.clone()];
-    let entities_hash = crate::protocol::compute_visual_entities_hash(&entities);
+    let entities_hash = mtk_sync::protocol::compute_visual_entities_hash(&entities);
     assert_ne!(entities_hash, 0);
 
     // 1. BaselineVisualEntities Roundtrip
@@ -467,7 +467,7 @@ fn test_visual_entities_codec_roundtrip() {
     if let Packet::DeltaVisualEntity { delta, .. } = &delta_remove {
         assert_eq!(
             delta.action_byte(),
-            crate::protocol::DELTA_VISUAL_ACTION_REMOVE
+            mtk_sync::protocol::DELTA_VISUAL_ACTION_REMOVE
         );
     }
 }

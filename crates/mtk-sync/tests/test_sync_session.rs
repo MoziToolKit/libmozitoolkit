@@ -1,6 +1,6 @@
-use crate::protocol::*;
-use crate::*;
 use glam::IVec3;
+use mtk_sync::protocol::*;
+use mtk_sync::*;
 use mtk_voxel::MesherConfig;
 use std::io::Write;
 
@@ -509,7 +509,7 @@ fn test_baseline_and_delta_visual_entity_integration() {
     );
 
     let initial_entities = vec![painting.clone(), item_frame.clone()];
-    let entities_hash = crate::protocol::compute_visual_entities_hash(&initial_entities);
+    let entities_hash = mtk_sync::protocol::compute_visual_entities_hash(&initial_entities);
 
     // 1. Welcome
     session.process_packet_direct(Packet::Welcome {

@@ -11,8 +11,8 @@ use super::dispatcher::lock_world_write;
 use super::state::{SessionState, SyncLifecycle};
 use super::watchdog::{abort_baseline, send_resync_request};
 use crate::client::ClientCommand;
-use crate::events::SyncEvent;
 use crate::protocol::{DeltaChangeEntry, Packet, ResyncReason};
+use crate::SyncEvent;
 
 pub(crate) fn handle_delta_blocks(
     packet: Packet,

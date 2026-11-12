@@ -12,10 +12,10 @@ use super::handlers_delta::apply_delta_entries_to_world;
 use super::state::{SessionState, SyncLifecycle};
 use super::watchdog::{abort_baseline, send_resync_request};
 use crate::client::ClientCommand;
-use crate::events::SyncEvent;
 use crate::protocol::{
     encode_packet, BaselineAckResult, Packet, ResyncReason, MAX_SELECTION_VOLUME,
 };
+use crate::SyncEvent;
 
 pub(crate) fn handle_baseline_begin(
     packet: &Packet,

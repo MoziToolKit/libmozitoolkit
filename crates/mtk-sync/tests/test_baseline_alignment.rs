@@ -1,10 +1,9 @@
 //! Regression tests for baseline assembly alignment, sequence handling and
 //! state-hash validation robustness.
 
-use crate::protocol::*;
-use crate::session::BaselineAssembler;
-use crate::{LiveSyncSession, SyncLifecycle};
 use glam::IVec3;
+use mtk_sync::protocol::*;
+use mtk_sync::{BaselineAssembler, LiveSyncSession, SyncLifecycle};
 
 /// Builds a single-chunk baseline payload for `size` voxels plus optional biome indices.
 fn build_chunk(voxel_indices: &[u8], biome_indices: &[u8]) -> (Vec<u8>, u64) {

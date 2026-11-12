@@ -2,8 +2,8 @@ use crossbeam_channel::Sender;
 
 use super::state::{SessionState, SyncLifecycle};
 use crate::client::ClientCommand;
-use crate::events::SyncEvent;
 use crate::protocol::{encode_packet, CancelReason, Packet, SyncDecision};
+use crate::SyncEvent;
 
 pub(crate) fn handle_welcome(
     server_uuid: [u8; 16],

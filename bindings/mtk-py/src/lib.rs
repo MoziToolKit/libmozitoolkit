@@ -98,6 +98,9 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // 4. Live Sync & Protocol
     m.add_class::<PyLiveSyncSession>()?;
+    m.add_function(wrap_pyfunction!(sync::encode_baseline_from_storage, m)?)?;
+    m.add_function(wrap_pyfunction!(sync::decide_handshake, m)?)?;
+    m.add_function(wrap_pyfunction!(sync::encode_delta_op_batch, m)?)?;
 
     // 5. Resource Pack & Textures
     m.add_class::<PyResourcePackStack>()?;

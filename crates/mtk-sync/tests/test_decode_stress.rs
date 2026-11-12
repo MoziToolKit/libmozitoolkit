@@ -1,5 +1,5 @@
-use crate::protocol::*;
 use glam::IVec3;
+use mtk_sync::protocol::*;
 
 #[test]
 fn test_all_packets_truncated_payload_safety() {

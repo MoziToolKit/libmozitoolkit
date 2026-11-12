@@ -13,8 +13,8 @@ pub(crate) const HEADER_SIZE: usize = 4;
 /// Resource limit guards (RFC Section 2.2).
 pub(crate) const MAX_PALETTE_ENTRIES: usize = 65535;
 pub(crate) const MAX_BASELINE_DECODED_BYTES: usize = 256 * 1024 * 1024; // 256 MiB
-pub(crate) const MAX_SELECTION_VOLUME: u64 = 33_554_432; // 32M voxels
-pub(crate) const MAX_DELTA_BATCH_CHANGES: usize = 16384;
+pub const MAX_SELECTION_VOLUME: u64 = 33_554_432; // 32M voxels
+pub const MAX_DELTA_BATCH_CHANGES: usize = 16384;
 pub(crate) const MAX_DELTA_STAGING_BATCHES: usize = 256;
 pub(crate) const MAX_VISUAL_ENTITIES: usize = 1_000_000;
 

@@ -2,32 +2,35 @@
 //! # mtk-sync
 //!
 //! **mtk-sync** provides native WebSocket Live Sync client implementations,
-//! binary network protocol codecs, and session lifecycle controllers for libmtk (RFC v3.1).
+//! authoritative baseline/delta stream encoders, binary network protocol codecs,
+//! and session lifecycle controllers for libmtk (RFC v3.1 / v3.2).
 //!
-//! It connects directly to Minecraft streaming servers, deserializes block delta changes,
-//! and synchronizes chunk data into `mtk-voxel` storage containers with DNA zero-copy handoff.
+//! It connects directly to Minecraft streaming servers or acts as an authoritative
+//! stream transmitter, deserializes and serializes block delta changes,
+//! and synchronizes chunk data into `mtk-voxel` storage containers with zero-copy handoff.
 
-mod client;
-mod events;
-mod protocol;
-mod session;
+pub mod client;
+pub mod protocol;
+pub mod server;
 
-#[cfg(test)]
-mod test_baseline_alignment;
-#[cfg(test)]
-mod test_decode_stress;
-#[cfg(test)]
-mod test_delta_seam_welding;
-#[cfg(test)]
-mod test_protocol;
-#[cfg(test)]
-mod test_sync_session;
+#[doc(hidden)]
+pub mod unstable {
+    pub mod testing {
+        pub use crate::client::session::{check_debounced_remesh, SessionState};
+    }
+}
 
-pub use events::{normalize_stream_progress, SyncEvent};
+pub use client::{
+    normalize_stream_progress, BaselineAssembler, LiveSyncSession, SyncEvent, SyncLifecycle,
+};
 pub use protocol::{
     compute_sparse_state_hash, compute_sparse_state_hash_for_point_cloud,
     compute_sparse_state_hash_for_storage, compute_visual_entities_hash, decode_packet,
-    encode_packet, DeltaChangeEntry, Opcode, Packet, SyncDecision, VisualEntityDelta,
-    DELTA_VISUAL_ACTION_REMOVE, DELTA_VISUAL_ACTION_UPSERT, PROTOCOL_MAGIC, PROTOCOL_VERSION,
+    encode_packet, DeltaChangeEntry, Opcode, Packet, QuartGrid, SparseBlockEntry, SyncDecision,
+    VisualEntityDelta, DELTA_VISUAL_ACTION_REMOVE, DELTA_VISUAL_ACTION_UPSERT, PROTOCOL_MAGIC,
+    PROTOCOL_VERSION,
 };
-pub use session::{LiveSyncSession, SyncLifecycle};
+pub use server::{
+    decide_handshake, encode_baseline_from_raw, encode_baseline_from_storage, encode_delta_op,
+    BaselineEncoderConfig, BaselineStream, HandshakeContext, HandshakeResult,
+};

@@ -411,3 +411,156 @@ fn hex_nibble(byte: u8) -> Option<u8> {
         _ => None,
     }
 }
+
+/// Encodes an existing VoxelStorage into a progressive RFC v3.1 baseline packet stream.
+/// Returns a tuple `(packets_bytes_list, state_hash, total_chunks)`.
+#[pyfunction]
+#[pyo3(signature = (
+    storage,
+    min_pos,
+    size,
+    dimension="minecraft:overworld",
+    epoch=1,
+    snapshot_uuid=None,
+    snapshot_seq=1,
+    palette_revision=1,
+    max_chunk_size=262144,
+    compression_mode=1,
+    compression_level=3
+))]
+pub fn encode_baseline_from_storage<'py>(
+    py: Python<'py>,
+    storage: &PyVoxelStorage,
+    min_pos: (i32, i32, i32),
+    size: (i32, i32, i32),
+    dimension: &str,
+    epoch: u64,
+    snapshot_uuid: Option<&[u8]>,
+    snapshot_seq: u64,
+    palette_revision: u32,
+    max_chunk_size: usize,
+    compression_mode: u8,
+    compression_level: i32,
+) -> PyResult<(Bound<'py, PyList>, u64, u32)> {
+    let mut uuid_arr = [0u8; 16];
+    if let Some(raw_uuid) = snapshot_uuid {
+        if raw_uuid.len() >= 16 {
+            uuid_arr.copy_from_slice(&raw_uuid[..16]);
+        }
+    }
+
+    let config = mtk_sync::BaselineEncoderConfig {
+        max_chunk_size,
+        compression_mode,
+        compression_level,
+        epoch,
+        snapshot_uuid: uuid_arr,
+        snapshot_seq,
+        palette_revision,
+    };
+
+    let stream = mtk_sync::encode_baseline_from_storage(
+        &storage.inner,
+        glam::IVec3::new(min_pos.0, min_pos.1, min_pos.2),
+        glam::IVec3::new(size.0, size.1, size.2),
+        dimension,
+        &[],
+        &config,
+    )
+    .map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("Baseline encode failed: {}", e))
+    })?;
+
+    let py_list = PyList::empty(py);
+    for pkt in &stream.packets {
+        let wire_bytes = mtk_sync::encode_packet(pkt);
+        py_list.append(PyBytes::new(py, &wire_bytes))?;
+    }
+
+    Ok((py_list, stream.state_hash, stream.total_chunks))
+}
+
+/// Evaluates a client HELLO frame against the server context and produces an RFC WELCOME frame.
+/// Returns a tuple `(welcome_packet_bytes, decision_code)`.
+#[pyfunction]
+#[pyo3(signature = (
+    hello_bytes,
+    server_uuid,
+    epoch,
+    sequence,
+    min_pos,
+    size,
+    state_hash,
+    dimension="minecraft:overworld",
+    expected_auth_token=None
+))]
+pub fn decide_handshake<'py>(
+    py: Python<'py>,
+    hello_bytes: &[u8],
+    server_uuid: &[u8],
+    epoch: u64,
+    sequence: u64,
+    min_pos: (i32, i32, i32),
+    size: (i32, i32, i32),
+    state_hash: u64,
+    dimension: &str,
+    expected_auth_token: Option<&str>,
+) -> PyResult<(Bound<'py, PyBytes>, u8)> {
+    let hello_packet = mtk_sync::decode_packet(hello_bytes).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("Invalid HELLO frame: {}", e))
+    })?;
+
+    let mut uuid_arr = [0u8; 16];
+    if server_uuid.len() >= 16 {
+        uuid_arr.copy_from_slice(&server_uuid[..16]);
+    }
+
+    let ctx = mtk_sync::HandshakeContext {
+        server_uuid: uuid_arr,
+        epoch,
+        sequence,
+        min_pos: glam::IVec3::new(min_pos.0, min_pos.1, min_pos.2),
+        size: glam::IVec3::new(size.0, size.1, size.2),
+        state_hash,
+        dimension: dimension.to_string(),
+        expected_auth_token: expected_auth_token.map(|s| s.to_string()),
+    };
+
+    let result = mtk_sync::decide_handshake(&hello_packet, &ctx).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("Handshake decision failed: {}", e))
+    })?;
+
+    let welcome_bytes = mtk_sync::encode_packet(&result.welcome_packet);
+    let decision_code = result.decision as u8;
+
+    Ok((PyBytes::new(py, &welcome_bytes), decision_code))
+}
+
+/// Encodes a list of atomic delta changes into RFC DELTA_OP packet byte frames.
+#[pyfunction]
+#[pyo3(signature = (epoch, seq_id, palette_revision, changes))]
+pub fn encode_delta_op_batch<'py>(
+    py: Python<'py>,
+    epoch: u64,
+    seq_id: u64,
+    palette_revision: u32,
+    changes: Vec<((i32, i32, i32), u16)>,
+) -> PyResult<Bound<'py, PyList>> {
+    let delta_entries: Vec<mtk_sync::DeltaChangeEntry> = changes
+        .into_iter()
+        .map(|((x, y, z), state_id)| mtk_sync::DeltaChangeEntry {
+            rel_pos: glam::IVec3::new(x, y, z),
+            state_id,
+        })
+        .collect();
+
+    let packets = mtk_sync::encode_delta_op(epoch, seq_id, palette_revision, delta_entries);
+
+    let py_list = PyList::empty(py);
+    for pkt in &packets {
+        let wire_bytes = mtk_sync::encode_packet(pkt);
+        py_list.append(PyBytes::new(py, &wire_bytes))?;
+    }
+
+    Ok(py_list)
+}

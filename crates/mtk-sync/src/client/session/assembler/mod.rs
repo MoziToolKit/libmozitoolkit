@@ -4,7 +4,6 @@
 //! verifies chunk xxHash64, decompresses Zstd payloads, and validates the canonical state_hash SSOT.
 
 pub(crate) mod finalize;
-pub(crate) mod unpack;
 
 use std::collections::HashMap;
 use std::io::Read;
@@ -12,36 +11,35 @@ use std::io::Read;
 use glam::IVec3;
 
 use crate::protocol::*;
-use unpack::unpack_lsb_indices;
 
 /// Baseline assembly state machine.
-pub(crate) struct BaselineAssembler {
-    pub(crate) epoch: u64,
-    pub(crate) snapshot_uuid: [u8; 16],
-    pub(crate) snapshot_seq: u64,
-    pub(crate) min_pos: IVec3,
-    pub(crate) size: IVec3,
-    pub(crate) total_voxels: usize,
-    pub(crate) total_chunks: u32,
-    pub(crate) compression_mode: u8,
-    pub(crate) palette_bits_per_block: u8,
-    pub(crate) biome_bits_per_quart: u8,
-    pub(crate) dimension: String,
-    pub(crate) block_palette: Vec<String>,
-    pub(crate) biome_palette: Vec<String>,
+pub struct BaselineAssembler {
+    pub epoch: u64,
+    pub snapshot_uuid: [u8; 16],
+    pub snapshot_seq: u64,
+    pub min_pos: IVec3,
+    pub size: IVec3,
+    pub total_voxels: usize,
+    pub total_chunks: u32,
+    pub compression_mode: u8,
+    pub palette_bits_per_block: u8,
+    pub biome_bits_per_quart: u8,
+    pub dimension: String,
+    pub block_palette: Vec<String>,
+    pub biome_palette: Vec<String>,
 
-    pub(crate) chunks_received: u32,
-    pub(crate) expected_next_voxel_index: u64,
-    pub(crate) raw_voxel_indices: Vec<u16>,
-    pub(crate) raw_quart_biome_indices: Vec<u16>,
-    pub(crate) block_entities: HashMap<IVec3, mtk_model::BlockEntityData>,
-    pub(crate) visual_entities: Vec<mtk_model::EntityInstance>,
-    pub(crate) visual_entities_hash: Option<u64>,
+    pub chunks_received: u32,
+    pub expected_next_voxel_index: u64,
+    pub raw_voxel_indices: Vec<u16>,
+    pub raw_quart_biome_indices: Vec<u16>,
+    pub block_entities: HashMap<IVec3, mtk_model::BlockEntityData>,
+    pub visual_entities: Vec<mtk_model::EntityInstance>,
+    pub visual_entities_hash: Option<u64>,
 }
 
 impl BaselineAssembler {
     /// Creates a new assembler from BASELINE_BEGIN packet.
-    pub(crate) fn new(begin_pkt: &Packet) -> Result<Self, CancelReason> {
+    pub fn new(begin_pkt: &Packet) -> Result<Self, CancelReason> {
         let (
             epoch,
             snapshot_uuid,
@@ -146,7 +144,7 @@ impl BaselineAssembler {
     }
 
     /// Appends and processes a single BASELINE_CHUNK.
-    pub(crate) fn process_chunk(&mut self, chunk: &Packet) -> Result<(), ResyncReason> {
+    pub fn process_chunk(&mut self, chunk: &Packet) -> Result<(), ResyncReason> {
         let (
             epoch,
             snapshot_uuid,
