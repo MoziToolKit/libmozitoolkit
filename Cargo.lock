@@ -881,6 +881,7 @@ dependencies = [
  "glam",
  "jni",
  "mtk-sync",
+ "xxhash-rust",
 ]
 
 [[package]]

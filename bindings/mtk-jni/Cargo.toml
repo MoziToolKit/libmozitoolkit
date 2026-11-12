@@ -15,6 +15,7 @@ crate-type = ["cdylib", "rlib"]
 mtk-sync = { workspace = true }
 jni = { workspace = true }
 glam = { workspace = true }
+xxhash-rust = { workspace = true }
 
 [features]
 default = ["sync-server"]

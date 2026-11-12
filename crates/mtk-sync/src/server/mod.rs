@@ -6,9 +6,11 @@
 pub mod baseline;
 pub mod decision;
 pub mod delta;
+pub mod service;
 
 pub use baseline::{
     encode_baseline_from_raw, encode_baseline_from_storage, BaselineEncoderConfig, BaselineStream,
 };
 pub use decision::{decide_handshake, HandshakeContext, HandshakeResult};
 pub use delta::encode_delta_op;
+pub use service::{LiveSyncServer, ServerConfig, ServerEvent};

@@ -245,6 +245,8 @@ fn test_loopback_handshake_decision() {
         state_hash: current_hash,
         dimension: "minecraft:overworld".to_string(),
         expected_auth_token: Some("secret123".to_string()),
+        is_loopback: false,
+        allow_loopback_without_token: false,
     };
 
     // 1. Valid cached hello -> VerifiedSkipRebuild

@@ -412,155 +412,242 @@ fn hex_nibble(byte: u8) -> Option<u8> {
     }
 }
 
-/// Encodes an existing VoxelStorage into a progressive RFC v3.1 baseline packet stream.
-/// Returns a tuple `(packets_bytes_list, state_hash, total_chunks)`.
-#[pyfunction]
-#[pyo3(signature = (
-    storage,
-    min_pos,
-    size,
-    dimension="minecraft:overworld",
-    epoch=1,
-    snapshot_uuid=None,
-    snapshot_seq=1,
-    palette_revision=1,
-    max_chunk_size=262144,
-    compression_mode=1,
-    compression_level=3
-))]
-pub fn encode_baseline_from_storage<'py>(
-    py: Python<'py>,
-    storage: &PyVoxelStorage,
-    min_pos: (i32, i32, i32),
-    size: (i32, i32, i32),
-    dimension: &str,
-    epoch: u64,
-    snapshot_uuid: Option<&[u8]>,
-    snapshot_seq: u64,
-    palette_revision: u32,
-    max_chunk_size: usize,
-    compression_mode: u8,
-    compression_level: i32,
-) -> PyResult<(Bound<'py, PyList>, u64, u32)> {
-    let mut uuid_arr = [0u8; 16];
-    if let Some(raw_uuid) = snapshot_uuid {
-        if raw_uuid.len() >= 16 {
-            uuid_arr.copy_from_slice(&raw_uuid[..16]);
+/// Python wrapper for native RFC v3.1 `LiveSyncServer`.
+#[pyclass(name = "LiveSyncServer")]
+pub struct PyLiveSyncServer {
+    inner: Option<mtk_sync::LiveSyncServer>,
+}
+
+#[pymethods]
+impl PyLiveSyncServer {
+    #[new]
+    #[pyo3(signature = (
+        bind_address="127.0.0.1:8765".to_string(),
+        auth_token=None,
+        allow_loopback_without_token=true,
+        server_uuid=None
+    ))]
+    pub fn new(
+        bind_address: String,
+        auth_token: Option<String>,
+        allow_loopback_without_token: bool,
+        server_uuid: Option<String>,
+    ) -> PyResult<Self> {
+        let mut uuid_bytes = [0u8; 16];
+        if let Some(ref s) = server_uuid {
+            let trimmed = s.trim();
+            if !trimmed.is_empty() {
+                uuid_bytes = parse_uuid_hex(trimmed);
+            }
+        }
+
+        let config = mtk_sync::ServerConfig {
+            bind_address,
+            auth_token,
+            allow_loopback_without_token,
+            server_uuid: uuid_bytes,
+            max_connections: 8,
+            handshake_timeout: std::time::Duration::from_millis(5000),
+            ping_interval: std::time::Duration::from_millis(5000),
+        };
+        let server = mtk_sync::LiveSyncServer::start(config).map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!(
+                "Failed to start LiveSyncServer: {}",
+                e
+            ))
+        })?;
+        Ok(Self {
+            inner: Some(server),
+        })
+    }
+
+    /// Stops the server and disconnects all clients.
+    pub fn stop(&mut self) {
+        if let Some(mut server) = self.inner.take() {
+            server.stop();
         }
     }
 
-    let config = mtk_sync::BaselineEncoderConfig {
-        max_chunk_size,
-        compression_mode,
-        compression_level,
-        epoch,
-        snapshot_uuid: uuid_arr,
-        snapshot_seq,
-        palette_revision,
-    };
+    /// Returns whether the server is actively running.
+    pub fn is_running(&self) -> bool {
+        self.inner.as_ref().map(|s| s.is_running()).unwrap_or(false)
+    }
 
-    let stream = mtk_sync::encode_baseline_from_storage(
-        &storage.inner,
-        glam::IVec3::new(min_pos.0, min_pos.1, min_pos.2),
-        glam::IVec3::new(size.0, size.1, size.2),
+    /// Returns the unique server instance UUID as a hex string.
+    #[getter]
+    pub fn server_uuid(&self) -> PyResult<String> {
+        let server = self
+            .inner
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Server is stopped"))?;
+        let bytes = server.server_uuid();
+        let hex: String = bytes.iter().map(|b| format!("{:02x}", b)).collect();
+        Ok(hex)
+    }
+
+    /// Returns the number of currently connected clients.
+    pub fn client_count(&self) -> usize {
+        self.inner.as_ref().map(|s| s.client_count()).unwrap_or(0)
+    }
+
+    /// Returns the local bound socket address as string.
+    pub fn local_addr(&self) -> Option<String> {
+        self.inner
+            .as_ref()
+            .and_then(|s| s.local_addr().map(|a| a.to_string()))
+    }
+
+    /// Updates the authoritative selection.
+    #[pyo3(signature = (min_pos, size, dimension="minecraft:overworld".to_string()))]
+    pub fn set_selection(
+        &self,
+        min_pos: (i32, i32, i32),
+        size: (i32, i32, i32),
+        dimension: String,
+    ) -> PyResult<()> {
+        let server = self
+            .inner
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Server is stopped"))?;
+        server.set_selection(
+            glam::IVec3::new(min_pos.0, min_pos.1, min_pos.2),
+            glam::IVec3::new(size.0, size.1, size.2),
+            dimension,
+        );
+        Ok(())
+    }
+
+    /// Clears the authoritative selection and cancels any active streams.
+    pub fn clear_selection(&self) -> PyResult<()> {
+        let server = self
+            .inner
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Server is stopped"))?;
+        server.clear_selection();
+        Ok(())
+    }
+
+    /// Submits a raw baseline scan to the server. The server computes state_hash, updates selection,
+    /// initializes the dynamic palette, encodes chunked baseline frames, and streams to client_id (or broadcasts if 0).
+    /// Returns the computed state_hash.
+    #[pyo3(signature = (
+        client_id,
+        min_pos,
+        size,
         dimension,
-        &[],
-        &config,
-    )
-    .map_err(|e| {
-        pyo3::exceptions::PyValueError::new_err(format!("Baseline encode failed: {}", e))
-    })?;
+        raw_states,
+        block_palette,
+        raw_biomes,
+        biome_palette,
+        block_entities=None
+    ))]
+    pub fn submit_baseline(
+        &self,
+        client_id: u64,
+        min_pos: (i32, i32, i32),
+        size: (i32, i32, i32),
+        dimension: String,
+        raw_states: Vec<u32>,
+        block_palette: Vec<String>,
+        raw_biomes: Vec<u32>,
+        biome_palette: Vec<String>,
+        block_entities: Option<Vec<((i32, i32, i32), String)>>,
+    ) -> PyResult<u64> {
+        let server = self
+            .inner
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Server is stopped"))?;
 
-    let py_list = PyList::empty(py);
-    for pkt in &stream.packets {
-        let wire_bytes = mtk_sync::encode_packet(pkt);
-        py_list.append(PyBytes::new(py, &wire_bytes))?;
+        let entities: Vec<(glam::IVec3, String)> = block_entities
+            .unwrap_or_default()
+            .into_iter()
+            .map(|((x, y, z), json)| (glam::IVec3::new(x, y, z), json))
+            .collect();
+
+        server
+            .submit_baseline(
+                client_id,
+                glam::IVec3::new(min_pos.0, min_pos.1, min_pos.2),
+                glam::IVec3::new(size.0, size.1, size.2),
+                dimension,
+                &raw_states,
+                &block_palette,
+                &raw_biomes,
+                &biome_palette,
+                &entities,
+            )
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("{:?}", e)))
     }
 
-    Ok((py_list, stream.state_hash, stream.total_chunks))
-}
+    /// Submits incremental block changes and entity mutations, automatically managing the dynamic palette.
+    #[pyo3(signature = (
+        rel_coords,
+        block_states,
+        block_entities=None
+    ))]
+    pub fn submit_deltas(
+        &self,
+        rel_coords: Vec<(i32, i32, i32)>,
+        block_states: Vec<String>,
+        block_entities: Option<Vec<((i32, i32, i32), Option<String>)>>,
+    ) -> PyResult<()> {
+        let server = self
+            .inner
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Server is stopped"))?;
 
-/// Evaluates a client HELLO frame against the server context and produces an RFC WELCOME frame.
-/// Returns a tuple `(welcome_packet_bytes, decision_code)`.
-#[pyfunction]
-#[pyo3(signature = (
-    hello_bytes,
-    server_uuid,
-    epoch,
-    sequence,
-    min_pos,
-    size,
-    state_hash,
-    dimension="minecraft:overworld",
-    expected_auth_token=None
-))]
-pub fn decide_handshake<'py>(
-    py: Python<'py>,
-    hello_bytes: &[u8],
-    server_uuid: &[u8],
-    epoch: u64,
-    sequence: u64,
-    min_pos: (i32, i32, i32),
-    size: (i32, i32, i32),
-    state_hash: u64,
-    dimension: &str,
-    expected_auth_token: Option<&str>,
-) -> PyResult<(Bound<'py, PyBytes>, u8)> {
-    let hello_packet = mtk_sync::decode_packet(hello_bytes).map_err(|e| {
-        pyo3::exceptions::PyValueError::new_err(format!("Invalid HELLO frame: {}", e))
-    })?;
+        let coords: Vec<glam::IVec3> = rel_coords
+            .into_iter()
+            .map(|(x, y, z)| glam::IVec3::new(x, y, z))
+            .collect();
 
-    let mut uuid_arr = [0u8; 16];
-    if server_uuid.len() >= 16 {
-        uuid_arr.copy_from_slice(&server_uuid[..16]);
+        let entities: Vec<(glam::IVec3, Option<String>)> = block_entities
+            .unwrap_or_default()
+            .into_iter()
+            .map(|((x, y, z), json)| (glam::IVec3::new(x, y, z), json))
+            .collect();
+
+        server
+            .submit_deltas(&coords, &block_states, &entities)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("{:?}", e)))
     }
 
-    let ctx = mtk_sync::HandshakeContext {
-        server_uuid: uuid_arr,
-        epoch,
-        sequence,
-        min_pos: glam::IVec3::new(min_pos.0, min_pos.1, min_pos.2),
-        size: glam::IVec3::new(size.0, size.1, size.2),
-        state_hash,
-        dimension: dimension.to_string(),
-        expected_auth_token: expected_auth_token.map(|s| s.to_string()),
-    };
-
-    let result = mtk_sync::decide_handshake(&hello_packet, &ctx).map_err(|e| {
-        pyo3::exceptions::PyValueError::new_err(format!("Handshake decision failed: {}", e))
-    })?;
-
-    let welcome_bytes = mtk_sync::encode_packet(&result.welcome_packet);
-    let decision_code = result.decision as u8;
-
-    Ok((PyBytes::new(py, &welcome_bytes), decision_code))
-}
-
-/// Encodes a list of atomic delta changes into RFC DELTA_OP packet byte frames.
-#[pyfunction]
-#[pyo3(signature = (epoch, seq_id, palette_revision, changes))]
-pub fn encode_delta_op_batch<'py>(
-    py: Python<'py>,
-    epoch: u64,
-    seq_id: u64,
-    palette_revision: u32,
-    changes: Vec<((i32, i32, i32), u16)>,
-) -> PyResult<Bound<'py, PyList>> {
-    let delta_entries: Vec<mtk_sync::DeltaChangeEntry> = changes
-        .into_iter()
-        .map(|((x, y, z), state_id)| mtk_sync::DeltaChangeEntry {
-            rel_pos: glam::IVec3::new(x, y, z),
-            state_id,
-        })
-        .collect();
-
-    let packets = mtk_sync::encode_delta_op(epoch, seq_id, palette_revision, delta_entries);
-
-    let py_list = PyList::empty(py);
-    for pkt in &packets {
-        let wire_bytes = mtk_sync::encode_packet(pkt);
-        py_list.append(PyBytes::new(py, &wire_bytes))?;
+    /// Polls pending server events as a list of dicts.
+    pub fn poll_events<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let list = PyList::empty(py);
+        if let Some(server) = self.inner.as_ref() {
+            for event in server.poll_events() {
+                let dict = PyDict::new(py);
+                match event {
+                    mtk_sync::ServerEvent::ClientConnected { client_id, addr } => {
+                        dict.set_item("type", "client_connected")?;
+                        dict.set_item("client_id", client_id)?;
+                        dict.set_item("addr", addr.to_string())?;
+                    }
+                    mtk_sync::ServerEvent::ClientDisconnected { client_id, reason } => {
+                        dict.set_item("type", "client_disconnected")?;
+                        dict.set_item("client_id", client_id)?;
+                        dict.set_item("reason", reason)?;
+                    }
+                    mtk_sync::ServerEvent::BaselineRequested {
+                        client_id,
+                        epoch,
+                        snapshot_seq,
+                    } => {
+                        dict.set_item("type", "baseline_requested")?;
+                        dict.set_item("client_id", client_id)?;
+                        dict.set_item("epoch", epoch)?;
+                        dict.set_item("snapshot_seq", snapshot_seq)?;
+                    }
+                    mtk_sync::ServerEvent::ClientResync { client_id, reason } => {
+                        dict.set_item("type", "client_resync")?;
+                        dict.set_item("client_id", client_id)?;
+                        dict.set_item("reason", format!("{:?}", reason))?;
+                    }
+                }
+                list.append(dict)?;
+            }
+        }
+        Ok(list)
     }
-
-    Ok(py_list)
 }

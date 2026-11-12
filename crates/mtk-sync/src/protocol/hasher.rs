@@ -83,6 +83,65 @@ where
     hasher.digest()
 }
 
+/// Computes the authoritative canonical sparse state_hash directly from raw memory arrays.
+/// Guarantees bit-for-bit equivalence with `compute_sparse_state_hash_for_storage`.
+pub fn compute_sparse_state_hash_from_raw(
+    min_pos: IVec3,
+    size: IVec3,
+    dimension_str: &str,
+    raw_states: &[u32],
+    state_palette: &[String],
+    raw_biomes: &[u32],
+    biome_palette: &[String],
+    entity_map: &std::collections::HashMap<IVec3, &str>,
+) -> u64 {
+    let quart_grid = super::quart::QuartGrid::from_bounds(min_pos, size);
+    let total_voxels = (size.x as usize) * (size.y as usize) * (size.z as usize);
+
+    let non_air_iter =
+        raw_states
+            .iter()
+            .take(total_voxels)
+            .enumerate()
+            .filter_map(|(idx, &raw_id)| {
+                let state_str = if (raw_id as usize) < state_palette.len() {
+                    &state_palette[raw_id as usize]
+                } else {
+                    "minecraft:air"
+                };
+
+                let norm_state = normalize_canonical_blockstate(state_str);
+                if norm_state == "minecraft:air" {
+                    return None;
+                }
+
+                let (lx, ly, lz) = super::quart::voxel_index_to_relative_coords(idx, size);
+
+                let q_idx = quart_grid.relative_voxel_to_quart_index(lx, ly, lz);
+                let raw_b_id = raw_biomes.get(q_idx).copied().unwrap_or(0);
+                let biome = if (raw_b_id as usize) < biome_palette.len() {
+                    &biome_palette[raw_b_id as usize]
+                } else {
+                    "minecraft:plains"
+                };
+
+                let entity_json = entity_map
+                    .get(&IVec3::new(lx as i32, ly as i32, lz as i32))
+                    .copied();
+
+                Some(SparseBlockEntry {
+                    rel_x: lx,
+                    rel_y: ly,
+                    rel_z: lz,
+                    state: state_str,
+                    biome,
+                    entity_json,
+                })
+            });
+
+    compute_sparse_state_hash(min_pos, size, dimension_str, non_air_iter)
+}
+
 /// Helper to extract u64 high and u64 low from a standard UUID string.
 pub fn parse_uuid_bits(uuid_str: &str) -> (u64, u64) {
     let clean: String = uuid_str.chars().filter(|c| *c != '-').collect();

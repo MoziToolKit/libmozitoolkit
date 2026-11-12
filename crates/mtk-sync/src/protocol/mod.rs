@@ -23,10 +23,11 @@ pub use error::ProtocolError;
 pub use hasher::SparseBlockEntry;
 pub use hasher::{
     compute_sparse_state_hash, compute_sparse_state_hash_for_point_cloud,
-    compute_sparse_state_hash_for_storage, compute_visual_entities_hash,
+    compute_sparse_state_hash_for_storage, compute_sparse_state_hash_from_raw,
+    compute_visual_entities_hash,
 };
 pub(crate) use hasher::{
     direction_to_facing_byte, facing_byte_to_direction, format_uuid, parse_uuid_bits,
 };
 pub use packet::{DeltaChangeEntry, Packet, VisualEntityDelta};
-pub use quart::QuartGrid;
+pub use quart::{voxel_index_to_relative_coords, QuartGrid};

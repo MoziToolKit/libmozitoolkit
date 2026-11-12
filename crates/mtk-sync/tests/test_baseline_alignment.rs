@@ -406,3 +406,110 @@ fn test_trailing_biome_only_chunk_is_accepted() {
     assert_eq!(assembler.expected_next_voxel_index, 8);
     assert_eq!(assembler.raw_quart_biome_indices, vec![0, 1]);
 }
+
+#[test]
+fn test_negative_unaligned_selection_with_multi_biomes_end_to_end() {
+    use mtk_sync::server::{encode_baseline_from_raw, BaselineEncoderConfig};
+
+    // Specifically test negative and non-4-aligned bounds matching the live issue:
+    // min_pos = (-5, 20, 39), size = (13, 11, 15)
+    let min_pos = IVec3::new(-5, 20, 39);
+    let size = IVec3::new(13, 11, 15);
+    let total_voxels = (size.x * size.y * size.z) as usize;
+
+    let quart_grid = QuartGrid::from_bounds(min_pos, size);
+    let total_quarts = quart_grid.total_quarts;
+
+    let state_to_name = vec![
+        "minecraft:air".to_string(),
+        "minecraft:stone".to_string(),
+        "minecraft:oak_planks".to_string(),
+    ];
+    let biome_to_name = vec![
+        "minecraft:plains".to_string(),
+        "minecraft:desert".to_string(),
+        "minecraft:forest".to_string(),
+    ];
+
+    // Populate alternating blocks and biomes
+    let mut raw_states = vec![0u32; total_voxels];
+    for (i, state) in raw_states.iter_mut().enumerate() {
+        if i % 3 != 0 {
+            *state = (i % 2 + 1) as u32; // stone or oak_planks
+        }
+    }
+
+    let mut raw_biomes = vec![0u32; total_quarts];
+    for (i, b) in raw_biomes.iter_mut().enumerate() {
+        *b = (i % 3) as u32;
+    }
+
+    let config = BaselineEncoderConfig {
+        max_chunk_size: 1024, // Split into multiple chunks to test chunking
+        compression_mode: 0,
+        compression_level: 0,
+        epoch: 1,
+        snapshot_uuid: [12u8; 16],
+        snapshot_seq: 1,
+        palette_revision: 1,
+    };
+
+    // 1. Compute direct raw hash
+    let raw_hash = compute_sparse_state_hash_from_raw(
+        min_pos,
+        size,
+        "minecraft:overworld",
+        &raw_states,
+        &state_to_name,
+        &raw_biomes,
+        &biome_to_name,
+        &std::collections::HashMap::new(),
+    );
+
+    // 2. Encode baseline from raw (server path)
+    let stream = encode_baseline_from_raw(
+        min_pos,
+        size,
+        "minecraft:overworld",
+        &raw_states,
+        &state_to_name,
+        &raw_biomes,
+        &biome_to_name,
+        &[],
+        &[],
+        &config,
+    )
+    .expect("encode_baseline_from_raw should succeed");
+
+    assert_eq!(stream.state_hash, raw_hash);
+
+    // 3. Assemble on client side (client path)
+    let mut begin_pkt = None;
+    let mut chunks = Vec::new();
+    let mut end_pkt = None;
+
+    for pkt in stream.packets {
+        match pkt {
+            Packet::BaselineBegin { .. } => begin_pkt = Some(pkt),
+            Packet::BaselineChunk { .. } => chunks.push(pkt),
+            Packet::BaselineEnd { .. } => end_pkt = Some(pkt),
+            _ => {}
+        }
+    }
+
+    let begin = begin_pkt.expect("must have begin packet");
+    let mut assembler = BaselineAssembler::new(&begin).expect("assembler init");
+    for chunk in &chunks {
+        assembler.process_chunk(chunk).expect("chunk process");
+    }
+
+    let end = end_pkt.expect("must have end packet");
+    let storage = assembler
+        .finalize(&end)
+        .expect("finalize must succeed with matched state_hash");
+
+    // 4. Double check storage state_hash matches
+    let storage_hash =
+        compute_sparse_state_hash_for_storage(&storage, min_pos, size, "minecraft:overworld");
+    assert_eq!(storage_hash, raw_hash);
+}

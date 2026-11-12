@@ -11,8 +11,9 @@ use mtk_model::{BlockEntityData, EntityInstance};
 use mtk_voxel::VoxelStorage;
 
 use crate::protocol::{
-    choose_bits_per_item, compute_sparse_state_hash, compute_sparse_state_hash_for_storage,
-    pack_lsb_indices, Packet, ProtocolError, QuartGrid, SparseBlockEntry, MAX_SELECTION_VOLUME,
+    choose_bits_per_item, compute_sparse_state_hash_for_storage,
+    compute_sparse_state_hash_from_raw, pack_lsb_indices, Packet, ProtocolError, QuartGrid,
+    MAX_SELECTION_VOLUME,
 };
 
 /// Configuration for baseline encoding and chunking.
@@ -264,7 +265,6 @@ pub fn encode_baseline_from_raw(
     let block_palette = block_builder.finish(None);
 
     // 2. Build biome palette & mapped indices
-    let quart_grid = QuartGrid::from_bounds(min_pos, size);
     let mut biome_builder = PaletteBuilder::new_biome_palette();
     let mut biome_id_remap: HashMap<u32, u16> = HashMap::new();
     let mut quart_biome_indices: Vec<u16> = Vec::with_capacity(raw_biomes.len());
@@ -285,10 +285,7 @@ pub fn encode_baseline_from_raw(
     }
     let biome_palette = biome_builder.finish(Some("minecraft:plains"));
 
-    // 3. Compute state hash
-    let sx = size.x as usize;
-    let slice_area = sx * (size.z as usize);
-
+    // 3. Compute state hash using the canonical SSOT calculator
     let mut entity_map: HashMap<IVec3, &str> = HashMap::new();
     let mut parsed_block_entities = Vec::new();
     for (rel_pos, json) in block_entities {
@@ -298,40 +295,16 @@ pub fn encode_baseline_from_raw(
         }
     }
 
-    let non_air_iter = voxel_indices
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, &p_idx)| {
-            if p_idx == 0 {
-                return None;
-            }
-            let ly = (idx / slice_area) as u32;
-            let rem = idx % slice_area;
-            let lz = (rem / sx) as u32;
-            let lx = (rem % sx) as u32;
-
-            let q_idx = quart_grid.relative_voxel_to_quart_index(lx, ly, lz);
-            let b_idx = quart_biome_indices.get(q_idx).copied().unwrap_or(0);
-            let biome = biome_palette
-                .get(b_idx as usize)
-                .map(|s| s.as_str())
-                .unwrap_or("minecraft:plains");
-
-            let entity_json = entity_map
-                .get(&IVec3::new(lx as i32, ly as i32, lz as i32))
-                .copied();
-
-            Some(SparseBlockEntry {
-                rel_x: lx,
-                rel_y: ly,
-                rel_z: lz,
-                state: &block_palette[p_idx as usize],
-                biome,
-                entity_json,
-            })
-        });
-
-    let state_hash = compute_sparse_state_hash(min_pos, size, dimension, non_air_iter);
+    let state_hash = compute_sparse_state_hash_from_raw(
+        min_pos,
+        size,
+        dimension,
+        raw_states,
+        state_to_name,
+        raw_biomes,
+        biome_to_name,
+        &entity_map,
+    );
 
     // 4. Delegate to chunking assembly
     assemble_baseline_stream(
@@ -501,7 +474,6 @@ fn assemble_baseline_stream(
     let mut packets = Vec::with_capacity(chunk_packets.len() + 4);
     packets.push(begin_packet);
     packets.extend(chunk_packets);
-    packets.push(end_packet);
 
     // 3. Optional BASELINE_ENTITIES (RFC v3.2 Sparse Block Entities)
     if !block_entities.is_empty() {
@@ -522,6 +494,9 @@ fn assemble_baseline_stream(
             entities: visual_entities,
         });
     }
+
+    // 5. BASELINE_END must be sent after all payload chunks and entities
+    packets.push(end_packet);
 
     Ok(BaselineStream {
         packets,

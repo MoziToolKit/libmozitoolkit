@@ -63,24 +63,7 @@ impl BaselineAssembler {
         }
 
         let p_len = self.block_palette.len();
-        let sx = self.size.x as usize;
-        let _sy = self.size.y as usize;
-        let sz = self.size.z as usize;
-        let slice_area = sx * sz; // X-fastest, Z-next, Y-slowest
-
-        let min_qx = self.min_pos.x.div_euclid(4);
-        let max_qx = (self.min_pos.x + self.size.x - 1).div_euclid(4);
-        let qw = (max_qx - min_qx + 1).max(0) as usize;
-
-        let min_qy = self.min_pos.y.div_euclid(4);
-        let max_qy = (self.min_pos.y + self.size.y - 1).div_euclid(4);
-        let _qh = (max_qy - min_qy + 1).max(0) as usize;
-
-        let min_qz = self.min_pos.z.div_euclid(4);
-        let max_qz = (self.min_pos.z + self.size.z - 1).div_euclid(4);
-        let qd = (max_qz - min_qz + 1).max(0) as usize;
-        let quart_slice_area = qw * qd;
-
+        let quart_grid = QuartGrid::from_bounds(self.min_pos, self.size);
         let mut section_biomes_map: HashMap<IVec3, SectionBiomes> = HashMap::new();
 
         for (idx, &p_idx_raw) in self
@@ -95,12 +78,7 @@ impl BaselineAssembler {
             }
             let state_str = &self.block_palette[p_idx];
 
-            // Invert RFC canonical 3D formula:
-            // index = (x - min_x) + W * ((z - min_z) + D * (y - min_y))
-            let ly = idx / slice_area;
-            let rem = idx % slice_area;
-            let lz = rem / sx;
-            let lx = rem % sx;
+            let (lx, ly, lz) = voxel_index_to_relative_coords(idx, self.size);
 
             let wx = self.min_pos.x + lx as i32;
             let wy = self.min_pos.y + ly as i32;
@@ -137,14 +115,10 @@ impl BaselineAssembler {
                 }
                 let biome_str = &self.biome_palette[b_idx];
 
-                let qy = (q_idx / quart_slice_area) as i32;
-                let q_rem = q_idx % quart_slice_area;
-                let qz = (q_rem / qw) as i32;
-                let qx = (q_rem % qw) as i32;
-
-                let world_qx = min_qx + qx;
-                let world_qy = min_qy + qy;
-                let world_qz = min_qz + qz;
+                let world_q = quart_grid.quart_index_to_world_coords(q_idx);
+                let world_qx = world_q.x;
+                let world_qy = world_q.y;
+                let world_qz = world_q.z;
 
                 let sec_coord = IVec3::new(
                     world_qx.div_euclid(4),

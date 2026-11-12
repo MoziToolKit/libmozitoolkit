@@ -1,138 +1,152 @@
-import struct
+import time
 import libmtk_py
 import pytest
 
-def build_test_hello_packet(
-    server_uuid=b"\x00" * 16,
-    epoch=0,
-    seq=0,
-    min_pos=(0, 0, 0),
-    size=(0, 0, 0),
-    state_hash=0,
-    token="secret",
-    dimension="minecraft:overworld",
-):
-    header = b"MT\x03\x01"  # Magic 'MT', version 3, opcode 0x01 (HELLO)
-    tok_bytes = token.encode("utf-8")
-    dim_bytes = dimension.encode("utf-8")
-    payload = struct.pack(
-        "<HHII16sQQiiiIIIQH",
-        3, 3, 0, 0,
-        server_uuid,
-        epoch, seq,
-        min_pos[0], min_pos[1], min_pos[2],
-        size[0], size[1], size[2],
-        state_hash,
-        len(tok_bytes),
-    ) + tok_bytes + struct.pack("<H", len(dim_bytes)) + dim_bytes
-    return header + payload
 
+def test_live_sync_server_lifecycle():
+    server = libmtk_py.LiveSyncServer(bind_address="127.0.0.1:0")
+    assert server.is_running()
+    addr = server.local_addr()
+    assert addr is not None and "127.0.0.1:" in addr
+    assert server.server_uuid != ""
+    assert len(server.server_uuid) == 32
 
-def test_encode_baseline_from_storage_python():
-    storage = libmtk_py.VoxelStorage()
-    storage.set_block(0, 0, 0, "minecraft:stone")
-    storage.set_block(1, 0, 0, "minecraft:dirt")
-    storage.set_block(2, 2, 2, "minecraft:diamond_block")
-
-    packets, state_hash, total_chunks = libmtk_py.encode_baseline_from_storage(
-        storage,
-        min_pos=(0, 0, 0),
-        size=(4, 4, 4),
+    server.set_selection(
+        min_pos=(0, 64, 0),
+        size=(16, 16, 16),
         dimension="minecraft:overworld",
-        epoch=1,
-        snapshot_uuid=b"\x01" * 16,
-        snapshot_seq=10,
-        max_chunk_size=1024,
     )
 
-    assert total_chunks >= 1
-    assert state_hash != 0
-    assert len(packets) >= total_chunks + 2  # Begin + Chunks + End
+    events = server.poll_events()
+    assert isinstance(events, list)
 
-    # Verify each packet starts with protocol magic 'MT'
-    for pkt in packets:
-        assert isinstance(pkt, bytes)
-        assert pkt[:2] == b"MT"
-        assert pkt[2] == 0x03  # Protocol v3
+    server.clear_selection()
 
-    # Decode first packet (BaselineBegin) using unstable.testing decoder
-    begin_pkt = libmtk_py.unstable.testing.decode_packet(packets[0])
-    assert begin_pkt["type"] == "BASELINE_BEGIN"
-    assert begin_pkt["state_hash"] == f"0x{state_hash:016x}"
-    assert begin_pkt["total_chunks"] == total_chunks
-    assert "minecraft:stone" in begin_pkt["block_palette"]
+    server.stop()
+    assert not server.is_running()
 
 
-def test_decide_handshake_python():
-    server_uuid = b"\x42" * 16
-    min_pos = (10, 20, 30)
+def test_live_sync_server_custom_uuid():
+    custom_uuid = "12345678-1234-5678-1234-567812345678"
+    server = libmtk_py.LiveSyncServer(
+        bind_address="127.0.0.1:0",
+        server_uuid=custom_uuid,
+    )
+    assert server.is_running()
+    assert server.server_uuid != ""
+    server.stop()
+
+
+def test_live_sync_server_submit_baseline_and_deltas():
+    server = libmtk_py.LiveSyncServer(bind_address="127.0.0.1:0")
+    assert server.is_running()
+
+    # 1. Submit baseline (16x16x16)
     size = (16, 16, 16)
-    state_hash = 123456789012345678
+    total_blocks = 16 * 16 * 16
+    raw_states = [0] * total_blocks
+    raw_states[0] = 0  # stone
+    raw_states[1] = 1  # dirt
+    block_palette = ["minecraft:stone", "minecraft:dirt"]
 
-    # 1. Match cached hello
-    cached_hello = build_test_hello_packet(
-        server_uuid=server_uuid,
-        epoch=1,
-        seq=5,
-        min_pos=min_pos,
+    total_biomes = 4 * 4 * 4
+    raw_biomes = [0] * total_biomes
+    biome_palette = ["minecraft:plains"]
+
+    state_hash = server.submit_baseline(
+        client_id=0,
+        min_pos=(0, 64, 0),
         size=size,
-        state_hash=state_hash,
-        token="secret",
         dimension="minecraft:overworld",
+        raw_states=raw_states,
+        block_palette=block_palette,
+        raw_biomes=raw_biomes,
+        biome_palette=biome_palette,
+    )
+    assert state_hash != 0
+
+    # 2. Submit deltas with dynamic palette addition
+    rel_coords = [(0, 0, 0), (1, 0, 0), (2, 0, 0)]
+    block_states = ["minecraft:stone", "minecraft:gold_block", "minecraft:diamond_block"]
+    block_entities = [((2, 0, 0), '{"id":"minecraft:chest"}')]
+
+    server.submit_deltas(
+        rel_coords=rel_coords,
+        block_states=block_states,
+        block_entities=block_entities,
     )
 
-    welcome_bytes, decision = libmtk_py.decide_handshake(
-        cached_hello,
-        server_uuid=server_uuid,
-        epoch=1,
-        sequence=5,
-        min_pos=min_pos,
+    server.stop()
+    assert not server.is_running()
+
+
+def test_live_sync_server_e2e_with_session():
+    # 1. Start native server on ephemeral port
+    server = libmtk_py.LiveSyncServer(
+        bind_address="127.0.0.1:0",
+        auth_token="test_token",
+        allow_loopback_without_token=True,
+    )
+    addr = server.local_addr()
+    assert addr is not None
+    port = addr.split(":")[-1]
+
+    # 2. Connect client session
+    session = libmtk_py.LiveSyncSession()
+    session.start(
+        url=f"ws://127.0.0.1:{port}",
+        auto_reconnect=False,
+        auth_token="test_token",
+    )
+
+    # 3. Wait for baseline_requested event on server
+    client_id = None
+    start_time = time.time()
+    while time.time() - start_time < 3.0:
+        events = server.poll_events()
+        for ev in events:
+            if ev.get("type") == "baseline_requested":
+                client_id = ev.get("client_id")
+                break
+        if client_id is not None:
+            break
+        time.sleep(0.05)
+
+    assert client_id is not None, "Server must emit baseline_requested event"
+
+    # 4. Stream baseline to requesting client
+    size = (4, 4, 4)
+    total_blocks = 4 * 4 * 4
+    raw_states = [1] * total_blocks
+    block_palette = ["minecraft:air", "minecraft:stone"]
+    raw_biomes = [0] * 64
+    biome_palette = ["minecraft:plains"]
+
+    server.submit_baseline(
+        client_id=client_id,
+        min_pos=(0, 64, 0),
         size=size,
-        state_hash=state_hash,
         dimension="minecraft:overworld",
-        expected_auth_token="secret",
+        raw_states=raw_states,
+        block_palette=block_palette,
+        raw_biomes=raw_biomes,
+        biome_palette=biome_palette,
     )
-    assert decision == 0  # VerifiedSkipRebuild
-    welcome_pkt = libmtk_py.unstable.testing.decode_packet(welcome_bytes)
-    assert welcome_pkt["type"] == "WELCOME"
-    assert welcome_pkt["decision"] == "VERIFIED_SKIP_REBUILD"
 
-    # 2. Token mismatch
-    welcome_bytes_rejected, decision_rejected = libmtk_py.decide_handshake(
-        cached_hello,
-        server_uuid=server_uuid,
-        epoch=1,
-        sequence=5,
-        min_pos=min_pos,
-        size=size,
-        state_hash=state_hash,
-        dimension="minecraft:overworld",
-        expected_auth_token="different_secret",
-    )
-    assert decision_rejected == 0xFF  # Rejected
-    welcome_pkt_rej = libmtk_py.unstable.testing.decode_packet(welcome_bytes_rejected)
-    assert welcome_pkt_rej["decision"] == "REJECTED"
+    # 5. Wait for client to process baseline and finish stream
+    mesh_ready = False
+    start_time = time.time()
+    while time.time() - start_time < 3.0:
+        events = session.poll_events()
+        for ev in events:
+            if ev.get("type") == "WORLD_MESH_READY":
+                mesh_ready = True
+                break
+        if mesh_ready:
+            break
+        time.sleep(0.05)
 
+    assert mesh_ready, "Client failed to receive baseline and build world mesh"
 
-def test_encode_delta_op_batch_python():
-    changes = [
-        ((0, 1, 2), 10),
-        ((3, 4, 5), 20),
-    ]
-
-    delta_packets = libmtk_py.encode_delta_op_batch(
-        epoch=1,
-        seq_id=42,
-        palette_revision=1,
-        changes=changes,
-    )
-    assert len(delta_packets) == 1
-    decoded = libmtk_py.unstable.testing.decode_packet(delta_packets[0])
-    assert decoded["type"] == "DELTA_OP"
-    assert decoded["count"] == 2
-    assert decoded["seq_id"] == 42
-    assert len(decoded["changes"]) == 2
-    assert decoded["changes"][0]["rel_x"] == 0
-    assert decoded["changes"][0]["rel_y"] == 1
-    assert decoded["changes"][0]["rel_z"] == 2
-    assert decoded["changes"][0]["state_id"] == 10
+    session.stop()
+    server.stop()
