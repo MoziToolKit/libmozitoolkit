@@ -1,125 +1,22 @@
 use std::collections::HashMap;
 use std::net::{SocketAddr, TcpListener};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use crossbeam_channel::{Receiver, Sender};
 use glam::IVec3;
 
 use crate::protocol::{
     compute_sparse_state_hash_from_raw, encode_packet, CancelReason, DeltaChangeEntry, Packet,
-    ProtocolError,
+    ProtocolError, VisualEntityDelta,
 };
 use crate::server::baseline::{encode_baseline_from_raw, BaselineEncoderConfig, BaselineStream};
-use crate::server::decision::HandshakeContext;
 use crate::server::delta::encode_delta_op;
 
 use super::config::{generate_unique_server_uuid, ServerCommand, ServerConfig, ServerEvent};
+use super::state::{ClientHandle, PaletteState, SelectionContext, ServerInner};
 use super::worker::run_client_worker;
-
-#[derive(Debug, Clone)]
-pub(crate) struct SelectionContext {
-    pub(crate) min_pos: IVec3,
-    pub(crate) size: IVec3,
-    pub(crate) dimension: String,
-    pub(crate) state_hash: u64,
-}
-
-pub(crate) struct ClientHandle {
-    pub(crate) tx: Sender<ServerCommand>,
-}
-
-#[derive(Debug)]
-pub(crate) struct PaletteState {
-    pub(crate) revision: u32,
-    pub(crate) lookup: HashMap<String, u32>,
-    pub(crate) list: Vec<String>,
-}
-
-impl Default for PaletteState {
-    fn default() -> Self {
-        let mut lookup = HashMap::new();
-        lookup.insert("minecraft:air".to_string(), 0);
-        Self {
-            revision: 1,
-            lookup,
-            list: vec!["minecraft:air".to_string()],
-        }
-    }
-}
-
-pub(crate) struct ServerInner {
-    pub(crate) running: AtomicBool,
-    pub(crate) epoch: AtomicU64,
-    pub(crate) sequence: AtomicU64,
-    pub(crate) server_uuid: [u8; 16],
-    pub(crate) selection: Mutex<Option<SelectionContext>>,
-    pub(crate) palette: Mutex<PaletteState>,
-    pub(crate) clients: Mutex<HashMap<u64, ClientHandle>>,
-    pub(crate) event_tx: Sender<ServerEvent>,
-    pub(crate) event_rx: Receiver<ServerEvent>,
-    pub(crate) local_addr: Mutex<Option<SocketAddr>>,
-}
-
-impl ServerInner {
-    pub(crate) fn new(server_uuid: [u8; 16]) -> Self {
-        let (event_tx, event_rx) = crossbeam_channel::unbounded();
-        Self {
-            running: AtomicBool::new(true),
-            epoch: AtomicU64::new(1),
-            sequence: AtomicU64::new(1),
-            server_uuid,
-            selection: Mutex::new(None),
-            palette: Mutex::new(PaletteState::default()),
-            clients: Mutex::new(HashMap::new()),
-            event_tx,
-            event_rx,
-            local_addr: Mutex::new(None),
-        }
-    }
-
-    pub(crate) fn is_running(&self) -> bool {
-        self.running.load(Ordering::Relaxed)
-    }
-
-    pub(crate) fn remove_client(&self, client_id: u64) {
-        if let Ok(mut clients) = self.clients.lock() {
-            clients.remove(&client_id);
-        }
-    }
-
-    pub(crate) fn get_handshake_context(
-        &self,
-        config: &ServerConfig,
-        addr: SocketAddr,
-    ) -> HandshakeContext {
-        let selection_opt = self.selection.lock().unwrap().clone();
-        let (min_pos, size, dimension, state_hash) = match selection_opt {
-            Some(s) => (s.min_pos, s.size, s.dimension, s.state_hash),
-            None => (
-                IVec3::ZERO,
-                IVec3::ZERO,
-                "minecraft:overworld".to_string(),
-                0u64,
-            ),
-        };
-
-        HandshakeContext {
-            server_uuid: self.server_uuid,
-            epoch: self.epoch.load(Ordering::Relaxed),
-            sequence: self.sequence.load(Ordering::Relaxed),
-            min_pos,
-            size,
-            state_hash,
-            dimension,
-            expected_auth_token: config.auth_token.clone(),
-            is_loopback: addr.ip().is_loopback(),
-            allow_loopback_without_token: config.allow_loopback_without_token,
-        }
-    }
-}
 
 /// The Native Live Sync WebSocket Server instance.
 pub struct LiveSyncServer {
@@ -281,6 +178,21 @@ impl LiveSyncServer {
         self.broadcast_packet(&cancel_pkt);
     }
 
+    /// Returns the combined set of subscribed visual entity types from all connected clients.
+    pub fn subscribed_visual_entities(&self) -> Vec<String> {
+        let mut set = std::collections::HashSet::new();
+        if let Ok(subs) = self.inner.client_subscriptions.lock() {
+            for list in subs.values() {
+                for s in list {
+                    set.insert(s.clone());
+                }
+            }
+        }
+        let mut res: Vec<String> = set.into_iter().collect();
+        res.sort();
+        res
+    }
+
     /// Authoritatively packages and streams a Baseline dataset to a client (or broadcasts if client_id == 0).
     pub fn submit_baseline(
         &self,
@@ -293,6 +205,7 @@ impl LiveSyncServer {
         raw_biomes: &[u32],
         biome_palette: &[String],
         block_entities: &[(IVec3, String)],
+        visual_entities: &[mtk_model::EntityInstance],
     ) -> Result<u64, ProtocolError> {
         let entity_map: HashMap<IVec3, &str> = block_entities
             .iter()
@@ -359,12 +272,46 @@ impl LiveSyncServer {
             raw_biomes,
             biome_palette,
             block_entities,
-            &[],
+            visual_entities,
             &encoder_config,
         )?;
 
         self.stream_baseline(client_id, &stream)?;
         Ok(state_hash)
+    }
+
+    /// Broadcasts an incremental Visual Entity change (Upsert or Remove).
+    pub fn submit_visual_entity_delta(&self, delta: VisualEntityDelta) {
+        let epoch = self.inner.epoch.load(Ordering::Relaxed);
+        let seq_id = self.inner.sequence.fetch_add(1, Ordering::Relaxed);
+        let pkt = Packet::DeltaVisualEntity {
+            epoch,
+            seq_id,
+            delta,
+        };
+        self.broadcast_packet(&pkt);
+    }
+
+    /// Broadcasts a pre-encoded raw RFC frame to all connected clients.
+    pub fn broadcast_packet_bytes(&self, bytes: Vec<u8>) {
+        if let Ok(clients) = self.inner.clients.lock() {
+            for client in clients.values() {
+                let _ = client.tx.send(ServerCommand::SendPacket(bytes.clone()));
+            }
+        }
+    }
+
+    /// Sends a pre-encoded raw RFC frame to a specific connected client.
+    pub fn send_packet_bytes(&self, client_id: u64, bytes: Vec<u8>) -> Result<(), ProtocolError> {
+        let clients = self.inner.clients.lock().unwrap();
+        if let Some(client) = clients.get(&client_id) {
+            let _ = client.tx.send(ServerCommand::SendPacket(bytes));
+            Ok(())
+        } else {
+            Err(ProtocolError::TruncatedPayload {
+                field: "client_id not found or disconnected",
+            })
+        }
     }
 
     /// Broadcasts incremental block changes and entity mutations, automatically managing the dynamic palette.

@@ -5,6 +5,7 @@
 
 pub mod config;
 pub mod server;
+pub(crate) mod state;
 pub(crate) mod worker;
 
 pub use config::{generate_unique_server_uuid, ServerConfig, ServerEvent};

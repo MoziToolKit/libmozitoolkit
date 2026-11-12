@@ -85,6 +85,10 @@ jobs:
       # gracefully when the real Minecraft pack is unavailable.
       - name: cargo test --workspace
         run: cargo test --workspace --no-fail-fast
+      - name: Smoke check JNI dynamic library (Windows)
+        run: |
+          cargo build -p mtk-jni --release
+          if (-not (Test-Path target/release/mtk_jni.dll)) { throw "mtk_jni.dll not found" }
 
   wasm:
     name: WASM compatibility
@@ -126,4 +130,8 @@ jobs:
           python -c "import libmtk_py; print('libmtk_py', libmtk_py.version(), 'api', libmtk_py.api_version())"
           python -c "import libmtk_blender_dna; print('libmtk_blender_dna', libmtk_blender_dna.api_version())"
           python -m unittest discover -s adapters/blender/mtk-blender-dna-py/tests -q
+      - name: Smoke check JNI dynamic library (Linux)
+        run: |
+          cargo build -p mtk-jni --release
+          test -f target/release/libmtk_jni.so
 

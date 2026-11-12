@@ -28,6 +28,7 @@ LIB_ROOT = Path(__file__).resolve().parents[1]
 ALLOWED_PUB_MOD = {
     "crates/mtk-core/src/lib.rs": {"constants"},
     "crates/mtk-resource/src/lib.rs": {"banner", "skin"},
+    "crates/mtk-sync/src/lib.rs": {"protocol", "server"},
 }
 
 # Symbols in crate root `pub use` that are intentionally exported for CLI / external contract

@@ -13,8 +13,10 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 mtk-sync = { workspace = true }
+mtk-model = { workspace = true }
 jni = { workspace = true }
 glam = { workspace = true }
+serde_json = { workspace = true }
 xxhash-rust = { workspace = true }
 
 [features]

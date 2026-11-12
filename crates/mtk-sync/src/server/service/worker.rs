@@ -13,7 +13,7 @@ use crate::protocol::{
 use crate::server::decision::decide_handshake;
 
 use super::config::{ServerCommand, ServerConfig, ServerEvent};
-use super::server::ServerInner;
+use super::state::ServerInner;
 
 pub(crate) fn run_client_worker(
     client_id: u64,
@@ -63,6 +63,17 @@ pub(crate) fn run_client_worker(
                                 inner.remove_client(client_id);
                                 return;
                             }
+
+                            let subscribed = if let Packet::Hello {
+                                ref subscribed_visual_entities,
+                                ..
+                            } = hello_pkt
+                            {
+                                subscribed_visual_entities.clone()
+                            } else {
+                                Vec::new()
+                            };
+                            inner.set_client_subscriptions(client_id, subscribed);
 
                             let _ = inner
                                 .event_tx

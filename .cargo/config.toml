@@ -44,4 +44,9 @@ build-dna-dev = "build -p mtk-blender-dna-py --features extension-module"
 build-all-py = "build --release -p mtk-py -p mtk-blender-dna-py --features mtk-py/extension-module,mtk-blender-dna-py/extension-module"
 build-all-py-dev = "build -p mtk-py -p mtk-blender-dna-py --features mtk-py/extension-module,mtk-blender-dna-py/extension-module"
 
+# Standalone JNI native module for Minecraft Mod (Yefira)
+build-jni = "build --release -p mtk-jni"
+build-jni-dev = "build -p mtk-jni"
+
+
 

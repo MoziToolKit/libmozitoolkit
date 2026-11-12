@@ -11,7 +11,8 @@ mod quart;
 
 pub use codec::compute_delta_batch_hash;
 pub use codec::{
-    choose_bits_per_item, decode_packet, encode_packet, pack_lsb_indices, unpack_lsb_indices,
+    choose_bits_per_item, decode_packet, encode_packet, pack_lsb_indices, read_visual_entity,
+    unpack_lsb_indices,
 };
 pub(crate) use constants::*;
 pub use constants::{
@@ -20,14 +21,12 @@ pub use constants::{
     MAX_SELECTION_VOLUME, PROTOCOL_MAGIC, PROTOCOL_VERSION,
 };
 pub use error::ProtocolError;
+pub(crate) use hasher::parse_uuid_bits;
 pub use hasher::SparseBlockEntry;
 pub use hasher::{
     compute_sparse_state_hash, compute_sparse_state_hash_for_point_cloud,
     compute_sparse_state_hash_for_storage, compute_sparse_state_hash_from_raw,
-    compute_visual_entities_hash,
-};
-pub(crate) use hasher::{
-    direction_to_facing_byte, facing_byte_to_direction, format_uuid, parse_uuid_bits,
+    compute_visual_entities_hash, direction_to_facing_byte, facing_byte_to_direction, format_uuid,
 };
 pub use packet::{DeltaChangeEntry, Packet, VisualEntityDelta};
 pub use quart::{voxel_index_to_relative_coords, QuartGrid};

@@ -9,7 +9,7 @@
 //! stream transmitter, deserializes and serializes block delta changes,
 //! and synchronizes chunk data into `mtk-voxel` storage containers with zero-copy handoff.
 
-pub mod client;
+mod client;
 pub mod protocol;
 pub mod server;
 
@@ -26,7 +26,8 @@ pub use client::{
 pub use protocol::{
     compute_sparse_state_hash, compute_sparse_state_hash_for_point_cloud,
     compute_sparse_state_hash_for_storage, compute_sparse_state_hash_from_raw,
-    compute_visual_entities_hash, decode_packet, encode_packet, voxel_index_to_relative_coords,
+    compute_visual_entities_hash, decode_packet, direction_to_facing_byte, encode_packet,
+    facing_byte_to_direction, format_uuid, read_visual_entity, voxel_index_to_relative_coords,
     DeltaChangeEntry, Opcode, Packet, QuartGrid, SparseBlockEntry, SyncDecision, VisualEntityDelta,
     DELTA_VISUAL_ACTION_REMOVE, DELTA_VISUAL_ACTION_UPSERT, PROTOCOL_MAGIC, PROTOCOL_VERSION,
 };

@@ -72,6 +72,7 @@ fn test_native_server_handshake_baseline_and_delta_e2e() {
             &raw_biomes,
             &biome_to_name,
             &[],
+            &[],
         )
         .expect("submit_baseline should succeed");
 
