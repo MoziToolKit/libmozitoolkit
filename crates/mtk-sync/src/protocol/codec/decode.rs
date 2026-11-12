@@ -99,6 +99,24 @@ pub(crate) fn read_u32_le(
 }
 
 #[inline]
+pub(crate) fn read_f32_le(
+    buf: &[u8],
+    offset: &mut usize,
+    field: &'static str,
+) -> Result<f32, ProtocolError> {
+    read_array::<4>(buf, offset, field).map(f32::from_le_bytes)
+}
+
+#[inline]
+pub(crate) fn read_f64_le(
+    buf: &[u8],
+    offset: &mut usize,
+    field: &'static str,
+) -> Result<f64, ProtocolError> {
+    read_array::<8>(buf, offset, field).map(f64::from_le_bytes)
+}
+
+#[inline]
 pub(crate) fn read_u64_le(
     buf: &[u8],
     offset: &mut usize,
@@ -168,6 +186,8 @@ pub fn decode_packet(buf: &[u8]) -> Result<Packet, ProtocolError> {
         Opcode::Error => decode_error(buf, &mut offset),
         Opcode::BaselineEntities => decode_baseline_entities(buf, &mut offset),
         Opcode::DeltaEntity => decode_delta_entity(buf, &mut offset),
+        Opcode::BaselineVisualEntities => decode_baseline_visual_entities(buf, &mut offset),
+        Opcode::DeltaVisualEntity => decode_delta_visual_entity(buf, &mut offset),
     }
 }
 
@@ -195,6 +215,15 @@ fn decode_hello(buf: &[u8], offset: &mut usize) -> Result<Packet, ProtocolError>
     let auth_token = read_str(buf, offset, "Hello auth_token")?.to_string();
     let cached_dimension = read_str(buf, offset, "Hello cached_dimension")?.to_string();
 
+    let mut subscribed_visual_entities = Vec::new();
+    if (capabilities & CAP_SUPPORTS_VISUAL_ENTITIES) != 0 && *offset + 2 <= buf.len() {
+        let count = read_u16_le(buf, offset, "Hello subscribed count")? as usize;
+        for _ in 0..count {
+            let id = read_str(buf, offset, "Hello subscribed entity id")?.to_string();
+            subscribed_visual_entities.push(id);
+        }
+    }
+
     Ok(Packet::Hello {
         min_version,
         max_version,
@@ -208,6 +237,7 @@ fn decode_hello(buf: &[u8], offset: &mut usize) -> Result<Packet, ProtocolError>
         cached_state_hash,
         auth_token,
         cached_dimension,
+        subscribed_visual_entities,
     })
 }
 
@@ -447,5 +477,106 @@ fn decode_delta_entity(buf: &[u8], offset: &mut usize) -> Result<Packet, Protoco
         seq_id,
         rel_pos: IVec3::new(rx, ry, rz),
         entity,
+    })
+}
+
+fn read_visual_entity(
+    buf: &[u8],
+    offset: &mut usize,
+) -> Result<mtk_model::EntityInstance, ProtocolError> {
+    let most = read_u64_le(buf, offset, "VisualEntity uuid_most")?;
+    let least = read_u64_le(buf, offset, "VisualEntity uuid_least")?;
+    let uuid_str = crate::protocol::format_uuid(most, least);
+
+    let x = read_f64_le(buf, offset, "VisualEntity pos.x")?;
+    let y = read_f64_le(buf, offset, "VisualEntity pos.y")?;
+    let z = read_f64_le(buf, offset, "VisualEntity pos.z")?;
+
+    let pitch = read_f32_le(buf, offset, "VisualEntity rot.pitch")?;
+    let yaw = read_f32_le(buf, offset, "VisualEntity rot.yaw")?;
+    let roll = read_f32_le(buf, offset, "VisualEntity rot.roll")?;
+
+    let sx = read_f32_le(buf, offset, "VisualEntity scale.x")?;
+    let sy = read_f32_le(buf, offset, "VisualEntity scale.y")?;
+    let sz = read_f32_le(buf, offset, "VisualEntity scale.z")?;
+
+    let facing_byte = read_u8(buf, offset, "VisualEntity facing")?;
+    let facing = crate::protocol::facing_byte_to_direction(facing_byte);
+
+    let id = read_str(buf, offset, "VisualEntity id")?.to_string();
+
+    let payload_len = read_u32_le(buf, offset, "VisualEntity payload_len")? as usize;
+    let payload = read_slice(buf, offset, payload_len, "VisualEntity payload")?;
+
+    let kind: mtk_model::EntityKindData = if !payload.is_empty() {
+        serde_json::from_slice(payload).unwrap_or_else(|_| mtk_model::EntityKindData::Generic {
+            custom_id: id.clone(),
+            payload: payload.to_vec(),
+        })
+    } else {
+        mtk_model::EntityKindData::Generic {
+            custom_id: id.clone(),
+            payload: Vec::new(),
+        }
+    };
+
+    Ok(mtk_model::EntityInstance {
+        uuid: Some(uuid_str),
+        id,
+        custom_name: None,
+        position: glam::DVec3::new(x, y, z),
+        facing,
+        rotation: glam::Vec3::new(pitch, yaw, roll),
+        scale: glam::Vec3::new(sx, sy, sz),
+        kind,
+    })
+}
+
+fn decode_baseline_visual_entities(
+    buf: &[u8],
+    offset: &mut usize,
+) -> Result<Packet, ProtocolError> {
+    let epoch = read_u64_le(buf, offset, "BaselineVisualEntities epoch")?;
+    let snapshot_seq = read_u64_le(buf, offset, "BaselineVisualEntities snapshot_seq")?;
+    let entities_hash = read_u64_le(buf, offset, "BaselineVisualEntities entities_hash")?;
+    let count = read_u32_le(buf, offset, "BaselineVisualEntities count")? as usize;
+
+    let mut entities = Vec::with_capacity(count);
+    for _ in 0..count {
+        entities.push(read_visual_entity(buf, offset)?);
+    }
+
+    Ok(Packet::BaselineVisualEntities {
+        epoch,
+        snapshot_seq,
+        entities_hash,
+        entities,
+    })
+}
+
+fn decode_delta_visual_entity(buf: &[u8], offset: &mut usize) -> Result<Packet, ProtocolError> {
+    let epoch = read_u64_le(buf, offset, "DeltaVisualEntity epoch")?;
+    let seq_id = read_u64_le(buf, offset, "DeltaVisualEntity seq_id")?;
+    let action = read_u8(buf, offset, "DeltaVisualEntity action")?;
+
+    let delta = if action == DELTA_VISUAL_ACTION_REMOVE {
+        let most = read_u64_le(buf, offset, "DeltaVisualEntity uuid_most")?;
+        let least = read_u64_le(buf, offset, "DeltaVisualEntity uuid_least")?;
+        let uuid = crate::protocol::format_uuid(most, least);
+        VisualEntityDelta::Remove { uuid }
+    } else if action == DELTA_VISUAL_ACTION_UPSERT {
+        let entity = read_visual_entity(buf, offset)?;
+        VisualEntityDelta::Upsert(entity)
+    } else {
+        return Err(ProtocolError::InvalidEnum {
+            field: "DeltaVisualEntity action",
+            val: action as u32,
+        });
+    };
+
+    Ok(Packet::DeltaVisualEntity {
+        epoch,
+        seq_id,
+        delta,
     })
 }

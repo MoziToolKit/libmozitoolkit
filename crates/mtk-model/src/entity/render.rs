@@ -16,7 +16,9 @@ use mtk_core::{
 use serde::{Deserialize, Serialize};
 
 use crate::entity::baker::EntityBaker;
-use crate::entity::instance::{entity_family, EntityInstance, EntityKindData};
+use crate::entity::instance::{
+    entity_family, find_supported_visual_entity, EntityInstance, EntityKindData,
+};
 
 /// Version of the entity render plan schema.
 pub const ENTITY_RENDER_SCHEMA_VERSION: u32 = 1;
@@ -99,9 +101,20 @@ impl EntityRenderTransform {
             ),
         };
 
+        let canonical_rot = match &entity.kind {
+            EntityKindData::Painting(_) => {
+                if let Some(facing) = entity.facing {
+                    Vec3::new(0.0, crate::entity::painting::facing_to_y_rot(facing), 0.0)
+                } else {
+                    entity.rotation
+                }
+            }
+            _ => entity.rotation,
+        };
+
         let rot_vec = match config.coordinate_system {
-            CoordinateSystem::Minecraft | CoordinateSystem::YUpRightHanded => entity.rotation,
-            CoordinateSystem::ZUpRightHanded => mc_rotation_to_z_up(entity.rotation),
+            CoordinateSystem::Minecraft | CoordinateSystem::YUpRightHanded => canonical_rot,
+            CoordinateSystem::ZUpRightHanded => mc_rotation_to_z_up(canonical_rot),
         };
 
         let scale_vec = match config.coordinate_system {
@@ -265,7 +278,10 @@ impl EntityRenderPlan {
                 continue;
             }
 
-            if !matches!(&entity.kind, EntityKindData::Painting(_)) {
+            let supports_baking = find_supported_visual_entity(&entity.id)
+                .map(|e| e.supports_mesh_baking())
+                .unwrap_or(false);
+            if !supports_baking {
                 warnings.push(EntityRenderWarning {
                     key,
                     code: "unsupported_entity".to_string(),

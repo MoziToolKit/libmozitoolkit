@@ -12,6 +12,41 @@ fn write_str(buf: &mut Vec<u8>, s: &str) {
     buf.extend_from_slice(bytes);
 }
 
+#[inline]
+fn write_uuid(buf: &mut Vec<u8>, uuid_str: &str) {
+    let (most_sig, least_sig) = crate::protocol::parse_uuid_bits(uuid_str);
+    buf.extend_from_slice(&most_sig.to_le_bytes());
+    buf.extend_from_slice(&least_sig.to_le_bytes());
+}
+
+#[inline]
+fn write_visual_entity(buf: &mut Vec<u8>, entity: &mtk_model::EntityInstance) {
+    let uuid_str = entity.uuid.as_deref().unwrap_or("");
+    write_uuid(buf, uuid_str);
+    buf.extend_from_slice(&entity.position.x.to_le_bytes());
+    buf.extend_from_slice(&entity.position.y.to_le_bytes());
+    buf.extend_from_slice(&entity.position.z.to_le_bytes());
+    buf.extend_from_slice(&entity.rotation.x.to_le_bytes());
+    buf.extend_from_slice(&entity.rotation.y.to_le_bytes());
+    buf.extend_from_slice(&entity.rotation.z.to_le_bytes());
+    buf.extend_from_slice(&entity.scale.x.to_le_bytes());
+    buf.extend_from_slice(&entity.scale.y.to_le_bytes());
+    buf.extend_from_slice(&entity.scale.z.to_le_bytes());
+    let facing = crate::protocol::direction_to_facing_byte(entity.facing);
+    buf.push(facing);
+    write_str(buf, &entity.id);
+    let payload = match &entity.kind {
+        mtk_model::EntityKindData::Generic { payload, .. } if !payload.is_empty() => {
+            payload.clone()
+        }
+        _ => serde_json::to_vec(&entity.kind).unwrap_or_default(),
+    };
+    buf.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+    if !payload.is_empty() {
+        buf.extend_from_slice(&payload);
+    }
+}
+
 /// Encodes any `Packet` into a complete WebSocket binary payload with standard 4-byte header.
 pub fn encode_packet(packet: &Packet) -> Vec<u8> {
     let mut buf = Vec::with_capacity(64);
@@ -32,6 +67,7 @@ pub fn encode_packet(packet: &Packet) -> Vec<u8> {
             cached_state_hash,
             auth_token,
             cached_dimension,
+            subscribed_visual_entities,
         } => {
             buf.push(Opcode::Hello as u8);
             buf.extend_from_slice(&min_version.to_le_bytes());
@@ -50,6 +86,12 @@ pub fn encode_packet(packet: &Packet) -> Vec<u8> {
             buf.extend_from_slice(&cached_state_hash.to_le_bytes());
             write_str(&mut buf, auth_token);
             write_str(&mut buf, cached_dimension);
+            if (*capabilities & CAP_SUPPORTS_VISUAL_ENTITIES) != 0 {
+                buf.extend_from_slice(&(subscribed_visual_entities.len() as u16).to_le_bytes());
+                for entity_id in subscribed_visual_entities {
+                    write_str(&mut buf, entity_id);
+                }
+            }
         }
 
         Packet::Welcome {
@@ -306,6 +348,41 @@ pub fn encode_packet(packet: &Packet) -> Vec<u8> {
                 buf.extend_from_slice(&ed_bytes);
             } else {
                 buf.extend_from_slice(&0u32.to_le_bytes());
+            }
+        }
+
+        Packet::BaselineVisualEntities {
+            epoch,
+            snapshot_seq,
+            entities_hash,
+            entities,
+        } => {
+            buf.push(Opcode::BaselineVisualEntities as u8);
+            buf.extend_from_slice(&epoch.to_le_bytes());
+            buf.extend_from_slice(&snapshot_seq.to_le_bytes());
+            buf.extend_from_slice(&entities_hash.to_le_bytes());
+            buf.extend_from_slice(&(entities.len() as u32).to_le_bytes());
+            for e in entities {
+                write_visual_entity(&mut buf, e);
+            }
+        }
+
+        Packet::DeltaVisualEntity {
+            epoch,
+            seq_id,
+            delta,
+        } => {
+            buf.push(Opcode::DeltaVisualEntity as u8);
+            buf.extend_from_slice(&epoch.to_le_bytes());
+            buf.extend_from_slice(&seq_id.to_le_bytes());
+            buf.push(delta.action_byte());
+            match delta {
+                VisualEntityDelta::Upsert(entity) => {
+                    write_visual_entity(&mut buf, entity);
+                }
+                VisualEntityDelta::Remove { uuid } => {
+                    write_uuid(&mut buf, uuid);
+                }
             }
         }
     }

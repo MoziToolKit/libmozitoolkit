@@ -55,6 +55,9 @@ pub struct LiveSyncSession {
     cmd_sender: Option<Sender<ClientCommand>>,
     /// Shared secret sent in every HELLO (RFC v3.1 §4.1, trimmed).
     auth_token: String,
+    /// Configured continuous visual entities subscribed during HELLO handshake (RFC v3.2).
+    /// When None, defaults to `mtk_model::supported_visual_entity_ids()`.
+    subscribed_entities: Option<Vec<String>>,
 }
 
 impl LiveSyncSession {
@@ -80,7 +83,23 @@ impl LiveSyncSession {
             state: Arc::new(Mutex::new(SessionState::new())),
             cmd_sender: None,
             auth_token: String::new(),
+            subscribed_entities: None,
         }
+    }
+
+    /// Sets the continuous visual entities to subscribe to during HELLO handshake (RFC v3.2).
+    ///
+    /// Pass `None` to restore default behavior (subscribes to all supported visual entities
+    /// declared in `mtk-model`).
+    pub fn set_subscribed_entities(&mut self, entities: Option<Vec<String>>) {
+        self.subscribed_entities = entities;
+    }
+
+    /// Returns the currently configured subscribed visual entity IDs, or the default list from `mtk-model`.
+    pub fn subscribed_entities(&self) -> Vec<String> {
+        self.subscribed_entities
+            .clone()
+            .unwrap_or_else(crate::session::hello::default_subscribed_visual_entities)
     }
 
     /// Sets the shared secret attached to every HELLO handshake (RFC v3.1 §4.1).

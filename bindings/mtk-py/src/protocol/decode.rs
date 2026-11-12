@@ -25,6 +25,7 @@ pub fn decode_packet<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, P
             cached_state_hash,
             auth_token,
             cached_dimension,
+            subscribed_visual_entities,
         } => {
             dict.set_item("type", "HELLO")?;
             dict.set_item("min_version", min_version)?;
@@ -43,6 +44,7 @@ pub fn decode_packet<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, P
             dict.set_item("cached_state_hash", format!("0x{:016x}", cached_state_hash))?;
             dict.set_item("auth_token", auth_token)?;
             dict.set_item("cached_dimension", cached_dimension)?;
+            dict.set_item("subscribed_visual_entities", subscribed_visual_entities)?;
         }
         Packet::Welcome {
             negotiated_version,
@@ -291,6 +293,44 @@ pub fn decode_packet<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, P
                 dict.set_item("entity", json_str)?;
             } else {
                 dict.set_item("entity", py.None())?;
+            }
+        }
+        Packet::BaselineVisualEntities {
+            epoch,
+            snapshot_seq,
+            entities_hash,
+            entities,
+        } => {
+            dict.set_item("type", "BASELINE_VISUAL_ENTITIES")?;
+            dict.set_item("epoch", epoch)?;
+            dict.set_item("snapshot_seq", snapshot_seq)?;
+            dict.set_item("entities_hash", format!("0x{:016x}", entities_hash))?;
+            let ent_list = pyo3::types::PyList::empty(py);
+            for e in entities {
+                let json_str = serde_json::to_string(&e).unwrap_or_default();
+                ent_list.append(json_str)?;
+            }
+            dict.set_item("entities", ent_list)?;
+        }
+        Packet::DeltaVisualEntity {
+            epoch,
+            seq_id,
+            delta,
+        } => {
+            dict.set_item("type", "DELTA_VISUAL_ENTITY")?;
+            dict.set_item("epoch", epoch)?;
+            dict.set_item("seq_id", seq_id)?;
+            dict.set_item("action", delta.action_byte())?;
+            match delta {
+                mtk_sync::VisualEntityDelta::Upsert(ref entity) => {
+                    let json_str = serde_json::to_string(entity).unwrap_or_default();
+                    dict.set_item("entity", json_str)?;
+                    dict.set_item("uuid", entity.uuid.as_deref().unwrap_or(""))?;
+                }
+                mtk_sync::VisualEntityDelta::Remove { ref uuid } => {
+                    dict.set_item("entity", py.None())?;
+                    dict.set_item("uuid", uuid)?;
+                }
             }
         }
     }

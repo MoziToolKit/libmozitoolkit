@@ -16,6 +16,7 @@ fn test_all_packets_truncated_payload_safety() {
         cached_state_hash: 0xDEADBEEFCAFE,
         auth_token: "secret_token".to_string(),
         cached_dimension: "minecraft:overworld".to_string(),
+        subscribed_visual_entities: Vec::new(),
     };
 
     let welcome = Packet::Welcome {
@@ -241,6 +242,7 @@ fn test_random_corrupt_byte_slices_no_panic() {
     // 2. Buffers with valid header prefix, random payload
     let opcodes = [
         0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x0B, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12,
+        0x13, 0x14,
     ];
 
     for &opcode in &opcodes {
@@ -277,6 +279,7 @@ fn test_corrupt_packet_mutations_no_panic() {
         cached_state_hash: 0xDEADBEEFCAFE,
         auth_token: "secret_token".to_string(),
         cached_dimension: "minecraft:overworld".to_string(),
+        subscribed_visual_entities: Vec::new(),
     };
     let encoded = encode_packet(&hello);
 

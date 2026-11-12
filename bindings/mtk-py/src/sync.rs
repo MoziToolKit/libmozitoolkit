@@ -81,12 +81,14 @@ impl PyLiveSyncSession {
     }
 
     /// Starts the background sync client thread connecting to Minecraft at `url`,
-    /// authenticating the HELLO with the shared session token (RFC v3.1 §4.1).
+    /// authenticating the HELLO with the shared session token (RFC v3.1 §4.1) and
+    /// subscribing to continuous visual entities (RFC v3.2).
     #[pyo3(signature = (
         url="ws://localhost:8765",
         auto_reconnect=true,
         max_reconnect_attempts=5,
-        auth_token=None
+        auth_token=None,
+        subscribed_entities=None
     ))]
     pub fn start(
         &mut self,
@@ -94,13 +96,21 @@ impl PyLiveSyncSession {
         auto_reconnect: bool,
         max_reconnect_attempts: usize,
         auth_token: Option<&str>,
+        subscribed_entities: Option<Vec<String>>,
     ) -> PyResult<()> {
         // The token must ride on the HELLO even when there is no cached state:
         // `LiveSyncSession::start` builds the default HELLO from this value.
         self.inner.set_auth_token(auth_token.unwrap_or(""));
+        self.inner.set_subscribed_entities(subscribed_entities);
         self.inner
             .start(url, auto_reconnect, max_reconnect_attempts)
             .map_err(pyo3::exceptions::PyRuntimeError::new_err)
+    }
+
+    /// Returns the active or default subscribed continuous visual entity types.
+    #[getter]
+    pub fn subscribed_entities(&self) -> Vec<String> {
+        self.inner.subscribed_entities()
     }
 
     /// Stops the live sync session cleanly and disconnects from server.
@@ -270,6 +280,27 @@ impl PyLiveSyncSession {
                     dict.set_item("type", "VERIFIED")?;
                     dict.set_item("is_verified", is_verified)?;
                     dict.set_item("message", message)?;
+                }
+                SyncEvent::VisualEntitiesUpdated {
+                    upserted,
+                    deleted_uuids,
+                } => {
+                    dict.set_item("type", "VISUAL_ENTITIES_UPDATED")?;
+                    let upserted_list = PyList::empty(py);
+                    for e in upserted {
+                        let json_str = serde_json::to_string(&e).map_err(|err| {
+                            pyo3::exceptions::PyValueError::new_err(format!(
+                                "Failed to serialize visual entity: {err}"
+                            ))
+                        })?;
+                        upserted_list.append(json_str)?;
+                    }
+                    dict.set_item("upserted", upserted_list)?;
+                    let deleted_list = PyList::empty(py);
+                    for u in deleted_uuids {
+                        deleted_list.append(u)?;
+                    }
+                    dict.set_item("deleted_uuids", deleted_list)?;
                 }
                 SyncEvent::Warning(msg) => {
                     dict.set_item("type", "WARNING")?;

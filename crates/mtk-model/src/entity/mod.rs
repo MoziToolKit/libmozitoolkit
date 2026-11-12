@@ -12,8 +12,10 @@ pub mod skull;
 pub use baker::EntityBaker;
 pub use banner::BannerPatternLayer;
 pub use instance::{
-    ArmorStandData, EntityInstance, EntityKindData, EntityValidationError, ItemFrameData,
-    PaintingData,
+    find_supported_visual_entity, is_supported_visual_entity, supported_visual_entity_ids,
+    ArmorStandData, EntityBuildCapability, EntityInstance, EntityKindData, EntityValidationError,
+    ItemFrameData, PaintingData, SupportedVisualEntity, ENTITY_ID_ARMOR_STAND,
+    ENTITY_ID_GLOW_ITEM_FRAME, ENTITY_ID_ITEM_FRAME, ENTITY_ID_PAINTING, SUPPORTED_VISUAL_ENTITIES,
 };
 pub use render::{
     build_entity_render_plan, entity_render_key, host_transform_to_mc, EntityMaterialRoute,

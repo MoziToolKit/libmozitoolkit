@@ -35,6 +35,8 @@ pub(crate) struct BaselineAssembler {
     pub(crate) raw_voxel_indices: Vec<u16>,
     pub(crate) raw_quart_biome_indices: Vec<u16>,
     pub(crate) block_entities: HashMap<IVec3, mtk_model::BlockEntityData>,
+    pub(crate) visual_entities: Vec<mtk_model::EntityInstance>,
+    pub(crate) visual_entities_hash: Option<u64>,
 }
 
 impl BaselineAssembler {
@@ -128,7 +130,19 @@ impl BaselineAssembler {
             raw_voxel_indices: Vec::with_capacity(total_voxels as usize),
             raw_quart_biome_indices: Vec::new(),
             block_entities: HashMap::new(),
+            visual_entities: Vec::new(),
+            visual_entities_hash: None,
         })
+    }
+
+    /// Stores continuous visual entities and their authoritative hash.
+    pub(crate) fn set_visual_entities(
+        &mut self,
+        entities: Vec<mtk_model::EntityInstance>,
+        entities_hash: u64,
+    ) {
+        self.visual_entities = entities;
+        self.visual_entities_hash = Some(entities_hash);
     }
 
     /// Appends and processes a single BASELINE_CHUNK.

@@ -83,6 +83,7 @@ fn cached_hello_keeps_cache_and_receives_auth_token() {
         cached_state_hash: 0xDEAD_BEEF,
         auth_token: String::new(),
         cached_dimension: "minecraft:the_nether".to_string(),
+        subscribed_visual_entities: Vec::new(),
     };
 
     let mut session = LiveSyncSession::new(Some(MesherConfig::default()), None, None);

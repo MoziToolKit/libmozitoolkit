@@ -11,6 +11,94 @@ use mtk_core::Direction;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// Canonical entity identifier for hanging paintings.
+pub const ENTITY_ID_PAINTING: &str = "minecraft:painting";
+
+/// Canonical entity identifier for regular item frames.
+pub const ENTITY_ID_ITEM_FRAME: &str = "minecraft:item_frame";
+
+/// Canonical entity identifier for glowing item frames.
+pub const ENTITY_ID_GLOW_ITEM_FRAME: &str = "minecraft:glow_item_frame";
+
+/// Canonical entity identifier for armor stands.
+pub const ENTITY_ID_ARMOR_STAND: &str = "minecraft:armor_stand";
+
+/// Build and baking capability level for an entity type in `mtk-model`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum EntityBuildCapability {
+    /// Full procedural 3D mesh baking and UV remapping supported into standalone local-space `MeshData`.
+    ProceduralMesh,
+    /// Spatial coordinates, metadata, and rigid transform supported; mesh baking handled externally or pending.
+    TransformAndMetadataOnly,
+}
+
+/// Canonical descriptor for a continuous visual entity type recognized by `mtk-model`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SupportedVisualEntity {
+    /// Full namespaced entity resource ID (e.g. "minecraft:painting").
+    pub id: &'static str,
+    /// Lowercase family slug (e.g. "painting").
+    pub family: &'static str,
+    /// Current procedural build capability in mtk-model.
+    pub build_capability: EntityBuildCapability,
+}
+
+impl SupportedVisualEntity {
+    /// Whether this entity type currently has procedural local-mesh baking support in mtk-model.
+    #[inline]
+    pub const fn supports_mesh_baking(&self) -> bool {
+        matches!(self.build_capability, EntityBuildCapability::ProceduralMesh)
+    }
+}
+
+/// Table of all visual entity types officially supported and declared by `mtk-model`.
+pub const SUPPORTED_VISUAL_ENTITIES: &[SupportedVisualEntity] = &[
+    SupportedVisualEntity {
+        id: ENTITY_ID_PAINTING,
+        family: "painting",
+        build_capability: EntityBuildCapability::ProceduralMesh,
+    },
+    SupportedVisualEntity {
+        id: ENTITY_ID_ITEM_FRAME,
+        family: "item_frame",
+        build_capability: EntityBuildCapability::TransformAndMetadataOnly,
+    },
+    SupportedVisualEntity {
+        id: ENTITY_ID_GLOW_ITEM_FRAME,
+        family: "glow_item_frame",
+        build_capability: EntityBuildCapability::TransformAndMetadataOnly,
+    },
+    SupportedVisualEntity {
+        id: ENTITY_ID_ARMOR_STAND,
+        family: "armor_stand",
+        build_capability: EntityBuildCapability::TransformAndMetadataOnly,
+    },
+];
+
+/// Returns a static slice of all canonical visual entity type identifiers supported by `mtk-model`.
+pub fn supported_visual_entity_ids() -> &'static [&'static str] {
+    static IDS: &[&str] = &[
+        ENTITY_ID_PAINTING,
+        ENTITY_ID_ITEM_FRAME,
+        ENTITY_ID_GLOW_ITEM_FRAME,
+        ENTITY_ID_ARMOR_STAND,
+    ];
+    IDS
+}
+
+/// Finds the supported visual entity descriptor matching the given entity ID or family.
+pub fn find_supported_visual_entity(id: &str) -> Option<&'static SupportedVisualEntity> {
+    let fam = entity_family(id);
+    SUPPORTED_VISUAL_ENTITIES
+        .iter()
+        .find(|e| e.id == id || e.family == fam)
+}
+
+/// Checks whether an entity type identifier is recognized as a supported visual entity.
+pub fn is_supported_visual_entity(id: &str) -> bool {
+    find_supported_visual_entity(id).is_some()
+}
+
 /// Validation failures for a canonical `EntityInstance`.
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum EntityValidationError {
@@ -91,7 +179,7 @@ impl EntityInstance {
         let v = variant.into();
         Self {
             uuid,
-            id: "minecraft:painting".to_string(),
+            id: ENTITY_ID_PAINTING.to_string(),
             custom_name: None,
             position,
             facing: Some(facing),
@@ -122,9 +210,9 @@ impl EntityInstance {
         Self {
             uuid,
             id: if is_glowing {
-                "minecraft:glow_item_frame".to_string()
+                ENTITY_ID_GLOW_ITEM_FRAME.to_string()
             } else {
-                "minecraft:item_frame".to_string()
+                ENTITY_ID_ITEM_FRAME.to_string()
             },
             custom_name: None,
             position,
@@ -262,7 +350,11 @@ pub enum EntityKindData {
     ArmorStand(ArmorStandData),
     /// Generic or unsupported entity with raw payload.
     #[serde(rename = "generic")]
-    Generic { custom_id: String, payload: Vec<u8> },
+    Generic {
+        custom_id: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        payload: Vec<u8>,
+    },
 }
 
 /// Data payload for a Painting entity.
@@ -283,6 +375,7 @@ pub struct PaintingData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ItemFrameData {
     /// Item identifier held in frame (e.g. "minecraft:diamond_sword").
+    #[serde(default)]
     pub item_id: String,
     /// Item stack count.
     #[serde(default = "default_one")]
@@ -439,5 +532,29 @@ mod tests {
         assert!(!textures
             .iter()
             .any(|t| t.contains("minecraft:painting/minecraft:")));
+    }
+
+    #[test]
+    fn test_supported_visual_entities_schema_declaration() {
+        let ids = supported_visual_entity_ids();
+        assert!(ids.contains(&ENTITY_ID_PAINTING));
+        assert!(ids.contains(&ENTITY_ID_ITEM_FRAME));
+        assert!(ids.contains(&ENTITY_ID_GLOW_ITEM_FRAME));
+        assert!(ids.contains(&ENTITY_ID_ARMOR_STAND));
+
+        assert!(is_supported_visual_entity("minecraft:painting"));
+        assert!(is_supported_visual_entity("painting"));
+        assert!(is_supported_visual_entity("minecraft:armor_stand"));
+        assert!(!is_supported_visual_entity("minecraft:creeper"));
+
+        let painting_desc =
+            find_supported_visual_entity(ENTITY_ID_PAINTING).expect("painting desc");
+        assert_eq!(painting_desc.family, "painting");
+        assert!(painting_desc.supports_mesh_baking());
+
+        let frame_desc =
+            find_supported_visual_entity(ENTITY_ID_ITEM_FRAME).expect("item frame desc");
+        assert_eq!(frame_desc.family, "item_frame");
+        assert!(!frame_desc.supports_mesh_baking());
     }
 }

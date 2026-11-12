@@ -508,3 +508,9 @@ pub fn host_transform_to_mc(
         (s.x, s.y, s.z),
     ))
 }
+
+/// Returns the canonical list of visual entity resource IDs supported by mtk-model.
+#[pyfunction]
+pub fn supported_visual_entity_ids() -> Vec<&'static str> {
+    mtk_model::supported_visual_entity_ids().to_vec()
+}

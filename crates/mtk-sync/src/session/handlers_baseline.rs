@@ -151,6 +151,22 @@ pub(crate) fn handle_baseline_entities(
     }
 }
 
+pub(crate) fn handle_baseline_visual_entities(
+    epoch: u64,
+    entities_hash: u64,
+    entities: &[mtk_model::EntityInstance],
+    state: &mut SessionState,
+) {
+    if state.epoch != 0 && epoch != state.epoch {
+        return;
+    }
+    if let Some(assembler) = state.assembler.as_mut() {
+        if epoch == assembler.epoch {
+            assembler.set_visual_entities(entities.to_vec(), entities_hash);
+        }
+    }
+}
+
 pub(crate) fn handle_baseline_end(
     packet: &Packet,
     epoch: u64,
@@ -195,6 +211,12 @@ pub(crate) fn handle_baseline_end(
                 {
                     let mut w = lock_world_write(world);
                     w.sync_from_storage(&assembled_storage);
+                }
+                if !assembled_storage.entities.is_empty() {
+                    let _ = event_sender.send(SyncEvent::VisualEntitiesUpdated {
+                        upserted: assembled_storage.entities.clone(),
+                        deleted_uuids: Vec::new(),
+                    });
                 }
 
                 // 2. Commit Baseline ACK

@@ -26,7 +26,8 @@ mod test_sync_session;
 pub use events::{normalize_stream_progress, SyncEvent};
 pub use protocol::{
     compute_sparse_state_hash, compute_sparse_state_hash_for_point_cloud,
-    compute_sparse_state_hash_for_storage, decode_packet, encode_packet, DeltaChangeEntry, Opcode,
-    Packet, SyncDecision, PROTOCOL_MAGIC, PROTOCOL_VERSION,
+    compute_sparse_state_hash_for_storage, compute_visual_entities_hash, decode_packet,
+    encode_packet, DeltaChangeEntry, Opcode, Packet, SyncDecision, VisualEntityDelta,
+    DELTA_VISUAL_ACTION_REMOVE, DELTA_VISUAL_ACTION_UPSERT, PROTOCOL_MAGIC, PROTOCOL_VERSION,
 };
 pub use session::{LiveSyncSession, SyncLifecycle};

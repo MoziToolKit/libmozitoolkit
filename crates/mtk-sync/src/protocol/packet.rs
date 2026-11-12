@@ -18,6 +18,27 @@ pub struct DeltaChangeEntry {
     pub state_id: u16,
 }
 
+/// Action payload for a continuous visual entity delta update (RFC v3.2 Opcode 0x14).
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum VisualEntityDelta {
+    /// Action 0x01: Upsert continuous visual entity with complete transform and state.
+    Upsert(mtk_model::EntityInstance),
+    /// Action 0x02: Remove continuous visual entity by its canonical UUID.
+    Remove { uuid: String },
+}
+
+impl VisualEntityDelta {
+    /// Returns the canonical protocol action byte (0x01 for UPSERT, 0x02 for REMOVE).
+    #[inline]
+    pub const fn action_byte(&self) -> u8 {
+        match self {
+            Self::Upsert(_) => crate::protocol::constants::DELTA_VISUAL_ACTION_UPSERT,
+            Self::Remove { .. } => crate::protocol::constants::DELTA_VISUAL_ACTION_REMOVE,
+        }
+    }
+}
+
 /// Strongly-typed Live Sync Packet enum (RFC v3.1 Section 4).
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -36,6 +57,8 @@ pub enum Packet {
         cached_state_hash: u64,
         auth_token: String,
         cached_dimension: String,
+        #[cfg_attr(feature = "serde", serde(default))]
+        subscribed_visual_entities: Vec<String>,
     },
 
     /// 0x02: Server Handshake Response (S -> C)
@@ -163,5 +186,20 @@ pub enum Packet {
         seq_id: u64,
         rel_pos: IVec3,
         entity: Option<mtk_model::BlockEntityData>,
+    },
+
+    /// 0x13: Continuous Visual Entity Stream (RFC v3.2, S -> C)
+    BaselineVisualEntities {
+        epoch: u64,
+        snapshot_seq: u64,
+        entities_hash: u64,
+        entities: Vec<mtk_model::EntityInstance>,
+    },
+
+    /// 0x14: Continuous Visual Entity Delta Update (RFC v3.2, S -> C)
+    DeltaVisualEntity {
+        epoch: u64,
+        seq_id: u64,
+        delta: VisualEntityDelta,
     },
 }

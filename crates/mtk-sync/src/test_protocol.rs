@@ -6,7 +6,7 @@ fn test_hello_and_welcome_codec_roundtrip() {
     let hello = Packet::Hello {
         min_version: 0x0003,
         max_version: 0x0003,
-        capabilities: 0x03,
+        capabilities: 0x07,
         flags: 0x01,
         cached_world_uuid: [1u8; 16],
         cached_epoch: 42,
@@ -16,6 +16,7 @@ fn test_hello_and_welcome_codec_roundtrip() {
         cached_state_hash: 0xDEADBEEFCAFE,
         auth_token: "secret_token".to_string(),
         cached_dimension: "minecraft:overworld".to_string(),
+        subscribed_visual_entities: vec!["minecraft:painting".to_string()],
     };
 
     let encoded = encode_packet(&hello);
@@ -398,4 +399,75 @@ fn test_sync_codec_throughput_benchmark() {
         throughput > 200_000.0,
         "Throughput must exceed 200k packets/sec"
     );
+}
+
+#[test]
+fn test_visual_entities_codec_roundtrip() {
+    let painting = mtk_model::EntityInstance::new_painting(
+        Some("11111111-2222-3333-4444-555555555555".to_string()),
+        glam::DVec3::new(10.5, 64.5, 20.0),
+        mtk_core::Direction::North,
+        glam::Vec3::new(0.0, std::f32::consts::PI, 0.0),
+        "kebab",
+        1,
+        1,
+        Some([10, 64, 20]),
+    );
+
+    let item_frame = mtk_model::EntityInstance::new_item_frame(
+        Some("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".to_string()),
+        glam::DVec3::new(15.0, 65.0, 25.5),
+        mtk_core::Direction::South,
+        glam::Vec3::ZERO,
+        "minecraft:diamond_sword",
+        1,
+        2,
+        false,
+        false,
+        None,
+    );
+
+    let entities = vec![painting.clone(), item_frame.clone()];
+    let entities_hash = crate::protocol::compute_visual_entities_hash(&entities);
+    assert_ne!(entities_hash, 0);
+
+    // 1. BaselineVisualEntities Roundtrip
+    let baseline = Packet::BaselineVisualEntities {
+        epoch: 42,
+        snapshot_seq: 100,
+        entities_hash,
+        entities: entities.clone(),
+    };
+    let encoded_baseline = encode_packet(&baseline);
+    let decoded_baseline = decode_packet(&encoded_baseline).expect("Decode BaselineVisualEntities");
+    assert_eq!(decoded_baseline, baseline);
+
+    // 2. DeltaVisualEntity UPSERT
+    let delta_upsert = Packet::DeltaVisualEntity {
+        epoch: 42,
+        seq_id: 101,
+        delta: VisualEntityDelta::Upsert(painting.clone()),
+    };
+    let enc_upsert = encode_packet(&delta_upsert);
+    let dec_upsert = decode_packet(&enc_upsert).expect("Decode DeltaVisualEntity UPSERT");
+    assert_eq!(dec_upsert, delta_upsert);
+
+    // 3. DeltaVisualEntity REMOVE
+    let delta_remove = Packet::DeltaVisualEntity {
+        epoch: 42,
+        seq_id: 102,
+        delta: VisualEntityDelta::Remove {
+            uuid: painting.uuid.clone().unwrap(),
+        },
+    };
+    let enc_remove = encode_packet(&delta_remove);
+    assert_eq!(enc_remove.len(), 37);
+    let dec_remove = decode_packet(&enc_remove).expect("Decode DeltaVisualEntity REMOVE");
+    assert_eq!(dec_remove, delta_remove);
+    if let Packet::DeltaVisualEntity { delta, .. } = &delta_remove {
+        assert_eq!(
+            delta.action_byte(),
+            crate::protocol::DELTA_VISUAL_ACTION_REMOVE
+        );
+    }
 }

@@ -52,6 +52,10 @@ pub enum Opcode {
     BaselineEntities = 0x11,
     /// 0x12: Sparse BlockEntity Delta Update (RFC v3.2, S -> C)
     DeltaEntity = 0x12,
+    /// 0x13: Continuous Visual Entity Stream (RFC v3.2, S -> C)
+    BaselineVisualEntities = 0x13,
+    /// 0x14: Continuous Visual Entity Delta Update (RFC v3.2, S -> C)
+    DeltaVisualEntity = 0x14,
 }
 
 impl Opcode {
@@ -72,6 +76,8 @@ impl Opcode {
             0x10 => Some(Opcode::Error),
             0x11 => Some(Opcode::BaselineEntities),
             0x12 => Some(Opcode::DeltaEntity),
+            0x13 => Some(Opcode::BaselineVisualEntities),
+            0x14 => Some(Opcode::DeltaVisualEntity),
             _ => None,
         }
     }
@@ -151,6 +157,7 @@ pub enum ResyncReason {
     PaletteRevisionMismatch = 0x02,
     StateHashMismatch = 0x03,
     ChunkCorrupted = 0x04,
+    VisualEntitiesHashMismatch = 0x06,
 }
 
 impl ResyncReason {
@@ -160,10 +167,19 @@ impl ResyncReason {
             0x02 => Some(ResyncReason::PaletteRevisionMismatch),
             0x03 => Some(ResyncReason::StateHashMismatch),
             0x04 => Some(ResyncReason::ChunkCorrupted),
+            0x06 => Some(ResyncReason::VisualEntitiesHashMismatch),
             _ => None,
         }
     }
 }
+
+/// Client capability flag: supports continuous visual entity stream (RFC v3.2).
+pub const CAP_SUPPORTS_VISUAL_ENTITIES: u32 = 0x0000_0004;
+
+/// Delta Visual Entity action: Upsert entity.
+pub const DELTA_VISUAL_ACTION_UPSERT: u8 = 0x01;
+/// Delta Visual Entity action: Remove entity by UUID.
+pub const DELTA_VISUAL_ACTION_REMOVE: u8 = 0x02;
 
 /// Protocol Error code (RFC Section 4.14).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

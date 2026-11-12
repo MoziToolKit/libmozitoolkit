@@ -207,6 +207,16 @@ impl BaselineAssembler {
             sec.set_block_entity(local_idx, Some(entity.clone()));
         }
 
+        // Apply and validate RFC v3.2 Continuous Visual Entities
+        if let Some(expected_hash) = self.visual_entities_hash {
+            let computed_entities_hash =
+                crate::protocol::compute_visual_entities_hash(&self.visual_entities);
+            if computed_entities_hash != expected_hash {
+                return Err(ResyncReason::VisualEntitiesHashMismatch);
+            }
+        }
+        storage.entities = self.visual_entities.clone();
+
         // Validate state_hash SSOT
         let computed_hash = compute_sparse_state_hash_for_storage(
             &storage,

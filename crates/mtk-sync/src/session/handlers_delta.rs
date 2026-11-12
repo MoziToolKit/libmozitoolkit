@@ -168,3 +168,61 @@ pub(crate) fn apply_delta_entries_to_world(
     }
     affected
 }
+
+/// Applies continuous visual entity updates or removals into VoxelWorld storage.
+pub(crate) fn handle_delta_visual_entity(
+    epoch: u64,
+    seq_id: u64,
+    delta: &crate::protocol::VisualEntityDelta,
+    state: &mut SessionState,
+    world: &Arc<RwLock<VoxelWorld>>,
+    event_sender: &Sender<SyncEvent>,
+) {
+    if state.epoch != 0 && epoch != state.epoch {
+        return;
+    }
+    if seq_id > state.sequence {
+        state.sequence = seq_id;
+    }
+
+    let mut upserted = Vec::new();
+    let mut deleted_uuids = Vec::new();
+
+    {
+        let mut w = lock_world_write(world);
+        match delta {
+            crate::protocol::VisualEntityDelta::Remove { uuid } => {
+                if !uuid.is_empty() {
+                    w.storage
+                        .entities
+                        .retain(|e| e.uuid.as_deref() != Some(uuid));
+                    deleted_uuids.push(uuid.clone());
+                }
+            }
+            crate::protocol::VisualEntityDelta::Upsert(entity) => {
+                let uuid_str = entity.uuid.as_deref().unwrap_or("");
+                let mut found = false;
+                if !uuid_str.is_empty() {
+                    for existing in &mut w.storage.entities {
+                        if existing.uuid.as_deref() == Some(uuid_str) {
+                            *existing = entity.clone();
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if !found {
+                    w.storage.entities.push(entity.clone());
+                }
+                upserted.push(entity.clone());
+            }
+        }
+    }
+
+    if !upserted.is_empty() || !deleted_uuids.is_empty() {
+        let _ = event_sender.send(SyncEvent::VisualEntitiesUpdated {
+            upserted,
+            deleted_uuids,
+        });
+    }
+}

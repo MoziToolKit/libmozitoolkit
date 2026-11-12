@@ -87,15 +87,16 @@ Python 模块名：`libmtk_py`
   - `rebuild_all() -> MeshData`, `rebuild_dirty() -> Dict`, `get_world_mesh() -> MeshData`, `sync_from_storage(storage)`, `clear_cache()`, `hot_reload(config=None, model_db=None)`, `num_threads` (getter)
 - **`MesherConfig` (`PyMesherConfig`)**：网格化配置（AO 开关、平滑生物群系过渡 `smooth_biome_blend`、流体曲面、坐标系转换、线程数、顶点焊接）。
 - **`LiveSyncSession` (`PyLiveSyncSession`)**：原生 WebSocket 实时协同客户端。
-  - `start(url, auto_reconnect=True, max_reconnect_attempts=5, auth_token=None)`, `stop()`
+  - `start(url, auto_reconnect=True, max_reconnect_attempts=5, auth_token=None, subscribed_entities=None)`, `stop()`
   - `auth_token` 会随默认 HELLO 发送（RFC v3.1 §4.1；Python 侧先 `strip()`；
     两端令牌会各自 trim 后比较），启用 Yefira `authToken` 时必须传入。
-  - `poll_events(coalesce_meshes=False)`：`True` 时只保留最新 `WORLD_MESH_READY` generation
+  - `subscribed_entities`：可显式指定订阅的连续视觉实体类型列表（如 `["minecraft:painting"]`）；未提供时默认订阅 `supported_visual_entity_ids()` 全部支持类型。
+  - `poll_events(coalesce_meshes=False)`：`True` 时只保留最新 `WORLD_MESH_READY` generation；事件类型包含 `STATUS_CHANGE`, `SELECTION_UPDATED`, `HANDSHAKE`, `WORLD_MESH_READY`, `STREAM_PROGRESS`, `STREAM_FINISHED`, `DELTA_APPLIED`, `VISUAL_ENTITIES_UPDATED` (`upserted: List[str]`, `deleted_uuids: List[str]`), `VERIFIED`, `WARNING`, `ERROR`。
   - `get_dynamic_entity_atlases()`：`{chunk_id: RGBA bytes}` 动态实体图集映射（无单数访问器）
   - 持久化握手入口（`start_with_persisted_state` / `export_persisted_state_json` /
     `start()` 的 `cached_*` 参数）已物理删除：Blender 侧 `VoxelStorage` 无法持久化，
     该路径始终不可达。
-  - `client_generation`, `current_sequence`, `current_epoch`, `state_hash`, `server_uuid`
+  - `client_generation`, `current_sequence`, `current_epoch`, `state_hash`, `server_uuid`, `subscribed_entities`
   - `clear_cache()`, `hot_reload(config=None, model_db=None)`, `request_resync()`
   - `STREAM_PROGRESS.percent` 已由 Rust 归一化为 0..100；`HANDSHAKE.decision_code` 为 RFC v3.1 原始值
 
@@ -142,6 +143,7 @@ Python 模块名：`libmtk_py`
 - **连续视觉实体格式**：通用连续视觉实体（涵盖 Painting、ItemFrame 以及未来 Mob、Display 等）在 Python 层统一以规范 JSON 字典 / 字符串或紧凑离散调色板传递：
   - 规范字段：`id`, `uuid`, `custom_name`, `kind`, `position`, `rotation`（权威 Euler XYZ 弧度，局部模型空间，yaw 0 = North / 朝向 -Z）, `scale`, `facing`（只作为元数据供参考，宿主严禁重复旋转）
   - 点云 / 存储通过 `get_visual_entities_palette()`, `set_visual_entities_palette(palette)` 访问。
+- **`supported_visual_entity_ids() -> List[str]`**：查询 native core (`mtk-model`) 声明支持的连续视觉实体类型清单（单一事实源 SSOT，如 `["minecraft:painting", "minecraft:item_frame", "minecraft:glow_item_frame", "minecraft:armor_stand"]`）。
 - **`build_entity_render_plan(entities=None, atlas=None, config=None, atlas_mapping_json=None, bounds=None, origin_centered=True, coordinate_system="z_up", revision=0, authoritative=True, deleted_keys=None) -> EntityRenderPlan`**：批量编译视觉实体渲染计划，一次性完成实体验证、确定性唯一键分配、局部空间网格烘焙、图集槽位分配以及宿主空间几何变换计算（$O(1)$ 跨语言 FFI 通信）。支持传入 `deleted_keys` 配合 `authoritative=False` 构造增量局部重构计划。
 - **`host_transform_to_mc(location, rotation_euler, scale, bounds=None, origin_centered=True, coordinate_system="z_up") -> (pos, rot, scale)`**：反向逆变换算子，将宿主视口刚体变换还原为规范 Minecraft 世界坐标 `((pos_x, pos_y, pos_z), (pitch, yaw, roll), (sx, sy, sz))`，实现视口提取时的前后端单一事实源（SSOT）。
 - **`EntityRenderPlan`**：纯数据契约 DTO。

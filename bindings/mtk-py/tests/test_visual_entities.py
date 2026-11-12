@@ -371,3 +371,17 @@ def test_build_entity_render_plan_delta_and_deleted_keys():
     assert plan_del_empty.deleted_keys == ["uuid:dead-3"]
 
 
+def test_supported_visual_entity_ids_and_session_subscription():
+    supported = libmtk_py.supported_visual_entity_ids()
+    assert isinstance(supported, list)
+    assert "minecraft:painting" in supported
+    assert "minecraft:item_frame" in supported
+    assert "minecraft:glow_item_frame" in supported
+    assert "minecraft:armor_stand" in supported
+
+    session = libmtk_py.LiveSyncSession()
+    # Default subscriptions inherit supported entities from mtk-model SSOT
+    assert session.subscribed_entities == supported
+
+
+

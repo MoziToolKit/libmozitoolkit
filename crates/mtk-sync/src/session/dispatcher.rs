@@ -386,6 +386,19 @@ pub(crate) fn handle_packet(
                 state,
             );
         }
+        Packet::BaselineVisualEntities {
+            epoch,
+            entities_hash,
+            ref entities,
+            ..
+        } => {
+            super::handlers_baseline::handle_baseline_visual_entities(
+                epoch,
+                entities_hash,
+                entities,
+                state,
+            );
+        }
         ref end @ Packet::BaselineEnd {
             epoch,
             snapshot_uuid,
@@ -431,6 +444,20 @@ pub(crate) fn handle_packet(
             ..
         } => {
             super::handlers_delta::handle_delta_entity(epoch, rel_pos, entity, state, world);
+        }
+        Packet::DeltaVisualEntity {
+            epoch,
+            seq_id,
+            ref delta,
+        } => {
+            super::handlers_delta::handle_delta_visual_entity(
+                epoch,
+                seq_id,
+                delta,
+                state,
+                world,
+                event_sender,
+            );
         }
         Packet::Cancel { reason, .. } => {
             super::handlers_control::handle_cancel(reason, state, event_sender);
