@@ -16,6 +16,7 @@ pub(crate) const MAX_BASELINE_DECODED_BYTES: usize = 256 * 1024 * 1024; // 256 M
 pub(crate) const MAX_SELECTION_VOLUME: u64 = 33_554_432; // 32M voxels
 pub(crate) const MAX_DELTA_BATCH_CHANGES: usize = 16384;
 pub(crate) const MAX_DELTA_STAGING_BATCHES: usize = 256;
+pub(crate) const MAX_VISUAL_ENTITIES: usize = 1_000_000;
 
 /// Protocol Opcode enumeration (RFC Section 4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

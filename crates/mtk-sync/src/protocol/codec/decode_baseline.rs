@@ -60,13 +60,22 @@ pub(crate) fn decode_baseline_begin(
         });
     }
 
-    let mut block_palette = Vec::with_capacity(block_palette_len);
+    let max_block_possible = (buf.len().saturating_sub(*offset)) / 2;
+    let mut block_palette = Vec::with_capacity(block_palette_len.min(max_block_possible));
     for _ in 0..block_palette_len {
         block_palette.push(read_str(buf, offset, "block_palette entry")?.to_string());
     }
 
     let biome_palette_len = read_u16_le(buf, offset, "biome_palette length")? as usize;
-    let mut biome_palette = Vec::with_capacity(biome_palette_len);
+    if biome_palette_len > MAX_PALETTE_ENTRIES {
+        return Err(ProtocolError::ResourceLimitExceeded {
+            resource: "Biome Palette Entries",
+            limit: MAX_PALETTE_ENTRIES,
+            actual: biome_palette_len,
+        });
+    }
+    let max_biome_possible = (buf.len().saturating_sub(*offset)) / 2;
+    let mut biome_palette = Vec::with_capacity(biome_palette_len.min(max_biome_possible));
     for _ in 0..biome_palette_len {
         biome_palette.push(read_str(buf, offset, "biome_palette entry")?.to_string());
     }

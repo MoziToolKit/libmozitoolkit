@@ -357,7 +357,8 @@ fn decode_palette_update(buf: &[u8], offset: &mut usize) -> Result<Packet, Proto
     let new_revision = read_u32_le(buf, offset, "PaletteUpdate new_revision")?;
     let count = read_u16_le(buf, offset, "PaletteUpdate count")? as usize;
 
-    let mut entries = Vec::with_capacity(count);
+    let max_possible = (buf.len().saturating_sub(*offset)) / 4;
+    let mut entries = Vec::with_capacity(count.min(max_possible));
     for _ in 0..count {
         let id = read_u16_le(buf, offset, "PaletteUpdate state_id")?;
         let s = read_str(buf, offset, "PaletteUpdate state string")?.to_string();
@@ -541,7 +542,31 @@ fn decode_baseline_visual_entities(
     let entities_hash = read_u64_le(buf, offset, "BaselineVisualEntities entities_hash")?;
     let count = read_u32_le(buf, offset, "BaselineVisualEntities count")? as usize;
 
-    let mut entities = Vec::with_capacity(count);
+    if count > MAX_VISUAL_ENTITIES {
+        return Err(ProtocolError::ResourceLimitExceeded {
+            resource: "Visual Entities Count",
+            limit: MAX_VISUAL_ENTITIES,
+            actual: count,
+        });
+    }
+
+    let min_entry_size = 71;
+    let entries_len =
+        count
+            .checked_mul(min_entry_size)
+            .ok_or(ProtocolError::ResourceLimitExceeded {
+                resource: "Visual Entities Count",
+                limit: MAX_VISUAL_ENTITIES,
+                actual: count,
+            })?;
+    if *offset + entries_len > buf.len() {
+        return Err(ProtocolError::TruncatedPayload {
+            field: "BaselineVisualEntities entries",
+        });
+    }
+
+    let max_possible = (buf.len().saturating_sub(*offset)) / min_entry_size;
+    let mut entities = Vec::with_capacity(count.min(max_possible));
     for _ in 0..count {
         entities.push(read_visual_entity(buf, offset)?);
     }
