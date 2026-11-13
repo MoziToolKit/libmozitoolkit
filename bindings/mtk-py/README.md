@@ -75,6 +75,8 @@ Python 模块名：`libmtk_py`
   - `to_storage() -> VoxelStorage`, `to_buffers() -> dict`, `from_indexed_arrays(...)`
   - `positions_memoryview()`, `block_x_memoryview()`, `block_y_memoryview()`, `block_z_memoryview()`
   - `get_state_palette()`, `get_biome_palette()`, `get_visual_entities_palette()`, `set_visual_entities_palette(palette)`, `state_indices_memoryview()`, `biome_indices_memoryview()`：点云只存 palette + 索引，视觉实体以紧凑 JSON 调色板数组传递，不在前端暴露裸编辑框。
+  - `compute_sparse_state_hash(min_pos, size, dimension) -> int`：计算权威稀疏状态哈希指纹（xxHash64），用于 0ms 重连前置自洽性校验。
+  - `scan_unknown_blocks(model_db=None, atlas=None, custom_aliases=None) -> List[str]`：扫描缺少模型或贴图的未知方块。
 - **`VoxelStorage` (`PyVoxelStorage`)**：16x16x16 稀疏 Chunk Section 体素容器，带脏标记追踪。
   - `to_point_cloud(config=None) -> VoxelPointCloud`, `load_from_point_cloud(cloud)`
   - `bounds` (getter), `get_visual_entities_palette()`, `set_visual_entities_palette(palette)`
@@ -93,9 +95,9 @@ Python 模块名：`libmtk_py`
   - `subscribed_entities`：可显式指定订阅的连续视觉实体类型列表（如 `["minecraft:painting"]`）；未提供时默认订阅 `supported_visual_entity_ids()` 全部支持类型。
   - `poll_events(coalesce_meshes=False)`：`True` 时只保留最新 `WORLD_MESH_READY` generation；事件类型包含 `STATUS_CHANGE`, `SELECTION_UPDATED`, `HANDSHAKE`, `WORLD_MESH_READY`, `STREAM_PROGRESS`, `STREAM_FINISHED`, `DELTA_APPLIED`, `VISUAL_ENTITIES_UPDATED` (`upserted: List[str]`, `deleted_uuids: List[str]`), `VERIFIED`, `WARNING`, `ERROR`。
   - `get_dynamic_entity_atlases()`：`{chunk_id: RGBA bytes}` 动态实体图集映射（无单数访问器）
-  - 持久化握手入口（`start_with_persisted_state` / `export_persisted_state_json` /
-    `start()` 的 `cached_*` 参数）已物理删除：Blender 侧 `VoxelStorage` 无法持久化，
-    该路径始终不可达。
+  - `start_with_cache(url, auto_reconnect=True, max_reconnect_attempts=5, server_uuid="", epoch=0, sequence=0, min_pos=(0,0,0), size=(0,0,0), state_hash=0, dimension="minecraft:overworld", auth_token=None)`：携带缓存握手参数直连，服务端命中即返回 `0x00 VERIFIED_SKIP_REBUILD`，实现 0ms 零网格重建秒级直连。
+  - `load_from_point_cloud(point_cloud: VoxelPointCloud)`：从 Blender 原生持久化的伴生点云恢复底层 `VoxelStorage` 拓扑，使 0ms 快速路径可无缝衔接后续增量变更。
+  - `get_storage() -> VoxelStorage`：获取当前底层 `VoxelStorage` 副本。
   - `client_generation`, `current_sequence`, `current_epoch`, `state_hash`, `server_uuid`, `subscribed_entities`
   - `clear_cache()`, `hot_reload(config=None, model_db=None)`, `request_resync()`
   - `STREAM_PROGRESS.percent` 已由 Rust 归一化为 0..100；`HANDSHAKE.decision_code` 为 RFC v3.1 原始值

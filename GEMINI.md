@@ -18,7 +18,8 @@
 - **本工作区职责**：纯 Rust 实现的通用 3D/体素几何处理核心引擎，纯数据输入输出 (Data-in, Data-out)、宿主无关 (Host-Agnostic)、高性能无头计算。
 - **协同边界**：
   - 为相对路径 `../MoziToolKit` (Blender Addon) 提供 `libmtk_py` (`bindings/mtk-py`) 与 `libmtk_blender_dna` (`adapters/blender/mtk-blender-dna-py`)；
-  - 与相对路径 `../yefira` (Minecraft 服务端模组) 共享 RFC v3.1 协议二进制体素编解码标准。
+  - 为相对路径 `../yefira` (Minecraft 服务端模组) 提供 `libmtk_jni` (`bindings/mtk-jni`) 原生 JNI 绑定与 RFC v3.1/v3.2 权威实时协同服务端引擎 (`LiveSyncServer`)；
+  - 与 `../yefira` 共享 RFC v3.1 / v3.2 协议二进制体素编解码标准与 xxHash64 权威指纹 SSOT。
 - **无兼容承诺**：本仓库的 Python API、Rust API、二进制格式与配置结构均按“源码级同步升级”处理。接口变更时直接修改消费者，不保留旧入口。
 
 ---
@@ -185,7 +186,7 @@ libmozitoolkit/
 │   ├── mtk-cull/       -> 6 向邻域遮挡状态机、2D 矩形差集切分
 │   ├── mtk-model/      -> BlockState 状态解析、1.21+ Block Model JSON 烘焙
 │   ├── mtk-voxel/      -> 16x16x16 体素存储、稀疏体素 (SparseVoxelStorage)、流体曲面、平滑 AO
-│   ├── mtk-sync/       -> RFC v3.1 原生 WebSocket 同步客户端与状态机
+│   ├── mtk-sync/       -> RFC v3.1/v3.2 原生 WebSocket 同步客户端 (SyncClient) 与权威服务端 (LiveSyncServer) 控制面、增量流式编码与状态机
 │   ├── mtk-resource/   -> VFS、.mcmeta 动图元数据、原版 atlases/*.json 解析
 │   ├── mtk-texture/    -> 矩形装箱 Stitcher、多类别 PBR 图集与 Overlay 烘焙
 │   ├── mtk-material/   -> 66 生物群系调色板引擎、规范 PBR 预解码、并行 UV
@@ -195,6 +196,7 @@ libmozitoolkit/
 │   └── mtk-testkit/    -> 测试用资产解析器与内置 fixtures
 ├── bindings/
 │   ├── mtk-py/         -> 宿主无关 PyO3 Python 绑定 (libmtk_py)
+│   ├── mtk-jni/        -> Minecraft 模组与 JVM 端高性能 JNI 原生绑定 (libmtk_jni)
 │   └── mtk-wasm/       -> 宿主无关 WebAssembly 绑定（无消费者时按规则 1 删除）
 └── adapters/
     ├── mtk-host-memory/-> 宿主连续内存切片安全检查底座

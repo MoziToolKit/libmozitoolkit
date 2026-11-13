@@ -17,11 +17,12 @@
 | **Layer 1: 贴图与图集** | **[`mtk-texture`](../crates/mtk-texture/README.md)** | 2D 矩形二叉装箱 Stitcher、多通道 PBR 图集烘焙、盔甲调色板置换与抗渗色填充 | [查看 API 手册 ↗](../crates/mtk-texture/README.md) |
 | **Layer 1: 材质与生物群系** | **[`mtk-material`](../crates/mtk-material/README.md)** | 66 种原版生物群系调色板与色彩数学权威唯一事实源 (SSOT)、`BiomeResolver` 染色模型扫描器、Rayon 并行多 UV 重映射与别名解析 | [查看 API 手册 ↗](../crates/mtk-material/README.md) |
 | **Layer 1: 体素世界与网格化** | **[`mtk-voxel`](../crates/mtk-voxel/README.md)** | 16×16×16 区块体素存储 (`SectionStorage` / `VoxelStorage`)、全量无剔除体素点云 (`VoxelPointCloud`)、稀疏列存体素流 (`SparseVoxelPayload` / `SparseVoxelColumns`)、平滑 AO 算法、物理流体曲面与原地拓扑批量修复 (`repair_mesh_fluid_uv_inplace`)、贪婪网格化、增量局部重构 (`DeltaMesher`)、统一 3D 场景引擎 (`VoxelWorld`) 与统一体素源抽象 (`VoxelSource`) | [查看 API 手册 ↗](../crates/mtk-voxel/README.md) |
-| **Layer 1: 实时网络协同** | **[`mtk-sync`](../crates/mtk-sync/README.md)** | 原生多线程 WebSocket 协同客户端 (`SyncClient`)、小端序二进制协议编解码、两阶段流式增量更新与单一世界大网格 (`WorldMeshReady`) 会话管理、0ms 缓存状态恢复 (`compute_sparse_state_hash`) | [查看 API 手册 ↗](../crates/mtk-sync/README.md) |
+| **Layer 1: 实时网络协同** | **[`mtk-sync`](../crates/mtk-sync/README.md)** | 原生多线程 WebSocket 协同客户端 (`SyncClient`) 与权威服务端 (`LiveSyncServer`)、RFC v3.1 / v3.2 二进制协议编解码、连续视觉实体伴生流、两阶段流式增量更新与单一世界大网格 (`WorldMeshReady`) 会话管理、0ms 缓存状态恢复 (`start_with_cache`, `compute_sparse_state_hash`) | [查看 API 手册 ↗](../crates/mtk-sync/README.md) |
 | **Layer 1: 存档与空间切片** | **[`mtk-save`](../crates/mtk-save/README.md)** | 现代 Minecraft 存档加载核心：基于内置零拷贝 NBT、Anvil `.mca` 区域寻址、384 高度解包与按需空间切片流式数据源 (`VoxelSource`) | [查看 API 手册 ↗](../crates/mtk-save/README.md) |
 | **Layer 1: 二进制包容器** | **[`mtk-package`](../crates/mtk-package/README.md)** | 统一二进制包与场景交换容器：64 字节头部 CRC 校验、分块 Zstd 压缩 TOC、`memmap2` 零拷贝解析与逐块惰性解压（支持 `AssetCache` 与 `SceneInterchange` 双 Profile） | [查看 API 手册 ↗](../crates/mtk-package/README.md) |
 | **Layer 2: 应用编排层** | **[`libmtk`](../crates/libmtk/README.md)** | 提供端到端全量资产预编译管线 (`precompile_all_assets`) 与自包含场景交换容器编解码器 (`libmtk::scene`: `ScenePackageReader`, `export_scene_package`)，不重导出领域类型 | [查看 API 手册 ↗](../crates/libmtk/README.md) |
 | **Layer 3: Python 绑定** | **[`mtk-py`](../bindings/mtk-py/README.md)** | **P0 核心绑定**：PyO3 驱动的 `libmtk_py` 模块，为 MoziToolKit (Blender 4.2+ 插件) 提供零拷贝 Buffer Protocol / NumPy 视图、极速批处理算子与 `.mtkscene` 场景包编解码支持 | [查看 API 手册 ↗](../bindings/mtk-py/README.md) |
+| **Layer 3: JNI 模组原生绑定** | **[`mtk-jni`](../bindings/mtk-jni/README.md)** | **P0 模组绑定**：Java Native Interface 驱动的 `libmtk_jni` 原生库，为 Minecraft 模组 (Yefira) 与 JVM 端提供零拷贝 WebSocket 协同服务端 (`LiveSyncServer`)、xxHash64 权威指纹与极速基线分块流式推送 | [查看 API 手册 ↗](../bindings/mtk-jni/README.md) |
 | **Layer 3: 独立命令行** | **[`mtk-cli`](../crates/mtk-cli/README.md)** | **P1 核心工具**：独立无头命令行终端工具 (`mtk`)，支持图集烘焙、模型导出、CTM 求解与遮挡校验 | [查看 API 手册 ↗](../crates/mtk-cli/README.md) |
 | **Layer 3: 性能基准测试** | **[`mtk-bench`](../crates/mtk-bench/README.md)** | **P1 压测套件**：4000+ 区块段多核网格化与数百万次遮挡剔除压力基准套件 | [查看 API 手册 ↗](../crates/mtk-bench/README.md) |
 | **Layer 3: WebAssembly** | **[`mtk-wasm`](../bindings/mtk-wasm/README.md)** | **P2 远期预备**：wasm-bindgen WebAssembly 绑定，暴露线性内存 TypedArray 视图，面向 WebGPU / Three.js 网页预览 | [查看 API 手册 ↗](../bindings/mtk-wasm/README.md) |
@@ -252,6 +253,22 @@ cache_output_dir/
   - `libmtk_py.supported_visual_entity_ids() -> List[str]`：返回 native core (`mtk-model`) 声明支持的连续视觉实体类型清单（单一事实源 SSOT）。
   - `libmtk_py.build_entity_render_plan(entities=None, atlas_mapping_json=None, bounds=None, origin_centered=True, coordinate_system="z_up", revision=0, authoritative=True, deleted_keys=None)`：顶层通用构建算子，支持全量对账与局部增量重构。
   - `libmtk_py.host_transform_to_mc(location, rotation_euler, scale, bounds=None, origin_centered=True, coordinate_system="z_up")`：反向逆变换算子，将宿主刚体变换还原为规范 Minecraft 空间参数。
+
+---
+
+### 2.14 实时协同服务端控制面与 0ms 零重建直连契约 (`LiveSyncServer` & 0ms Reconnect SSOT)
+为实现 Minecraft 服务端（Yefira）与 DCC 前端（MoziToolKit）的无缝双向直连，实时协同底层由 Rust 提供统一的服务端与握手决策引擎：
+- **`LiveSyncServer` 控制面 (`mtk-sync::server`)**：
+  - 原生无阻塞 WebSocket 架构，支持通过 `ServerConfig` 配置 `bind_address`、`auth_token`、`allow_loopback_without_token` 与 `server_uuid`；
+  - `set_selection(min_pos, size, dimension)` / `clear_selection()`：维护权威选区与状态代际 (`epoch`)；
+  - `submit_baseline(...)`：接收原始体素、生物群系与方块实体数据，全自动执行稀疏指纹计算、调色板注册、分块 Zstd 压缩并流式推送；
+  - `submit_deltas(...)`：增量改动流式广播，自动维护调色板增量分片；
+  - `submit_visual_entity_upsert(...)` / `submit_visual_entity_remove(...)`：RFC v3.2 连续视觉实体增量广播。
+- **0ms 零重建快速重连与多层校验体系**：
+  - **`decide_handshake(ctx)`**：服务端权威握手仲裁。比对 `server_uuid`、`epoch` 与客户端提交的 `cached_state_hash`。若匹配一致且本地世界未发生过变更，返回 `SyncDecision::VerifiedSkipRebuild` (`0x00`)，客户端直接保留现有视口网格切入 LIVE 状态，实现 0ms 瞬间直连；
+  - **`VoxelPointCloud` 原生持久化闭环**：通过 Blender 伴生点云恢复底层拓扑（`session.load_from_point_cloud`），确保 0ms 快速路径后续接收增量时具备完备的世界体素拓扑；
+  - **六层权威校验体系**：握手指纹校验、分块 `xxHash64` 校验、基线终态 `state_hash` 校验、连续视觉实体 `entities_hash` 校验、伴生点云自洽性门禁与 Delta 边界硬限，全面杜绝数据腐化。
+
 
 
 

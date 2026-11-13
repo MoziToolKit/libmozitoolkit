@@ -33,7 +33,7 @@
 | **[`mtk-cull`](crates/mtk-cull)** | 核心 | 6 向邻域遮挡状态机、原版剔除规则、2D 矩形差集切分与外部网格叠面剔除 (`cull_mesh_faces`) | [📖 `crates/mtk-cull/README.md`](crates/mtk-cull/README.md) |
 | **[`mtk-model`](crates/mtk-model)** | 核心 | 无头 BlockState 状态机解析与对齐 1.21+ 规范的 Model JSON 模型烘焙、OBJ 导出/加载 | [📖 `crates/mtk-model/README.md`](crates/mtk-model/README.md) |
 | **[`mtk-voxel`](crates/mtk-voxel)** | 核心 | 纯体素核心：16x16x16 Chunk Section 体素存储、流体曲面计算、平滑环境光遮蔽 (AO)、网格化器 (Mesher)、差量网格构建与统一体素源抽象接口 (`VoxelSource`) | [📖 `crates/mtk-voxel/README.md`](crates/mtk-voxel/README.md) |
-| **[`mtk-sync`](crates/mtk-sync)** | 核心 | 实时网络协同：原生 WebSocket 客户端、小端序二进制协议编解码、对接模组 [`Yefira`](https://github.com/MoziToolKit/yefira) 与 Live Sync 会话管理（遵循 [RFC v3.1 协议规范](https://github.com/MoziToolKit/MoziToolKit/blob/main/docs/live_sync/live_sync_protocol.md)） | [📖 `crates/mtk-sync/README.md`](crates/mtk-sync/README.md) |
+| **[`mtk-sync`](crates/mtk-sync)** | 核心 | 实时网络协同：原生多线程 WebSocket 协同客户端 (`SyncClient`) 与权威服务端 (`LiveSyncServer`)、小端序二进制协议编解码、RFC v3.1 / v3.2 (稀疏方块实体与连续视觉实体) 全生命周期会话管理、xxHash64 空间指纹与 0ms 零重建快速重连 | [📖 `crates/mtk-sync/README.md`](crates/mtk-sync/README.md) |
 | **[`mtk-resource`](crates/mtk-resource)** | 核心 | 无头资源包虚拟文件系统 (VFS)、.mcmeta 动图元数据、原版 atlases/*.json 规范解析与 CTM 47/17 连接纹理求解 | [📖 `crates/mtk-resource/README.md`](crates/mtk-resource/README.md) |
 | **[`mtk-texture`](crates/mtk-texture)** | 核心 | 矩形空间装箱 Stitcher、多类别 PBR 图集与 Companion Overlay 贴图烘焙、透明度采样与边缘外推填充 | [📖 `crates/mtk-texture/README.md`](crates/mtk-texture/README.md) |
 | **[`mtk-material`](crates/mtk-material)** | 核心 | 66 种原版生物群系调色板与线性色彩数学引擎 (SSOT)、`BiomeResolver` 模型扫描与预编译映射、多线程并行 UV 重映射与外部别名解算 | [📖 `crates/mtk-material/README.md`](crates/mtk-material/README.md) |
@@ -41,6 +41,7 @@
 | **[`mtk-package`](crates/mtk-package)** | 核心 | 统一二进制资产缓存容器编解码器：64 字节头部校验、分块 TOC 索引、`memmap2` 零拷贝解析与分块 Zstd 压缩 | [📖 `crates/mtk-package/README.md`](crates/mtk-package/README.md) |
 | **[`libmtk`](crates/libmtk)** | 应用层 | 应用编排 Crate：端到端资产预编译管线 (`prebake`)。**不再重导出领域类型**，下游按需直连 `mtk-*` | [📖 `crates/libmtk/README.md`](crates/libmtk/README.md) |
 | **[`mtk-py`](bindings/mtk-py)** | **P0 (当前重点)** | 基于 PyO3 的统一 Python 扩展模块 (`libmtk_py`)，提供通用 Buffer Protocol 内存视图，直供 [`MoziToolKit`](https://github.com/MoziToolKit/MoziToolKit) 消费 | [📖 `bindings/mtk-py/README.md`](bindings/mtk-py/README.md) |
+| **[`mtk-jni`](bindings/mtk-jni)** | **P0 (模组 JNI)** | 高性能 Java Native Interface 绑定 (`libmtk_jni`)，为 Minecraft 模组 ([`Yefira`](https://github.com/MoziToolKit/yefira)) 提供无锁原生 WebSocket 协同服务端 (`LiveSyncServer`)、xxHash64 权威指纹与极速基线分块流式推送 | [📖 `bindings/mtk-jni/README.md`](bindings/mtk-jni/README.md) |
 | **[`mtk-cli`](crates/mtk-cli)** | **P1 (工具链)** | 独立命令行工具 (`mtk`)，支持图集烘焙 (`atlas`)、模型烘焙/导出 (`model` / `export`)、CTM 测试 (`ctm`)、规则校验 (`verify`) 与性能基准 (`bench`) | [📖 `crates/mtk-cli/README.md`](crates/mtk-cli/README.md) |
 | **[`mtk-bench`](crates/mtk-bench)** | **P1 (基准压测)** | 4000 区块与网格面剔除基准性能压测套件 | [📖 `crates/mtk-bench/README.md`](crates/mtk-bench/README.md) |
 | **[`mtk-testkit`](crates/mtk-testkit)** | **Dev (测试基建)** | 仅用于测试的资产解析器与内置 JSON fixtures（`publish = false`），统一真包位置发现与缺省跳过策略 | [📖 `crates/mtk-testkit/README.md`](crates/mtk-testkit/README.md) |

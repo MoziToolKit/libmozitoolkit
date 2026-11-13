@@ -93,7 +93,7 @@ graph TD
 | **`crates/mtk-model`** | BlockState 状态解析、1.21+ Block Model JSON 烘焙、Wavefront OBJ 解析与导出 | `mtk-core`, `mtk-cull` | `BlockState`, `BlockModelJson`, `BakedModel`, `BakedModelDatabase` |
 | **`crates/mtk-texture`**| 空间装箱图集拼接器 (Stitcher)、多类别图集烘焙 (`build_categories`)、Companion Overlay 贴图合成 | `mtk-core`, `mtk-resource` | `AtlasBuilder`, `BakedAtlas`, `BakedAtlasChunk`, `RgbaBuffer`, UV 坐标映射表 |
 | **`crates/mtk-voxel`**  | 纯体素核心：16x16x16 Chunk Section 体素存储、全量无剔除体素点云 (`VoxelPointCloud`)、稀疏列存体素流 (`SparseVoxelPayload` / `SparseVoxelColumns`)、平滑 AO 计算、网格化器 (Mesher)、物理流体曲面、统一体素源抽象 (`VoxelSource` / `VoxelReader` / `VoxelWriter`) | `mtk-core`, `mtk-cull`, `mtk-model`, `mtk-texture`, `mtk-resource`, `mtk-material` | `SectionStorage`, `VoxelStorage`, `VoxelPointCloud`, `SparseVoxelPayload`, `SectionMesher`, `DeltaMesher`, `VoxelSource`, `WorldMeshBuildResult` |
-| **`crates/mtk-sync`**   | 实时网络协同：原生多线程 WebSocket 客户端、小端序二进制协议编解码、增量修复包生成、复合模型库注入与单一世界大网格 (`WorldMeshReady`) 会话管理、0ms 缓存状态快速恢复 | `mtk-voxel`, `mtk-cull`, `mtk-model`, `mtk-core` | `LiveSyncSession`, `SyncClient`, `SyncEvent`, `decode_packet`, `encode_full_sync_request` |
+| **`crates/mtk-sync`**   | 实时网络协同：原生多线程 WebSocket 协同客户端与权威服务端 (`LiveSyncServer`)、RFC v3.1 / v3.2 二进制协议编解码、连续视觉实体伴生流、增量修复包生成、复合模型库注入与单一世界大网格 (`WorldMeshReady`) 会话管理、0ms 缓存状态快速恢复与六层权威校验体系 | `mtk-voxel`, `mtk-cull`, `mtk-model`, `mtk-core` | `LiveSyncSession`, `LiveSyncServer`, `SyncClient`, `SyncEvent`, `decode_packet`, `encode_baseline_from_storage`, `compute_sparse_state_hash` |
 | **`crates/mtk-material`** | 66 种原版生物群系调色板与线性色彩数学引擎 (SSOT)、`BiomeResolver` 模型扫描与预编译映射、多线程 Rayon 并行 UV 重映射与外部别名解算 | `mtk-core`, `mtk-texture`, `mtk-resource` | `BiomePalette`, `BiomeResolver`, `compute_mesh_biome_attributes`, `MaterialResolver`, `MeshMultiUvRemapResult` |
 | **`crates/mtk-save`** | 现代 Minecraft 存档加载核心：基于内置零拷贝 NBT、Anvil `.mca` 区域文件寻址、384 高度世界 3D 生物群系与方块状态解包、按 3D 边界盒空间切片加载 | `mtk-core`, `mtk-voxel` | `LevelData`, `RegionFile`, `ChunkParser`, `SaveLoader` |
 | **`crates/mtk-package`** | 统一二进制包与场景交换容器编解码器：64 字节头部校验与 CRC、分块 Zstd 压缩 TOC、`memmap2` 零拷贝解析与逐块惰性解压（支持 `AssetCache` 与 `SceneInterchange` 双 Profile） | `mtk-core` | `MtkPackageWriter`, `MtkPackageReader`, `TableOfContents`, `PackageHeader`, `PackageProfile` |
@@ -102,6 +102,7 @@ graph TD
 | **`crates/mtk-cli`** | 独立命令行终端工具，为无头环境与 CI/CD 提供资产预编译与检查能力 | Layer 0/1 Crates | 命令行二进制 `mtk` |
 | **`crates/mtk-testkit`** | **仅测试用**（`publish = false`）资产解析器与内置 JSON fixtures：统一真包位置发现、缺省跳过策略与路径拼接 | 仅 `std` | `assets_root`, `real_assets_root`, `fabric_jar`, `model_json_path`, fixtures |
 | **`bindings/mtk-py`** | Python 动态扩展模块 (PyO3 + maturin)，提供 `MeshData`、零拷贝内存视图、极速批处理算子与 `.mtkscene` 场景包编解码支持 | 各领域 Crate + `libmtk` | `libmtk_py` CPython 轮子 (.whl) |
+| **`bindings/mtk-jni`** | Java Native Interface 绑定 (JNI)，为 Minecraft 模组 ([`Yefira`](https://github.com/MoziToolKit/yefira)) 提供无锁高性能原生 `LiveSyncServer`、xxHash64 权威指纹计算与流式分帧推送 | `mtk-sync`, `mtk-core` | `libmtk_jni` 动态链接库 (.dylib / .so / .dll) |
 | **`bindings/mtk-wasm`** | WebAssembly 绑定 (wasm-bindgen)，暴露 TypedArray 视图 | `mtk-core`, `mtk-voxel`, `mtk-resource`, `mtk-cull`, `mtk-model`, `mtk-material` | `mtk_wasm.wasm` + `mtk_wasm.js` npm 包 |
 | **`adapters/mtk-host-memory`** | 宿主无关 raw slice → pointer 复制原语；无核心/宿主 SDK 依赖，负责空指针、对齐与容量守卫 | 仅 `thiserror` | `copy_f32_to_ptr`, `copy_i32_to_ptr`, `copy_u32_to_ptr`, `copy_u8_to_ptr` |
 | **`adapters/blender/mtk-blender-dna`** | Blender 语义 raw slice → pointer 适配层；不依赖核心 crate | `mtk-host-memory` | `copy_positions_to_ptr`, `copy_indices_to_ptr`, `copy_point_cloud_positions_to_ptr` |
@@ -180,9 +181,17 @@ Rust 处理内核 (libmtk)
   - `manifest.rs`: 变更清单与 CRC 校验
   - `padded.rs`: 邻域填充数组与边界平滑支持
   - `mod.rs`: 模块统一门面重导出
-- **`mtk-sync::session`**:
-  - `dispatcher.rs`: 网络协议数据包分发器与处理流水线
-  - `mod.rs`: `LiveSyncSession` 会话状态机与生命周期管理
+- **`mtk-sync`**:
+  - `client/`: 原生 WebSocket 协同客户端 (`SyncClient`)、会话调度器 (`dispatcher.rs`)、基线组装与自愈校验器 (`assembler/`)、增量暂存 (`staging.rs`) 与事件通道 (`events.rs`)
+  - `protocol/`: 二进制帧编解码 (`codec/`)、位压缩 (`bitpack.rs`)、RFC v3.2 连续视觉实体编解码 (`decode_visual.rs`)、权威 xxHash64 稀疏指纹 (`hasher.rs`)
+  - `server/`: 原生 WebSocket 协同服务端 (`LiveSyncServer`)、权威握手仲裁 (`decision.rs`)、流式基线与增量广播编码器 (`baseline.rs`, `delta.rs`)
+- **`mtk-jni`**:
+  - `server.rs`: Java 原生服务端句柄与生命周期适配 (`NativeSync.nativeServer*`)
+  - `event.rs`: 服务端事件轮询与跨 JNI 边界转换
+  - `convert.rs`: JNI 基本数据类型与连续字节缓冲零拷贝互转
+- **`mtk-py::sync`**:
+  - `client.rs`: 实时协同客户端 Python 封装 (`PyLiveSyncSession`)
+  - `server.rs`: 实时协同服务端 Python 封装 (`PyLiveSyncServer`)
 - **`mtk-texture::atlas::builder`**:
   - `static_atlas.rs`: 静态纹理装箱与多通道 PBR 图集烘焙
   - `anim_atlas.rs`: 动画条图集处理与帧元数据对齐
