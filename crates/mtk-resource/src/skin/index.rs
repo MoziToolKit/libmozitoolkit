@@ -79,9 +79,15 @@ pub fn clean_player_name(raw_name: &str) -> String {
 
 /// Computes the standard lowercase 64-hex SHA256 string for arbitrary bytes.
 pub(crate) fn compute_sha256_hex(bytes: &[u8]) -> String {
+    use std::fmt::Write;
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
+    let result = hasher.finalize();
+    let mut hex = String::with_capacity(64);
+    for b in result {
+        let _ = write!(&mut hex, "{:02x}", b);
+    }
+    hex
 }
 
 /// Known SHA-256 content hashes of default fallback skins returned by mirror services

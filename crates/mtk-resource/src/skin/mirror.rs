@@ -11,9 +11,10 @@ use super::resolver::is_valid_png_header;
 use std::io::Read;
 
 /// Reads up to 1 MB PNG image from response body, checking PNG magic bytes.
-pub fn read_png_body(resp: ureq::Response) -> Option<Vec<u8>> {
+pub fn read_png_body(resp: ureq::http::Response<ureq::Body>) -> Option<Vec<u8>> {
     let mut bytes = Vec::new();
-    resp.into_reader()
+    resp.into_body()
+        .into_reader()
         .take(1024 * 1024)
         .read_to_end(&mut bytes)
         .ok()?;
@@ -38,34 +39,46 @@ pub fn query_crafthead(
         return None;
     }
     let url = format!("https://crafthead.net/skin/{}", identifier);
-    let resp = match agent.get(&url).set("User-Agent", "MoziToolKit/2.0").call() {
+    let resp = match agent
+        .get(&url)
+        .header("User-Agent", "MoziToolKit/2.0")
+        .call()
+    {
         Ok(r) => {
             circuit.record_success();
             r
         }
-        Err(ureq::Error::Status(_status, _r)) => {
+        Err(ureq::Error::StatusCode(_status)) => {
             circuit.record_success();
             return None;
         }
-        Err(ureq::Error::Transport(_e)) => {
+        Err(_e) => {
             circuit.record_transport_failure();
             return None;
         }
     };
 
-    if resp.status() != 200 {
+    if resp.status().as_u16() != 200 {
         return None;
     }
 
     // 1. Check profile cache hit header: Crafthead returns "invalid-profile" for non-existent profiles.
-    if let Some(hit) = resp.header("x-crafthead-profile-cache-hit") {
+    if let Some(hit) = resp
+        .headers()
+        .get("x-crafthead-profile-cache-hit")
+        .and_then(|h| h.to_str().ok())
+    {
         if hit.eq_ignore_ascii_case("invalid-profile") {
             return None;
         }
     }
 
     // 2. Texture ID header must be present and be a 64-char hex string (Mojang texture hash).
-    let texture_id = resp.header("x-crafthead-texture-id")?.trim();
+    let texture_id = resp
+        .headers()
+        .get("x-crafthead-texture-id")
+        .and_then(|h| h.to_str().ok())?
+        .trim();
     if texture_id.len() != 64 || !texture_id.chars().all(|c| c.is_ascii_hexdigit()) {
         return None;
     }
@@ -99,29 +112,33 @@ pub fn query_minotar(
         return None;
     }
     let url = format!("https://minotar.net/skin/{}", identifier);
-    let resp = match agent.get(&url).set("User-Agent", "MoziToolKit/2.0").call() {
+    let resp = match agent
+        .get(&url)
+        .header("User-Agent", "MoziToolKit/2.0")
+        .call()
+    {
         Ok(r) => {
             circuit.record_success();
             r
         }
-        Err(ureq::Error::Status(_status, _r)) => {
+        Err(ureq::Error::StatusCode(_status)) => {
             circuit.record_success();
             return None;
         }
-        Err(ureq::Error::Transport(_e)) => {
+        Err(_e) => {
             circuit.record_transport_failure();
             return None;
         }
     };
 
-    if resp.status() != 200 {
+    if resp.status().as_u16() != 200 {
         return None;
     }
 
     // Minotar returns etag header:
     // If skin exists, etag is 64-char hex SHA256 (the texture hash).
     // If skin is a fallback (e.g. invalid UUID), etag is a 32-char MD5 (e.g. "98903c1609352e11552dca79eb1ce3d6").
-    let etag = resp.header("etag")?;
+    let etag = resp.headers().get("etag").and_then(|h| h.to_str().ok())?;
     let clean_etag = etag.trim().trim_matches('"');
     if clean_etag.len() != 64 || !clean_etag.chars().all(|c| c.is_ascii_hexdigit()) {
         return None;

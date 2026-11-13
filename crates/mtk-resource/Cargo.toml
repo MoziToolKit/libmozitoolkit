@@ -17,14 +17,13 @@ thiserror = { workspace = true }
 xxhash-rust = { workspace = true }
 sha2 = { workspace = true }
 zip = { workspace = true, optional = true }
-rayon = { workspace = true, optional = true }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ureq = { workspace = true, optional = true }
 
 [features]
 default = ["parallel", "zip", "net"]
 zip = ["dep:zip"]
-parallel = ["dep:rayon"]
+parallel = []
 net = ["dep:ureq"]
 
 [dev-dependencies]

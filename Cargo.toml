@@ -32,30 +32,30 @@ repository = "https://github.com/MoziToolKit/libmozitoolkit"
 rust-version = "1.88.0"
 [workspace.dependencies]
 clap = { version = "4.6.7", default-features = false, features = ["derive", "std", "help", "usage", "error-context"] }
-glam = { version = "0.34.1", default-features = false, features = ["libm", "serde", "all-types"] }
+glam = { version = "0.34.3", default-features = false, features = ["libm", "serde", "all-types"] }
 serde = { version = "1.0.229", default-features = false, features = ["derive", "alloc", "std"] }
 serde_json = { version = "1.0.154", default-features = false, features = ["alloc"] }
 postcard = { version = "1.1.3", default-features = false, features = ["alloc", "use-std"] }
 thiserror = { version = "2.0.21", default-features = false }
 bitflags = { version = "2.13.2", default-features = false, features = ["serde"] }
 rayon = { version = "1.12.0", default-features = false }
-zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
+zip = { version = "9.5.1", default-features = false, features = ["deflate"] }
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 pyo3 = { version = "0.30.1", default-features = false, features = ["macros"] }
 jni = { version = "0.21", default-features = false }
-wasm-bindgen = "0.2.129"
-js-sys = "0.3.106"
+wasm-bindgen = "0.2.130"
+js-sys = "0.3.107"
 console_error_panic_hook = { version = "0.1.7", default-features = false }
 tungstenite = { version = "0.30.0", default-features = false, features = ["handshake", "rustls-tls-webpki-roots"] }
-ureq = { version = "2.10.1", default-features = false, features = ["tls"] }
+ureq = { version = "3.5.2", default-features = false, features = ["rustls"] }
 crossbeam-channel = { version = "0.5.17", default-features = false, features = ["std"] }
 url = { version = "2.5.8", default-features = false }
-flate2 = { version = "1.1.10", default-features = false, features = ["rust_backend"] }
+flate2 = { version = "1.1.11", default-features = false, features = ["rust_backend"] }
 rustc-hash = { version = "2.1.3", features = ["std"] }
-zstd = "0.14.3"
-crc32fast = "1.5.3"
+zstd = "0.14.4"
+crc32fast = "1.5.5"
 xxhash-rust = { version = "0.8.19", default-features = false, features = ["xxh64"] }
-sha2 = { version = "0.10.8", default-features = false }
+sha2 = { version = "0.11.1", default-features = false }
 memmap2 = "0.9.12"
 bytemuck = { version = "1.25.2", default-features = false }
 

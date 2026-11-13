@@ -136,7 +136,7 @@ impl SkinResolver {
         let res = self
             .agent
             .get(url)
-            .set("User-Agent", "MoziToolKit/2.0")
+            .header("User-Agent", "MoziToolKit/2.0")
             .call();
 
         let resp = match res {
@@ -144,17 +144,17 @@ impl SkinResolver {
                 self.circuit.record_success();
                 r
             }
-            Err(ureq::Error::Status(_status, _r)) => {
+            Err(ureq::Error::StatusCode(_status)) => {
                 self.circuit.record_success();
                 return None;
             }
-            Err(ureq::Error::Transport(_e)) => {
+            Err(_e) => {
                 self.circuit.record_transport_failure();
                 return None;
             }
         };
 
-        if resp.status() != 200 {
+        if resp.status().as_u16() != 200 {
             return None;
         }
 
@@ -169,7 +169,7 @@ impl SkinResolver {
         let res = self
             .agent
             .get(url)
-            .set("User-Agent", "MoziToolKit/2.0")
+            .header("User-Agent", "MoziToolKit/2.0")
             .call();
 
         let resp = match res {
@@ -177,18 +177,19 @@ impl SkinResolver {
                 self.circuit.record_success();
                 r
             }
-            Err(ureq::Error::Status(_status, _r)) => {
+            Err(ureq::Error::StatusCode(_status)) => {
                 self.circuit.record_success();
                 return None;
             }
-            Err(ureq::Error::Transport(_e)) => {
+            Err(_e) => {
                 self.circuit.record_transport_failure();
                 return None;
             }
         };
 
         let mut bytes = Vec::new();
-        resp.into_reader()
+        resp.into_body()
+            .into_reader()
             .take(64 * 1024)
             .read_to_end(&mut bytes)
             .ok()?;
@@ -211,7 +212,7 @@ impl SkinResolver {
         let res = self
             .agent
             .get(url)
-            .set("User-Agent", "MoziToolKit/2.0")
+            .header("User-Agent", "MoziToolKit/2.0")
             .call();
 
         let resp = match res {
@@ -219,18 +220,19 @@ impl SkinResolver {
                 self.circuit.record_success();
                 r
             }
-            Err(ureq::Error::Status(_status, _r)) => {
+            Err(ureq::Error::StatusCode(_status)) => {
                 self.circuit.record_success();
                 return None;
             }
-            Err(ureq::Error::Transport(_e)) => {
+            Err(_e) => {
                 self.circuit.record_transport_failure();
                 return None;
             }
         };
 
         let mut bytes = Vec::new();
-        resp.into_reader()
+        resp.into_body()
+            .into_reader()
             .take(64 * 1024)
             .read_to_end(&mut bytes)
             .ok()?;

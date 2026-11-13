@@ -57,10 +57,11 @@ impl Default for SkinResolver {
 impl SkinResolver {
     #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     fn build_agent(timeout_secs: u64) -> ureq::Agent {
-        ureq::AgentBuilder::new()
-            .timeout(std::time::Duration::from_secs(timeout_secs))
-            .try_proxy_from_env(true)
-            .build()
+        let config = ureq::Agent::config_builder()
+            .timeout_global(Some(std::time::Duration::from_secs(timeout_secs)))
+            .user_agent("MoziToolKit/2.0")
+            .build();
+        ureq::Agent::new_with_config(config)
     }
 
     /// Creates a new resolver with an optional on-disk cache directory.
