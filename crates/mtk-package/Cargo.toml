@@ -9,7 +9,6 @@ readme = "README.md"
 description = "High-performance unified binary package container and codec for MoziToolKit."
 
 [dependencies]
-mtk-core = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

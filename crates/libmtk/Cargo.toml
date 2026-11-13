@@ -17,7 +17,6 @@ mtk-resource = { workspace = true }
 mtk-texture = { workspace = true }
 mtk-material = { workspace = true }
 mtk-package = { workspace = true }
-mtk-sync = { workspace = true, optional = true }
 mtk-save = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -26,7 +25,7 @@ rayon = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
 [features]
-default = ["parallel", "sync", "save"]
+default = ["parallel", "save"]
 parallel = [
     "mtk-core/parallel",
     "mtk-model/parallel",
@@ -35,9 +34,6 @@ parallel = [
     "mtk-texture/parallel",
     "mtk-material/parallel",
     "dep:rayon",
-]
-sync = [
-    "dep:mtk-sync",
 ]
 save = [
     "dep:mtk-save",

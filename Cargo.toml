@@ -29,7 +29,6 @@ edition = "2021"
 authors = ["Mozi <mozi1924@arasaka.ltd>"]
 license = "GPL-3.0-or-later"
 repository = "https://github.com/MoziToolKit/libmozitoolkit"
-readme = "README.md"
 rust-version = "1.88.0"
 [workspace.dependencies]
 clap = { version = "4.6.7", default-features = false, features = ["derive", "std", "help", "usage", "error-context"] }
@@ -39,7 +38,6 @@ serde_json = { version = "1.0.154", default-features = false, features = ["alloc
 postcard = { version = "1.1.3", default-features = false, features = ["alloc", "use-std"] }
 thiserror = { version = "2.0.21", default-features = false }
 bitflags = { version = "2.13.2", default-features = false, features = ["serde"] }
-tinyvec = { version = "1.13.3", default-features = false, features = ["alloc"] }
 rayon = { version = "1.12.0", default-features = false }
 zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 image = { version = "0.25.10", default-features = false, features = ["png"] }

@@ -359,8 +359,5 @@ pub(crate) fn is_non_full_or_partial_block(name_low: &str) -> bool {
         "flower", "sapling", "torch", "lantern", "pane", "fence", "wall", "carpet", "trapdoor",
         "door",
     ];
-    if KEYWORDS.iter().any(|&kw| name_low.contains(kw)) {
-        return true;
-    }
-    false
+    KEYWORDS.iter().any(|&kw| name_low.contains(kw))
 }

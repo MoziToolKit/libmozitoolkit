@@ -42,7 +42,6 @@
 | [`mtk-resource`](../mtk-resource/) | 虚拟文件系统 (VFS, `ResourcePackStack`)、.mcmeta 动图解析与 CTM 17/47 连接纹理求解器。 |
 | [`mtk-texture`](../mtk-texture/) | 2D 矩形装箱 (`Stitcher`)、多类别 PBR 图集烘焙与 Companion Overlay 贴图合成。 |
 | [`mtk-material`](../mtk-material/) | 66 种原版生物群系调色板引擎 (SSOT)、`BiomeResolver` 映射提取与 Rayon 并行 UV 重映射。 |
-| [`mtk-sync`](../mtk-sync/) | 原生 WebSocket 实时协同客户端 (`LiveSyncSession`) 与 Yefira 二进制小端序协议编解码器。 |
 | [`mtk-save`](../mtk-save/) | 现代 Minecraft 存档加载核心：基于内置零拷贝 NBT、Anvil `.mca` 寻址与按需空间切片流。 |
 
 ---

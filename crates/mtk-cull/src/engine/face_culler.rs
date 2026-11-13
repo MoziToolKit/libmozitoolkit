@@ -215,10 +215,6 @@ impl FaceCuller {
         };
         let neighbor_shapes = neighbor_meta.get_face_shapes(opp_dir);
 
-        if is_face_completely_occluded(target_shapes, neighbor_shapes) {
-            return false;
-        }
-
-        true
+        !is_face_completely_occluded(target_shapes, neighbor_shapes)
     }
 }

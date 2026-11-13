@@ -97,9 +97,5 @@ pub(crate) fn should_skip_rendering(
     }
 
     // 5. Powder Snow (PowderSnowBlock)
-    if state_meta.block_name == "powder_snow" && neighbor_meta.block_name == "powder_snow" {
-        return true;
-    }
-
-    false
+    state_meta.block_name == "powder_snow" && neighbor_meta.block_name == "powder_snow"
 }
