@@ -121,8 +121,11 @@
   - [x] 完整支持正面多网格分段切片 UV 映射与背面/边框 UV 映射；
   - [x] 挂接到 `mtk-py` 跨语言绑定与 Blender 前端 `bridge/entity.py` 及 `bridge/save.py`；
   - [x] 存档导入时自动识别 `entities/*.mca` 中的艺术画并完整融入体素世界网格与点云。
-- [ ] **物品展示框 (`ItemFrameEntity`) 解析**
-  - [ ] 提取展示框旋转角度、发光属性与内容物信息。
+- [x] **物品展示框 (`ItemFrameEntity`) 程序化模型与 6-DOF 空间装配**
+  - [x] 基于 Minecraft 1.21 `template_item_frame.json` 原版几何程序化生成 $0.75 \times 0.75 \times 0.0625$ 桦木边框与正反面底板网格；
+  - [x] 完整支持水平四向与天花板 (`Down`)/地板 (`Up`) 全 6 方向欧拉角与变换矩阵求解；
+  - [x] 支持发光物品展示框 (`glow_item_frame`) 自发光标记与隐形展示框 (`is_invisible`) 几何剔除；
+  - [x] 挂接至 `EntityRenderPlan` 与 `reconcile_entity_render_plan`，并在真实 Blender 5.x LTS 宿主中通过端到端集成测试。
 - [ ] **原版填充地图数据解码器 (`mtk-save::map`)**
   - [ ] 解析 `data/map_<id>.dat` Gzip NBT 文件；
   - [ ] 内置 60+ 种 `MapColor` 基础色彩表与 4 级明暗倍率，解码 128×128 RGBA8 连续像素流。

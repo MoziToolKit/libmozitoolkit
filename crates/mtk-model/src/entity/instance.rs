@@ -61,12 +61,12 @@ pub const SUPPORTED_VISUAL_ENTITIES: &[SupportedVisualEntity] = &[
     SupportedVisualEntity {
         id: ENTITY_ID_ITEM_FRAME,
         family: "item_frame",
-        build_capability: EntityBuildCapability::TransformAndMetadataOnly,
+        build_capability: EntityBuildCapability::ProceduralMesh,
     },
     SupportedVisualEntity {
         id: ENTITY_ID_GLOW_ITEM_FRAME,
         family: "glow_item_frame",
-        build_capability: EntityBuildCapability::TransformAndMetadataOnly,
+        build_capability: EntityBuildCapability::ProceduralMesh,
     },
     SupportedVisualEntity {
         id: ENTITY_ID_ARMOR_STAND,
@@ -318,11 +318,20 @@ impl EntityInstance {
                     crate::entity::painting::PAINTING_BACK_TEXTURE.to_string(),
                 ]
             }
-            EntityKindData::ItemFrame(_) => {
-                // ItemFrame baking is not yet implemented; full item model -> texture resolution
-                // will be handled when the ItemFrame baker is introduced. Return empty to avoid
-                // polluting the mini-atlas texture set with unresolvable item IDs.
-                Vec::new()
+            EntityKindData::ItemFrame(f) => {
+                if f.is_invisible {
+                    Vec::new()
+                } else if f.is_glowing {
+                    vec![
+                        crate::entity::item_frame::GLOW_ITEM_FRAME_BACK_TEXTURE.to_string(),
+                        crate::entity::item_frame::ITEM_FRAME_WOOD_TEXTURE.to_string(),
+                    ]
+                } else {
+                    vec![
+                        crate::entity::item_frame::ITEM_FRAME_BACK_TEXTURE.to_string(),
+                        crate::entity::item_frame::ITEM_FRAME_WOOD_TEXTURE.to_string(),
+                    ]
+                }
             }
             EntityKindData::ArmorStand(_) => Vec::new(),
             EntityKindData::Generic { .. } => Vec::new(),
@@ -555,6 +564,6 @@ mod tests {
         let frame_desc =
             find_supported_visual_entity(ENTITY_ID_ITEM_FRAME).expect("item frame desc");
         assert_eq!(frame_desc.family, "item_frame");
-        assert!(!frame_desc.supports_mesh_baking());
+        assert!(frame_desc.supports_mesh_baking());
     }
 }

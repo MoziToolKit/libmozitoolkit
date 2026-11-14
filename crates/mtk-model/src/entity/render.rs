@@ -109,6 +109,13 @@ impl EntityRenderTransform {
                     entity.rotation
                 }
             }
+            EntityKindData::ItemFrame(_) => {
+                if let Some(facing) = entity.facing {
+                    crate::entity::item_frame::facing_to_rotation(facing)
+                } else {
+                    entity.rotation
+                }
+            }
             _ => entity.rotation,
         };
 
@@ -577,21 +584,23 @@ mod tests {
         let mut invalid = painting(None, "kebab", 1, 1);
         invalid.id = "minecraft:item_frame".to_string();
 
-        let frame = EntityInstance::new_item_frame(
-            None,
-            DVec3::new(5.0, 65.0, 3.0),
-            Direction::West,
-            Vec3::ZERO,
-            "minecraft:diamond_sword",
-            1,
-            0,
-            false,
-            false,
-            None,
-        );
+        let armor_stand = EntityInstance {
+            uuid: None,
+            id: "minecraft:armor_stand".to_string(),
+            custom_name: None,
+            position: DVec3::new(5.0, 65.0, 3.0),
+            facing: Some(Direction::West),
+            rotation: Vec3::ZERO,
+            scale: Vec3::ONE,
+            kind: EntityKindData::ArmorStand(crate::entity::instance::ArmorStandData {
+                show_arms: false,
+                no_base_plate: false,
+                is_small: false,
+            }),
+        };
 
         let plan = EntityRenderPlan::build(
-            &[invalid, frame],
+            &[invalid, armor_stand],
             EntityRenderConfig::default(),
             |_texture| None,
         );
@@ -600,6 +609,47 @@ mod tests {
         assert_eq!(plan.warnings.len(), 2);
         assert_eq!(plan.warnings[0].code, "invalid_entity");
         assert_eq!(plan.warnings[1].code, "unsupported_entity");
+    }
+
+    #[test]
+    fn test_build_entity_render_plan_item_frame() {
+        let frame = EntityInstance::new_item_frame(
+            Some("11111111-2222-3333-4444-555555555555".to_string()),
+            DVec3::new(10.5, 64.5, 20.0),
+            Direction::Up,
+            Vec3::ZERO,
+            "",
+            1,
+            0,
+            false,
+            false,
+            None,
+        );
+
+        let plan = EntityRenderPlan::build(
+            &[frame],
+            EntityRenderConfig {
+                coordinate_system: CoordinateSystem::ZUpRightHanded,
+                origin_centered: false,
+                ..Default::default()
+            },
+            |texture| {
+                if texture.contains("birch_planks") {
+                    Some(([0.0, 0.0, 0.5, 0.5], 0, 10))
+                } else if texture.contains("item_frame") {
+                    Some(([0.5, 0.0, 1.0, 0.5], 0, 11))
+                } else {
+                    None
+                }
+            },
+        );
+
+        assert_eq!(plan.nodes.len(), 1);
+        let node = &plan.nodes[0];
+        assert_eq!(node.key, "uuid:11111111-2222-3333-4444-555555555555");
+        assert_eq!(node.display_name, "item_frame_11111111");
+        assert!(node.local_mesh.face_count() > 0);
+        assert_eq!(node.transform.location, [10.5, -20.0, 64.5]);
     }
 
     #[test]

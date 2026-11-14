@@ -202,12 +202,11 @@ def test_build_entity_render_plan_top_level():
     # 2. Build with unsupported entity reports warning
     entities_with_unsupported = entities + [
         {
-            "id": "minecraft:item_frame",
+            "id": "minecraft:armor_stand",
             "position": [5.0, 65.0, 3.0],
             "rotation": [0.0, 0.0, 0.0],
             "kind": {
-                "type": "minecraft:item_frame",
-                "item_id": "minecraft:diamond_sword",
+                "type": "minecraft:armor_stand",
             },
         }
     ]
@@ -218,6 +217,49 @@ def test_build_entity_render_plan_top_level():
     assert plan_with_warn.node_count == 1
     assert len(plan_with_warn.warnings) == 1
     assert plan_with_warn.warnings[0]["code"] == "unsupported_entity"
+
+
+def test_build_entity_render_plan_item_frames_all_facings():
+    facings = ["north", "south", "west", "east", "up", "down"]
+    entities = []
+    for i, facing in enumerate(facings):
+        entities.append({
+            "id": "minecraft:item_frame",
+            "uuid": f"00000000-0000-0000-0000-00000000000{i}",
+            "position": [10.5, 64.0, 20.0 + i],
+            "facing": facing,
+            "kind": {
+                "type": "minecraft:item_frame",
+                "item_id": "minecraft:diamond_sword",
+                "rotation": 2,
+                "is_glowing": (facing == "up"),
+                "is_invisible": (facing == "down"),
+            },
+        })
+
+    plan = libmtk_py.build_entity_render_plan(
+        entities,
+        coordinate_system="z_up",
+        origin_centered=False,
+    )
+
+    assert plan.node_count == 6
+    assert len(plan.warnings) == 0
+
+    # 1. Floor placement (facing: up) -> Glow frame
+    floor_node = plan.nodes[4]
+    assert floor_node.facing == "up"
+    assert floor_node.is_glowing is True
+    assert floor_node.is_invisible is False
+    assert floor_node.item_id == "minecraft:diamond_sword"
+    assert floor_node.item_rotation == 2
+    assert floor_node.mesh.face_count > 0
+
+    # 2. Ceiling placement (facing: down) -> Invisible frame
+    ceiling_node = plan.nodes[5]
+    assert ceiling_node.facing == "down"
+    assert ceiling_node.is_invisible is True
+    assert ceiling_node.mesh.face_count == 0  # Frame geometry is cleared when invisible
 
 
 def test_storage_and_cloud_entities_palette_build_entity_render_plan():

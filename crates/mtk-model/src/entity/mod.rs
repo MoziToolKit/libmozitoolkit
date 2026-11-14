@@ -4,6 +4,7 @@ pub mod baker;
 pub mod banner;
 pub(crate) mod copper_statue;
 pub mod instance;
+pub mod item_frame;
 pub mod painting;
 pub(crate) mod pot;
 pub mod render;

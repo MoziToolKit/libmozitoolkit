@@ -167,6 +167,38 @@ impl PyEntityRenderNode {
         }
     }
 
+    #[getter]
+    pub fn item_id(&self) -> Option<&str> {
+        match &self.inner.entity.kind {
+            mtk_model::EntityKindData::ItemFrame(f) => Some(f.item_id.as_str()),
+            _ => None,
+        }
+    }
+
+    #[getter]
+    pub fn item_rotation(&self) -> Option<u8> {
+        match &self.inner.entity.kind {
+            mtk_model::EntityKindData::ItemFrame(f) => Some(f.rotation),
+            _ => None,
+        }
+    }
+
+    #[getter]
+    pub fn is_glowing(&self) -> Option<bool> {
+        match &self.inner.entity.kind {
+            mtk_model::EntityKindData::ItemFrame(f) => Some(f.is_glowing),
+            _ => None,
+        }
+    }
+
+    #[getter]
+    pub fn is_invisible(&self) -> Option<bool> {
+        match &self.inner.entity.kind {
+            mtk_model::EntityKindData::ItemFrame(f) => Some(f.is_invisible),
+            _ => None,
+        }
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "EntityRenderNode(key='{}', name='{}', loc={:?}, rot={:?})",

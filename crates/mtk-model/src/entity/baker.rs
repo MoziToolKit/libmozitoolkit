@@ -10,7 +10,7 @@ use mtk_core::MeshData;
 use crate::baker::baked_model::ModelMeshOptions;
 use crate::baker::BakedModel;
 use crate::entity::instance::{EntityInstance, EntityKindData};
-use crate::entity::painting;
+use crate::entity::{item_frame, painting};
 
 /// Standalone procedural baker for continuous-space visual entities.
 pub struct EntityBaker;
@@ -24,10 +24,10 @@ impl EntityBaker {
                 p.width as u32,
                 p.height as u32,
             )),
-            EntityKindData::ItemFrame(_) => {
-                // Item Frame procedural baked model (stub ready for expansion)
-                None
-            }
+            EntityKindData::ItemFrame(f) => Some(item_frame::create_item_frame_baked_model(
+                f.is_glowing,
+                f.is_invisible,
+            )),
             EntityKindData::ArmorStand(_) => {
                 // Armor Stand procedural baked model (stub ready for expansion)
                 None

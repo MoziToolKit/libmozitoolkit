@@ -398,10 +398,10 @@ impl EntityParser {
             let tile_x = comp.int("TileX")?;
             let tile_y = comp.int("TileY").unwrap_or(0);
             let tile_z = comp.int("TileZ").unwrap_or(0);
-            DVec3::new(
-                tile_x as f64 + 0.5,
-                tile_y as f64 + 0.5,
-                tile_z as f64 + 0.5,
+            mtk_model::item_frame::calculate_item_frame_world_position(
+                [tile_x, tile_y, tile_z],
+                facing,
+                false,
             )
         };
 
@@ -479,13 +479,8 @@ impl EntityParser {
             .is_some()
         {
             Self::parse_rotation_euler(comp)
-        } else if matches!(
-            facing,
-            Direction::North | Direction::South | Direction::East | Direction::West
-        ) {
-            Vec3::new(0.0, mtk_model::painting::facing_to_y_rot(facing), 0.0)
         } else {
-            Vec3::ZERO
+            mtk_model::item_frame::facing_to_rotation(facing)
         };
 
         let mut inst = EntityInstance::new_item_frame(
