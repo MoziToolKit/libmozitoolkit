@@ -248,4 +248,94 @@ impl ModelBaker {
 
         Ok(baked_model)
     }
+
+    /// Bakes a resolved block/item model (with elements) directly into a `BakedModel`.
+    pub fn bake_resolved_model(
+        &self,
+        model_id: &str,
+        resolved: &crate::parser::model_json::ResolvedBlockModel,
+    ) -> BakedModel {
+        let mut baked_elements = Vec::new();
+        for elem in &resolved.elements {
+            let from_pos = elem.from;
+            let to_pos = elem.to;
+            let elem_rot = elem.rotation.as_ref();
+            let mut elem_faces = HashMap::new();
+
+            const CANONICAL_DIRS: [&str; 6] = ["down", "up", "north", "south", "west", "east"];
+            for orig_dir_str in CANONICAL_DIRS {
+                let face_data = match elem.faces.get(orig_dir_str) {
+                    Some(f) => f,
+                    None => continue,
+                };
+                let orig_dir = match Direction::parse_loose(orig_dir_str) {
+                    Some(d) => d,
+                    None => continue,
+                };
+
+                let uv_base = if let Some(uv) = face_data.uv {
+                    if uv.iter().any(|&c| c > 16.0) {
+                        64.0
+                    } else {
+                        16.0
+                    }
+                } else {
+                    16.0
+                };
+
+                let baked_geom = bake_face_exact(
+                    orig_dir,
+                    from_pos,
+                    to_pos,
+                    face_data.uv,
+                    face_data.rotation as f32,
+                    0.0,
+                    0.0,
+                    elem_rot,
+                    elem.transform.as_ref(),
+                    false,
+                    uv_base,
+                );
+
+                let v1 = baked_geom.positions[1] - baked_geom.positions[0];
+                let v2 = baked_geom.positions[2] - baked_geom.positions[0];
+                let normal = v1.cross(v2).normalize_or_zero();
+
+                let baked_face = BakedFace {
+                    direction: baked_geom.direction,
+                    texture: face_data.texture.clone(),
+                    uv_rot: baked_geom.detected_rotation,
+                    uv_bounds: baked_geom.uv_bounds,
+                    tint_index: face_data.tintindex,
+                    cullface: face_data
+                        .cullface
+                        .as_deref()
+                        .and_then(Direction::parse_loose),
+                    vertices: baked_geom.positions,
+                    uvs: baked_geom.uvs,
+                    normal,
+                    ..Default::default()
+                };
+
+                elem_faces.insert(orig_dir, baked_face);
+            }
+
+            baked_elements.push(BakedElement {
+                from_pos,
+                to_pos,
+                faces: elem_faces,
+            });
+        }
+
+        let mut baked_model = BakedModel {
+            block_state: model_id.to_string(),
+            elements: baked_elements,
+            is_cube: false,
+            is_opaque: false,
+            is_emissive: false,
+            ..Default::default()
+        };
+        baked_model.rebuild_face_buckets();
+        baked_model
+    }
 }

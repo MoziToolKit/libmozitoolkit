@@ -7,6 +7,7 @@ use rayon::prelude::*;
 
 use mtk_core::{ProgressCallback, ProgressReport, ProgressThrottler};
 use mtk_material::MaterialResolver;
+use mtk_model::item::{bake_item_from_png_bytes, ItemMeshOptions};
 use mtk_model::{BakedModelDatabase, BlockModelJson, BlockStateDefinition, ModelBaker};
 use mtk_resource::{ResourceLocation, ResourcePackStack};
 use mtk_texture::AtlasAddressMap;
@@ -21,6 +22,26 @@ fn is_dynamic_entity_texture(tex: &str) -> bool {
         || tex.starts_with("skin/")
         || tex.starts_with("minecraft:player/")
         || tex.starts_with("player/")
+}
+
+#[inline]
+fn open_item_texture_png(stack: &ResourcePackStack, tex: &str) -> Option<Vec<u8>> {
+    let loc = ResourceLocation::parse(tex).unwrap_or_else(|_| ResourceLocation::vanilla(tex));
+    let path = loc.to_asset_path("textures", "png");
+    if let Some(bytes) = stack.open_asset_raw(&path) {
+        return Some(bytes);
+    }
+    if !loc.path.contains('/') {
+        let item_path = format!("assets/{}/textures/item/{}.png", loc.namespace, loc.path);
+        if let Some(bytes) = stack.open_asset_raw(&item_path) {
+            return Some(bytes);
+        }
+        let block_path = format!("assets/{}/textures/block/{}.png", loc.namespace, loc.path);
+        if let Some(bytes) = stack.open_asset_raw(&block_path) {
+            return Some(bytes);
+        }
+    }
+    None
 }
 
 /// Prebakes all blockstates discovered across all active resource packs in the stack with physical progress reporting.
@@ -42,6 +63,9 @@ pub(crate) fn prebake_all_models_with_progress(
 
     // 1. Preload all model JSONs across packs into a fast lookup map
     let mut model_cache: HashMap<String, BlockModelJson> = HashMap::new();
+    let mut item_model_locs: Vec<ResourceLocation> = Vec::new();
+    let mut seen_items = std::collections::HashSet::new();
+
     for pack in stack.packs().iter().rev() {
         for file in pack.list_files("assets/") {
             if file.ends_with(".json") && file.contains("/models/") {
@@ -54,6 +78,9 @@ pub(crate) fn prebake_all_models_with_progress(
                             model_cache.insert(canon.clone(), model.clone());
                             if loc.namespace == "minecraft" {
                                 model_cache.insert(loc.path.clone(), model.clone());
+                            }
+                            if loc.path.starts_with("item/") && seen_items.insert(canon) {
+                                item_model_locs.push(loc);
                             }
                         }
                     }
@@ -218,18 +245,92 @@ pub(crate) fn prebake_all_models_with_progress(
         })
         .collect();
 
+    // 5. Bake all item models
+    let total_items = item_model_locs.len();
+    let item_throttler =
+        ProgressThrottler::new("prebake_items", total_items.max(1), progress_callback)
+            .with_prefix("Baking item models");
+
+    let item_mesh_opts = ItemMeshOptions::default();
+
+    let bake_single_item =
+        |loc: &ResourceLocation| -> Option<(Vec<String>, mtk_model::BakedModel)> {
+            let canon = loc.as_string();
+            let resolved = shared_resolved.get(&canon)?;
+
+            let baked: Option<mtk_model::BakedModel> = if !resolved.elements.is_empty() {
+                let baker = ModelBaker::new();
+                Some(baker.bake_resolved_model(&canon, resolved))
+            } else {
+                let mut combined_model: Option<mtk_model::BakedModel> = None;
+                for layer_idx in 0..8 {
+                    let layer_key = format!("layer{}", layer_idx);
+                    if let Some(tex) = resolved.textures.get(&layer_key) {
+                        if let Some(png_bytes) = open_item_texture_png(stack, tex) {
+                            if let Ok(layer_model) =
+                                bake_item_from_png_bytes(&png_bytes, tex, &item_mesh_opts)
+                            {
+                                if let Some(ref mut base) = combined_model {
+                                    base.elements.extend(layer_model.elements);
+                                } else {
+                                    combined_model = Some(layer_model);
+                                }
+                            }
+                        }
+                    }
+                }
+                combined_model
+            };
+
+            let mut baked = baked?;
+
+            if let Some(atlas) = atlas_map {
+                baked.remap_to_atlas_with(|tex| {
+                    if is_dynamic_entity_texture(tex) {
+                        return None;
+                    }
+                    MaterialResolver::resolve(tex, None, atlas)
+                        .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
+                });
+            }
+            baked.rebuild_face_buckets();
+            baked.deduplicate_faces();
+
+            let keys = vec![loc.as_string(), loc.path.clone()];
+
+            item_throttler.inc();
+            Some((keys, baked))
+        };
+
+    #[cfg(feature = "parallel")]
+    let baked_item_pairs: Vec<(Vec<String>, mtk_model::BakedModel)> = item_model_locs
+        .par_iter()
+        .filter_map(bake_single_item)
+        .collect();
+
+    #[cfg(not(feature = "parallel"))]
+    let baked_item_pairs: Vec<(Vec<String>, mtk_model::BakedModel)> = item_model_locs
+        .iter()
+        .filter_map(bake_single_item)
+        .collect();
+
     let mut db = BakedModelDatabase::new();
     for (state_str, group) in baked_pairs {
         db.insert_variant_group(state_str, group);
+    }
+    for (keys, model) in baked_item_pairs {
+        for key in keys {
+            db.insert(key, model.clone());
+        }
     }
     db.deduplicate_all();
 
     if let Some(cb) = progress_callback {
         cb(ProgressReport::new(
             "prebake_models",
-            total_defs,
-            total_defs.max(1),
-            format!("Completed baking {} model variants", db.len()),
+            total_defs + total_items,
+            (total_defs + total_items).max(1),
+            format!("Completed baking {} models and items", db.len()),
         ));
     }
 

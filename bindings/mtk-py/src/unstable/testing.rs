@@ -244,18 +244,164 @@ pub fn create_colormaps_from_bytes(
     })
 }
 
-/// Test helper to retrieve baked mesh geometry and texture list for a given canonical blockstate string.
+/// Test helper to retrieve baked mesh geometry and texture list for a given canonical blockstate string or item ID.
 #[pyfunction]
-#[pyo3(signature = (db, state_str, clip_hidden=true))]
+#[pyo3(signature = (db, state_str, clip_hidden=true, weld=false))]
 pub fn model_database_get_mesh(
     db: &PyBakedModelDatabase,
     state_str: &str,
     clip_hidden: bool,
+    weld: bool,
 ) -> Option<(crate::mesh::PyMeshData, Vec<String>)> {
-    db.inner.get(state_str).map(|baked| {
-        let (mesh, textures) = baked.to_mesh_with_textures(clip_hidden);
-        (crate::mesh::PyMeshData::from_mesh(mesh), textures)
-    })
+    db.inner
+        .get(state_str)
+        .or_else(|| db.inner.get_item(state_str))
+        .map(|baked| {
+            let (mut mesh, textures) = baked.to_mesh_with_textures(clip_hidden);
+            if weld {
+                mesh.weld_vertices(1e-4);
+            }
+            (crate::mesh::PyMeshData::from_mesh(mesh), textures)
+        })
+}
+
+/// Bakes an extruded 2D item model mesh directly from RGBA8 pixels (test-only debugger).
+#[pyfunction]
+#[pyo3(signature = (pixels, width, height, texture="item", use_greedy=true, weld=false))]
+pub fn bake_item_model_mesh(
+    pixels: &[u8],
+    width: u32,
+    height: u32,
+    texture: &str,
+    use_greedy: bool,
+    weld: bool,
+) -> PyResult<crate::mesh::PyMeshData> {
+    let options = mtk_model::item::ItemMeshOptions {
+        use_greedy_meshing: use_greedy,
+        ..Default::default()
+    };
+    let baked =
+        mtk_model::item::bake_item_generated_model(pixels, width, height, texture, &options)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    let (mut mesh, _) = baked.to_mesh_with_textures(false);
+    if weld {
+        mesh.weld_vertices(1e-4);
+    }
+    Ok(crate::mesh::PyMeshData::from(mesh))
+}
+
+/// Bakes a tiled showcase gallery of items in the model database into a single combined PyMeshData.
+#[pyfunction]
+#[pyo3(signature = (db, columns=36, spacing=1.5, vertical=false, filter_mode="items_only", weld=true))]
+pub fn model_database_build_items_gallery(
+    db: &PyBakedModelDatabase,
+    columns: usize,
+    spacing: f32,
+    vertical: bool,
+    filter_mode: &str,
+    weld: bool,
+) -> (crate::mesh::PyMeshData, Vec<String>, usize) {
+    let mut item_keys: Vec<String> = db
+        .inner
+        .models
+        .keys()
+        .filter(|k| k.starts_with("minecraft:item/") || k.contains(":item/"))
+        .cloned()
+        .collect();
+    item_keys.sort();
+
+    let cols = columns.max(1);
+    let mut gallery_mesh = mtk_core::MeshData::new();
+    gallery_mesh.uv_layout = mtk_core::UvLayout::PerLoop;
+    let mut all_textures: Vec<String> = Vec::new();
+    let mut total_items = 0usize;
+
+    let mode = filter_mode.to_lowercase();
+
+    for key in item_keys {
+        if let Some(baked) = db.inner.get(&key) {
+            let (mut item_mesh, textures) = baked.to_mesh_with_textures(false);
+            if item_mesh.is_empty() {
+                continue;
+            }
+
+            let has_item_tex = textures
+                .iter()
+                .any(|t| t.contains(":item/") || t.starts_with("item/"));
+            let has_block_tex = textures
+                .iter()
+                .any(|t| t.contains(":block/") || t.starts_with("block/"));
+
+            let should_skip = (mode == "items_only" && (!has_item_tex || has_block_tex))
+                || (mode == "blocks_only" && (!has_block_tex || has_item_tex));
+            if should_skip {
+                continue;
+            }
+
+            if weld {
+                item_mesh.weld_vertices(1e-4);
+            }
+
+            let col = total_items % cols;
+            let row = total_items / cols;
+            let offset_x = (col as f32) * spacing;
+            let offset_y = -(row as f32) * spacing;
+
+            let base_v_idx = gallery_mesh.positions.len() as u32;
+
+            for p in item_mesh.positions {
+                if vertical {
+                    gallery_mesh
+                        .positions
+                        .push([p[0] + offset_x, p[2], p[1] + offset_y]);
+                } else {
+                    gallery_mesh
+                        .positions
+                        .push([p[0] + offset_x, p[1] + offset_y, p[2]]);
+                }
+            }
+
+            for n in item_mesh.normals {
+                if vertical {
+                    gallery_mesh.normals.push([n[0], n[2], n[1]]);
+                } else {
+                    gallery_mesh.normals.push(n);
+                }
+            }
+
+            gallery_mesh.uvs.extend(item_mesh.uvs);
+
+            for idx in item_mesh.indices {
+                gallery_mesh.indices.push(idx + base_v_idx);
+            }
+
+            if let Some(quads) = item_mesh.quad_indices {
+                let g_quads = gallery_mesh.quad_indices.get_or_insert_with(Vec::new);
+                for q_idx in quads {
+                    g_quads.push(q_idx + base_v_idx);
+                }
+            }
+
+            gallery_mesh.face_materials.extend(item_mesh.face_materials);
+            gallery_mesh
+                .face_tint_indices
+                .extend(item_mesh.face_tint_indices);
+
+            for t in textures {
+                if !all_textures.contains(&t) {
+                    all_textures.push(t);
+                }
+            }
+
+            total_items += 1;
+        }
+    }
+
+    (
+        crate::mesh::PyMeshData::from_mesh(gallery_mesh),
+        all_textures,
+        total_items,
+    )
 }
 
 /// Registers the `testing` module on `parent_module`.
@@ -329,6 +475,10 @@ pub fn register_submodule(py: Python<'_>, parent_module: &Bound<'_, PyModule>) -
     // Scene & Colormaps helpers
     sub.add_function(wrap_pyfunction!(validate_scene_package, &sub)?)?;
     sub.add_function(wrap_pyfunction!(create_colormaps_from_bytes, &sub)?)?;
+
+    // Item generator debuggers
+    sub.add_function(wrap_pyfunction!(bake_item_model_mesh, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(model_database_build_items_gallery, &sub)?)?;
 
     parent_module.add_submodule(&sub)?;
     Ok(())

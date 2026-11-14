@@ -40,7 +40,10 @@ pub use geometry::{
 };
 
 // 5. Mesh Data & Topology Analysis
-pub use mesh::{analyze_hard_edges, MeshData, UvLayout};
+pub use mesh::{
+    analyze_hard_edges, greedy_mesh_2d_mask, greedy_mesh_2d_values, greedy_span_1d, GreedyRect,
+    MeshData, UvLayout,
+};
 pub use polygon::FlatPolygonMesh;
 
 // 6. Profiling & Diagnostics

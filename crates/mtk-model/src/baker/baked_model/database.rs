@@ -390,6 +390,33 @@ impl BakedModelDatabase {
         self.models.get(&parsed.name)
     }
 
+    /// Resolves an item model by item identifier (e.g. "minecraft:diamond_sword", "diamond_sword", "item/diamond_sword").
+    pub fn get_item(&self, item_id: &str) -> Option<&BakedModel> {
+        if let Some(m) = self.models.get(item_id) {
+            return Some(m);
+        }
+        let clean = item_id.trim();
+        let stripped = clean.strip_prefix("minecraft:").unwrap_or(clean);
+        let candidates = [
+            format!(
+                "minecraft:item/{}",
+                stripped.strip_prefix("item/").unwrap_or(stripped)
+            ),
+            format!(
+                "item/{}",
+                stripped.strip_prefix("item/").unwrap_or(stripped)
+            ),
+            format!("minecraft:{}", stripped),
+            stripped.to_string(),
+        ];
+        for cand in &candidates {
+            if let Some(m) = self.models.get(cand) {
+                return Some(m);
+            }
+        }
+        None
+    }
+
     pub fn len(&self) -> usize {
         self.models.len()
     }
@@ -400,5 +427,26 @@ impl BakedModelDatabase {
 
     pub fn keys(&self) -> impl Iterator<Item = &String> {
         self.models.keys()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_baked_model_database_get_item() {
+        let mut db = BakedModelDatabase::new();
+        let model = BakedModel {
+            block_state: "minecraft:item/diamond_sword".to_string(),
+            ..Default::default()
+        };
+        db.insert("minecraft:item/diamond_sword".to_string(), model);
+
+        assert!(db.get_item("minecraft:item/diamond_sword").is_some());
+        assert!(db.get_item("item/diamond_sword").is_some());
+        assert!(db.get_item("minecraft:diamond_sword").is_some());
+        assert!(db.get_item("diamond_sword").is_some());
+        assert!(db.get_item("iron_sword").is_none());
     }
 }

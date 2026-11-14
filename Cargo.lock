@@ -854,6 +854,7 @@ name = "mtk-model"
 version = "0.1.0"
 dependencies = [
  "glam",
+ "image",
  "mtk-core",
  "mtk-cull",
  "mtk-resource",

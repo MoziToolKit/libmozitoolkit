@@ -51,6 +51,24 @@ fn test_precompile_all_assets_end_to_end() {
         blockstate_json.as_bytes().to_vec(),
     );
 
+    // 4. Add sample item texture and model
+    let item_img = image::RgbaImage::from_pixel(16, 16, image::Rgba([0, 255, 255, 255]));
+    let mut item_png = Vec::new();
+    let mut cursor = std::io::Cursor::new(&mut item_png);
+    item_img
+        .write_to(&mut cursor, image::ImageFormat::Png)
+        .unwrap();
+    pack.insert("assets/minecraft/textures/item/diamond_sword.png", item_png);
+
+    let item_json = r##"{
+        "parent": "minecraft:item/generated",
+        "textures": { "layer0": "minecraft:item/diamond_sword" }
+    }"##;
+    pack.insert(
+        "assets/minecraft/models/item/diamond_sword.json",
+        item_json.as_bytes().to_vec(),
+    );
+
     stack.push_pack(Box::new(pack));
 
     let temp_cache_dir =
@@ -92,6 +110,9 @@ fn test_precompile_all_assets_end_to_end() {
 
     let models = reader.load_models().unwrap();
     assert!(!models.is_empty());
+    assert!(models.get_item("minecraft:diamond_sword").is_some());
+    assert!(models.get_item("diamond_sword").is_some());
+    assert!(models.get_item("item/diamond_sword").is_some());
 
     let atlas_map = reader.load_atlas_mapping().unwrap();
     assert!(!atlas_map.chunks.is_empty());

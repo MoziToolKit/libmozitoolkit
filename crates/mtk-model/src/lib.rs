@@ -4,6 +4,7 @@ mod baker;
 mod builtin;
 mod entity;
 mod error;
+pub mod item;
 mod parser;
 
 // Top-level re-exports
@@ -23,6 +24,7 @@ pub use entity::{
     ENTITY_RENDER_SCHEMA_VERSION, SUPPORTED_VISUAL_ENTITIES,
 };
 pub use error::ModelError;
+pub use item::{bake_item_from_png_bytes, bake_item_generated_model, ItemMeshOptions};
 pub use parser::{
     mesh_to_obj_string, normalize_canonical_blockstate, BakedObjFace, BlockModelJson, BlockState,
     BlockStateDefinition, BlockStateResolver, ResolvedBlockModel, VariantModel,

@@ -13,11 +13,13 @@ use crate::geometry::{mc_world_to_z_up, CoordinateSystem, Quad};
 
 mod attributes;
 mod from_flat;
+pub mod greedy;
 mod merge;
 mod merge_attributes;
 mod topology;
 mod weld;
 
+pub use greedy::{greedy_mesh_2d_mask, greedy_mesh_2d_values, greedy_span_1d, GreedyRect};
 pub use topology::analyze_hard_edges;
 
 /// Explicit interpretation of the `uvs` buffer.

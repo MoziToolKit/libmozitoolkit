@@ -31,4 +31,7 @@ pub enum ModelError {
 
     #[error("Invalid model database payload: {0}")]
     InvalidDatabasePayload(String),
+
+    #[error("Item mesh baking error: {0}")]
+    ItemBakeError(String),
 }
