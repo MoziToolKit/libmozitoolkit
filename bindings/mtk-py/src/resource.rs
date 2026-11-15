@@ -239,6 +239,17 @@ impl PyAssetCache {
         self.inner.package_reader().has_chunk("ctm/rules")
     }
 
+    /// Loads CTM solver directly from package if CTM rules are present.
+    pub fn load_ctm_solver(&self) -> PyResult<Option<crate::ctm::PyCtmSolver>> {
+        let solver = self
+            .inner
+            .load_ctm_solver()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        Ok(solver.map(|s| crate::ctm::PyCtmSolver {
+            inner: std::sync::Arc::new(s),
+        }))
+    }
+
     /// Loads raw atlas mapping JSON string directly from package.
     pub fn load_atlas_mapping(&self) -> PyResult<String> {
         self.inner
@@ -353,6 +364,14 @@ pub fn precompile_all_assets<'py>(
         cache_dir: res.cache_dir,
         profile: res.profile,
     })
+}
+
+/// Computes the stack fingerprint directly from a list of pack names or paths
+/// without instantiating or decompressing any resource packs.
+#[pyfunction]
+pub fn compute_stack_fingerprint_from_names(names: Vec<String>) -> String {
+    let name_refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+    ResourcePackStack::compute_fingerprint_from_names(name_refs)
 }
 
 /// Resolve the active `.mtkcache` package for a cache directory + optional stack fingerprint.

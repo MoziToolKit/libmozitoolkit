@@ -209,6 +209,7 @@ pub struct CtmSolver {
 | `load_ctm_rules() -> Vec<CtmRule>` | 扫描并解析活跃包中的所有 OptiFine/Continuity CTM 规则。 |
 | `build_ctm_solver() -> CtmSolver` | 自动从活跃包解析规则构建 CTM 解算器。 |
 | `compute_stack_fingerprint() -> String` | 计算当前资源包栈拓扑与顺序的唯一哈希指纹。 |
+| `compute_fingerprint_from_names(names) -> String` | 静态方法：直接从名称/路径列表计算指纹，无需实例化或解压资源包。 |
 
 ### 3.2 CTM 解算方法
 | 方法签名 | 描述 |

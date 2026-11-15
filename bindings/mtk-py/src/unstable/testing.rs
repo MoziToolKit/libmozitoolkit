@@ -15,11 +15,12 @@ use crate::{protocol, subdivide, texture, uv};
 
 /// Helper function for unit testing: creates a minimal valid `.mtkcache` package file.
 #[pyfunction]
-#[pyo3(signature = (path, fingerprint, created_at=0))]
+#[pyo3(signature = (path, fingerprint, created_at=0, ctm_rules_json=None))]
 pub fn create_test_cache_package(
     path: &str,
     fingerprint: &str,
     created_at: u64,
+    ctm_rules_json: Option<&str>,
 ) -> PyResult<String> {
     let p = std::path::Path::new(path);
     let fp_bytes = libmtk::fingerprint_str_to_bytes16(fingerprint);
@@ -48,6 +49,18 @@ pub fn create_test_cache_package(
             &mtk_package::ChunkWriteOptions::zstd_fast(),
         )
         .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+
+    if let Some(ctm_json) = ctm_rules_json {
+        writer
+            .add_str_chunk(
+                *b"RULE",
+                "ctm/rules",
+                ctm_json,
+                &mtk_package::ChunkWriteOptions::zstd_fast(),
+            )
+            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+    }
+
     writer
         .finish()
         .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
@@ -276,13 +289,12 @@ pub fn bake_item_model_mesh(
     use_greedy: bool,
     weld: bool,
 ) -> PyResult<crate::mesh::PyMeshData> {
-    let options = mtk_model::item::ItemMeshOptions {
+    let options = mtk_model::ItemMeshOptions {
         use_greedy_meshing: use_greedy,
         ..Default::default()
     };
-    let baked =
-        mtk_model::item::bake_item_generated_model(pixels, width, height, texture, &options)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    let baked = mtk_model::bake_item_generated_model(pixels, width, height, texture, &options)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
     let (mut mesh, _) = baked.to_mesh_with_textures(false);
     if weld {
         mesh.weld_vertices(1e-4);

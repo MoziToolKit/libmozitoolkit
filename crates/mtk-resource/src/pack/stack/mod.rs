@@ -195,12 +195,19 @@ impl ResourcePackStack {
     ///
     /// Changes if packs are reordered, added, or removed.
     pub fn compute_stack_fingerprint(&self) -> String {
+        Self::compute_fingerprint_from_names(self.packs.iter().map(|p| p.name()))
+    }
+
+    /// Computes the stack fingerprint directly from an iterator of pack names/descriptors
+    /// without instantiating or decompressing any resource packs.
+    pub fn compute_fingerprint_from_names<'a>(names: impl IntoIterator<Item = &'a str>) -> String {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        self.packs.len().hash(&mut hasher);
-        for (idx, pack) in self.packs.iter().enumerate() {
+        let names_vec: Vec<&'a str> = names.into_iter().collect();
+        names_vec.len().hash(&mut hasher);
+        for (idx, name) in names_vec.iter().enumerate() {
             idx.hash(&mut hasher);
-            pack.name().hash(&mut hasher);
+            name.hash(&mut hasher);
         }
         format!("mtk_fp_{:016x}", hasher.finish())
     }

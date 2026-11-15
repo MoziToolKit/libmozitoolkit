@@ -4,7 +4,7 @@ mod baker;
 mod builtin;
 mod entity;
 mod error;
-pub mod item;
+mod item;
 mod parser;
 
 // Top-level re-exports

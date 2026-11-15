@@ -127,7 +127,9 @@ Python 模块名：`libmtk_py`
   - `resolve_mesh_routes(face_texture_keys, atlas, aliases=None, enable_animated_textures=false)`
   - `reroute_mesh_animation(uvs, face_loop_ranges, face_texture_keys, face_old_chunk_ids, atlas, aliases=None, enable_animated_textures=false)`
 - **`GridAtlasSpec` (`PyGridAtlasSpec`)**：网格图集元数据规范。
-- **缓存解析**：`resolve_active_cache_package(cache_dir, fingerprint=None)` 返回 active `.mtkcache` 路径。
+- **缓存解析与轻量指纹**：
+  - `resolve_active_cache_package(cache_dir, fingerprint=None)` 返回 active `.mtkcache` 路径。
+  - `compute_stack_fingerprint_from_names(names: List[str]) -> str` 直接根据包名称/路径列表计算堆栈指纹，无需实例化或解压任何资源包（耗时 < 0.01ms）。
 - **色彩数学与常量**：`compute_biome_tint_attributes_paletted`, `compute_mesh_biome_attributes_from_storage`, `sample_colormap_colors`, `TINT_TYPE_NONE..DRY_FOLIAGE`
 
 ### 2.9 模型烘焙 (`model`)

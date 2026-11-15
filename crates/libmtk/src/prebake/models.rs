@@ -7,7 +7,7 @@ use rayon::prelude::*;
 
 use mtk_core::{ProgressCallback, ProgressReport, ProgressThrottler};
 use mtk_material::MaterialResolver;
-use mtk_model::item::{bake_item_from_png_bytes, ItemMeshOptions};
+use mtk_model::{bake_item_from_png_bytes, ItemMeshOptions};
 use mtk_model::{BakedModelDatabase, BlockModelJson, BlockStateDefinition, ModelBaker};
 use mtk_resource::{ResourceLocation, ResourcePackStack};
 use mtk_texture::AtlasAddressMap;

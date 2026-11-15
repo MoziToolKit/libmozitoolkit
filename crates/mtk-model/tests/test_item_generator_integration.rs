@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use mtk_model::item::{bake_item_from_png_bytes, bake_item_generated_model, ItemMeshOptions};
+use mtk_model::{bake_item_from_png_bytes, bake_item_generated_model, ItemMeshOptions};
 
 fn find_item_textures_dir() -> Option<PathBuf> {
     // 1. Check Minecraft_Source adjacent in workspace

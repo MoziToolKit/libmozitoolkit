@@ -178,6 +178,16 @@ impl AssetCacheReader {
         Ok(Some(rules))
     }
 
+    /// Loads cached indexed CTM solver directly from the package if present.
+    pub fn load_ctm_solver(&self) -> Result<Option<mtk_resource::CtmSolver>, MtkError> {
+        if !self.reader.has_chunk("ctm/rules") {
+            return Ok(None);
+        }
+        let json_str = self.reader.read_chunk_str("ctm/rules")?;
+        let solver = mtk_resource::CtmSolver::from_json(&json_str)?;
+        Ok(Some(solver))
+    }
+
     /// Loads a pre-populated `BannerBaker` containing cached base cloth and pattern sprites.
     pub fn load_banner_baker(&self) -> Result<mtk_texture::BannerBaker, MtkError> {
         let mut baker = mtk_texture::BannerBaker::default();

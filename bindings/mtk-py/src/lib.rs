@@ -42,8 +42,9 @@ pub(crate) use mesh::PyMeshData;
 pub(crate) use model::PyBakedModelDatabase;
 pub(crate) use point_cloud::PyVoxelPointCloud;
 pub(crate) use resource::{
-    evaluate_cache_status, path_provides_vanilla_client, precompile_all_assets, probe_pack,
-    resolve_active_cache_package, PyAssetCache, PyResourcePackStack,
+    compute_stack_fingerprint_from_names, evaluate_cache_status, path_provides_vanilla_client,
+    precompile_all_assets, probe_pack, resolve_active_cache_package, PyAssetCache,
+    PyResourcePackStack,
 };
 pub(crate) use sync::{PyLiveSyncServer, PyLiveSyncSession};
 pub(crate) use texture::PyBakedAtlas;
@@ -110,6 +111,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(clean_material_identifier, m)?)?;
     m.add_function(wrap_pyfunction!(builtin_biome_suffixes, m)?)?;
     m.add_function(wrap_pyfunction!(resolve_active_cache_package, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_stack_fingerprint_from_names, m)?)?;
     m.add_function(wrap_pyfunction!(probe_pack, m)?)?;
     m.add_function(wrap_pyfunction!(path_provides_vanilla_client, m)?)?;
     m.add_function(wrap_pyfunction!(evaluate_cache_status, m)?)?;
