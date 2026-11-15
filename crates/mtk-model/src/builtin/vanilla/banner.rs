@@ -82,6 +82,7 @@ pub fn create_builtin_banner_model(
             pivot: [8.0, 8.0, 8.0],
         }),
         shade: Some(true),
+        light_emission: None,
         faces: make_box_faces(
             "#base",
             [0.5, 10.5, 5.5, 11.0],
@@ -112,6 +113,7 @@ pub fn create_builtin_banner_model(
                 pivot: [8.0, 8.0, 8.0],
             }),
             shade: Some(true),
+            light_emission: None,
             faces: make_box_faces(
                 "#base",
                 [11.5, 0.0, 12.0, 0.5],
@@ -142,6 +144,7 @@ pub fn create_builtin_banner_model(
             pivot: [8.0, 8.0, 8.0],
         }),
         shade: Some(true),
+        light_emission: None,
         faces: make_box_faces(
             "#cloth",
             [0.25, 0.0, 5.25, 0.25],
@@ -158,5 +161,6 @@ pub fn create_builtin_banner_model(
         ambientocclusion: Some(true),
         textures: Some(textures),
         elements: Some(elements),
+        ..Default::default()
     })
 }

@@ -3,6 +3,7 @@ use mtk_core::Direction;
 use serde::{Deserialize, Serialize};
 
 pub use super::element::{BakedElement, BakedFace};
+use crate::parser::model_json::{GuiLight, ItemTransforms};
 use crate::parser::obj::BakedObjFace;
 
 /// Options for configuring mesh generation and face de-overlapping from baked models.
@@ -42,6 +43,10 @@ pub struct BakedModel {
     pub is_emissive: bool,
     #[serde(default)]
     pub cull_meta: Option<mtk_cull::BlockCullMeta>,
+    #[serde(default)]
+    pub transforms: ItemTransforms,
+    #[serde(default)]
+    pub gui_light: Option<GuiLight>,
     #[serde(skip)]
     pub culled_faces: [Vec<BakedFace>; 6],
     #[serde(skip)]
@@ -65,6 +70,10 @@ impl<'de> Deserialize<'de> for BakedModel {
             is_emissive: bool,
             #[serde(default)]
             cull_meta: Option<mtk_cull::BlockCullMeta>,
+            #[serde(default)]
+            transforms: ItemTransforms,
+            #[serde(default)]
+            gui_light: Option<GuiLight>,
         }
 
         let helper = BakedModelHelper::deserialize(deserializer)?;
@@ -77,6 +86,8 @@ impl<'de> Deserialize<'de> for BakedModel {
             is_opaque: helper.is_opaque,
             is_emissive: helper.is_emissive,
             cull_meta: helper.cull_meta,
+            transforms: helper.transforms,
+            gui_light: helper.gui_light,
             culled_faces: Default::default(),
             unculled_faces: Default::default(),
         };

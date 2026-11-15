@@ -27,5 +27,6 @@ pub use error::ModelError;
 pub use item::{bake_item_from_png_bytes, bake_item_generated_model, ItemMeshOptions};
 pub use parser::{
     mesh_to_obj_string, normalize_canonical_blockstate, BakedObjFace, BlockModelJson, BlockState,
-    BlockStateDefinition, BlockStateResolver, ResolvedBlockModel, VariantModel,
+    BlockStateDefinition, BlockStateResolver, GuiLight, ItemDisplayContext, ItemTransforms,
+    ModelOverride, ModelTransform, ResolvedBlockModel, VariantModel,
 };

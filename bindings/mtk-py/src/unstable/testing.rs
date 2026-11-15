@@ -278,6 +278,63 @@ pub fn model_database_get_mesh(
         })
 }
 
+/// Test helper to retrieve the item transforms (rotation, translation, scale) for a model.
+#[pyfunction]
+pub fn model_database_get_transforms<'py>(
+    py: Python<'py>,
+    db: &PyBakedModelDatabase,
+    key: &str,
+) -> PyResult<Option<Bound<'py, pyo3::types::PyDict>>> {
+    let Some(baked) = db.inner.get(key).or_else(|| db.inner.get_item(key)) else {
+        return Ok(None);
+    };
+    let dict = pyo3::types::PyDict::new(py);
+    let make_transform_dict =
+        |t: &mtk_model::ModelTransform| -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+            let d = pyo3::types::PyDict::new(py);
+            d.set_item("rotation", t.rotation.to_vec())?;
+            d.set_item("translation", t.translation.to_vec())?;
+            d.set_item("scale", t.scale.to_vec())?;
+            Ok(d)
+        };
+
+    if let Some(ref t) = baked.transforms.fixed {
+        dict.set_item("fixed", make_transform_dict(t)?)?;
+    }
+    if let Some(ref t) = baked.transforms.gui {
+        dict.set_item("gui", make_transform_dict(t)?)?;
+    }
+    if let Some(ref t) = baked.transforms.ground {
+        dict.set_item("ground", make_transform_dict(t)?)?;
+    }
+    if let Some(ref t) = baked.transforms.head {
+        dict.set_item("head", make_transform_dict(t)?)?;
+    }
+    if let Some(ref t) = baked.transforms.thirdperson_righthand {
+        dict.set_item("thirdperson_righthand", make_transform_dict(t)?)?;
+    }
+    if let Some(ref t) = baked.transforms.thirdperson_lefthand {
+        dict.set_item("thirdperson_lefthand", make_transform_dict(t)?)?;
+    }
+    if let Some(ref t) = baked.transforms.firstperson_righthand {
+        dict.set_item("firstperson_righthand", make_transform_dict(t)?)?;
+    }
+    if let Some(ref t) = baked.transforms.firstperson_lefthand {
+        dict.set_item("firstperson_lefthand", make_transform_dict(t)?)?;
+    }
+    if let Some(ref t) = baked.transforms.on_shelf {
+        dict.set_item("on_shelf", make_transform_dict(t)?)?;
+    }
+    if let Some(ref gl) = baked.gui_light {
+        let gl_str = match gl {
+            mtk_model::GuiLight::Front => "front",
+            mtk_model::GuiLight::Side => "side",
+        };
+        dict.set_item("gui_light", gl_str)?;
+    }
+    Ok(Some(dict))
+}
+
 /// Bakes an extruded 2D item model mesh directly from RGBA8 pixels (test-only debugger).
 #[pyfunction]
 #[pyo3(signature = (pixels, width, height, texture="item", use_greedy=true, weld=false))]
@@ -469,6 +526,7 @@ pub fn register_submodule(py: Python<'_>, parent_module: &Bound<'_, PyModule>) -
     sub.add_function(wrap_pyfunction!(model_database_get_states, &sub)?)?;
     sub.add_function(wrap_pyfunction!(model_database_remap_to_atlas, &sub)?)?;
     sub.add_function(wrap_pyfunction!(model_database_get_mesh, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(model_database_get_transforms, &sub)?)?;
 
     // Voxel storage testing helpers
     sub.add_function(wrap_pyfunction!(voxel_dirty_section_count, &sub)?)?;

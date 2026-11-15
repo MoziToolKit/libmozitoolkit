@@ -16,11 +16,13 @@ use crate::MtkError;
 
 /// Format version for compiled cache compatibility checking.
 ///
+/// v7: Model JSON display transforms (ItemTransforms) and GuiLight are deserialized, inherited and baked into BakedModel; older caches are invalidated.
+/// v6: Prebake pipeline multi-threaded atlas and model baking improvements.
 /// v5: the baked model database uses Postcard + Zstd instead of Bincode,
 ///     producing smaller `models.bin` payloads; older caches are invalidated.
 /// v4: LabPBR is decoded at precompile time; atlas chunks carry `_n` (GL normal + height),
 ///     `_orm` (AO/roughness/metallic/emission) and `_aux` (IOR/porosity/SSS/transmission).
-pub const ASSET_CACHE_FORMAT_VERSION: u32 = 6;
+pub const ASSET_CACHE_FORMAT_VERSION: u32 = 7;
 
 /// Converts a string fingerprint (e.g. `"mtk_fp_1234abcd5678ef00"`) to a 16-byte array.
 pub fn fingerprint_str_to_bytes16(fp: &str) -> [u8; 16] {

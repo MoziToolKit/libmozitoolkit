@@ -286,6 +286,7 @@ pub fn create_item_frame_baked_model(is_glowing: bool, is_invisible: bool) -> Ba
         cull_meta: None,
         culled_faces: Default::default(),
         unculled_faces: Vec::new(),
+        ..Default::default()
     }
 }
 

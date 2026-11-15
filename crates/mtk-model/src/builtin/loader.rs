@@ -171,6 +171,7 @@ impl MiExModelLoader {
             ambientocclusion: Some(true),
             textures: Some(textures),
             elements: Some(elements),
+            ..Default::default()
         })
     }
 

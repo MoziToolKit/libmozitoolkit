@@ -57,6 +57,7 @@ pub fn apply_bell_patches(model_id: &str, model: &mut BlockModelJson) -> bool {
         rotation: None,
         transform: None,
         shade: Some(true),
+        light_emission: None,
         faces: {
             let mut f = HashMap::new();
             f.insert(
@@ -129,6 +130,7 @@ pub fn apply_bell_patches(model_id: &str, model: &mut BlockModelJson) -> bool {
         rotation: None,
         transform: None,
         shade: Some(true),
+        light_emission: None,
         faces: {
             let mut f = HashMap::new();
             f.insert(

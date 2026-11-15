@@ -365,6 +365,7 @@ pub fn create_copper_statue_baked_model(blockstate: &BlockState) -> BakedModel {
         cull_meta: Some(cull_meta),
         culled_faces: Default::default(),
         unculled_faces: Default::default(),
+        ..Default::default()
     };
 
     model.rebuild_face_buckets();

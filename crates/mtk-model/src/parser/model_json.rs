@@ -6,6 +6,180 @@ use crate::error::ModelError;
 
 const MAX_PARENT_DEPTH: usize = 32;
 
+pub(crate) fn default_scale_one() -> [f32; 3] {
+    [1.0, 1.0, 1.0]
+}
+
+/// Viewport/render lighting mode in Minecraft models.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GuiLight {
+    Front,
+    Side,
+}
+
+/// Canonical display context enum matching vanilla Minecraft's `ItemDisplayContext`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ItemDisplayContext {
+    ThirdpersonRighthand,
+    ThirdpersonLefthand,
+    FirstpersonRighthand,
+    FirstpersonLefthand,
+    Head,
+    Gui,
+    Ground,
+    Fixed,
+    OnShelf,
+}
+
+/// Raw JSON viewport 3D display transform (translation specified in pixels).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct ItemTransformJson {
+    #[serde(default)]
+    pub rotation: [f32; 3],
+    #[serde(default)]
+    pub translation: [f32; 3],
+    #[serde(default = "default_scale_one")]
+    pub scale: [f32; 3],
+}
+
+impl Default for ItemTransformJson {
+    fn default() -> Self {
+        Self {
+            rotation: [0.0, 0.0, 0.0],
+            translation: [0.0, 0.0, 0.0],
+            scale: default_scale_one(),
+        }
+    }
+}
+
+impl ItemTransformJson {
+    /// Converts raw JSON transform (translation in pixels) into normalized `ModelTransform`
+    /// where translation is in standard block units (scaled by 1/16 = 0.0625).
+    #[inline]
+    pub fn to_model_transform(self) -> ModelTransform {
+        ModelTransform {
+            rotation: self.rotation,
+            translation: [
+                self.translation[0] * 0.0625,
+                self.translation[1] * 0.0625,
+                self.translation[2] * 0.0625,
+            ],
+            scale: self.scale,
+        }
+    }
+}
+
+/// Raw JSON display transform dictionary across standard contexts.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ItemTransformsJson {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thirdperson_righthand: Option<ItemTransformJson>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thirdperson_lefthand: Option<ItemTransformJson>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub firstperson_righthand: Option<ItemTransformJson>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub firstperson_lefthand: Option<ItemTransformJson>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head: Option<ItemTransformJson>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gui: Option<ItemTransformJson>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ground: Option<ItemTransformJson>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fixed: Option<ItemTransformJson>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_shelf: Option<ItemTransformJson>,
+}
+
+/// Standardized 3D viewport transformation with translation normalized to block space.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct ModelTransform {
+    /// Rotation Euler XYZ in degrees.
+    #[serde(default)]
+    pub rotation: [f32; 3],
+    /// Translation offset in block units [tx, ty, tz].
+    #[serde(default)]
+    pub translation: [f32; 3],
+    /// Scale factor [sx, sy, sz].
+    #[serde(default = "default_scale_one")]
+    pub scale: [f32; 3],
+}
+
+impl Default for ModelTransform {
+    fn default() -> Self {
+        Self {
+            rotation: [0.0, 0.0, 0.0],
+            translation: [0.0, 0.0, 0.0],
+            scale: default_scale_one(),
+        }
+    }
+}
+
+/// Fully resolved display transforms across standard viewport contexts.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ItemTransforms {
+    #[serde(default)]
+    pub thirdperson_righthand: Option<ModelTransform>,
+    #[serde(default)]
+    pub thirdperson_lefthand: Option<ModelTransform>,
+    #[serde(default)]
+    pub firstperson_righthand: Option<ModelTransform>,
+    #[serde(default)]
+    pub firstperson_lefthand: Option<ModelTransform>,
+    #[serde(default)]
+    pub head: Option<ModelTransform>,
+    #[serde(default)]
+    pub gui: Option<ModelTransform>,
+    #[serde(default)]
+    pub ground: Option<ModelTransform>,
+    #[serde(default)]
+    pub fixed: Option<ModelTransform>,
+    #[serde(default)]
+    pub on_shelf: Option<ModelTransform>,
+}
+
+impl ItemTransforms {
+    /// Returns the transform for a given display context.
+    pub fn get(&self, context: ItemDisplayContext) -> Option<ModelTransform> {
+        match context {
+            ItemDisplayContext::ThirdpersonRighthand => self.thirdperson_righthand,
+            ItemDisplayContext::ThirdpersonLefthand => self.thirdperson_lefthand,
+            ItemDisplayContext::FirstpersonRighthand => self.firstperson_righthand,
+            ItemDisplayContext::FirstpersonLefthand => self.firstperson_lefthand,
+            ItemDisplayContext::Head => self.head,
+            ItemDisplayContext::Gui => self.gui,
+            ItemDisplayContext::Ground => self.ground,
+            ItemDisplayContext::Fixed => self.fixed,
+            ItemDisplayContext::OnShelf => self.on_shelf,
+        }
+    }
+
+    /// Sets the transform for a given display context.
+    pub fn set(&mut self, context: ItemDisplayContext, transform: Option<ModelTransform>) {
+        match context {
+            ItemDisplayContext::ThirdpersonRighthand => self.thirdperson_righthand = transform,
+            ItemDisplayContext::ThirdpersonLefthand => self.thirdperson_lefthand = transform,
+            ItemDisplayContext::FirstpersonRighthand => self.firstperson_righthand = transform,
+            ItemDisplayContext::FirstpersonLefthand => self.firstperson_lefthand = transform,
+            ItemDisplayContext::Head => self.head = transform,
+            ItemDisplayContext::Gui => self.gui = transform,
+            ItemDisplayContext::Ground => self.ground = transform,
+            ItemDisplayContext::Fixed => self.fixed = transform,
+            ItemDisplayContext::OnShelf => self.on_shelf = transform,
+        }
+    }
+}
+
+/// Model override rule based on item predicates (e.g. pulling bow, damage, clock time).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ModelOverride {
+    pub predicate: HashMap<String, f32>,
+    pub model: String,
+}
+
 /// High-level representation of a Minecraft Block Model JSON.
 ///
 /// Follows Minecraft 1.21+ format, supporting parent template inheritance,
@@ -20,6 +194,10 @@ pub struct BlockModelJson {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ambientocclusion: Option<bool>,
 
+    /// Viewport/render lighting mode: "front" (items) or "side" (blocks).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gui_light: Option<GuiLight>,
+
     /// Texture mappings dictionary (e.g. {"all": "minecraft:block/stone", "particle": "#all"}).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub textures: Option<HashMap<String, TextureValue>>,
@@ -27,6 +205,14 @@ pub struct BlockModelJson {
     /// 3D box elements definition.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub elements: Option<Vec<ElementJson>>,
+
+    /// Viewport 3D display transformations across standard contexts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display: Option<ItemTransformsJson>,
+
+    /// Item predicate-based model overrides.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overrides: Option<Vec<ModelOverride>>,
 }
 
 impl BlockModelJson {
@@ -48,6 +234,13 @@ impl BlockModelJson {
         let mut raw_textures = self.textures.clone().unwrap_or_default();
         let mut elements = self.elements.clone();
         let mut ambientocclusion = self.ambientocclusion;
+        let mut gui_light = self.gui_light;
+        let mut overrides = self.overrides.clone();
+
+        let mut display_chain: Vec<ItemTransformsJson> = Vec::new();
+        if let Some(ref d) = self.display {
+            display_chain.push(d.clone());
+        }
 
         let mut curr_parent = self.parent.clone();
         let mut depth = 0;
@@ -78,8 +271,55 @@ impl BlockModelJson {
                 ambientocclusion = parent_model.ambientocclusion;
             }
 
+            // 4. Inherit gui_light if not defined
+            if gui_light.is_none() && parent_model.gui_light.is_some() {
+                gui_light = parent_model.gui_light;
+            }
+
+            // 5. Inherit overrides if not defined
+            if overrides.is_none() && parent_model.overrides.is_some() {
+                overrides = parent_model.overrides.clone();
+            }
+
+            // 6. Collect display transforms up the parent chain
+            if let Some(ref d) = parent_model.display {
+                display_chain.push(d.clone());
+            }
+
             curr_parent = parent_model.parent;
         }
+
+        // Resolve display transforms per slot (top-wins in inheritance chain)
+        let find_slot = |extractor: fn(&ItemTransformsJson) -> Option<ItemTransformJson>| -> Option<ModelTransform> {
+            for d in &display_chain {
+                if let Some(t) = extractor(d) {
+                    return Some(t.to_model_transform());
+                }
+            }
+            None
+        };
+
+        let thirdperson_righthand = find_slot(|d| d.thirdperson_righthand);
+        let thirdperson_lefthand = find_slot(|d| d.thirdperson_lefthand).or(thirdperson_righthand);
+        let firstperson_righthand = find_slot(|d| d.firstperson_righthand);
+        let firstperson_lefthand = find_slot(|d| d.firstperson_lefthand).or(firstperson_righthand);
+        let head = find_slot(|d| d.head);
+        let gui = find_slot(|d| d.gui);
+        let ground = find_slot(|d| d.ground);
+        let fixed = find_slot(|d| d.fixed);
+        let on_shelf = find_slot(|d| d.on_shelf);
+
+        let resolved_transforms = ItemTransforms {
+            thirdperson_righthand,
+            thirdperson_lefthand,
+            firstperson_righthand,
+            firstperson_lefthand,
+            head,
+            gui,
+            ground,
+            fixed,
+            on_shelf,
+        };
 
         // Resolve all `#texture` variable references
         let mut resolved_textures = HashMap::new();
@@ -92,6 +332,7 @@ impl BlockModelJson {
         let resolved_elements = if let Some(elems) = elements {
             let mut res_elems = Vec::with_capacity(elems.len());
             for elem in elems {
+                let elem_emission = elem.light_emission.unwrap_or(0);
                 let mut res_faces = HashMap::with_capacity(elem.faces.len());
                 for (dir, face) in elem.faces {
                     let final_tex = Self::resolve_texture_value(&face.texture, &raw_textures)
@@ -113,6 +354,7 @@ impl BlockModelJson {
                     rotation: elem.rotation,
                     transform: elem.transform,
                     shade: elem.shade.unwrap_or(true),
+                    light_emission: elem_emission,
                     faces: res_faces,
                 });
             }
@@ -123,8 +365,11 @@ impl BlockModelJson {
 
         Ok(ResolvedBlockModel {
             ambientocclusion: ambientocclusion.unwrap_or(true),
+            gui_light,
             textures: resolved_textures,
             elements: resolved_elements,
+            transforms: resolved_transforms,
+            overrides: overrides.unwrap_or_default(),
         })
     }
 
@@ -187,10 +432,16 @@ impl BlockModelJson {
 pub struct ResolvedBlockModel {
     /// Ambient occlusion.
     pub ambientocclusion: bool,
+    /// Viewport/render light mode: "front" (items) or "side" (blocks).
+    pub gui_light: Option<GuiLight>,
     /// Resolved texture dictionary mapping variable names to canonical texture IDs.
     pub textures: HashMap<String, String>,
     /// Fully resolved elements.
     pub elements: Vec<ResolvedElement>,
+    /// Resolved viewport 3D display transformations.
+    pub transforms: ItemTransforms,
+    /// Item predicate-based model overrides.
+    pub overrides: Vec<ModelOverride>,
 }
 
 /// Resolved element with concrete textures.
@@ -201,6 +452,7 @@ pub struct ResolvedElement {
     pub rotation: Option<RotationJson>,
     pub transform: Option<BuiltinTransform>,
     pub shade: bool,
+    pub light_emission: u8,
     pub faces: HashMap<String, ResolvedFace>,
 }
 
@@ -277,6 +529,10 @@ pub struct ElementJson {
     /// Whether to render shadows/shading on this element.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shade: Option<bool>,
+
+    /// Optional light emission level in [0, 15] (1.21+).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub light_emission: Option<u8>,
 
     /// Faces dictionary mapping direction ("down", "up", "north", "south", "west", "east") to face data.
     pub faces: HashMap<String, FaceJson>,
@@ -420,5 +676,120 @@ mod tests {
             resolved.elements[0].faces.get("up").unwrap().texture,
             "minecraft:block/oak_planks"
         );
+    }
+
+    #[test]
+    fn test_display_transforms_deserialization_and_inheritance() {
+        let parent_json = r##"{
+            "gui_light": "side",
+            "display": {
+                "thirdperson_righthand": {
+                    "rotation": [75, 45, 0],
+                    "translation": [0, 2.5, 0],
+                    "scale": [0.375, 0.375, 0.375]
+                },
+                "fixed": {
+                    "rotation": [0, 180, 0],
+                    "translation": [0, 0, 0],
+                    "scale": [0.5, 0.5, 0.5]
+                }
+            }
+        }"##;
+
+        let child_json = r##"{
+            "parent": "minecraft:item/parent_tool",
+            "gui_light": "front",
+            "display": {
+                "gui": {
+                    "rotation": [0, 0, 0],
+                    "translation": [0, 0, 0],
+                    "scale": [1.0, 1.0, 1.0]
+                }
+            },
+            "overrides": [
+                {
+                    "predicate": { "damaged": 1.0, "damage": 0.5 },
+                    "model": "minecraft:item/broken_tool"
+                }
+            ]
+        }"##;
+
+        let parent: BlockModelJson = serde_json::from_str(parent_json).unwrap();
+        let child: BlockModelJson = serde_json::from_str(child_json).unwrap();
+
+        assert_eq!(parent.gui_light, Some(GuiLight::Side));
+        assert_eq!(child.gui_light, Some(GuiLight::Front));
+        assert_eq!(child.overrides.as_ref().unwrap().len(), 1);
+
+        let resolved = child
+            .resolve_hierarchy("minecraft:item/sword", |id| {
+                if id == "minecraft:item/parent_tool" {
+                    Some(parent.clone())
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+
+        // 1. gui_light: child overrides parent
+        assert_eq!(resolved.gui_light, Some(GuiLight::Front));
+
+        // 2. overrides: inherited from child
+        assert_eq!(resolved.overrides.len(), 1);
+        assert_eq!(resolved.overrides[0].model, "minecraft:item/broken_tool");
+        assert_eq!(resolved.overrides[0].predicate.get("damaged"), Some(&1.0));
+
+        // 3. display slots:
+        // gui is defined on child
+        let gui_tf = resolved.transforms.get(ItemDisplayContext::Gui).unwrap();
+        assert_eq!(gui_tf.scale, [1.0, 1.0, 1.0]);
+
+        // fixed is inherited from parent
+        let fixed_tf = resolved.transforms.get(ItemDisplayContext::Fixed).unwrap();
+        assert_eq!(fixed_tf.rotation, [0.0, 180.0, 0.0]);
+        assert_eq!(fixed_tf.scale, [0.5, 0.5, 0.5]);
+
+        // thirdperson_righthand is inherited from parent
+        let tp_right = resolved
+            .transforms
+            .get(ItemDisplayContext::ThirdpersonRighthand)
+            .unwrap();
+        assert_eq!(tp_right.rotation, [75.0, 45.0, 0.0]);
+        // translation in pixels [0, 2.5, 0] scaled by 0.0625 = [0, 0.15625, 0]
+        assert_eq!(tp_right.translation, [0.0, 2.5 * 0.0625, 0.0]);
+
+        // thirdperson_lefthand was not specified, so it falls back to thirdperson_righthand
+        let tp_left = resolved
+            .transforms
+            .get(ItemDisplayContext::ThirdpersonLefthand)
+            .unwrap();
+        assert_eq!(tp_left, tp_right);
+
+        // ground was not specified anywhere, so it is None
+        assert!(resolved
+            .transforms
+            .get(ItemDisplayContext::Ground)
+            .is_none());
+    }
+
+    #[test]
+    fn test_light_emission_deserialization() {
+        let json_data = r##"{
+            "elements": [
+                {
+                    "from": [0, 0, 0],
+                    "to": [16, 16, 16],
+                    "light_emission": 15,
+                    "faces": {
+                        "up": { "texture": "#all" }
+                    }
+                }
+            ]
+        }"##;
+
+        let model: BlockModelJson = serde_json::from_str(json_data).unwrap();
+        let resolved = model.resolve_hierarchy("test:light", |_| None).unwrap();
+        assert_eq!(resolved.elements.len(), 1);
+        assert_eq!(resolved.elements[0].light_emission, 15);
     }
 }

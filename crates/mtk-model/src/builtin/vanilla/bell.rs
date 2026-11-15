@@ -29,6 +29,7 @@ pub fn create_builtin_bell_model(stem: &str) -> Option<BlockModelJson> {
                 rotation: None,
                 transform: None,
                 shade: Some(true),
+                light_emission: None,
                 faces: make_simple_faces("#bar"),
             });
             elements.push(ElementJson {
@@ -37,6 +38,7 @@ pub fn create_builtin_bell_model(stem: &str) -> Option<BlockModelJson> {
                 rotation: None,
                 transform: None,
                 shade: Some(true),
+                light_emission: None,
                 faces: make_simple_faces("#post"),
             });
             elements.push(ElementJson {
@@ -45,6 +47,7 @@ pub fn create_builtin_bell_model(stem: &str) -> Option<BlockModelJson> {
                 rotation: None,
                 transform: None,
                 shade: Some(true),
+                light_emission: None,
                 faces: make_simple_faces("#post"),
             });
         }
@@ -55,6 +58,7 @@ pub fn create_builtin_bell_model(stem: &str) -> Option<BlockModelJson> {
                 rotation: None,
                 transform: None,
                 shade: Some(true),
+                light_emission: None,
                 faces: make_simple_faces("#bar"),
             });
         }
@@ -65,6 +69,7 @@ pub fn create_builtin_bell_model(stem: &str) -> Option<BlockModelJson> {
                 rotation: None,
                 transform: None,
                 shade: Some(true),
+                light_emission: None,
                 faces: make_simple_faces("#bar"),
             });
         }
@@ -75,6 +80,7 @@ pub fn create_builtin_bell_model(stem: &str) -> Option<BlockModelJson> {
                 rotation: None,
                 transform: None,
                 shade: Some(true),
+                light_emission: None,
                 faces: make_simple_faces("#bar"),
             });
         }
@@ -86,6 +92,7 @@ pub fn create_builtin_bell_model(stem: &str) -> Option<BlockModelJson> {
         ambientocclusion: Some(true),
         textures: Some(textures),
         elements: Some(elements),
+        ..Default::default()
     };
 
     apply_bell_patches("block/bell_", &mut model);

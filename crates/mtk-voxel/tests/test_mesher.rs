@@ -228,6 +228,7 @@ fn test_grass_block_meshing_no_duplicate_overlay_faces() {
         cull_meta: None,
         culled_faces: Default::default(),
         unculled_faces: Default::default(),
+        ..Default::default()
     });
 
     let config = MesherConfig {
@@ -510,6 +511,7 @@ fn test_waterlogged_isolated_block_with_baked_model() {
         cull_meta: None,
         culled_faces: Default::default(),
         unculled_faces: Vec::new(),
+        ..Default::default()
     };
     slab_model.rebuild_face_buckets();
     let slab_arc = std::sync::Arc::new(slab_model);
@@ -585,6 +587,7 @@ fn test_alternate_blocks_variant_sampling() {
             cull_meta: None,
             culled_faces: Default::default(),
             unculled_faces: Vec::new(),
+            ..Default::default()
         };
         m.rebuild_face_buckets();
         variants.push(m);

@@ -845,6 +845,7 @@ pub fn create_painting_baked_model(variant_name: &str, custom_w: u32, custom_h: 
         cull_meta: None,
         culled_faces: Default::default(),
         unculled_faces: Vec::new(),
+        ..Default::default()
     };
     model.rebuild_face_buckets();
     model

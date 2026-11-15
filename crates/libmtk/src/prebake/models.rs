@@ -279,6 +279,14 @@ pub(crate) fn prebake_all_models_with_progress(
                         }
                     }
                 }
+                if let Some(ref mut model) = combined_model {
+                    if resolved.transforms != mtk_model::ItemTransforms::default() {
+                        model.transforms = resolved.transforms.clone();
+                    }
+                    if resolved.gui_light.is_some() {
+                        model.gui_light = resolved.gui_light;
+                    }
+                }
                 combined_model
             };
 

@@ -27,6 +27,8 @@ impl ModelBaker {
     {
         let mut baked_elements = Vec::new();
         let mut six_faces: [Option<BakedFace>; 6] = [None, None, None, None, None, None];
+        let mut primary_transforms = crate::parser::model_json::ItemTransforms::default();
+        let mut primary_gui_light = None;
 
         let allow_blockstate_builtin = variant_matches.len() == 1;
 
@@ -38,6 +40,13 @@ impl ModelBaker {
                 allow_blockstate_builtin,
                 model_loader,
             )?;
+
+            if primary_gui_light.is_none() {
+                primary_gui_light = resolved.gui_light;
+            }
+            if primary_transforms == crate::parser::model_json::ItemTransforms::default() {
+                primary_transforms = resolved.transforms.clone();
+            }
 
             for elem in &resolved.elements {
                 let from_pos = elem.from;
@@ -241,6 +250,8 @@ impl ModelBaker {
             is_opaque,
             is_emissive: emissive,
             cull_meta: Some(cull_meta),
+            transforms: primary_transforms,
+            gui_light: primary_gui_light,
             culled_faces: Default::default(),
             unculled_faces: Default::default(),
         };
@@ -333,6 +344,8 @@ impl ModelBaker {
             is_cube: false,
             is_opaque: false,
             is_emissive: false,
+            transforms: resolved.transforms.clone(),
+            gui_light: resolved.gui_light,
             ..Default::default()
         };
         baked_model.rebuild_face_buckets();

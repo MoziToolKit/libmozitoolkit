@@ -129,6 +129,7 @@ pub fn parse_element_node(
         rotation: elem_rotation,
         transform: active_transform.cloned(),
         shade: Some(true),
+        light_emission: None,
         faces,
     })
 }

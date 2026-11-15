@@ -453,8 +453,58 @@ pub fn bake_item_generated_model(
         is_cube: false,
         is_opaque: false,
         is_emissive: false,
+        transforms: default_item_generated_transforms(),
+        gui_light: Some(crate::parser::model_json::GuiLight::Front),
         ..Default::default()
     })
+}
+
+/// Returns the standard default `ItemTransforms` for 2D extruded items (matching vanilla `item/generated.json`).
+pub fn default_item_generated_transforms() -> crate::parser::model_json::ItemTransforms {
+    use crate::parser::model_json::{ItemTransforms, ModelTransform};
+    ItemTransforms {
+        thirdperson_righthand: Some(ModelTransform {
+            rotation: [0.0, 0.0, 0.0],
+            translation: [0.0, 3.0 * 0.0625, 1.0 * 0.0625],
+            scale: [0.55, 0.55, 0.55],
+        }),
+        thirdperson_lefthand: Some(ModelTransform {
+            rotation: [0.0, 0.0, 0.0],
+            translation: [0.0, 3.0 * 0.0625, 1.0 * 0.0625],
+            scale: [0.55, 0.55, 0.55],
+        }),
+        firstperson_righthand: Some(ModelTransform {
+            rotation: [0.0, -90.0, 25.0],
+            translation: [1.13 * 0.0625, 3.2 * 0.0625, 1.13 * 0.0625],
+            scale: [0.68, 0.68, 0.68],
+        }),
+        firstperson_lefthand: Some(ModelTransform {
+            rotation: [0.0, -90.0, 25.0],
+            translation: [1.13 * 0.0625, 3.2 * 0.0625, 1.13 * 0.0625],
+            scale: [0.68, 0.68, 0.68],
+        }),
+        head: Some(ModelTransform {
+            rotation: [0.0, 180.0, 0.0],
+            translation: [0.0, 13.0 * 0.0625, 7.0 * 0.0625],
+            scale: [1.0, 1.0, 1.0],
+        }),
+        gui: Some(ModelTransform {
+            rotation: [0.0, 0.0, 0.0],
+            translation: [0.0, 0.0, 0.0],
+            scale: [1.0, 1.0, 1.0],
+        }),
+        ground: Some(ModelTransform {
+            rotation: [0.0, 0.0, 0.0],
+            translation: [0.0, 2.0 * 0.0625, 0.0],
+            scale: [0.5, 0.5, 0.5],
+        }),
+        fixed: Some(ModelTransform {
+            rotation: [0.0, 180.0, 0.0],
+            translation: [0.0, 0.0, 0.0],
+            scale: [1.0, 1.0, 1.0],
+        }),
+        on_shelf: None,
+    }
 }
 
 /// Decodes a PNG byte slice and bakes an extruded item model.

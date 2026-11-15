@@ -6,5 +6,8 @@ pub use blockstate::{
     normalize_canonical_blockstate, BlockState, BlockStateDefinition, BlockStateResolver,
     VariantModel,
 };
-pub use model_json::{BlockModelJson, ResolvedBlockModel};
+pub use model_json::{
+    BlockModelJson, GuiLight, ItemDisplayContext, ItemTransforms, ModelOverride, ModelTransform,
+    ResolvedBlockModel,
+};
 pub use obj::{mesh_to_obj_string, BakedObjFace};

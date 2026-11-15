@@ -69,6 +69,7 @@ mod tests {
             cull_meta: None,
             culled_faces: Default::default(),
             unculled_faces: Default::default(),
+            ..Default::default()
         };
 
         let mesh = model.to_mesh(false);
@@ -122,6 +123,7 @@ mod tests {
             cull_meta: None,
             culled_faces: Default::default(),
             unculled_faces: Default::default(),
+            ..Default::default()
         };
 
         db.insert(

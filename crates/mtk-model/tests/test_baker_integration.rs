@@ -314,12 +314,29 @@ fn test_baked_model_cull_meta_serialization() {
     assert_eq!(meta.full_face_mask, mtk_core::DirMask::ALL);
 
     // Test postcard roundtrip
+    let mut baked = baked;
+    baked.gui_light = Some(mtk_model::GuiLight::Front);
+    baked.transforms.fixed = Some(mtk_model::ModelTransform {
+        rotation: [0.0, 180.0, 0.0],
+        translation: [0.0, 0.0, 0.0],
+        scale: [0.5, 0.5, 0.5],
+    });
+
     let bin = postcard::to_allocvec(&baked).unwrap();
     let deserialized: BakedModel = postcard::from_bytes(&bin).unwrap();
     assert!(deserialized.cull_meta.is_some());
     let des_meta = deserialized.cull_meta.unwrap();
     assert_eq!(des_meta.category, mtk_cull::CullCategory::SolidOpaque);
     assert_eq!(des_meta.full_face_mask, mtk_core::DirMask::ALL);
+    assert_eq!(deserialized.gui_light, Some(mtk_model::GuiLight::Front));
+    assert_eq!(
+        deserialized.transforms.fixed,
+        Some(mtk_model::ModelTransform {
+            rotation: [0.0, 180.0, 0.0],
+            translation: [0.0, 0.0, 0.0],
+            scale: [0.5, 0.5, 0.5],
+        })
+    );
 }
 
 #[test]
