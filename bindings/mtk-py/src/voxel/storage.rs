@@ -34,16 +34,19 @@ impl PyVoxelStorage {
     }
 
     /// Pure-code generation of a canonical Minecraft debug world.
-    /// Can take an optional list of blockstates, a ResourcePackStack, or an unpack directory path.
+    /// Can take an optional list of blockstates, a model database, a ResourcePackStack, or an unpack directory path.
     #[staticmethod]
-    #[pyo3(signature = (states=None, stack=None, path=None))]
+    #[pyo3(signature = (states=None, stack=None, path=None, model_db=None))]
     pub fn create_debug_world(
         states: Option<Vec<String>>,
         stack: Option<&crate::resource::PyResourcePackStack>,
         path: Option<&str>,
+        model_db: Option<&crate::model::PyBakedModelDatabase>,
     ) -> PyResult<Self> {
         let storage = if let Some(st) = states {
             VoxelStorage::create_debug_world_from_states(&st)
+        } else if let Some(db) = model_db {
+            VoxelStorage::create_debug_world_from_model_db(&db.inner)
         } else if let Some(s) = stack {
             VoxelStorage::create_debug_world_from_pack_stack(&s.inner)
         } else if let Some(p) = path {
@@ -61,6 +64,16 @@ impl PyVoxelStorage {
     pub fn create_debug_world_from_states(states: Vec<String>) -> PyResult<Self> {
         let storage =
             VoxelStorage::create_debug_world_from_states(&states).map_err(map_voxel_err)?;
+        Ok(Self { inner: storage })
+    }
+
+    /// Pure-code generation from an active pre-baked model database.
+    #[staticmethod]
+    pub fn create_debug_world_from_model_db(
+        db: &crate::model::PyBakedModelDatabase,
+    ) -> PyResult<Self> {
+        let storage =
+            VoxelStorage::create_debug_world_from_model_db(&db.inner).map_err(map_voxel_err)?;
         Ok(Self { inner: storage })
     }
 

@@ -212,6 +212,20 @@ class TestLibMtkPy(unittest.TestCase):
             )
         self.assertIn("must not overlap in memory", str(ctx.exception))
 
+    def test_baked_model_database_is_empty_and_debug_world(self):
+        db = libmtk_py.BakedModelDatabase()
+        self.assertTrue(db.is_empty())
+        self.assertEqual(len(db), 0)
+
+        # Empty db rejection gate
+        with self.assertRaises(ValueError) as ctx:
+            libmtk_py.VoxelStorage.create_debug_world_from_model_db(db)
+        self.assertIn("baked model database is empty", str(ctx.exception))
+
+        with self.assertRaises(ValueError) as ctx:
+            libmtk_py.VoxelStorage.create_debug_world(model_db=db)
+        self.assertIn("baked model database is empty", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

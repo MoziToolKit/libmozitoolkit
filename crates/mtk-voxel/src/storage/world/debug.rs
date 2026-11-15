@@ -189,13 +189,30 @@ impl VoxelStorage {
         }
 
         // 1. Host-level asset root override (CI / custom unpack locations)
-        for env_key in &["MC_ASSETS_DIR", "MC_DIR"] {
+        for env_key in &["MC_ASSETS_DIR", "MC_DIR", "MTK_TEST_ASSETS"] {
             if let Ok(env_path) = std::env::var(env_key) {
                 let p = Path::new(&env_path);
                 if p.join("assets").exists() {
                     if let Ok(storage) = Self::create_debug_world_from_dir(p) {
                         Self::store_debug_world(storage.clone());
                         return Ok(storage);
+                    }
+                }
+            }
+        }
+
+        // 2. Host-level archive override (JAR / ZIP)
+        for env_key in &["MTK_TEST_JAR", "MC_JAR"] {
+            if let Ok(env_path) = std::env::var(env_key) {
+                let p = Path::new(&env_path);
+                if p.exists() && p.is_file() {
+                    let mut stack = mtk_resource::ResourcePackStack::new();
+                    if let Ok(pack) = mtk_resource::ZipPack::from_file("VanillaJar", p) {
+                        stack.append_pack(Box::new(pack));
+                        if let Ok(storage) = Self::create_debug_world_from_pack_stack(&stack) {
+                            Self::store_debug_world(storage.clone());
+                            return Ok(storage);
+                        }
                     }
                 }
             }

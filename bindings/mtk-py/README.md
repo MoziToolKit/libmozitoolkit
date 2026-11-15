@@ -80,7 +80,8 @@ Python 模块名：`libmtk_py`
 - **`VoxelStorage` (`PyVoxelStorage`)**：16x16x16 稀疏 Chunk Section 体素容器，带脏标记追踪。
   - `to_point_cloud(config=None) -> VoxelPointCloud`, `load_from_point_cloud(cloud)`
   - `bounds` (getter), `get_visual_entities_palette()`, `set_visual_entities_palette(palette)`
-  - `create_debug_world()`：一键加载内置嵌入的原版调试世界快照（529 sections, 32,539 blocks）。
+  - `create_debug_world(states=None, stack=None, path=None, model_db=None)`：加载或生成原版调试世界，支持从 states、model_db、pack_stack 或环境资产生成。
+  - `create_debug_world_from_states(states)`、`create_debug_world_from_model_db(model_db)`、`create_debug_world_from_pack_stack(stack)`
   - `set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)`, `set_block(x, y, z, state, tint)`
 - **`VoxelWorld` (`PyVoxelWorld`)**：统一 3D 场景引擎，支持增量区块缓存与全量世界网格管理。
   - `to_point_cloud() -> VoxelPointCloud`
@@ -133,7 +134,7 @@ Python 模块名：`libmtk_py`
 - **色彩数学与常量**：`compute_biome_tint_attributes_paletted`, `compute_mesh_biome_attributes_from_storage`, `sample_colormap_colors`, `TINT_TYPE_NONE..DRY_FOLIAGE`
 
 ### 2.9 模型烘焙 (`model`)
-- **`BakedModelDatabase` (`PyBakedModelDatabase`)**：预编译方块几何模型库。
+- **`BakedModelDatabase` (`PyBakedModelDatabase`)**：预编译方块几何模型库（支持 `len()` 与 `is_empty()`）。
 
 ### 2.10 场景交换包与 Mini-Atlas (`scene`)
 - **`ScenePackageReader`**：`.mtkscene` 单文件中间交换容器读取器（只读无副作用设计，构造时不污染全局进程状态）。

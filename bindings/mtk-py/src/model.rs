@@ -29,6 +29,11 @@ impl PyBakedModelDatabase {
     pub fn __len__(&self) -> usize {
         self.inner.len()
     }
+
+    /// Returns true if the database contains no baked models.
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
 }
 
 /// Headless Minecraft Model Baker for BlockStates and custom models.
