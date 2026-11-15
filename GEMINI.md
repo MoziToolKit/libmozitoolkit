@@ -133,11 +133,12 @@ rg -n '^pub (use|mod)' crates/*/src/lib.rs bindings/*/src/lib.rs adapters/*/src/
 
 文档中不得出现已删除符号、旧参数名、旧版本兼容说明。CI 前用 `rg` 检查变更符号是否仍残留在文档/示例中。
 
-提交前必须保证以下本地门禁全绿（与 GitHub Actions CI 完全对齐，零 Warning）：
+提交前必须保证以下本地门禁全绿（与 GitHub Actions CI 完全对齐，零 Warning，全量真实资产覆盖）：
 
 ```bash
-# 1. 格式化规范检查
+# 1. 格式化与架构准则静态守卫检查 (严格拦截未经批准的 pub 模块等规则违规)
 cargo fmt --all -- --check
+python tools/ci_guardrails.py
 
 # 2. 静态分析 (-D warnings 严格拦截)
 cargo clippy --workspace --all-targets -- -D warnings
@@ -148,8 +149,8 @@ cargo check -p mtk-wasm --target wasm32-unknown-unknown
 # 4. DNA 独立性门禁 (mtk-blender-dna 严禁反向引入核心 crate)
 cargo tree -p mtk-blender-dna | grep -Eq 'mtk-(core|voxel|material|model|texture|resource)' && exit 1 || true
 
-# 5. 全工作区单元与集成测试
-cargo test --workspace
+# 5. 全工作区单元与集成测试 (自动消费 ../mc, ../26.2-Fabric.jar, ../SPBR-21.zip 等真实资产)
+cargo test --workspace --no-fail-fast
 
 # 6. Python 绑定测试 (复用 MoziToolKit 的 uv 虚拟环境与 dev/lib)
 cargo build-all-py
@@ -157,7 +158,8 @@ PYTHONPATH=../MoziToolKit/dev/lib uv run --directory ../MoziToolKit pytest ../li
 PYTHONPATH=../MoziToolKit/dev/lib uv run --directory ../MoziToolKit pytest ../libmozitoolkit/adapters/blender/mtk-blender-dna-py/tests/ -q
 ```
 
-- 测试资产统一走 `mtk-testkit` 动态解析，缺失时必须优雅跳过并退出，严禁 panic，严禁硬编码绝对路径。
+- **测试资产约定**：
+  测试资产统一走 `mtk-testkit` 动态解析。工作区相邻父目录 (`..`，即 `/Volumes/Data/code_projects/mtk/`) 部署有全套 CI 资产（`../mc`, `../26.2-Fabric.jar`, `../SPBR-21.zip`, `../mtk-save-world`）。本地运行 `cargo test --workspace` 将自动检测并覆盖全量资产路径测试，严禁在缺少资产导致的跳过状态下交付代码。
 
 ### 规则 11：三层数据交换与宿主无关批量规范 (Tiered Ingestion & Host-Agnostic Model)
 
