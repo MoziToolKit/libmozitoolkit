@@ -333,7 +333,11 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerS
         Vec::new()
     };
 
-    let uuid_str = format!("{:016x}{:016x}", most_sig as u64, least_sig as u64);
+    // Must match `mtk_sync::protocol::format_uuid` exactly (canonical 8-4-4-4-12 dashed
+    // form). The live-sync decoder rebuilds UUIDs with that formatter, and
+    // `entity_render_key` keys host objects on the UUID string, so any divergence here
+    // makes the same entity upsert and delete under different keys.
+    let uuid_str = mtk_sync::protocol::format_uuid(most_sig as u64, least_sig as u64);
     let facing_dir = mtk_sync::protocol::facing_byte_to_direction(facing as u8);
     let kind: mtk_model::EntityKindData = if !payload.is_empty() {
         serde_json::from_slice(&payload).unwrap_or_else(|_| mtk_model::EntityKindData::Generic {
@@ -374,7 +378,7 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerS
         return;
     }
     let server = unsafe { &*(handle as *const LiveSyncServer) };
-    let uuid_str = format!("{:016x}{:016x}", most_sig as u64, least_sig as u64);
+    let uuid_str = mtk_sync::protocol::format_uuid(most_sig as u64, least_sig as u64);
     server.submit_visual_entity_delta(VisualEntityDelta::Remove { uuid: uuid_str });
 }
 

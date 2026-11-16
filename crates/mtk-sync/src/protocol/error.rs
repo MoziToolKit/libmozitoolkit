@@ -43,4 +43,13 @@ pub enum ProtocolError {
 
     #[error("Invalid enum discriminant for {field}: value was {val}")]
     InvalidEnum { field: &'static str, val: u32 },
+
+    #[error("Invalid UUID string: expected 8-4-4-4-12 or 32-hex-digit form, got {0:?}")]
+    InvalidUuid(String),
+
+    #[error("String field too long: byte length {actual} exceeds u16::MAX ({limit})")]
+    StringTooLong { actual: usize, limit: usize },
+
+    #[error("Invalid JSON payload: {detail}")]
+    InvalidPayload { detail: String },
 }

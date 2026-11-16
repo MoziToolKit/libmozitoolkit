@@ -142,16 +142,81 @@ pub fn compute_sparse_state_hash_from_raw(
     compute_sparse_state_hash(min_pos, size, dimension_str, non_air_iter)
 }
 
-/// Helper to extract u64 high and u64 low from a standard UUID string.
-pub fn parse_uuid_bits(uuid_str: &str) -> (u64, u64) {
-    let clean: String = uuid_str.chars().filter(|c| *c != '-').collect();
-    if clean.len() == 32 {
-        let high = u64::from_str_radix(&clean[0..16], 16).unwrap_or(0);
-        let low = u64::from_str_radix(&clean[16..32], 16).unwrap_or(0);
-        (high, low)
+/// Parses a UUID string in canonical 8-4-4-4-12 or 32-hex-digit form into `(most_sig, least_sig)`.
+///
+/// Returns `Err(ProtocolError::InvalidUuid)` for any other input, including garbage,
+/// wrong lengths, non-ASCII, or non-hex characters.  Never returns `(0, 0)` for bad input.
+/// Does not slice `str` by byte index; operates on the raw `&[u8]` representation.
+pub fn parse_canonical_uuid(s: &str) -> Result<(u64, u64), crate::protocol::error::ProtocolError> {
+    let bytes = s.as_bytes();
+
+    // Try 8-4-4-4-12 form (36 bytes: 32 hex + 4 hyphens)
+    let hex32: Option<[u8; 32]> = if bytes.len() == 36
+        && bytes[8] == b'-'
+        && bytes[13] == b'-'
+        && bytes[18] == b'-'
+        && bytes[23] == b'-'
+    {
+        // Collect the 32 hex nibbles, skip the 4 hyphens.
+        let mut buf = [0u8; 32];
+        let positions: [usize; 32] = [
+            0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16, 17, 19, 20, 21, 22, 24, 25, 26, 27,
+            28, 29, 30, 31, 32, 33, 34, 35,
+        ];
+        let mut all_hex = true;
+        for (dst, &src_pos) in buf.iter_mut().zip(positions.iter()) {
+            let ch = bytes[src_pos];
+            if !ch.is_ascii_hexdigit() {
+                all_hex = false;
+                break;
+            }
+            *dst = ch;
+        }
+        if all_hex {
+            Some(buf)
+        } else {
+            None
+        }
     } else {
-        (0, 0)
-    }
+        None
+    };
+
+    // Try 32-hex-digit form (no hyphens).
+    let hex32: [u8; 32] = if let Some(h) = hex32 {
+        h
+    } else if bytes.len() == 32 && bytes.iter().all(|b| b.is_ascii_hexdigit()) {
+        let mut buf = [0u8; 32];
+        buf.copy_from_slice(bytes);
+        buf
+    } else {
+        return Err(crate::protocol::error::ProtocolError::InvalidUuid(
+            s.chars().take(64).collect(),
+        ));
+    };
+
+    // Parse the two halves from ASCII hex bytes (safe: we confirmed all are hex digits).
+    let high_str = std::str::from_utf8(&hex32[..16])
+        .map_err(|_| crate::protocol::error::ProtocolError::InvalidUuid(s.to_string()))?;
+    let low_str = std::str::from_utf8(&hex32[16..])
+        .map_err(|_| crate::protocol::error::ProtocolError::InvalidUuid(s.to_string()))?;
+
+    let high = u64::from_str_radix(high_str, 16)
+        .map_err(|_| crate::protocol::error::ProtocolError::InvalidUuid(s.to_string()))?;
+    let low = u64::from_str_radix(low_str, 16)
+        .map_err(|_| crate::protocol::error::ProtocolError::InvalidUuid(s.to_string()))?;
+
+    Ok((high, low))
+}
+
+/// Extracts `(most_sig, least_sig)` from a UUID string.
+///
+/// Used internally by the codec and by the JNI layer. Returns `(0, 0)` only for the
+/// nil UUID `00000000-0000-0000-0000-000000000000`; for unparseable input the caller
+/// must decide whether to propagate the error or use a nil placeholder.
+///
+/// Callers that need strict validation must use [`parse_canonical_uuid`] directly.
+pub(crate) fn parse_uuid_bits(uuid_str: &str) -> (u64, u64) {
+    parse_canonical_uuid(uuid_str).unwrap_or((0, 0))
 }
 
 /// Helper to format most_sig and least_sig u64 into canonical 8-4-4-4-12 UUID string.
