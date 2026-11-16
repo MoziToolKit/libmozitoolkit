@@ -511,6 +511,7 @@ mod tests {
             is_glowing: false,
             is_invisible: false,
             map_id: None,
+            components: None,
         };
 
         // Create a mock 2D item model: single quad at (0, 0, 0) extents [-0.5, 0.5] in Y

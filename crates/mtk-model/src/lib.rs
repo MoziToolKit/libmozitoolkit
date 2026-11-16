@@ -19,7 +19,7 @@ pub use entity::{
     supported_visual_entity_ids, ArmorStandData, BlockEntityData, EntityBaker,
     EntityBuildCapability, EntityInstance, EntityKindData, EntityMaterialRoute, EntityRenderConfig,
     EntityRenderNode, EntityRenderPlan, EntityRenderTransform, EntityRenderWarning,
-    EntityValidationError, ItemFrameData, PaintingData, SupportedVisualEntity,
+    EntityValidationError, ItemComponentsData, ItemFrameData, PaintingData, SupportedVisualEntity,
     ENTITY_ID_ARMOR_STAND, ENTITY_ID_GLOW_ITEM_FRAME, ENTITY_ID_ITEM_FRAME, ENTITY_ID_PAINTING,
     ENTITY_RENDER_SCHEMA_VERSION, SUPPORTED_VISUAL_ENTITIES,
 };

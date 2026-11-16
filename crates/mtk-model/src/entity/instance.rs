@@ -11,6 +11,8 @@ use mtk_core::Direction;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use super::BlockEntityData;
+
 /// Canonical entity identifier for hanging paintings.
 pub const ENTITY_ID_PAINTING: &str = "minecraft:painting";
 
@@ -226,8 +228,17 @@ impl EntityInstance {
                 is_glowing,
                 is_invisible,
                 map_id,
+                components: None,
             }),
         }
+    }
+
+    /// Attaches optional high-order item components to this entity (if an Item Frame).
+    pub fn with_item_components(mut self, components: Option<ItemComponentsData>) -> Self {
+        if let EntityKindData::ItemFrame(ref mut f) = self.kind {
+            f.components = components;
+        }
+        self
     }
 
     /// Validates the canonical entity contract before baking, exporting, or persisting.
@@ -380,6 +391,23 @@ pub struct PaintingData {
     pub anchor_block: Option<[i32; 3]>,
 }
 
+/// High-order item component data driven by Minecraft Data Components / NBT.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+pub struct ItemComponentsData {
+    /// Associated block entity data (e.g. Decorated Pot sherds, Banner patterns, Skull profile).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub block_entity: Option<BlockEntityData>,
+    /// RGB color for leather armor / dyed items (from minecraft:dyed_color).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dyed_color: Option<u32>,
+    /// Custom item name (from minecraft:custom_name).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_name: Option<String>,
+    /// Enchantment glint flag (from minecraft:enchantments / glint_override).
+    #[serde(default)]
+    pub has_glint: bool,
+}
+
 /// Data payload for an Item Frame entity.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ItemFrameData {
@@ -401,6 +429,9 @@ pub struct ItemFrameData {
     /// Optional Filled Map ID if holding a map.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub map_id: Option<i32>,
+    /// High-order item components and NBT payload.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub components: Option<ItemComponentsData>,
 }
 
 /// Data payload for an Armor Stand entity.

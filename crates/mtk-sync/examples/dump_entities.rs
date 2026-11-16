@@ -24,7 +24,10 @@ fn main() {
                     dimension,
                     ..
                 } => {
-                    println!("[Handshake] decision: {}, dimension: {}", decision, dimension);
+                    println!(
+                        "[Handshake] decision: {}, dimension: {}",
+                        decision, dimension
+                    );
                 }
                 SyncEvent::VisualEntitiesUpdated {
                     upserted,
@@ -80,7 +83,10 @@ fn main() {
         let storage = session.get_storage();
         println!("Storage entities count: {}", storage.entities.len());
         for ent in &storage.entities {
-            println!("Storage Entity: {} at {:?}, kind: {:?}", ent.id, ent.position, ent.kind);
+            println!(
+                "Storage Entity: {} at {:?}, kind: {:?}",
+                ent.id, ent.position, ent.kind
+            );
         }
     }
 }

@@ -482,6 +482,9 @@ impl EntityParser {
             ic.int("map_id").or_else(|| ic.int("map"))
         });
 
+        let components =
+            item_comp.and_then(|ic| crate::block_entity::decode_item_components(&item_id, ic));
+
         let item_rotation = comp
             .byte("ItemRotation")
             .or_else(|| comp.byte("item_rotation"))
@@ -525,7 +528,8 @@ impl EntityParser {
             is_glowing,
             is_invisible,
             map_id,
-        );
+        )
+        .with_item_components(components);
         inst.custom_name = custom_name;
         Some(inst)
     }

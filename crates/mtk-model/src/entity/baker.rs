@@ -28,7 +28,26 @@ impl EntityBaker {
                 p.height as u32,
             )),
             EntityKindData::ItemFrame(f) => {
-                let item_model = if f.item_id.trim().is_empty() {
+                let custom_model: Option<BakedModel> = if let Some(be) =
+                    f.components.as_ref().and_then(|c| c.block_entity.as_ref())
+                {
+                    if let Some(mut model) =
+                        crate::builtin::BuiltinModelRegistry::bake_block_entity(&f.item_id, be)
+                    {
+                        if let Some(base) = model_lookup(&f.item_id) {
+                            model.transforms = base.transforms.clone();
+                        }
+                        Some(model)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                let item_model = if let Some(ref m) = custom_model {
+                    Some(m)
+                } else if f.item_id.trim().is_empty() {
                     None
                 } else {
                     model_lookup(&f.item_id)

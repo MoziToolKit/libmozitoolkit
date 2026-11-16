@@ -6,7 +6,7 @@
 use crate::nbt::NbtCompound;
 use mtk_model::banner::BannerPatternLayer;
 use mtk_model::skull::{PlayerProfileData, SkullKind};
-use mtk_model::BlockEntityData;
+use mtk_model::{BlockEntityData, ItemComponentsData};
 
 /// Decodes an NBT Compound from a chunk's `block_entities` list into a typed `BlockEntityData`.
 ///
@@ -44,9 +44,29 @@ fn decode_decorated_pot(comp: &NbtCompound) -> Option<BlockEntityData> {
             }
         }
     }
-    // 2. Check 1.20.5+ component `minecraft:pot_decorations`
-    else if let Some(components) = comp.compound("components") {
-        if let Some(decorations) = components.compound("minecraft:pot_decorations") {
+    // 2. Check 1.20.5+ component `minecraft:pot_decorations` (direct or nested)
+    else {
+        let dec_comp = comp
+            .compound("minecraft:pot_decorations")
+            .or_else(|| comp.compound("pot_decorations"))
+            .or_else(|| {
+                comp.compound("components").and_then(|c| {
+                    c.compound("minecraft:pot_decorations")
+                        .or_else(|| c.compound("pot_decorations"))
+                })
+            });
+
+        let dec_list = comp
+            .list("minecraft:pot_decorations")
+            .or_else(|| comp.list("pot_decorations"))
+            .or_else(|| {
+                comp.compound("components").and_then(|c| {
+                    c.list("minecraft:pot_decorations")
+                        .or_else(|| c.list("pot_decorations"))
+                })
+            });
+
+        if let Some(decorations) = dec_comp {
             let slots = ["back", "left", "right", "front"];
             for (i, slot) in slots.iter().enumerate() {
                 if let Some(s) = decorations.string(slot) {
@@ -56,11 +76,8 @@ fn decode_decorated_pot(comp: &NbtCompound) -> Option<BlockEntityData> {
                     }
                 }
             }
-        } else if let Some(dec_list) = components
-            .list("minecraft:pot_decorations")
-            .and_then(|l| l.strings())
-        {
-            for (i, s) in dec_list.iter().enumerate().take(4) {
+        } else if let Some(l) = dec_list.and_then(|l| l.strings()) {
+            for (i, s) in l.iter().enumerate().take(4) {
                 let s_ref = s.as_str();
                 if s_ref != "minecraft:brick" && s_ref != "brick" && !s_ref.is_empty() {
                     sherds[i] = Some(s_ref.to_string());
@@ -105,12 +122,19 @@ fn decode_banner(comp: &NbtCompound) -> Option<BlockEntityData> {
             patterns.push(BannerPatternLayer::new(pat, col));
         }
     }
-    // 3. 1.20.5+ component `minecraft:banner_patterns`
-    else if let Some(components) = comp.compound("components") {
-        if let Some(comp_patterns) = components
+    // 3. 1.20.5+ component `minecraft:banner_patterns` (direct or nested)
+    else {
+        let pattern_list = comp
             .list("minecraft:banner_patterns")
-            .and_then(|l| l.compounds())
-        {
+            .or_else(|| comp.list("banner_patterns"))
+            .or_else(|| {
+                comp.compound("components").and_then(|c| {
+                    c.list("minecraft:banner_patterns")
+                        .or_else(|| c.list("banner_patterns"))
+                })
+            });
+
+        if let Some(comp_patterns) = pattern_list.and_then(|l| l.compounds()) {
             for p_comp in comp_patterns {
                 let pat = p_comp
                     .string("pattern")
@@ -180,6 +204,7 @@ fn decode_profile(comp: &NbtCompound) -> Option<PlayerProfileData> {
     let prof_comp = comp
         .compound("profile")
         .or_else(|| comp.compound("SkullOwner"))
+        .or_else(|| comp.compound("minecraft:profile"))
         .or_else(|| {
             comp.compound("components").and_then(|c| {
                 c.compound("minecraft:profile")
@@ -270,6 +295,172 @@ fn decode_profile(comp: &NbtCompound) -> Option<PlayerProfileData> {
     }
 
     None
+}
+
+/// Decodes high-order item components and NBT payloads from an Item compound
+/// (supporting both pre-1.20.5 `tag` structures and 1.20.5+ `components` structures).
+pub(crate) fn decode_item_components(
+    item_id: &str,
+    item_comp: &NbtCompound,
+) -> Option<ItemComponentsData> {
+    let clean_id = item_id.strip_prefix("minecraft:").unwrap_or(item_id);
+
+    // 1. Resolve BlockEntityData if applicable
+    let mut block_entity: Option<BlockEntityData> = None;
+
+    // Check modern components (1.20.5+)
+    if let Some(comp_map) = item_comp.compound("components") {
+        if comp_map.compound("minecraft:pot_decorations").is_some()
+            || comp_map.list("minecraft:pot_decorations").is_some()
+            || comp_map.compound("pot_decorations").is_some()
+            || comp_map.list("pot_decorations").is_some()
+        {
+            block_entity = decode_decorated_pot(comp_map);
+        } else if comp_map.list("minecraft:banner_patterns").is_some()
+            || comp_map.list("banner_patterns").is_some()
+        {
+            let mut be = decode_banner(comp_map);
+            if let Some(BlockEntityData::Banner {
+                ref mut base_color, ..
+            }) = be
+            {
+                if base_color == "white" && clean_id.contains('_') {
+                    if let Some((color_prefix, _)) = clean_id.split_once('_') {
+                        *base_color = color_prefix.to_string();
+                    }
+                }
+            }
+            block_entity = be;
+        } else if comp_map.compound("minecraft:profile").is_some()
+            || comp_map.compound("profile").is_some()
+        {
+            block_entity = decode_skull(comp_map);
+        } else if let Some(be_data) = comp_map
+            .compound("minecraft:block_entity_data")
+            .or_else(|| comp_map.compound("block_entity_data"))
+        {
+            block_entity = decode_block_entity(be_data);
+            if block_entity.is_none() {
+                if clean_id.contains("pot") {
+                    block_entity = decode_decorated_pot(be_data);
+                } else if clean_id.contains("banner") || clean_id.contains("shield") {
+                    let mut be = decode_banner(be_data);
+                    if let Some(BlockEntityData::Banner {
+                        ref mut base_color, ..
+                    }) = be
+                    {
+                        if base_color == "white" && clean_id.contains('_') {
+                            if let Some((color_prefix, _)) = clean_id.split_once('_') {
+                                *base_color = color_prefix.to_string();
+                            }
+                        }
+                    }
+                    block_entity = be;
+                } else if clean_id.contains("head") || clean_id.contains("skull") {
+                    block_entity = decode_skull(be_data);
+                }
+            }
+        }
+    }
+
+    // Check legacy tag (pre-1.20.5)
+    if block_entity.is_none() {
+        if let Some(tag_map) = item_comp.compound("tag") {
+            if let Some(be_tag) = tag_map.compound("BlockEntityTag") {
+                block_entity = decode_block_entity(be_tag);
+                if block_entity.is_none() {
+                    if clean_id.contains("pot") {
+                        block_entity = decode_decorated_pot(be_tag);
+                    } else if clean_id.contains("banner") || clean_id.contains("shield") {
+                        let mut be = decode_banner(be_tag);
+                        if let Some(BlockEntityData::Banner {
+                            ref mut base_color, ..
+                        }) = be
+                        {
+                            if base_color == "white" && clean_id.contains('_') {
+                                if let Some((color_prefix, _)) = clean_id.split_once('_') {
+                                    *base_color = color_prefix.to_string();
+                                }
+                            }
+                        }
+                        block_entity = be;
+                    } else if clean_id.contains("head") || clean_id.contains("skull") {
+                        block_entity = decode_skull(be_tag);
+                    }
+                }
+            } else if tag_map.compound("SkullOwner").is_some()
+                || tag_map.string("SkullOwner").is_some()
+            {
+                block_entity = decode_skull(tag_map);
+            }
+        }
+    }
+
+    // 2. Resolve dyed_color
+    let dyed_color = item_comp
+        .compound("components")
+        .and_then(|c| {
+            c.int("minecraft:dyed_color")
+                .or_else(|| c.int("dyed_color"))
+                .or_else(|| {
+                    c.compound("minecraft:dyed_color")
+                        .or_else(|| c.compound("dyed_color"))
+                        .and_then(|dc| dc.int("rgb").or_else(|| dc.int("color")))
+                })
+        })
+        .or_else(|| {
+            item_comp
+                .compound("tag")
+                .and_then(|t| t.compound("display"))
+                .and_then(|d| d.int("color"))
+        })
+        .map(|c| c as u32);
+
+    // 3. Resolve custom_name
+    let custom_name = item_comp
+        .compound("components")
+        .and_then(|c| {
+            c.string("minecraft:custom_name")
+                .or_else(|| c.string("custom_name"))
+        })
+        .or_else(|| {
+            item_comp
+                .compound("tag")
+                .and_then(|t| t.compound("display"))
+                .and_then(|d| d.string("Name"))
+        })
+        .map(|s| s.as_str().to_string());
+
+    // 4. Resolve has_glint
+    let has_glint = item_comp
+        .compound("components")
+        .map(|c| {
+            c.compound("minecraft:enchantments").is_some()
+                || c.compound("enchantments").is_some()
+                || c.byte("minecraft:enchantment_glint_override") == Some(1)
+                || c.byte("enchantment_glint_override") == Some(1)
+        })
+        .unwrap_or(false)
+        || item_comp
+            .compound("tag")
+            .map(|t| {
+                t.list("Enchantments").is_some()
+                    || t.list("enchantments").is_some()
+                    || t.list("StoredEnchantments").is_some()
+                    || t.list("ench").is_some()
+            })
+            .unwrap_or(false);
+
+    if block_entity.is_none() && dyed_color.is_none() && custom_name.is_none() && !has_glint {
+        return None;
+    }
+
+    Some(ItemComponentsData {
+        block_entity,
+        dyed_color,
+        custom_name,
+        has_glint,
+    })
 }
 
 #[cfg(test)]
@@ -437,5 +628,125 @@ mod tests {
         } else {
             panic!("Expected Skull variant");
         }
+    }
+
+    #[test]
+    fn test_decode_item_components_legacy_pot_with_sherds() {
+        let mut item_comp = NbtCompound::new();
+        item_comp.entries.push((
+            NbtStr::from_borrowed("id"),
+            NbtTag::String(NbtStr::from_borrowed("minecraft:decorated_pot")),
+        ));
+
+        let mut be_tag = NbtCompound::new();
+        be_tag.entries.push((
+            NbtStr::from_borrowed("sherds"),
+            NbtTag::List(NbtList::String(vec![
+                NbtStr::from_borrowed("minecraft:archer_pottery_sherd"),
+                NbtStr::from_borrowed("minecraft:brick"),
+                NbtStr::from_borrowed("minecraft:miner_pottery_sherd"),
+                NbtStr::from_borrowed("minecraft:brick"),
+            ])),
+        ));
+
+        let mut tag_comp = NbtCompound::new();
+        tag_comp.entries.push((
+            NbtStr::from_borrowed("BlockEntityTag"),
+            NbtTag::Compound(be_tag),
+        ));
+
+        item_comp
+            .entries
+            .push((NbtStr::from_borrowed("tag"), NbtTag::Compound(tag_comp)));
+
+        let decoded = decode_item_components("minecraft:decorated_pot", &item_comp)
+            .expect("Must decode legacy pot item components");
+
+        let be = decoded
+            .block_entity
+            .expect("Block entity data must be present");
+        if let BlockEntityData::DecoratedPot { sherds } = be {
+            assert_eq!(sherds[0].as_deref(), Some("minecraft:archer_pottery_sherd"));
+            assert_eq!(sherds[1], None); // brick -> None
+            assert_eq!(sherds[2].as_deref(), Some("minecraft:miner_pottery_sherd"));
+            assert_eq!(sherds[3], None);
+        } else {
+            panic!("Expected DecoratedPot variant");
+        }
+    }
+
+    #[test]
+    fn test_decode_item_components_modern_pot_with_sherds() {
+        let mut item_comp = NbtCompound::new();
+        item_comp.entries.push((
+            NbtStr::from_borrowed("id"),
+            NbtTag::String(NbtStr::from_borrowed("minecraft:decorated_pot")),
+        ));
+
+        let mut comp_map = NbtCompound::new();
+        comp_map.entries.push((
+            NbtStr::from_borrowed("minecraft:pot_decorations"),
+            NbtTag::List(NbtList::String(vec![
+                NbtStr::from_borrowed("minecraft:angler_pottery_sherd"),
+                NbtStr::from_borrowed("minecraft:blade_pottery_sherd"),
+                NbtStr::from_borrowed("minecraft:brewer_pottery_sherd"),
+                NbtStr::from_borrowed("minecraft:burn_pottery_sherd"),
+            ])),
+        ));
+
+        item_comp.entries.push((
+            NbtStr::from_borrowed("components"),
+            NbtTag::Compound(comp_map),
+        ));
+
+        let decoded = decode_item_components("minecraft:decorated_pot", &item_comp)
+            .expect("Must decode modern pot item components");
+
+        let be = decoded
+            .block_entity
+            .expect("Block entity data must be present");
+        if let BlockEntityData::DecoratedPot { sherds } = be {
+            assert_eq!(sherds[0].as_deref(), Some("minecraft:angler_pottery_sherd"));
+            assert_eq!(sherds[1].as_deref(), Some("minecraft:blade_pottery_sherd"));
+            assert_eq!(sherds[2].as_deref(), Some("minecraft:brewer_pottery_sherd"));
+            assert_eq!(sherds[3].as_deref(), Some("minecraft:burn_pottery_sherd"));
+        } else {
+            panic!("Expected DecoratedPot variant");
+        }
+    }
+
+    #[test]
+    fn test_decode_item_components_dyed_leather_and_name_and_glint() {
+        let mut item_comp = NbtCompound::new();
+        item_comp.entries.push((
+            NbtStr::from_borrowed("id"),
+            NbtTag::String(NbtStr::from_borrowed("minecraft:leather_chestplate")),
+        ));
+
+        let mut comp_map = NbtCompound::new();
+        comp_map.entries.push((
+            NbtStr::from_borrowed("minecraft:dyed_color"),
+            NbtTag::Int(0xFF0000), // Red
+        ));
+        comp_map.entries.push((
+            NbtStr::from_borrowed("minecraft:custom_name"),
+            NbtTag::String(NbtStr::from_borrowed("Hero Armor")),
+        ));
+        comp_map.entries.push((
+            NbtStr::from_borrowed("minecraft:enchantment_glint_override"),
+            NbtTag::Byte(1),
+        ));
+
+        item_comp.entries.push((
+            NbtStr::from_borrowed("components"),
+            NbtTag::Compound(comp_map),
+        ));
+
+        let decoded = decode_item_components("minecraft:leather_chestplate", &item_comp)
+            .expect("Must decode dyed leather item components");
+
+        assert_eq!(decoded.dyed_color, Some(0xFF0000));
+        assert_eq!(decoded.custom_name.as_deref(), Some("Hero Armor"));
+        assert!(decoded.has_glint);
     }
 }
