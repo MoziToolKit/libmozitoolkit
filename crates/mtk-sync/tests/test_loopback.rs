@@ -34,12 +34,9 @@ fn test_loopback_storage_baseline_assembly() {
     );
 
     // Add a block entity
-    let sign_data = BlockEntityData::new_sign(
-        vec!["Line 1".into(), "Line 2".into()],
-        None::<String>,
-        false,
-    );
-    storage.set_block_entity(11, -5, 20, Some(sign_data));
+    let skull_data =
+        BlockEntityData::new_skull(mtk_model::skull::SkullKind::Skeleton, Some(2), None);
+    storage.set_block_entity(11, -5, 20, Some(skull_data));
 
     let dimension = "minecraft:overworld";
     let config = BaselineEncoderConfig {

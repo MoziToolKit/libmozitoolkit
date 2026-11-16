@@ -447,16 +447,16 @@ mod tests {
             15,
             "minecraft:oak_sign[rotation=4]",
             "minecraft:the_end",
-            Some(&BlockEntityData::new_sign(
-                vec!["hello".to_string()],
-                None::<&str>,
-                false,
+            Some(&BlockEntityData::new_skull(
+                mtk_model::skull::SkullKind::Skeleton,
+                Some(4),
+                None,
             )),
             Some(15),
         );
 
         let json = payload.to_json().expect("Serialize sparse payload to json");
-        assert!(json.contains("minecraft:sign"));
+        assert!(json.contains("minecraft:skull"));
 
         let deserialized = SparseVoxelPayload::from_json(&json).expect("Deserialize json");
         assert_eq!(payload, deserialized);

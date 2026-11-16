@@ -347,8 +347,11 @@ pub fn create_item_frame_with_item_baked_model(
 
     let fixed_scale = Vec3::from_array(fixed_transform.scale) * ITEM_FRAME_BASE_ITEM_SCALE;
     let fixed_rot_deg = Vec3::from_array(fixed_transform.rotation);
+    // Vanilla applies display rotations through JOML `Quaternionf.rotationXYZ`, which is
+    // the extrinsic "X then Y then Z" order, i.e. R = Rz * Ry * Rx. glam's intrinsic ZYX
+    // produces exactly that product.
     let fixed_rot_quat = Quat::from_euler(
-        EulerRot::XYZ,
+        EulerRot::ZYX,
         fixed_rot_deg.x.to_radians(),
         fixed_rot_deg.y.to_radians(),
         fixed_rot_deg.z.to_radians(),
@@ -359,8 +362,14 @@ pub fn create_item_frame_with_item_baked_model(
     let frame_rot_rad = (frame.rotation as f32) * std::f32::consts::FRAC_PI_4;
     let frame_rot_quat = Quat::from_rotation_z(frame_rot_rad);
 
-    // 4. Surface offset along -Z: place item just in front of backplate (z = 0.0)
-    let surface_offset = Vec3::new(0.0, 0.0, -0.015);
+    // 4. Surface offset along -Z (the frame's facing direction).
+    //
+    // `ItemFrameRenderer.submit` places the item plane at `0.4375` while the backplate's
+    // visible face sits at `0.46875`, i.e. 1/32 of a block in front of it — flush with the
+    // wooden rim's front plane. This model is authored mirrored (front is -Z, backplate at
+    // z in [0, ITEM_FRAME_HALF_DEPTH]), so the equivalent offset is exactly -1/32.
+    // Using a smaller value leaves the item half-buried in the backplate and z-fighting.
+    let surface_offset = Vec3::new(0.0, 0.0, -ITEM_FRAME_HALF_DEPTH);
 
     // Transform function for vertices
     let transform_vertex = |p: Vec3| -> Vec3 {
@@ -548,9 +557,10 @@ mod tests {
 
         let item_elem_rot0 = &fused_rot0.elements[5];
         let face_rot0 = item_elem_rot0.faces.get(&Direction::North).unwrap();
-        // Top vertex originally at (0.25, 0.5, 0.0) -> scaled by 0.5 -> y = 0.25, z = -0.015
+        // Top vertex originally at (0.25, 0.5, 0.0) -> scaled by 0.5 -> y = 0.25, and the
+        // item plane sits exactly 1/32 in front of the backplate (vanilla 0.46875-0.4375).
         assert!((face_rot0.vertices[2].y - 0.25).abs() < 1e-4);
-        assert!((face_rot0.vertices[2].z - (-0.015)).abs() < 1e-4);
+        assert!((face_rot0.vertices[2].z - (-ITEM_FRAME_HALF_DEPTH)).abs() < 1e-4);
 
         // 2. rotation = 2 (90 degrees counter-clockwise matching vanilla ItemFrameRenderer -> vertex (0.25, 0.5) scaled by 0.5 to (0.125, 0.25) rotates to x ≈ -0.25, y ≈ 0.125)
         let mut frame_rot2 = frame.clone();
@@ -560,12 +570,70 @@ mod tests {
         let face_rot2 = item_elem_rot2.faces.get(&Direction::North).unwrap();
         assert!((face_rot2.vertices[2].x - (-0.25)).abs() < 1e-4);
         assert!((face_rot2.vertices[2].y - 0.125).abs() < 1e-4);
-        assert!((face_rot2.vertices[2].z - (-0.015)).abs() < 1e-4);
+        assert!((face_rot2.vertices[2].z - (-ITEM_FRAME_HALF_DEPTH)).abs() < 1e-4);
 
         // 3. Invisible item frame: only item element exists
         let mut frame_invis = frame.clone();
         frame_invis.is_invisible = true;
         let fused_invis = create_item_frame_with_item_baked_model(&frame_invis, Some(&item_model));
         assert_eq!(fused_invis.elements.len(), 1);
+    }
+
+    #[test]
+    fn test_item_plane_is_flush_with_the_rim_and_never_intersects_the_backplate() {
+        let frame = ItemFrameData {
+            item_id: "minecraft:diamond_sword".to_string(),
+            count: 1,
+            rotation: 0,
+            is_glowing: false,
+            is_invisible: false,
+            map_id: None,
+            components: None,
+        };
+
+        // A 2D sprite with the vanilla generated thickness: 1/16 of a block (±1/32).
+        let mut faces = HashMap::new();
+        faces.insert(
+            Direction::North,
+            BakedFace {
+                direction: Direction::North,
+                texture: "minecraft:item/sprite".to_string(),
+                vertices: [
+                    Vec3::new(-0.5, -0.5, -ITEM_FRAME_HALF_DEPTH),
+                    Vec3::new(0.5, -0.5, -ITEM_FRAME_HALF_DEPTH),
+                    Vec3::new(0.5, 0.5, -ITEM_FRAME_HALF_DEPTH),
+                    Vec3::new(-0.5, 0.5, -ITEM_FRAME_HALF_DEPTH),
+                ],
+                normal: Vec3::NEG_Z,
+                ..Default::default()
+            },
+        );
+        let item_model = BakedModel {
+            block_state: "minecraft:item/sprite".to_string(),
+            elements: vec![BakedElement {
+                from_pos: [-0.5, -0.5, -ITEM_FRAME_HALF_DEPTH],
+                to_pos: [0.5, 0.5, ITEM_FRAME_HALF_DEPTH],
+                faces,
+            }],
+            ..Default::default()
+        };
+
+        let fused = create_item_frame_with_item_baked_model(&frame, Some(&item_model));
+        let item = fused.elements.last().expect("item element");
+
+        // The item's front plane must land on the wooden rim's front plane.
+        let front_z = item.from_pos[2].min(item.to_pos[2]);
+        assert!(
+            (front_z - (-ITEM_FRAME_HALF_DEPTH)).abs() < 1e-4,
+            "item front plane {front_z} must be flush with the rim at {}",
+            -ITEM_FRAME_HALF_DEPTH
+        );
+
+        // And it must stay clear of the backplate (which occupies z >= 0).
+        let back_z = item.from_pos[2].max(item.to_pos[2]);
+        assert!(
+            back_z < 0.0,
+            "item back plane {back_z} must stay in front of the backplate (z >= 0)"
+        );
     }
 }

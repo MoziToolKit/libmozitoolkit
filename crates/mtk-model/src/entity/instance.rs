@@ -391,21 +391,15 @@ pub struct PaintingData {
     pub anchor_block: Option<[i32; 3]>,
 }
 
-/// High-order item component data driven by Minecraft Data Components / NBT.
+/// Visual payload carried by an item's data components / NBT.
+///
+/// Only the block-entity-backed payload is modelled: dyed colors, custom names and glint
+/// have no consumer in the rendering pipeline yet, so they are not decoded or stored.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub struct ItemComponentsData {
-    /// Associated block entity data (e.g. Decorated Pot sherds, Banner patterns, Skull profile).
+    /// Associated block entity data (decorated pot sherds, banner patterns, skull profile).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub block_entity: Option<BlockEntityData>,
-    /// RGB color for leather armor / dyed items (from minecraft:dyed_color).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dyed_color: Option<u32>,
-    /// Custom item name (from minecraft:custom_name).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub custom_name: Option<String>,
-    /// Enchantment glint flag (from minecraft:enchantments / glint_override).
-    #[serde(default)]
-    pub has_glint: bool,
 }
 
 /// Data payload for an Item Frame entity.

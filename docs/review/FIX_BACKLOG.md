@@ -42,13 +42,13 @@
 | **M-03** ✅ DONE | P0 | `prebake/models.rs` / `prebake/engine.rs` | 烘焙失败无任何可观测信号：`if let Ok(...)` 链 + `baked_models: N` 计数，用户不知道少了什么 | 预烘结束时收集 `Vec<ModelBakeFailure { key, reason }>`，写入 manifest（或日志），并在 Python 侧可读；`baked_models` 与实际条目数必须一致 | 故意放一个坏 item JSON，断言失败列表里出现该 key | ◻ |
 | **M-04** ✅ DONE | P0 | `bindings/mtk-py/src/model.rs` | 模型库对 Python 只有 `__len__`/`is_empty`，**拿不到网格、拿不到 display transforms**；唯一入口在 `unstable.testing` | 生产面加 `BakedModelDatabase.get_mesh(key, clip_hidden=True, weld=False)` 与 `get_item_transforms(item_id)`（返回 `{context: {rotation, translation, scale}, gui_light}`）；删掉 testing 里的同名函数 | `cargo test -p mtk-py` + `tests/test_api_surface_contract.py` 补正向断言 | ✅ |
 | **M-05** ✅ DONE | P0 | `crates/mtk-model/src/entity/item_frame.rs:326-380` | 展示框只会用 `transforms.fixed`；物品模型缺失时静默用单位变换，没有"这个物品我拿不到模型"的告警 | `EntityBaker` 在 `model_lookup` 与内置模型都失败时，往 `EntityRenderPlan.warnings` 推 `item_model_missing`（需要把 warning 通道传进 baker，或让 baker 返回 `Result`） | 渲染计划测试：未知 item_id 必须产生 warning 而不是静默 0 面 | ✅ |
-| **M-06** | P1 | `crates/mtk-model/src/entity/render.rs:132` | 实体旋转按 `EulerRot::XYZ` 组合，MC 是 `Ry(yaw)·Rx(pitch)·Rz(roll)`；pitch≠0 时姿态错（实测 pitch=30°/yaw=45° 偏差明显）。当前展示框/画走 `facing` 未暴露，盔甲架一旦开烘就会错 | 统一走四元数：`q_mc = YXZ(yaw,pitch,roll)`；导出时分解成宿主 XYZ；`mtk-save::mc_rotation_to_model_euler` 同步改成"MC 矩阵 → XYZ 分解" | 新增 3 轴旋转测试（现在 `render.rs:826` 用 `rotation=ZERO`，永远发现不了） | ✅ |
-| **M-07** | P1 | `crates/mtk-save/src/block_entity.rs:419-428` | `custom_name` 只认 `String`；1.20.5+ 实际是 JSON 文本组件，Compound 形态直接丢、JSON 形态返回带引号的脏值 | 解 Text Component：`{"text":...}` / `{"translate":...}` / 纯字符串，取纯文本；Compound 形态也支持 | 单测：三种形态都断言得到 `Hero Armor` | ✅ |
-| **M-08** | P1 | `crates/mtk-save/src/block_entity.rs:93-100,313-333` | 不读 1.20.5+ `minecraft:base_color`，改用物品 id 前缀猜 → `light_blue_banner` 得 `"light"`，`shield` 永远白 | 优先读组件，其次 id 前缀；前缀必须按**最长匹配**（`light_blue` 先于 `light`） | 单测：`light_blue_banner`、`shield`、`white_banner` | ✅ |
-| **M-09** | P1 | `crates/mtk-save/src/block_entity.rs:344,372` | `clean_id.contains("pot")` / `contains("banner")` 启发式：`flower_pot` 被当装饰陶罐、`*_banner_pattern` 被当旗帜 | 改成精确 id 表（`decorated_pot`、`*_banner`/`*_wall_banner`、`*_head`/`*_skull`） | 单测：`flower_pot` 必须 `None` | ✅ |
-| **M-10** | P1 | `crates/mtk-model/src/entity/instance.rs:394-410` | `ItemComponentsData` 的 `dyed_color` / `custom_name` / `has_glint` 解码后**零消费者** | 按规则 1 删除这三个字段与解码（接消费者是另一个功能，单独开项）；保留 `block_entity` | `rg` 零引用 + 全绿 | ✅ |
-| **M-11** | P1 | `crates/mtk-save/src/block_entity.rs:179-196` | 无 profile 时 `SkullKind` 默认 `Skeleton`，`zombie_head`/`creeper_head`/`dragon_head` 全变骷髅 | 按 id 判定（`SkullKind::from_block_name` 已存在，接上） | 单测 7 种头 | ✅ |
-| **M-12** | P2 | `crates/mtk-save/src/block_entity.rs:14-25` | 告示牌从不解码，而 `BlockEntityData::Sign` 在生产路径无生产者 | 要么实现 sign 解码并接烘焙，要么删掉 `Sign` 变体 | `rg BlockEntityData::Sign` 无生产调用即删 | ◻ |
+| ~~**M-06**~~ | — | ~~`entity/render.rs:132`~~ | **假阳性，已撤回。** 26.2 `ItemFrameRenderer` 是 `mulPose(X)` 后 `mulPose(Y)`，`ModelPart` 用 `rotationZYX(z,y,x)`，两者都等价于 `Rx·Ry·Rz` —— 正是 glam 的 `EulerRot::XYZ`。原判据（MC 用 `Ry·Rx`）是错的 | 不改代码；补回归测试钉住 `Rx·Ry` 组合（`render.rs` 的 round-trip 测试用 `rotation=ZERO`，确实覆盖不到） | — | ✅ 已撤回 |
+| **M-07** ✅ DONE | P1 | `crates/mtk-save/src/block_entity.rs:419-428` | `custom_name` 只认 `String`；1.20.5+ 实际是 JSON 文本组件，Compound 形态直接丢、JSON 形态返回带引号的脏值 | 解 Text Component：`{"text":...}` / `{"translate":...}` / 纯字符串，取纯文本；Compound 形态也支持 | 单测：三种形态都断言得到 `Hero Armor` | ✅ |
+| **M-08** ✅ DONE | P1 | `crates/mtk-save/src/block_entity.rs:93-100,313-333` | 不读 1.20.5+ `minecraft:base_color`，改用物品 id 前缀猜 → `light_blue_banner` 得 `"light"`，`shield` 永远白 | 优先读组件，其次 id 前缀；前缀必须按**最长匹配**（`light_blue` 先于 `light`） | 单测：`light_blue_banner`、`shield`、`white_banner` | ✅ |
+| **M-09** ✅ DONE | P1 | `crates/mtk-save/src/block_entity.rs:344,372` | `clean_id.contains("pot")` / `contains("banner")` 启发式：`flower_pot` 被当装饰陶罐、`*_banner_pattern` 被当旗帜 | 改成精确 id 表（`decorated_pot`、`*_banner`/`*_wall_banner`、`*_head`/`*_skull`） | 单测：`flower_pot` 必须 `None` | ✅ |
+| **M-10** ✅ DONE | P1 | `crates/mtk-model/src/entity/instance.rs:394-410` | `ItemComponentsData` 的 `dyed_color` / `custom_name` / `has_glint` 解码后**零消费者** | 按规则 1 删除这三个字段与解码（接消费者是另一个功能，单独开项）；保留 `block_entity` | `rg` 零引用 + 全绿 | ✅ |
+| **M-11** ✅ DONE | P1 | `crates/mtk-save/src/block_entity.rs:179-196` | 无 profile 时 `SkullKind` 默认 `Skeleton`，`zombie_head`/`creeper_head`/`dragon_head` 全变骷髅 | 按 id 判定（`SkullKind::from_block_name` 已存在，接上） | 单测 7 种头 | ✅ |
+| **M-12** ✅ DONE | P2 | `crates/mtk-save/src/block_entity.rs:14-25` | 告示牌从不解码，而 `BlockEntityData::Sign` 在生产路径无生产者 | 要么实现 sign 解码并接烘焙，要么删掉 `Sign` 变体 | `rg BlockEntityData::Sign` 无生产调用即删 | ◻ |
 
 ---
 
@@ -103,7 +103,7 @@
 | **V-06** | P1 | `mtk-voxel/src/mesher/shading/resolver.rs:398` | `(cy >> 2) & 3` 在 `cy=16` 回绕到 0 → 3D biome 最上角采样最底层 | `min(cy>>2, 3)` | ◻ |
 | **V-07** | P2 | `mtk-voxel/src/fluid/height.rs:82-100 vs 126-141` | 流体高度公式两份，waterlogged 分支不一致 | 收敛成一份 | ◻ |
 | **V-08** | P2 | `mtk-voxel/src/mesher/section_mesher.rs:55` | 早退按 `non_air_count==0`：空气格里的方块实体（悬挂告示牌/头颅）完全无几何 | 有 block entity 也进 mesher | ◻ |
-| **V-09** | P2 | `mtk-model/src/entity/item_frame.rs:343-380` | 展示框物品 `surface_offset = -0.015`、`BASE_ITEM_SCALE=0.5` 等魔数，与 vanilla `ItemFrameRenderer` 无对应注释；FIXED 变换的旋转用 `EulerRot::XYZ`（JOML `rotationXYZ` 是 Rz·Ry·Rx） | 抽常量 + 注明 vanilla 出处；用四元数对齐 JOML 顺序（当前只有铜像有 2 轴 fixed，风险低但别留坑） | ✅ |
+| **V-09** ✅ DONE | P2 | `mtk-model/src/entity/item_frame.rs:343-380` | 展示框物品 `surface_offset = -0.015`、`BASE_ITEM_SCALE=0.5` 等魔数，与 vanilla `ItemFrameRenderer` 无对应注释；FIXED 变换的旋转用 `EulerRot::XYZ`（JOML `rotationXYZ` 是 Rz·Ry·Rx） | 抽常量 + 注明 vanilla 出处；用四元数对齐 JOML 顺序（当前只有铜像有 2 轴 fixed，风险低但别留坑） | ✅ |
 | **M-13** | P1 | `mtk-model/src/parser/model_json.rs:37-45` | `scale: [f32;3]` 强制数组；大量资源包写 `"scale": 1.0`（标量）→ 整个模型 JSON 解析失败 → 模型静默缺失 | 自定义反序列化接受标量/数组 | ◻ |
 | **M-14** | P2 | `mtk-model/src/item/generator.rs:462-520` | `default_item_generated_transforms()` 手工抄 vanilla `item/generated.json`，与真实 JSON 会漂移 | 从真实 JSON 读取，或加一致性测试 | ◻ |
 | **C-01** | P1 | `mtk-resource/src/meta.rs:8-28` | `.mcmeta` 的 `frames` 解析了但从不使用，`frametime` 丢失 → 动画帧序/时长错 | 序列化/消费 `frames`，或删字段 | ◻ |
@@ -265,3 +265,24 @@
 | M-05 | `EntityRenderConfig.model_lookup_available`（默认 false，Python 绑定按 `models is not None` 设置）+ `item_model_missing` 警告，展示框不再"静默没有物品" | `test_visual_entity_contract.rs`：有信号→告警，无数据库→不误报 |
 
 剩余：B0 的 M-06～M-12 与 B1～B7 未动。
+
+---
+
+## D2 完成记录（2026-11-16）
+
+依据 26.2 反编译源码 `ItemFrameRenderer.submit` / `ModelPart.translateAndRotate` 对齐，不再靠调参。
+
+| 项 | 落地内容 | 验证 |
+|---|---|---|
+| **V-09** | 框内物品平面从 `-0.015` 改为 `-ITEM_FRAME_HALF_DEPTH`（= -1/32）。原版：背板可见面 `0.46875`、物品平面 `0.4375`，相差正好 1/32，且与木框前平面齐平。旧值会让物品背面贴到背板上（共面闪烁 / 轻微陷入） | `test_item_plane_is_flush_with_the_rim_and_never_intersects_the_backplate` |
+| **V-09b** | 物品 `fixed` 旋转改用 `EulerRot::ZYX`，对齐 JOML `Quaternionf.rotationXYZ`（外旋 X→Y→Z = `Rz·Ry·Rx`）。目前只有铜像的 `fixed=[0,180,180]` 是双轴，两个对角阵可交换，所以视觉上无变化，但语义正确了 | `test_create_item_frame_with_item_fuses_and_rotates` |
+| **M-06** | **撤回**。原版证据：`ItemFrameRenderer` = `mulPose(X)` → `mulPose(Y)`；`ModelPart` = `rotationZYX(z,y,x)`；两者都等于 `Rx·Ry·Rz`，就是 glam `EulerRot::XYZ`。代码本来就是对的 | — |
+| **M-07** | `custom_name` / `CustomName` 现在按文本组件解析：纯字符串、JSON 字符串（`{"text"} / {"translate"} / extra 拼接`）、Compound 三种形态都还原成纯文本；不再把 `{"text":"..."}` 原样塞进对象名和元数据 | `test_custom_name_text_component_is_flattened`（5 种形态） |
+| **M-08** | 优先读 `minecraft:base_color` 组件；id 回退改为**后缀剥离 + 完整染料名匹配**，`light_blue_banner` → `light_blue`、`light_gray_wall_banner` → `light_gray`（旧代码 `split_once('_')` 得到 `light`） | `test_banner_base_color_uses_component_and_longest_dye_name` |
+| **M-09** | 删除 `contains("pot")` / `contains("banner")` 启发式，改为精确分类：`decorated_pot` / `*_banner` / `*_wall_banner` / `shield` / `*_head` / `*_skull`。`flower_pot` 不再被当成装饰陶罐，`*_banner_pattern` 不再被当成旗帜 | `test_flower_pot_is_not_a_decorated_pot` |
+| **M-10** | 删除 `ItemComponentsData` 的 `dyed_color` / `custom_name` / `has_glint`（零消费者），解码路径同步收敛 | `cargo clippy -D warnings` + 全量测试 |
+| **M-11** | 物品头颅按 item id 判定 `SkullKind`（`dragon_head` → Dragon 等）；方块实体仍由 blockstate 补正 | `test_item_skull_kind_comes_from_the_item_id`（5 种） |
+| **M-12** | 删除 `BlockEntityData::Sign` 与 `new_sign`（全仓零生产者/消费者），连带清理 2 处测试对它的依赖 | 全量测试 |
+| 额外 | `decode_item_components` 从三份复制粘贴合并成一条流程（components → BlockEntityTag → legacy SkullOwner），新增 `ItemBlockEntityKind` 分类器 | 同上 |
+
+门禁：`fmt --check` / `clippy -D warnings` / 77 组 Rust 测试（真实资产）/ `build-all-py` / Blender 5 个套件 34 passed。

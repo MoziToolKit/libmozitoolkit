@@ -182,7 +182,7 @@ commit `e1e3ae3` 把 `ItemTransforms` / `GuiLight` 烘进了 `BakedModel`，comm
 
 **这一组审计因额度耗尽失败，未完成。** 以下仅为本人在别处顺带复核到的点，不能当作完整结论：
 
-1. `mtk-core/src/geometry.rs:318-333` + `mtk-model/src/entity/render.rs:132` — 实体旋转用 `EulerRot::XYZ`（= Rx·Ry·Rz）构造，而 Minecraft 实体朝向是 Ry(yaw)·Rx(pitch)·Rz(roll)。pitch 与 yaw 同时非零时姿态错误（举��：pitch=30°/yaw=45° 时正面法线 (−0.707,0.354,−0.612) vs 正确 (−0.612,0.5,−0.612)）。当前 6 个展示框 facing 实测正确（属巧合），painting 只有 yaw、盔甲架尚未烘焙，所以暂未外显 —— 属**潜伏**缺陷。`render.rs:826` 的 round-trip 测试用 `rotation = ZERO`，无法发现。
+1. ~~实体旋转的 Euler 顺序错误~~ **假阳性，已撤回（2026-11-16 复核）。** 26.2 源码：`ItemFrameRenderer.submit` 依次 `mulPose(X)`、`mulPose(Y)`；`ModelPart.translateAndRotate` 用 `rotationZYX(z,y,x)`。两者都等价于 `Rx·Ry·Rz`，正是 glam 的 `EulerRot::XYZ`。代码原就是对的；仅缺一个非零 pitch 的回归测试。
 2. `mtk-cull/src/geometry/coplanar.rs:97` — `norm_a.cross(u_axis).normalize()` 无零向量保护 → NaN 参与比较恒 false，共面检测静默失效。
 3. `mtk-voxel/src/biome/color.rs` 的 5 个调色板取值点全部委托 `mtk_material`，规则 5 的 SSOT 未被破坏（这一条是**通过**）。
 4. 未审计：`mtk-texture` 图集装箱的重叠/边缘留白、`mtk-core` 的 subdivide/clip 退化几何、`mtk-material` PBR 解码表。这部分需要重新跑一遍审查。

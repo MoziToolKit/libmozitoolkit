@@ -112,11 +112,15 @@ impl EntityParser {
         None
     }
 
-    /// Extracts optional custom name tag.
+    /// Extracts the optional custom name tag as plain text.
+    ///
+    /// Minecraft stores names as text components (a JSON string in NBT, or a compound for
+    /// mod-written data); returning the raw value would leak `{"text":"..."}` into object
+    /// labels and metadata.
     pub(crate) fn parse_custom_name(comp: &NbtCompound) -> Option<String> {
-        comp.string("CustomName")
-            .or_else(|| comp.string("custom_name"))
-            .map(|s| s.as_str().to_string())
+        comp.get("CustomName")
+            .or_else(|| comp.get("custom_name"))
+            .and_then(crate::block_entity::decode_text_component)
     }
 
     /// Extracts continuous 3D world position from Pos tag.

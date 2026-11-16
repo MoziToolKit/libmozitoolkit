@@ -32,11 +32,6 @@ fn default_banner_base_color() -> String {
     "white".to_string()
 }
 
-#[inline]
-fn default_sign_color() -> String {
-    "black".to_string()
-}
-
 /// High-level typed BlockEntity representation decoupled from BlockState strings.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "id")]
@@ -64,24 +59,6 @@ pub enum BlockEntityData {
         rotation: Option<u8>,
         #[serde(skip_serializing_if = "Option::is_none")]
         profile: Option<PlayerProfileData>,
-    },
-    /// Sign or Hanging Sign text and styling.
-    #[serde(rename = "minecraft:sign", alias = "sign")]
-    Sign {
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        front_text: Vec<String>,
-        #[serde(default = "default_sign_color")]
-        front_color: String,
-        #[serde(default)]
-        front_glowing: bool,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        back_text: Option<Vec<String>>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        back_color: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        back_glowing: Option<bool>,
-        #[serde(default)]
-        is_waxed: bool,
     },
     /// Generic or custom block entity with an explicit type ID and raw NBT payload.
     #[serde(rename = "generic")]
@@ -158,25 +135,6 @@ impl BlockEntityData {
             kind,
             rotation,
             profile,
-        }
-    }
-
-    /// Constructs a canonical `Sign` data struct.
-    pub fn new_sign(
-        front_text: Vec<String>,
-        front_color: Option<impl Into<String>>,
-        front_glowing: bool,
-    ) -> Self {
-        Self::Sign {
-            front_text,
-            front_color: front_color
-                .map(Into::into)
-                .unwrap_or_else(default_sign_color),
-            front_glowing,
-            back_text: None,
-            back_color: None,
-            back_glowing: None,
-            is_waxed: false,
         }
     }
 
@@ -297,20 +255,7 @@ mod tests {
 
     #[test]
     fn test_block_entities_roundtrip() {
-        // 1. Sign
-        let sign = BlockEntityData::new_sign(
-            vec!["Welcome to".to_string(), "MoziToolKit".to_string()],
-            Some("yellow"),
-            true,
-        );
-        let sign_json = sign.to_visual_json();
-        assert!(sign_json.contains("\"minecraft:sign\""));
-        assert!(sign_json.contains("\"yellow\""));
-        assert!(sign_json.contains("\"front_glowing\":true"));
-        let sign_parsed = BlockEntityData::from_visual_json(&sign_json).expect("Parse sign");
-        assert_eq!(sign, sign_parsed);
-
-        // 2. Generic Custom
+        // 1. Generic Custom
         let generic = BlockEntityData::new_generic("custom:copper_statue", vec![1, 2, 3, 4]);
         let g_json = generic.to_visual_json();
         assert!(g_json.contains("\"generic\""));
@@ -391,8 +336,5 @@ mod tests {
 
         let skull = BlockEntityData::new_skull(SkullKind::Skeleton, None, None);
         assert!(skull.texture_identifier().is_some());
-
-        let sign = BlockEntityData::new_sign(vec!["hello".to_string()], None::<&str>, false);
-        assert_eq!(sign.texture_identifier(), None);
     }
 }
