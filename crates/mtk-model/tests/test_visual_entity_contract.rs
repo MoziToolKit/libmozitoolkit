@@ -190,3 +190,43 @@ fn item_frame_without_components_still_bakes_frame_only() {
         "an empty frame still has its own geometry"
     );
 }
+
+#[test]
+fn item_frame_with_unbaked_item_reports_a_warning() {
+    let json = r#"{
+      "id": "minecraft:item_frame",
+      "position": [0.0, 64.0, 0.0],
+      "facing": "north",
+      "kind": {
+        "type": "minecraft:item_frame",
+        "item_id": "minecraft:shield",
+        "count": 1,
+        "rotation": 0,
+        "is_glowing": false,
+        "is_invisible": false
+      }
+    }"#;
+    let entity: EntityInstance = serde_json::from_str(json).expect("payload");
+    let config = mtk_model::EntityRenderConfig {
+        model_lookup_available: true,
+        ..Default::default()
+    };
+    let plan = mtk_model::build_entity_render_plan(
+        std::slice::from_ref(&entity),
+        config,
+        |_| Some(([0.0, 0.0, 0.25, 0.25], 0, 0)),
+        |_| None,
+    );
+
+    assert_eq!(plan.nodes.len(), 1, "the frame itself still bakes");
+    let warning = plan
+        .warnings
+        .iter()
+        .find(|warning| warning.code == "item_model_missing")
+        .expect("missing item model must be reported");
+    assert!(
+        warning.message.contains("minecraft:shield"),
+        "warning must name the item: {}",
+        warning.message
+    );
+}

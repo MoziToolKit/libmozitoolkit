@@ -40,6 +40,12 @@ pub struct EntityRenderConfig {
     pub coordinate_system: CoordinateSystem,
     /// Explicit keys or UUIDs of entities that should be deleted by the host (primarily used when authoritative is false).
     pub deleted_keys: Vec<String>,
+    /// Whether the caller supplied a model database for item-model lookups.
+    ///
+    /// When true, an item frame whose held item has no baked model is reported through
+    /// `warnings` instead of silently rendering without the item. When false (no database
+    /// available), the plan cannot tell "missing" from "not looked up" and stays quiet.
+    pub model_lookup_available: bool,
 }
 
 impl Default for EntityRenderConfig {
@@ -51,6 +57,7 @@ impl Default for EntityRenderConfig {
             origin_centered: true,
             coordinate_system: CoordinateSystem::ZUpRightHanded,
             deleted_keys: Vec::new(),
+            model_lookup_available: false,
         }
     }
 }
@@ -300,6 +307,31 @@ impl EntityRenderPlan {
                     ),
                 });
                 continue;
+            }
+
+            // A frame whose held item has no baked model would otherwise render with an
+            // identity display transform and silently wrong scale/orientation.
+            if let EntityKindData::ItemFrame(frame) = &entity.kind {
+                let has_builtin_payload = frame
+                    .components
+                    .as_ref()
+                    .and_then(|components| components.block_entity.as_ref())
+                    .is_some();
+                if config.model_lookup_available
+                    && !has_builtin_payload
+                    && !frame.item_id.trim().is_empty()
+                    && model_lookup(&frame.item_id).is_none()
+                {
+                    warnings.push(EntityRenderWarning {
+                        key: key.clone(),
+                        code: "item_model_missing".to_string(),
+                        message: format!(
+                            "Item model '{}' is not present in the prebaked model database; \
+                             the frame is baked without its item",
+                            frame.item_id
+                        ),
+                    });
+                }
             }
 
             let mut resolved_routes: HashMap<String, (u16, u32)> = HashMap::new();

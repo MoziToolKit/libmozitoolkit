@@ -10,7 +10,7 @@ mod parser;
 // Top-level re-exports
 pub use baker::{
     is_block_emissive, is_known_non_cube, is_opaque_block, BakedElement, BakedFace, BakedModel,
-    BakedModelDatabase, BakedVariantGroup, ModelBaker,
+    BakedModelDatabase, BakedVariantGroup, ModelBakeFailure, ModelBaker,
 };
 pub use builtin::BuiltinModelRegistry;
 pub use entity::{

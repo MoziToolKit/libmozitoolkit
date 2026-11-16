@@ -257,84 +257,6 @@ pub fn create_colormaps_from_bytes(
     })
 }
 
-/// Test helper to retrieve baked mesh geometry and texture list for a given canonical blockstate string or item ID.
-#[pyfunction]
-#[pyo3(signature = (db, state_str, clip_hidden=true, weld=false))]
-pub fn model_database_get_mesh(
-    db: &PyBakedModelDatabase,
-    state_str: &str,
-    clip_hidden: bool,
-    weld: bool,
-) -> Option<(crate::mesh::PyMeshData, Vec<String>)> {
-    db.inner
-        .get(state_str)
-        .or_else(|| db.inner.get_item(state_str))
-        .map(|baked| {
-            let (mut mesh, textures) = baked.to_mesh_with_textures(clip_hidden);
-            if weld {
-                mesh.weld_vertices(1e-4);
-            }
-            (crate::mesh::PyMeshData::from_mesh(mesh), textures)
-        })
-}
-
-/// Test helper to retrieve the item transforms (rotation, translation, scale) for a model.
-#[pyfunction]
-pub fn model_database_get_transforms<'py>(
-    py: Python<'py>,
-    db: &PyBakedModelDatabase,
-    key: &str,
-) -> PyResult<Option<Bound<'py, pyo3::types::PyDict>>> {
-    let Some(baked) = db.inner.get(key).or_else(|| db.inner.get_item(key)) else {
-        return Ok(None);
-    };
-    let dict = pyo3::types::PyDict::new(py);
-    let make_transform_dict =
-        |t: &mtk_model::ModelTransform| -> PyResult<Bound<'py, pyo3::types::PyDict>> {
-            let d = pyo3::types::PyDict::new(py);
-            d.set_item("rotation", t.rotation.to_vec())?;
-            d.set_item("translation", t.translation.to_vec())?;
-            d.set_item("scale", t.scale.to_vec())?;
-            Ok(d)
-        };
-
-    if let Some(ref t) = baked.transforms.fixed {
-        dict.set_item("fixed", make_transform_dict(t)?)?;
-    }
-    if let Some(ref t) = baked.transforms.gui {
-        dict.set_item("gui", make_transform_dict(t)?)?;
-    }
-    if let Some(ref t) = baked.transforms.ground {
-        dict.set_item("ground", make_transform_dict(t)?)?;
-    }
-    if let Some(ref t) = baked.transforms.head {
-        dict.set_item("head", make_transform_dict(t)?)?;
-    }
-    if let Some(ref t) = baked.transforms.thirdperson_righthand {
-        dict.set_item("thirdperson_righthand", make_transform_dict(t)?)?;
-    }
-    if let Some(ref t) = baked.transforms.thirdperson_lefthand {
-        dict.set_item("thirdperson_lefthand", make_transform_dict(t)?)?;
-    }
-    if let Some(ref t) = baked.transforms.firstperson_righthand {
-        dict.set_item("firstperson_righthand", make_transform_dict(t)?)?;
-    }
-    if let Some(ref t) = baked.transforms.firstperson_lefthand {
-        dict.set_item("firstperson_lefthand", make_transform_dict(t)?)?;
-    }
-    if let Some(ref t) = baked.transforms.on_shelf {
-        dict.set_item("on_shelf", make_transform_dict(t)?)?;
-    }
-    if let Some(ref gl) = baked.gui_light {
-        let gl_str = match gl {
-            mtk_model::GuiLight::Front => "front",
-            mtk_model::GuiLight::Side => "side",
-        };
-        dict.set_item("gui_light", gl_str)?;
-    }
-    Ok(Some(dict))
-}
-
 /// Bakes an extruded 2D item model mesh directly from RGBA8 pixels (test-only debugger).
 #[pyfunction]
 #[pyo3(signature = (pixels, width, height, texture="item", use_greedy=true, weld=false))]
@@ -357,120 +279,6 @@ pub fn bake_item_model_mesh(
         mesh.weld_vertices(1e-4);
     }
     Ok(crate::mesh::PyMeshData::from(mesh))
-}
-
-/// Bakes a tiled showcase gallery of items in the model database into a single combined PyMeshData.
-#[pyfunction]
-#[pyo3(signature = (db, columns=36, spacing=1.5, vertical=false, filter_mode="items_only", weld=true))]
-pub fn model_database_build_items_gallery(
-    db: &PyBakedModelDatabase,
-    columns: usize,
-    spacing: f32,
-    vertical: bool,
-    filter_mode: &str,
-    weld: bool,
-) -> (crate::mesh::PyMeshData, Vec<String>, usize) {
-    let mut item_keys: Vec<String> = db
-        .inner
-        .models
-        .keys()
-        .filter(|k| k.starts_with("minecraft:item/") || k.contains(":item/"))
-        .cloned()
-        .collect();
-    item_keys.sort();
-
-    let cols = columns.max(1);
-    let mut gallery_mesh = mtk_core::MeshData::new();
-    gallery_mesh.uv_layout = mtk_core::UvLayout::PerLoop;
-    let mut all_textures: Vec<String> = Vec::new();
-    let mut total_items = 0usize;
-
-    let mode = filter_mode.to_lowercase();
-
-    for key in item_keys {
-        if let Some(baked) = db.inner.get(&key) {
-            let (mut item_mesh, textures) = baked.to_mesh_with_textures(false);
-            if item_mesh.is_empty() {
-                continue;
-            }
-
-            let has_item_tex = textures
-                .iter()
-                .any(|t| t.contains(":item/") || t.starts_with("item/"));
-            let has_block_tex = textures
-                .iter()
-                .any(|t| t.contains(":block/") || t.starts_with("block/"));
-
-            let should_skip = (mode == "items_only" && (!has_item_tex || has_block_tex))
-                || (mode == "blocks_only" && (!has_block_tex || has_item_tex));
-            if should_skip {
-                continue;
-            }
-
-            if weld {
-                item_mesh.weld_vertices(1e-4);
-            }
-
-            let col = total_items % cols;
-            let row = total_items / cols;
-            let offset_x = (col as f32) * spacing;
-            let offset_y = -(row as f32) * spacing;
-
-            let base_v_idx = gallery_mesh.positions.len() as u32;
-
-            for p in item_mesh.positions {
-                if vertical {
-                    gallery_mesh
-                        .positions
-                        .push([p[0] + offset_x, p[2], p[1] + offset_y]);
-                } else {
-                    gallery_mesh
-                        .positions
-                        .push([p[0] + offset_x, p[1] + offset_y, p[2]]);
-                }
-            }
-
-            for n in item_mesh.normals {
-                if vertical {
-                    gallery_mesh.normals.push([n[0], n[2], n[1]]);
-                } else {
-                    gallery_mesh.normals.push(n);
-                }
-            }
-
-            gallery_mesh.uvs.extend(item_mesh.uvs);
-
-            for idx in item_mesh.indices {
-                gallery_mesh.indices.push(idx + base_v_idx);
-            }
-
-            if let Some(quads) = item_mesh.quad_indices {
-                let g_quads = gallery_mesh.quad_indices.get_or_insert_with(Vec::new);
-                for q_idx in quads {
-                    g_quads.push(q_idx + base_v_idx);
-                }
-            }
-
-            gallery_mesh.face_materials.extend(item_mesh.face_materials);
-            gallery_mesh
-                .face_tint_indices
-                .extend(item_mesh.face_tint_indices);
-
-            for t in textures {
-                if !all_textures.contains(&t) {
-                    all_textures.push(t);
-                }
-            }
-
-            total_items += 1;
-        }
-    }
-
-    (
-        crate::mesh::PyMeshData::from_mesh(gallery_mesh),
-        all_textures,
-        total_items,
-    )
 }
 
 /// Registers the `testing` module on `parent_module`.
@@ -525,8 +333,6 @@ pub fn register_submodule(py: Python<'_>, parent_module: &Bound<'_, PyModule>) -
     // Model database helpers
     sub.add_function(wrap_pyfunction!(model_database_get_states, &sub)?)?;
     sub.add_function(wrap_pyfunction!(model_database_remap_to_atlas, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(model_database_get_mesh, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(model_database_get_transforms, &sub)?)?;
 
     // Voxel storage testing helpers
     sub.add_function(wrap_pyfunction!(voxel_dirty_section_count, &sub)?)?;
@@ -548,7 +354,6 @@ pub fn register_submodule(py: Python<'_>, parent_module: &Bound<'_, PyModule>) -
 
     // Item generator debuggers
     sub.add_function(wrap_pyfunction!(bake_item_model_mesh, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(model_database_build_items_gallery, &sub)?)?;
 
     parent_module.add_submodule(&sub)?;
     Ok(())

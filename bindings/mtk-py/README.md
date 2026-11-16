@@ -134,7 +134,11 @@ Python 模块名：`libmtk_py`
 - **色彩数学与常量**：`compute_biome_tint_attributes_paletted`, `compute_mesh_biome_attributes_from_storage`, `sample_colormap_colors`, `TINT_TYPE_NONE..DRY_FOLIAGE`
 
 ### 2.9 模型烘焙 (`model`)
-- **`BakedModelDatabase` (`PyBakedModelDatabase`)**：预编译方块几何模型库（支持 `len()` 与 `is_empty()`）。
+- **`BakedModelDatabase` (`PyBakedModelDatabase`)**：预编译方块/物品几何模型库。唯一模型查询入口：
+  - `get_mesh(state_or_item, clip_hidden=True, weld=False) -> (MeshData, list[str]) | None`：按方块状态串或物品 ID 烘出局部空间网格与贴图键列表；物品模型优先，因此方块物品会拿到物品显示变体。
+  - `get_item_transforms(item_id) -> dict | None`：返回 `fixed` / `gui` / `ground` / `head` / 第一/第三人称 / `on_shelf` 的 `{rotation, translation, scale}` 以及 `gui_light`；模型未烘焙时返回 `None`，调用方不得猜测缩放与朝向。
+  - `build_items_gallery(columns=36, spacing=1.5, vertical=False, filter_mode="items_only", weld=True) -> (MeshData, list[str], int)`：将所有物品模型拼成展廊网格。
+  - `bake_failures -> list[dict]`：本次烘焙中"发现但无法产出几何"的模型（`{key, reason}`）；从缓存加载时为空。
 
 ### 2.10 场景交换包与 Mini-Atlas (`scene`)
 - **`ScenePackageReader`**：`.mtkscene` 单文件中间交换容器读取器（只读无副作用设计，构造时不污染全局进程状态）。
@@ -181,7 +185,7 @@ Python 模块名：`libmtk_py`
 `encode_baseline_begin`, `encode_baseline_chunk`, `encode_baseline_end`, `encode_delta_op`,
 `encode_palette_update`, `mesh_attribute_schema`, `retired_mesh_attributes`,
 `extract_cache_atlas_texture`, `model_database_get_states`, `model_database_remap_to_atlas`,
-`model_database_get_mesh`, `voxel_storage_get_non_empty_sections`, `voxel_storage_get_block_entity_json`,
+`voxel_storage_get_non_empty_sections`, `voxel_storage_get_block_entity_json`,
 `voxel_storage_set_block_entity_json`, `voxel_world_ensure_dynamic_entities_resolved_sync`,
 `voxel_dirty_section_count`, `voxel_set_section_snapshot`, `validate_scene_package`,
 `create_colormaps_from_bytes`。

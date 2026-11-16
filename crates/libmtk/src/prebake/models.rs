@@ -24,6 +24,16 @@ fn is_dynamic_entity_texture(tex: &str) -> bool {
         || tex.starts_with("player/")
 }
 
+/// Maps an item model location (`minecraft:item/chest`) to the block model that carries
+/// its geometry (`minecraft:block/chest`).
+///
+/// `builtin/entity` items declare display transforms but no elements; vanilla renders them
+/// from block geometry through a block-entity renderer.
+fn block_model_id_for_item(loc: &ResourceLocation) -> Option<String> {
+    let name = loc.path.strip_prefix("item/")?;
+    Some(format!("{}:block/{}", loc.namespace, name))
+}
+
 #[inline]
 fn open_item_texture_png(stack: &ResourcePackStack, tex: &str) -> Option<Vec<u8>> {
     let loc = ResourceLocation::parse(tex).unwrap_or_else(|_| ResourceLocation::vanilla(tex));
@@ -245,6 +255,24 @@ pub(crate) fn prebake_all_models_with_progress(
         })
         .collect();
 
+    // Abstract item models are not renderable items: inheritance-only templates and `air`.
+    // Being referenced as a parent is NOT a reliable signal — real items such as
+    // `item/bow` are parents of their own pulling variants — so only explicit names are
+    // excluded. Everything else that cannot bake is reported through `bake_failures()`.
+    const ABSTRACT_ITEM_MODELS: &[&str] = &[
+        "air",
+        "generated",
+        "handheld",
+        "handheld_mace",
+        "handheld_rod",
+        "spear_in_hand",
+    ];
+    item_model_locs.retain(|loc| {
+        let stem = loc.path.strip_prefix("item/").unwrap_or(&loc.path);
+        !(loc.path.starts_with("item/template_")
+            || (loc.namespace == "minecraft" && ABSTRACT_ITEM_MODELS.contains(&stem)))
+    });
+
     // 5. Bake all item models
     let total_items = item_model_locs.len();
     let item_throttler =
@@ -253,80 +281,133 @@ pub(crate) fn prebake_all_models_with_progress(
 
     let item_mesh_opts = ItemMeshOptions::default();
 
-    let bake_single_item =
-        |loc: &ResourceLocation| -> Option<(Vec<String>, mtk_model::BakedModel)> {
-            let canon = loc.as_string();
-            let resolved = shared_resolved.get(&canon)?;
+    let bake_single_item = |loc: &ResourceLocation| -> Result<
+        (Vec<String>, mtk_model::BakedModel),
+        (String, &'static str),
+    > {
+        let canon = loc.as_string();
+        let resolved = shared_resolved
+            .get(&canon)
+            .ok_or_else(|| (canon.clone(), "unresolved_model"))?;
 
-            let baked: Option<mtk_model::BakedModel> = if !resolved.elements.is_empty() {
-                let baker = ModelBaker::new();
-                Some(baker.bake_resolved_model(&canon, resolved))
-            } else {
-                let mut combined_model: Option<mtk_model::BakedModel> = None;
-                for layer_idx in 0..8 {
-                    let layer_key = format!("layer{}", layer_idx);
-                    if let Some(tex) = resolved.textures.get(&layer_key) {
-                        if let Some(png_bytes) = open_item_texture_png(stack, tex) {
-                            if let Ok(layer_model) =
-                                bake_item_from_png_bytes(&png_bytes, tex, &item_mesh_opts)
-                            {
-                                if let Some(ref mut base) = combined_model {
-                                    base.elements.extend(layer_model.elements);
-                                } else {
-                                    combined_model = Some(layer_model);
+        let baked: Option<mtk_model::BakedModel> = if !resolved.elements.is_empty() {
+            let baker = ModelBaker::new();
+            Some(baker.bake_resolved_model(&canon, resolved))
+        } else {
+            // 2D sprite items: extrude the layer textures into a flat model.
+            let mut combined_model: Option<mtk_model::BakedModel> = None;
+            for layer_idx in 0..8 {
+                let layer_key = format!("layer{}", layer_idx);
+                if let Some(tex) = resolved.textures.get(&layer_key) {
+                    if let Some(png_bytes) = open_item_texture_png(stack, tex) {
+                        if let Ok(layer_model) =
+                            bake_item_from_png_bytes(&png_bytes, tex, &item_mesh_opts)
+                        {
+                            if let Some(ref mut base) = combined_model {
+                                base.elements.extend(layer_model.elements);
+                            } else {
+                                combined_model = Some(layer_model);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // `builtin/entity` items (chests, shulker boxes, decorated pots, conduits, ...)
+            // declare display transforms but no geometry: vanilla renders them through a
+            // block-entity renderer. Bake that geometry and keep the item's own display data,
+            // otherwise the item renders with guessed scale and orientation.
+            if combined_model.is_none() {
+                if let Some(block_name) = loc.path.strip_prefix("item/") {
+                    let state = format!("{}:{}", loc.namespace, block_name);
+                    let mut baker = ModelBaker::new();
+                    let builtin = baker
+                        .bake_blockstate_with_entity(&state, None, None, |id| get_model(id))
+                        .ok()
+                        .filter(|model| !model.elements.is_empty());
+                    if let Some(mut model) = builtin {
+                        model.transforms = resolved.transforms.clone();
+                        model.gui_light = resolved.gui_light.or(model.gui_light);
+                        model.block_state = canon.clone();
+                        combined_model = Some(model);
+                    }
+
+                    if combined_model.is_none() {
+                        if let Some(block_id) = block_model_id_for_item(loc) {
+                            if let Some(block_resolved) = shared_resolved.get(&block_id) {
+                                if !block_resolved.elements.is_empty() {
+                                    let mut model = ModelBaker::new()
+                                        .bake_resolved_model(&canon, block_resolved);
+                                    model.transforms = resolved.transforms.clone();
+                                    model.gui_light =
+                                        resolved.gui_light.or(block_resolved.gui_light);
+                                    combined_model = Some(model);
                                 }
                             }
                         }
                     }
                 }
-                if let Some(ref mut model) = combined_model {
-                    if resolved.transforms != mtk_model::ItemTransforms::default() {
-                        model.transforms = resolved.transforms.clone();
-                    }
-                    if resolved.gui_light.is_some() {
-                        model.gui_light = resolved.gui_light;
-                    }
-                }
-                combined_model
-            };
-
-            let mut baked = baked?;
-
-            if let Some(atlas) = atlas_map {
-                baked.remap_to_atlas_with(|tex| {
-                    if is_dynamic_entity_texture(tex) {
-                        return None;
-                    }
-                    MaterialResolver::resolve(tex, None, atlas)
-                        .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
-                });
-            }
-            baked.rebuild_face_buckets();
-            baked.deduplicate_faces();
-
-            let mut keys = vec![loc.as_string(), loc.path.clone()];
-            if let Some(item_name) = loc.path.strip_prefix("item/") {
-                keys.push(format!("{}:{}", loc.namespace, item_name));
-                if loc.namespace == "minecraft" {
-                    keys.push(item_name.to_string());
-                }
             }
 
-            item_throttler.inc();
-            Some((keys, baked))
+            if let Some(ref mut model) = combined_model {
+                if resolved.transforms != mtk_model::ItemTransforms::default() {
+                    model.transforms = resolved.transforms.clone();
+                }
+                if resolved.gui_light.is_some() {
+                    model.gui_light = resolved.gui_light;
+                }
+            }
+            combined_model
         };
 
+        let mut baked = baked.ok_or_else(|| {
+            let reason = if resolved.textures.is_empty() {
+                "no_geometry"
+            } else {
+                "no_texture_layers"
+            };
+            (canon.clone(), reason)
+        })?;
+
+        if let Some(atlas) = atlas_map {
+            baked.remap_to_atlas_with(|tex| {
+                if is_dynamic_entity_texture(tex) {
+                    return None;
+                }
+                MaterialResolver::resolve(tex, None, atlas)
+                    .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
+            });
+        }
+        baked.rebuild_face_buckets();
+        baked.deduplicate_faces();
+
+        // Only canonical item-model keys. Inserting the bare item name (e.g.
+        // `minecraft:chest`) would overwrite the blockstate entry with item geometry
+        // and item display data, corrupting block meshing for every block item.
+        let keys = vec![loc.as_string(), loc.path.clone()];
+
+        item_throttler.inc();
+        Ok((keys, baked))
+    };
+
     #[cfg(feature = "parallel")]
-    let baked_item_pairs: Vec<(Vec<String>, mtk_model::BakedModel)> = item_model_locs
-        .par_iter()
-        .filter_map(bake_single_item)
-        .collect();
+    let item_results: Vec<
+        Result<(Vec<String>, mtk_model::BakedModel), (String, &'static str)>,
+    > = item_model_locs.par_iter().map(bake_single_item).collect();
 
     #[cfg(not(feature = "parallel"))]
-    let baked_item_pairs: Vec<(Vec<String>, mtk_model::BakedModel)> = item_model_locs
-        .iter()
-        .filter_map(bake_single_item)
-        .collect();
+    let item_results: Vec<
+        Result<(Vec<String>, mtk_model::BakedModel), (String, &'static str)>,
+    > = item_model_locs.iter().map(bake_single_item).collect();
+
+    let mut baked_item_pairs: Vec<(Vec<String>, mtk_model::BakedModel)> = Vec::new();
+    let mut item_failures: Vec<(String, &'static str)> = Vec::new();
+    for result in item_results {
+        match result {
+            Ok(pair) => baked_item_pairs.push(pair),
+            Err(failure) => item_failures.push(failure),
+        }
+    }
 
     let mut db = BakedModelDatabase::new();
     for (state_str, group) in baked_pairs {
@@ -337,6 +418,9 @@ pub(crate) fn prebake_all_models_with_progress(
             db.insert(key, model.clone());
         }
     }
+    for (key, reason) in &item_failures {
+        db.push_bake_failure(key.clone(), *reason);
+    }
     db.deduplicate_all();
 
     if let Some(cb) = progress_callback {
@@ -346,6 +430,29 @@ pub(crate) fn prebake_all_models_with_progress(
             (total_defs + total_items).max(1),
             format!("Completed baking {} models and items", db.len()),
         ));
+        let failures = db.bake_failures();
+        if !failures.is_empty() {
+            let sample: Vec<&str> = failures
+                .iter()
+                .take(5)
+                .map(|failure| failure.key.as_str())
+                .collect();
+            cb(ProgressReport::new(
+                "prebake_models",
+                total_defs + total_items,
+                (total_defs + total_items).max(1),
+                format!(
+                    "{} models could not be baked ({}): {}",
+                    failures.len(),
+                    if failures.len() > sample.len() {
+                        "showing first 5"
+                    } else {
+                        "complete list"
+                    },
+                    sample.join(", ")
+                ),
+            ));
+        }
     }
 
     Ok(db)

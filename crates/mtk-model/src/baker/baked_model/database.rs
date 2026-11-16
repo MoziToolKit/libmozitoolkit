@@ -10,6 +10,20 @@ use super::variant_group::BakedVariantGroup;
 pub struct BakedModelDatabase {
     pub models: HashMap<String, BakedModel>,
     pub variant_groups: HashMap<String, BakedVariantGroup>,
+    /// Models that were discovered in the resource stack but could not be baked.
+    ///
+    /// Bake diagnostics describe one particular run, not the cached data, so they are
+    /// intentionally excluded from [`BakedModelDatabase`]'s serialized form.
+    bake_failures: Vec<ModelBakeFailure>,
+}
+
+/// One model that was discovered but produced no baked geometry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModelBakeFailure {
+    /// Canonical model identifier, e.g. `minecraft:item/shield`.
+    pub key: String,
+    /// Machine-readable reason, e.g. `no_geometry`, `no_texture_layers`.
+    pub reason: String,
 }
 
 #[derive(Serialize)]
@@ -72,6 +86,7 @@ impl<'de> Deserialize<'de> for BakedModelDatabase {
         Ok(Self {
             models,
             variant_groups,
+            bake_failures: Vec::new(),
         })
     }
 }
@@ -81,7 +96,21 @@ impl BakedModelDatabase {
         Self {
             models: HashMap::new(),
             variant_groups: HashMap::new(),
+            bake_failures: Vec::new(),
         }
+    }
+
+    /// Records a model that was discovered but could not be baked into geometry.
+    pub fn push_bake_failure(&mut self, key: impl Into<String>, reason: impl Into<String>) {
+        self.bake_failures.push(ModelBakeFailure {
+            key: key.into(),
+            reason: reason.into(),
+        });
+    }
+
+    /// Models discovered in the resource stack that produced no baked geometry.
+    pub fn bake_failures(&self) -> &[ModelBakeFailure] {
+        &self.bake_failures
     }
 
     pub fn insert(&mut self, state: String, model: BakedModel) {
@@ -392,6 +421,12 @@ impl BakedModelDatabase {
 
     /// Resolves an item model by item identifier (e.g. "minecraft:diamond_sword", "diamond_sword", "item/diamond_sword")
     /// with multi-tiered resolution and block-state fallback for block items.
+    ///
+    /// A caller that names an explicit `item/...` model (for example
+    /// `minecraft:item/chest`) is never answered with a fuzzy blockstate variant: the
+    /// block model carries block geometry and block-context display data, so substituting
+    /// it makes the item render with guessed scale and orientation. Missing item models
+    /// return `None` instead.
     pub fn get_item(&self, item_id: &str) -> Option<&BakedModel> {
         let clean = item_id.trim();
         if clean.is_empty() {
@@ -406,7 +441,24 @@ impl BakedModelDatabase {
             None => ("minecraft", clean),
         };
 
+        let explicit_item_model = path.starts_with("item/");
         let sub_path = path.strip_prefix("item/").unwrap_or(path);
+
+        // An explicit `item/...` request may only be answered with item-model entries.
+        // Falling back to `minecraft:<name>` would silently hand back the blockstate entry,
+        // whose geometry and display data belong to block rendering.
+        if explicit_item_model {
+            for cand in [
+                format!("{}:item/{}", namespace, sub_path),
+                format!("item/{}", sub_path),
+            ] {
+                if let Some(m) = self.models.get(&cand) {
+                    return Some(m);
+                }
+            }
+            return None;
+        }
+
         let candidates = [
             format!("{}:item/{}", namespace, sub_path),
             format!("{}:{}", namespace, sub_path),
@@ -419,7 +471,9 @@ impl BakedModelDatabase {
             }
         }
 
-        // Fallback to block model lookup (e.g. for block items like "minecraft:stone")
+        // Bare block ids may resolve a representative blockstate variant (e.g.
+        // `minecraft:chest` has no unparameterised state) because that is the correct
+        // geometry for a block item.
         self.get(clean)
     }
 

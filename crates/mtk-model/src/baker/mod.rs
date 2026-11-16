@@ -6,7 +6,9 @@ pub(crate) mod model_baker;
 pub(crate) mod planar;
 pub(crate) mod rules;
 
-pub use baked_model::{BakedElement, BakedFace, BakedModel, BakedModelDatabase, BakedVariantGroup};
+pub use baked_model::{
+    BakedElement, BakedFace, BakedModel, BakedModelDatabase, BakedVariantGroup, ModelBakeFailure,
+};
 pub use emissive::is_block_emissive;
 pub use model_baker::ModelBaker;
 pub use rules::{is_known_non_cube, is_opaque_block};

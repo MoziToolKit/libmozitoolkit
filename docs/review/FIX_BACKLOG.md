@@ -37,11 +37,11 @@
 
 | ID | P | 位置 | 现象 | 修法 | 验证 | 状态 |
 |---|---|---|---|---|---|---|
-| **M-01** | P0 | `crates/libmtk/src/prebake/models.rs` `bake_single_item` | **46 个原版物品模型完全没进缓存**（1271 个 item JSON 里缺 46）。原因：`resolved.elements` 为空且无 `layer0/1..` 贴图时 `combined_model=None`，整项被 `baked?` 静默丢弃。这些正是 `builtin/entity` / BEWLR 物品 | 通用规则（不做逐物品 hack）：`elements` 非空 → 现有路径；否则有 `layer*` → PNG 挤出；**否则回退到 `block/<path>` 几何并保留 item 链的 `transforms`/`gui_light`**；仍无几何 → 按 M-03 记录失败。二选一例外表见下 | 新增 `mtk-model/tests/test_item_model_coverage.rs`：遍历 `../Minecraft_Source/assets/minecraft/models/item/*.json`，除白名单外全部必须能 bake | ✅ |
-| **M-02** | P0 | `crates/mtk-model/src/baker/baked_model/database.rs:get_item` 末尾 `self.get(clean)` | `get_item("minecraft:item/chest")` **静默返回 `minecraft:chest` 方块模型**（3 元素、18 面、`transforms == default`）。玩家看到的就是身份变换 → 大小/朝向错。这是"猜"的来源 | 删除 `get_item` 对方块状态模糊匹配的回退。方块物品只允许**精确** `item/<name>` → 显式 `block/<name>` 两步，且必须带 display 数据；找不到就 `None` | 单测：`get_item("minecraft:item/chest")` 在 M-01 修复前必须 `None`（而不是返回方块）；`get_item("minecraft:stone")` 仍能解析 | ✅ |
-| **M-03** | P0 | `prebake/models.rs` / `prebake/engine.rs` | 烘焙失败无任何可观测信号：`if let Ok(...)` 链 + `baked_models: N` 计数，用户不知道少了什么 | 预烘结束时收集 `Vec<ModelBakeFailure { key, reason }>`，写入 manifest（或日志），并在 Python 侧可读；`baked_models` 与实际条目数必须一致 | 故意放一个坏 item JSON，断言失败列表里出现该 key | ◻ |
-| **M-04** | P0 | `bindings/mtk-py/src/model.rs` | 模型库对 Python 只有 `__len__`/`is_empty`，**拿不到网格、拿不到 display transforms**；唯一入口在 `unstable.testing` | 生产面加 `BakedModelDatabase.get_mesh(key, clip_hidden=True, weld=False)` 与 `get_item_transforms(item_id)`（返回 `{context: {rotation, translation, scale}, gui_light}`）；删掉 testing 里的同名函数 | `cargo test -p mtk-py` + `tests/test_api_surface_contract.py` 补正向断言 | ✅ |
-| **M-05** | P0 | `crates/mtk-model/src/entity/item_frame.rs:326-380` | 展示框只会用 `transforms.fixed`；物品模型缺失时静默用单位变换，没有"这个物品我拿不到模型"的告警 | `EntityBaker` 在 `model_lookup` 与内置模型都失败时，往 `EntityRenderPlan.warnings` 推 `item_model_missing`（需要把 warning 通道传进 baker，或让 baker 返回 `Result`） | 渲染计划测试：未知 item_id 必须产生 warning 而不是静默 0 面 | ✅ |
+| **M-01** ✅ DONE | P0 | `crates/libmtk/src/prebake/models.rs` `bake_single_item` | **46 个原版物品模型完全没进缓存**（1271 个 item JSON 里缺 46）。原因：`resolved.elements` 为空且无 `layer0/1..` 贴图时 `combined_model=None`，整项被 `baked?` 静默丢弃。这些正是 `builtin/entity` / BEWLR 物品 | 通用规则（不做逐物品 hack）：`elements` 非空 → 现有路径；否则有 `layer*` → PNG 挤出；**否则回退到 `block/<path>` 几何并保留 item 链的 `transforms`/`gui_light`**；仍无几何 → 按 M-03 记录失败。二选一例外表见下 | 新增 `mtk-model/tests/test_item_model_coverage.rs`：遍历 `../Minecraft_Source/assets/minecraft/models/item/*.json`，除白名单外全部必须能 bake | ✅ |
+| **M-02** ✅ DONE | P0 | `crates/mtk-model/src/baker/baked_model/database.rs:get_item` 末尾 `self.get(clean)` | `get_item("minecraft:item/chest")` **静默返回 `minecraft:chest` 方块模型**（3 元素、18 面、`transforms == default`）。玩家看到的就是身份变换 → 大小/朝向错。这是"猜"的来源 | 删除 `get_item` 对方块状态模糊匹配的回退。方块物品只允许**精确** `item/<name>` → 显式 `block/<name>` 两步，且必须带 display 数据；找不到就 `None` | 单测：`get_item("minecraft:item/chest")` 在 M-01 修复前必须 `None`（而不是返回方块）；`get_item("minecraft:stone")` 仍能解析 | ✅ |
+| **M-03** ✅ DONE | P0 | `prebake/models.rs` / `prebake/engine.rs` | 烘焙失败无任何可观测信号：`if let Ok(...)` 链 + `baked_models: N` 计数，用户不知道少了什么 | 预烘结束时收集 `Vec<ModelBakeFailure { key, reason }>`，写入 manifest（或日志），并在 Python 侧可读；`baked_models` 与实际条目数必须一致 | 故意放一个坏 item JSON，断言失败列表里出现该 key | ◻ |
+| **M-04** ✅ DONE | P0 | `bindings/mtk-py/src/model.rs` | 模型库对 Python 只有 `__len__`/`is_empty`，**拿不到网格、拿不到 display transforms**；唯一入口在 `unstable.testing` | 生产面加 `BakedModelDatabase.get_mesh(key, clip_hidden=True, weld=False)` 与 `get_item_transforms(item_id)`（返回 `{context: {rotation, translation, scale}, gui_light}`）；删掉 testing 里的同名函数 | `cargo test -p mtk-py` + `tests/test_api_surface_contract.py` 补正向断言 | ✅ |
+| **M-05** ✅ DONE | P0 | `crates/mtk-model/src/entity/item_frame.rs:326-380` | 展示框只会用 `transforms.fixed`；物品模型缺失时静默用单位变换，没有"这个物品我拿不到模型"的告警 | `EntityBaker` 在 `model_lookup` 与内置模型都失败时，往 `EntityRenderPlan.warnings` 推 `item_model_missing`（需要把 warning 通道传进 baker，或让 baker 返回 `Result`） | 渲染计划测试：未知 item_id 必须产生 warning 而不是静默 0 面 | ✅ |
 | **M-06** | P1 | `crates/mtk-model/src/entity/render.rs:132` | 实体旋转按 `EulerRot::XYZ` 组合，MC 是 `Ry(yaw)·Rx(pitch)·Rz(roll)`；pitch≠0 时姿态错（实测 pitch=30°/yaw=45° 偏差明显）。当前展示框/画走 `facing` 未暴露，盔甲架一旦开烘就会错 | 统一走四元数：`q_mc = YXZ(yaw,pitch,roll)`；导出时分解成宿主 XYZ；`mtk-save::mc_rotation_to_model_euler` 同步改成"MC 矩阵 → XYZ 分解" | 新增 3 轴旋转测试（现在 `render.rs:826` 用 `rotation=ZERO`，永远发现不了） | ✅ |
 | **M-07** | P1 | `crates/mtk-save/src/block_entity.rs:419-428` | `custom_name` 只认 `String`；1.20.5+ 实际是 JSON 文本组件，Compound 形态直接丢、JSON 形态返回带引号的脏值 | 解 Text Component：`{"text":...}` / `{"translate":...}` / 纯字符串，取纯文本；Compound 形态也支持 | 单测：三种形态都断言得到 `Hero Armor` | ✅ |
 | **M-08** | P1 | `crates/mtk-save/src/block_entity.rs:93-100,313-333` | 不读 1.20.5+ `minecraft:base_color`，改用物品 id 前缀猜 → `light_blue_banner` 得 `"light"`，`shield` 永远白 | 优先读组件，其次 id 前缀；前缀必须按**最长匹配**（`light_blue` 先于 `light`） | 单测：`light_blue_banner`、`shield`、`white_banner` | ✅ |
@@ -160,8 +160,8 @@
 
 | ID | P | 位置 | 现象 | 修法 | 状态 |
 |---|---|---|---|---|---|
-| **A-01** | P0 | `bindings/mtk-py/src/unstable/testing.rs:263,365` + `MoziToolKit/dev/ops/op_debug_item.py:234,347` | 生产 dev operator 依赖 `unstable.testing` 的 `model_database_get_mesh` / `build_items_gallery` | 并入 M-04 的生产面，删 testing 版本 | ✅ |
-| **A-02** | P1 | `unstable/testing.rs:283-338` | `model_database_get_transforms` **零消费者** | 删除（能力并入 M-04） | ✅ |
+| **A-01** ✅ DONE | P0 | `bindings/mtk-py/src/unstable/testing.rs:263,365` + `MoziToolKit/dev/ops/op_debug_item.py:234,347` | 生产 dev operator 依赖 `unstable.testing` 的 `model_database_get_mesh` / `build_items_gallery` | 并入 M-04 的生产面，删 testing 版本 | ✅ |
+| **A-02** ✅ DONE | P1 | `unstable/testing.rs:283-338` | `model_database_get_transforms` **零消费者** | 删除（能力并入 M-04） | ✅ |
 | **A-03** | P1 | `libmtk/src/prebake/engine.rs` + `mtk-voxel/src/storage/world/debug.rs:21,222-238` | 进程级全局 `static CACHED_DEBUG_STORAGE` + 公开 `clear_*`；core 内读 `MTK_TEST_ASSETS` | 缓存改为实例内/调用方传入；env 只在测试 crate | ◻ |
 | **A-04** | P1 | `mtk-voxel/src/world/dynamic_entities.rs:130-265 vs 283-470` | skull/banner 扫描+解析两份实现（async/sync），5 个公开入口 | 收敛一份 + 一个入口 | ◻ |
 | **A-05** | P1 | `mtk-save/src/loader.rs:243,256,272` | `load_box_into_storage` / `_with_progress` / `_with_entities` 三个近似入口，消费方只有测试 | 收敛成一个 + 显式配置 DTO | ◻ |
@@ -250,3 +250,18 @@
 | D5 | B3（Y-01..Y-08） | 联机不再无限 RESYNC / 丢编辑 / 幽灵实体 |
 | D6 | B4 + B5 | 缓存指纹与版本校验；确定性；`unstable.testing` 生产依赖清零 |
 | D7 | B6 + B7 | 测试不再空转；Blender 侧换物品/显隐/材质 |
+
+---
+
+## D1 完成记录（2026-11-16）
+
+| 项 | 落地内容 | 验证 |
+|---|---|---|
+| M-01 | `bake_single_item` 增加三级几何来源：item 链 elements → `layer*` PNG 挤出 → **按方块 id 走内置/MiEx/方块模型几何**（保留 item 链的 `transforms`/`gui_light`）。真实原版资产实测：`chest`(3 元素) / `shulker_box`(2) / `decorated_pot`(3) / `conduit`(1) / `copper_chest`(3) 全部烘出，且 `gui=[30,45,0]`、`fixed=[0,180,0]` 正确；失败列表只剩 5 个真不支持的（`shield`、`shield_blocking`、`trident_in_hand`、`trident_throwing`、`amethyst_bud`） | `crates/libmtk/tests/test_item_model_bake.rs::real_vanilla_item_models_keep_display_transforms`（真实资产，3.7s） |
+| M-01b | 物品模型不再插入 `<name>` 裸别名，避免覆盖同名方块条目（否则 `minecraft:chest` 会被物品几何+显示数据污染，方块网格错乱） | 同上：断言 `models["minecraft:chest"].transforms == default` |
+| M-02 | `get_item` 对显式 `item/...` 请求只查 item 条目，绝不回落方块状态模糊匹配；裸方块 id 仍可解析代表变体 | 单测 + 断言 `get_item("minecraft:item/shield") is None` |
+| M-03 | `BakedModelDatabase` 新增非序列化的 `bake_failures`（`ModelBakeFailure { key, reason }`）+ `push_bake_failure`/`bake_failures()`；预烘结束通过 progress 通道输出汇总行；Python 侧 `BakedModelDatabase.bake_failures` 可读 | 合成 pack 断言失败被记录；真实资产断言 `chest` 不在失败列表 |
+| M-04 | 生产面新增 `BakedModelDatabase.get_mesh` / `get_item_transforms` / `build_items_gallery`；删除 `unstable.testing` 的同名函数与注册；`dev/ops/op_debug_item.py` 直接调用生产方式 | `clippy -D warnings` + Blender 套件 27 passed |
+| M-05 | `EntityRenderConfig.model_lookup_available`（默认 false，Python 绑定按 `models is not None` 设置）+ `item_model_missing` 警告，展示框不再"静默没有物品" | `test_visual_entity_contract.rs`：有信号→告警，无数据库→不误报 |
+
+剩余：B0 的 M-06～M-12 与 B1～B7 未动。

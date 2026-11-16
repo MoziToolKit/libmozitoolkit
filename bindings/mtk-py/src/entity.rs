@@ -314,6 +314,7 @@ pub(crate) fn build_plan_from_entities_with_map(
         origin_centered: active_config.origin_centered,
         coordinate_system: active_config.coordinate_system,
         deleted_keys: deleted_keys.unwrap_or_default(),
+        model_lookup_available: models.is_some(),
     };
 
     let plan = mtk_model::build_entity_render_plan(
