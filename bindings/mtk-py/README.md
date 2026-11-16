@@ -156,7 +156,7 @@ Python 模块名：`libmtk_py`
   - 规范字段：`id`, `uuid`, `custom_name`, `kind`, `position`, `rotation`（权威 Euler XYZ 弧度，局部模型空间，yaw 0 = North / 朝向 -Z）, `scale`, `facing`（只作为元数据供参考，宿主严禁重复旋转）
   - 点云 / 存储通过 `get_visual_entities_palette()`, `set_visual_entities_palette(palette)` 访问。
 - **`supported_visual_entity_ids() -> List[str]`**：查询 native core (`mtk-model`) 声明支持的连续视觉实体类型清单（单一事实源 SSOT，如 `["minecraft:painting", "minecraft:item_frame", "minecraft:glow_item_frame", "minecraft:armor_stand"]`）。
-- **`build_entity_render_plan(entities=None, atlas=None, config=None, atlas_mapping_json=None, bounds=None, origin_centered=True, coordinate_system="z_up", revision=0, authoritative=True, deleted_keys=None) -> EntityRenderPlan`**：批量编译视觉实体渲染计划，一次性完成实体验证、确定性唯一键分配、局部空间网格烘焙、图集槽位分配以及宿主空间几何变换计算（$O(1)$ 跨语言 FFI 通信）。支持传入 `deleted_keys` 配合 `authoritative=False` 构造增量局部重构计划。
+- **`build_entity_render_plan(entities=None, atlas=None, config=None, atlas_mapping_json=None, bounds=None, origin_centered=True, coordinate_system="z_up", revision=0, authoritative=True, deleted_keys=None, models=None) -> EntityRenderPlan`**：批量编译视觉实体渲染计划，一次性完成实体验证、确定性唯一键分配、局部空间网格烘焙（含物品展示框物品模型与 Display Context `fixed` 融合）、图集槽位分配以及宿主空间几何变换计算（$O(1)$ 跨语言 FFI 通信）。支持传入 `models`（`BakedModelDatabase`）以呈现展示框内物品几何，支持传入 `deleted_keys` 配合 `authoritative=False` 构造增量局部重构计划。
 - **`host_transform_to_mc(location, rotation_euler, scale, bounds=None, origin_centered=True, coordinate_system="z_up") -> (pos, rot, scale)`**：反向逆变换算子，将宿主视口刚体变换还原为规范 Minecraft 世界坐标 `((pos_x, pos_y, pos_z), (pitch, yaw, roll), (sx, sy, sz))`，实现视口提取时的前后端单一事实源（SSOT）。
 - **`EntityRenderPlan`**：纯数据契约 DTO。
   - 属性：`schema_version`, `revision`, `authoritative`, `bounds`, `node_count`, `nodes`, `deleted_keys`, `warnings`

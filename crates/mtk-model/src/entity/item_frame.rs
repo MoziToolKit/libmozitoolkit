@@ -7,11 +7,13 @@
 
 use std::collections::HashMap;
 
-use glam::{Vec2, Vec3};
+use glam::{EulerRot, Quat, Vec2, Vec3};
 use mtk_core::Direction;
 
 use crate::baker::baked_model::model::{BakedElement, BakedFace, BakedModel};
 use crate::baker::math::face::{cuboid_face_get_u, cuboid_face_get_v, get_face_canonical_vertex};
+use crate::entity::instance::ItemFrameData;
+use crate::parser::model_json::ModelTransform;
 
 /// Total physical width of an item frame in blocks (12/16th block, or 12 pixels).
 pub const ITEM_FRAME_WIDTH: f32 = 0.75;
@@ -290,6 +292,126 @@ pub fn create_item_frame_baked_model(is_glowing: bool, is_invisible: bool) -> Ba
     }
 }
 
+/// Base scaling factor applied by vanilla Minecraft's `ItemFrameRenderer`
+/// before applying the model's `ItemDisplayContext::FIXED` transforms.
+pub const ITEM_FRAME_BASE_ITEM_SCALE: f32 = 0.5;
+
+/// Creates a procedural `BakedModel` for an item frame with its held item model
+/// fused into a single local-space model (centered at (0, 0, 0)).
+pub fn create_item_frame_with_item_baked_model(
+    frame: &ItemFrameData,
+    item_model: Option<&BakedModel>,
+) -> BakedModel {
+    let mut base_model = create_item_frame_baked_model(frame.is_glowing, frame.is_invisible);
+
+    let Some(item) = item_model else {
+        return base_model;
+    };
+
+    if item.elements.is_empty() {
+        return base_model;
+    }
+
+    // 1. Calculate AABB of item elements to determine model center
+    let mut min_pos = Vec3::splat(f32::INFINITY);
+    let mut max_pos = Vec3::splat(f32::NEG_INFINITY);
+    for elem in &item.elements {
+        for face in elem.faces.values() {
+            for v in &face.vertices {
+                min_pos = min_pos.min(*v);
+                max_pos = max_pos.max(*v);
+            }
+        }
+    }
+
+    let center = if min_pos.x.is_finite() && max_pos.x.is_finite() {
+        (min_pos + max_pos) * 0.5
+    } else {
+        Vec3::ZERO
+    };
+
+    // If center is already very close to zero (e.g. 2D extruded item), don't shift.
+    // If center is around (0.5, 0.5, 0.5) (e.g. 3D block model in [0, 1]), shift to center.
+    let center_offset = if center.length_squared() > 1e-4 {
+        center
+    } else {
+        Vec3::ZERO
+    };
+
+    // 2. Resolve fixed display transform (ItemDisplayContext::FIXED)
+    let fixed_transform = item.transforms.fixed.unwrap_or(ModelTransform {
+        rotation: [0.0, 0.0, 0.0],
+        translation: [0.0, 0.0, 0.0],
+        scale: [1.0, 1.0, 1.0],
+    });
+
+    let fixed_scale = Vec3::from_array(fixed_transform.scale) * ITEM_FRAME_BASE_ITEM_SCALE;
+    let fixed_rot_deg = Vec3::from_array(fixed_transform.rotation);
+    let fixed_rot_quat = Quat::from_euler(
+        EulerRot::XYZ,
+        fixed_rot_deg.x.to_radians(),
+        fixed_rot_deg.y.to_radians(),
+        fixed_rot_deg.z.to_radians(),
+    );
+    let fixed_trans = Vec3::from_array(fixed_transform.translation) * ITEM_FRAME_BASE_ITEM_SCALE;
+
+    // 3. Item rotation on frame (0..7, in 45-degree increments matching vanilla ItemFrameRenderer Axis.ZP)
+    let frame_rot_rad = (frame.rotation as f32) * std::f32::consts::FRAC_PI_4;
+    let frame_rot_quat = Quat::from_rotation_z(frame_rot_rad);
+
+    // 4. Surface offset along -Z: place item just in front of backplate (z = 0.0)
+    let surface_offset = Vec3::new(0.0, 0.0, -0.015);
+
+    // Transform function for vertices
+    let transform_vertex = |p: Vec3| -> Vec3 {
+        let p_centered = p - center_offset;
+        let p_scaled = p_centered * fixed_scale;
+        let p_rot = fixed_rot_quat * p_scaled;
+        let p_trans = p_rot + fixed_trans;
+        let p_frame_rot = frame_rot_quat * p_trans;
+        p_frame_rot + surface_offset
+    };
+
+    // Transform function for normals (pure rotation, normalized)
+    let combined_rot_quat = frame_rot_quat * fixed_rot_quat;
+    let transform_normal = |n: Vec3| -> Vec3 { (combined_rot_quat * n).normalize_or_zero() };
+
+    // 5. Append transformed item elements into base_model
+    for elem in &item.elements {
+        let mut transformed_faces = HashMap::with_capacity(elem.faces.len());
+        let mut elem_min = Vec3::splat(f32::INFINITY);
+        let mut elem_max = Vec3::splat(f32::NEG_INFINITY);
+
+        for (dir, face) in &elem.faces {
+            let mut new_verts = [Vec3::ZERO; 4];
+            for i in 0..4 {
+                let v = transform_vertex(face.vertices[i]);
+                new_verts[i] = v;
+                elem_min = elem_min.min(v);
+                elem_max = elem_max.max(v);
+            }
+            let new_normal = transform_normal(face.normal);
+
+            let mut new_face = face.clone();
+            new_face.vertices = new_verts;
+            new_face.normal = new_normal;
+            new_face.cullface = None;
+
+            transformed_faces.insert(*dir, new_face);
+        }
+
+        base_model.elements.push(BakedElement {
+            from_pos: [elem_min.x, elem_min.y, elem_min.z],
+            to_pos: [elem_max.x, elem_max.y, elem_max.z],
+            faces: transformed_faces,
+        });
+    }
+
+    base_model.rebuild_face_buckets();
+    base_model.deduplicate_faces();
+    base_model
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -378,5 +500,71 @@ mod tests {
         // Floor placement (Up, +Y):
         let world_pos_up = calculate_item_frame_world_position(pos, Direction::Up, false);
         assert!((world_pos_up.y - (64.5 - 0.46875)).abs() < 1e-4);
+    }
+
+    #[test]
+    fn test_create_item_frame_with_item_fuses_and_rotates() {
+        let frame = ItemFrameData {
+            item_id: "minecraft:diamond_sword".to_string(),
+            count: 1,
+            rotation: 0,
+            is_glowing: false,
+            is_invisible: false,
+            map_id: None,
+        };
+
+        // Create a mock 2D item model: single quad at (0, 0, 0) extents [-0.5, 0.5] in Y
+        let mut elem_faces = HashMap::new();
+        elem_faces.insert(
+            Direction::North,
+            BakedFace {
+                direction: Direction::North,
+                texture: "minecraft:item/diamond_sword".to_string(),
+                vertices: [
+                    Vec3::new(-0.25, -0.5, 0.0),
+                    Vec3::new(0.25, -0.5, 0.0),
+                    Vec3::new(0.25, 0.5, 0.0),
+                    Vec3::new(-0.25, 0.5, 0.0),
+                ],
+                normal: Vec3::NEG_Z,
+                ..Default::default()
+            },
+        );
+
+        let item_model = BakedModel {
+            block_state: "minecraft:item/diamond_sword".to_string(),
+            elements: vec![BakedElement {
+                from_pos: [-0.25, -0.5, 0.0],
+                to_pos: [0.25, 0.5, 0.0],
+                faces: elem_faces,
+            }],
+            ..Default::default()
+        };
+
+        // 1. rotation = 0
+        let fused_rot0 = create_item_frame_with_item_baked_model(&frame, Some(&item_model));
+        assert_eq!(fused_rot0.elements.len(), 6); // 5 frame elements + 1 item element
+
+        let item_elem_rot0 = &fused_rot0.elements[5];
+        let face_rot0 = item_elem_rot0.faces.get(&Direction::North).unwrap();
+        // Top vertex originally at (0.25, 0.5, 0.0) -> scaled by 0.5 -> y = 0.25, z = -0.015
+        assert!((face_rot0.vertices[2].y - 0.25).abs() < 1e-4);
+        assert!((face_rot0.vertices[2].z - (-0.015)).abs() < 1e-4);
+
+        // 2. rotation = 2 (90 degrees counter-clockwise matching vanilla ItemFrameRenderer -> vertex (0.25, 0.5) scaled by 0.5 to (0.125, 0.25) rotates to x ≈ -0.25, y ≈ 0.125)
+        let mut frame_rot2 = frame.clone();
+        frame_rot2.rotation = 2;
+        let fused_rot2 = create_item_frame_with_item_baked_model(&frame_rot2, Some(&item_model));
+        let item_elem_rot2 = &fused_rot2.elements[5];
+        let face_rot2 = item_elem_rot2.faces.get(&Direction::North).unwrap();
+        assert!((face_rot2.vertices[2].x - (-0.25)).abs() < 1e-4);
+        assert!((face_rot2.vertices[2].y - 0.125).abs() < 1e-4);
+        assert!((face_rot2.vertices[2].z - (-0.015)).abs() < 1e-4);
+
+        // 3. Invisible item frame: only item element exists
+        let mut frame_invis = frame.clone();
+        frame_invis.is_invisible = true;
+        let fused_invis = create_item_frame_with_item_baked_model(&frame_invis, Some(&item_model));
+        assert_eq!(fused_invis.elements.len(), 1);
     }
 }

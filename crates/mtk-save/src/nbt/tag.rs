@@ -102,6 +102,14 @@ impl<'a> NbtTag<'a> {
     }
 
     #[inline]
+    pub fn short(&self) -> Option<i16> {
+        match self {
+            Self::Short(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    #[inline]
     pub fn int(&self) -> Option<i32> {
         match self {
             Self::Int(v) => Some(*v),
@@ -201,6 +209,11 @@ impl<'a> NbtCompound<'a> {
     #[inline]
     pub fn byte(&self, key: &str) -> Option<i8> {
         self.get(key).and_then(|t| t.byte())
+    }
+
+    #[inline]
+    pub fn short(&self, key: &str) -> Option<i16> {
+        self.get(key).and_then(|t| t.short())
     }
 
     #[inline]

@@ -153,7 +153,13 @@ impl BakedModel {
                     mesh.face_materials.push(mat_slot);
                     mesh.face_tint_indices.push(face.tint_index);
 
-                    let (tint_color, tint_data) = ([1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 0.0, 0.0]);
+                    let (tint_data, tint_color) = mtk_material::compute_face_tint(
+                        &face.texture,
+                        Some(&self.block_state),
+                        face.tint_index,
+                        None,
+                        None,
+                    );
 
                     face_attributes_list.push(mtk_core::FaceAttributes {
                         texture_key: face.texture.clone(),
@@ -190,7 +196,13 @@ impl BakedModel {
                 mesh.uvs.push([uv.x, 1.0 - uv.y]);
             }
 
-            let (tint_color, tint_data) = ([1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 0.0, 0.0]);
+            let (tint_data, tint_color) = mtk_material::compute_face_tint(
+                &obj_f.texture,
+                Some(&self.block_state),
+                obj_f.tint_index,
+                None,
+                None,
+            );
 
             let face_attr = mtk_core::FaceAttributes {
                 texture_key: obj_f.texture.clone(),

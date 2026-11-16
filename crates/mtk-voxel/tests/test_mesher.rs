@@ -2020,8 +2020,8 @@ fn test_entity_baker_painting_mesh() {
         1,
         Some([5, 10, 5]),
     );
-    let (mesh, textures) =
-        mtk_model::EntityBaker::bake_entity_mesh(&painting, |_| None).expect("Bake painting mesh");
+    let (mesh, textures) = mtk_model::EntityBaker::bake_entity_mesh(&painting, |_| None, |_| None)
+        .expect("Bake painting mesh");
     assert_eq!(mesh.quad_count(), 6);
     assert_eq!(mesh.vertex_count(), 24);
     assert!(textures.contains(&"minecraft:painting/kebab".to_string()));

@@ -15,7 +15,7 @@ mod types;
 pub use pbr::decode_baked_atlas;
 
 pub use biome::{
-    compute_mesh_biome_attributes_paletted_flat, default_biome_palette, get_biome_palette,
+    compute_face_tint, compute_mesh_biome_attributes_paletted_flat, get_biome_palette,
     get_colormap_uv, get_default_colormaps, get_swamp_grass_color, get_unit_cube_tint_indices,
     hex_to_linear_rgba, reapply_uniform_biome_tint_flat, resolve_biome_color_set_with_colormaps,
     BiomeColorSet, BiomePalette, BiomeResolver, CustomBiomeSettings, VanillaColormaps,

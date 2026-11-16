@@ -857,6 +857,7 @@ dependencies = [
  "image",
  "mtk-core",
  "mtk-cull",
+ "mtk-material",
  "mtk-resource",
  "mtk-testkit",
  "postcard",

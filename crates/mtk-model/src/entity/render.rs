@@ -258,17 +258,19 @@ pub struct EntityRenderPlan {
 }
 
 impl EntityRenderPlan {
-    /// Builds a plan from canonical entities using an atlas lookup closure.
+    /// Builds a plan from canonical entities using atlas and model lookup closures.
     ///
     /// Entities that fail validation or do not yet have a procedural baker are
     /// reported through `warnings` instead of silently disappearing.
-    pub fn build<F>(
+    pub fn build<'a, FA, FM>(
         entities: &[EntityInstance],
         config: EntityRenderConfig,
-        mut atlas_lookup: F,
+        mut atlas_lookup: FA,
+        model_lookup: FM,
     ) -> Self
     where
-        F: FnMut(&str) -> Option<([f32; 4], u16, u32)>,
+        FA: FnMut(&str) -> Option<([f32; 4], u16, u32)>,
+        FM: Fn(&str) -> Option<&'a crate::baker::BakedModel>,
     {
         let mut nodes = Vec::new();
         let mut warnings = Vec::new();
@@ -301,13 +303,17 @@ impl EntityRenderPlan {
             }
 
             let mut resolved_routes: HashMap<String, (u16, u32)> = HashMap::new();
-            let baked = EntityBaker::bake_entity_mesh(entity, |texture_key| {
-                let resolved = atlas_lookup(texture_key);
-                if let Some((_, chunk_id, texture_id)) = resolved {
-                    resolved_routes.insert(texture_key.to_string(), (chunk_id, texture_id));
-                }
-                resolved
-            });
+            let baked = EntityBaker::bake_entity_mesh(
+                entity,
+                |texture_key| {
+                    let resolved = atlas_lookup(texture_key);
+                    if let Some((_, chunk_id, texture_id)) = resolved {
+                        resolved_routes.insert(texture_key.to_string(), (chunk_id, texture_id));
+                    }
+                    resolved
+                },
+                &model_lookup,
+            );
 
             let Some((local_mesh, textures)) = baked else {
                 warnings.push(EntityRenderWarning {
@@ -363,15 +369,17 @@ impl EntityRenderPlan {
 }
 
 /// Builds an entity render plan. This is the canonical entry point for hosts and bindings.
-pub fn build_entity_render_plan<F>(
+pub fn build_entity_render_plan<'a, FA, FM>(
     entities: &[EntityInstance],
     config: EntityRenderConfig,
-    atlas_lookup: F,
+    atlas_lookup: FA,
+    model_lookup: FM,
 ) -> EntityRenderPlan
 where
-    F: FnMut(&str) -> Option<([f32; 4], u16, u32)>,
+    FA: FnMut(&str) -> Option<([f32; 4], u16, u32)>,
+    FM: Fn(&str) -> Option<&'a crate::baker::BakedModel>,
 {
-    EntityRenderPlan::build(entities, config, atlas_lookup)
+    EntityRenderPlan::build(entities, config, atlas_lookup, model_lookup)
 }
 
 /// Inverts host-space transform (location, rotation_euler, scale) back into canonical Minecraft world coordinates.
@@ -504,9 +512,12 @@ mod tests {
             coordinate_system: CoordinateSystem::ZUpRightHanded,
             ..Default::default()
         };
-        let plan = EntityRenderPlan::build(&entities, config, |_texture| {
-            Some(([0.0, 0.0, 0.5, 0.5], 7, 9))
-        });
+        let plan = EntityRenderPlan::build(
+            &entities,
+            config,
+            |_texture| Some(([0.0, 0.0, 0.5, 0.5], 7, 9)),
+            |_| None,
+        );
 
         assert_eq!(plan.schema_version, ENTITY_RENDER_SCHEMA_VERSION);
         assert_eq!(plan.revision, 42);
@@ -603,6 +614,7 @@ mod tests {
             &[invalid, armor_stand],
             EntityRenderConfig::default(),
             |_texture| None,
+            |_| None,
         );
 
         assert!(plan.nodes.is_empty());
@@ -642,6 +654,7 @@ mod tests {
                     None
                 }
             },
+            |_| None,
         );
 
         assert_eq!(plan.nodes.len(), 1);
@@ -650,6 +663,78 @@ mod tests {
         assert_eq!(node.display_name, "item_frame_11111111");
         assert!(node.local_mesh.face_count() > 0);
         assert_eq!(node.transform.location, [10.5, -20.0, 64.5]);
+
+        // Test item frame with held diamond sword and model lookup
+        let frame_with_sword = EntityInstance::new_item_frame(
+            Some("sword-frame-uuid".to_string()),
+            DVec3::new(10.5, 64.5, 20.0),
+            Direction::North,
+            Vec3::ZERO,
+            "minecraft:diamond_sword",
+            1,
+            2,
+            false,
+            false,
+            None,
+        );
+
+        let mut item_elem_faces = HashMap::new();
+        item_elem_faces.insert(
+            Direction::North,
+            crate::baker::BakedFace {
+                direction: Direction::North,
+                texture: "minecraft:item/diamond_sword".to_string(),
+                vertices: [
+                    Vec3::new(-0.25, -0.5, 0.0),
+                    Vec3::new(0.25, -0.5, 0.0),
+                    Vec3::new(0.25, 0.5, 0.0),
+                    Vec3::new(-0.25, 0.5, 0.0),
+                ],
+                normal: Vec3::NEG_Z,
+                ..Default::default()
+            },
+        );
+        let sword_model = crate::baker::BakedModel {
+            block_state: "minecraft:item/diamond_sword".to_string(),
+            elements: vec![crate::baker::BakedElement {
+                from_pos: [-0.25, -0.5, 0.0],
+                to_pos: [0.25, 0.5, 0.0],
+                faces: item_elem_faces,
+            }],
+            ..Default::default()
+        };
+
+        let plan_sword = EntityRenderPlan::build(
+            &[frame_with_sword],
+            EntityRenderConfig::default(),
+            |texture| {
+                if texture.contains("birch_planks") {
+                    Some(([0.0, 0.0, 0.5, 0.5], 0, 10))
+                } else if texture.contains("item_frame") {
+                    Some(([0.5, 0.0, 1.0, 0.5], 0, 11))
+                } else if texture.contains("diamond_sword") {
+                    Some(([0.0, 0.5, 0.5, 1.0], 1, 20))
+                } else {
+                    None
+                }
+            },
+            |item_id| {
+                if item_id == "minecraft:diamond_sword" {
+                    Some(&sword_model)
+                } else {
+                    None
+                }
+            },
+        );
+
+        assert_eq!(plan_sword.nodes.len(), 1);
+        let sword_node = &plan_sword.nodes[0];
+        // Must contain material route for diamond_sword
+        assert!(sword_node
+            .material_routes
+            .iter()
+            .any(|r| r.texture_key == "minecraft:item/diamond_sword"));
+        assert!(plan_sword.warnings.is_empty());
     }
 
     #[test]
@@ -664,9 +749,12 @@ mod tests {
     #[test]
     fn test_entity_render_plan_serialization_roundtrip() {
         let entities = vec![painting(None, "kebab", 1, 1)];
-        let plan = EntityRenderPlan::build(&entities, EntityRenderConfig::default(), |_texture| {
-            Some(([0.0, 0.0, 0.5, 0.5], 1, 2))
-        });
+        let plan = EntityRenderPlan::build(
+            &entities,
+            EntityRenderConfig::default(),
+            |_texture| Some(([0.0, 0.0, 0.5, 0.5], 1, 2)),
+            |_| None,
+        );
 
         let json = serde_json::to_string(&plan).expect("serialize render plan");
         let parsed: EntityRenderPlan =
@@ -685,9 +773,12 @@ mod tests {
             ..Default::default()
         };
 
-        let plan = EntityRenderPlan::build(&entities, config, |_texture| {
-            Some(([0.0, 0.0, 0.5, 0.5], 1, 2))
-        });
+        let plan = EntityRenderPlan::build(
+            &entities,
+            config,
+            |_texture| Some(([0.0, 0.0, 0.5, 0.5], 1, 2)),
+            |_| None,
+        );
 
         assert_eq!(plan.revision, 42);
         assert!(!plan.authoritative);

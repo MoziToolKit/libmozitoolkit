@@ -251,7 +251,7 @@ cache_output_dir/
   - `EntityRenderPlan`：完整渲染计划，包含 `nodes: List[EntityRenderNode]`、`node_count: int`、`deleted_keys: List[str]`、`warnings: List[dict]`、`revision: int` 与 `authoritative: bool`。
 - **规范入口**：
   - `libmtk_py.supported_visual_entity_ids() -> List[str]`：返回 native core (`mtk-model`) 声明支持的连续视觉实体类型清单（单一事实源 SSOT）。
-  - `libmtk_py.build_entity_render_plan(entities=None, atlas_mapping_json=None, bounds=None, origin_centered=True, coordinate_system="z_up", revision=0, authoritative=True, deleted_keys=None)`：顶层通用构建算子，支持全量对账与局部增量重构。
+  - `libmtk_py.build_entity_render_plan(entities=None, atlas_mapping_json=None, bounds=None, origin_centered=True, coordinate_system="z_up", revision=0, authoritative=True, deleted_keys=None, models=None)`：顶层通用构建算子，支持全量对账与局部增量重构（可注入 `models: BakedModelDatabase` 融合展示框物品）。
   - `libmtk_py.host_transform_to_mc(location, rotation_euler, scale, bounds=None, origin_centered=True, coordinate_system="z_up")`：反向逆变换算子，将宿主刚体变换还原为规范 Minecraft 空间参数。
 
 ---

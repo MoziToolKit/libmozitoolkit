@@ -390,31 +390,37 @@ impl BakedModelDatabase {
         self.models.get(&parsed.name)
     }
 
-    /// Resolves an item model by item identifier (e.g. "minecraft:diamond_sword", "diamond_sword", "item/diamond_sword").
+    /// Resolves an item model by item identifier (e.g. "minecraft:diamond_sword", "diamond_sword", "item/diamond_sword")
+    /// with multi-tiered resolution and block-state fallback for block items.
     pub fn get_item(&self, item_id: &str) -> Option<&BakedModel> {
-        if let Some(m) = self.models.get(item_id) {
+        let clean = item_id.trim();
+        if clean.is_empty() {
+            return None;
+        }
+        if let Some(m) = self.models.get(clean) {
             return Some(m);
         }
-        let clean = item_id.trim();
-        let stripped = clean.strip_prefix("minecraft:").unwrap_or(clean);
+
+        let (namespace, path) = match clean.split_once(':') {
+            Some((ns, p)) => (ns, p),
+            None => ("minecraft", clean),
+        };
+
+        let sub_path = path.strip_prefix("item/").unwrap_or(path);
         let candidates = [
-            format!(
-                "minecraft:item/{}",
-                stripped.strip_prefix("item/").unwrap_or(stripped)
-            ),
-            format!(
-                "item/{}",
-                stripped.strip_prefix("item/").unwrap_or(stripped)
-            ),
-            format!("minecraft:{}", stripped),
-            stripped.to_string(),
+            format!("{}:item/{}", namespace, sub_path),
+            format!("{}:{}", namespace, sub_path),
+            format!("item/{}", sub_path),
+            sub_path.to_string(),
         ];
         for cand in &candidates {
             if let Some(m) = self.models.get(cand) {
                 return Some(m);
             }
         }
-        None
+
+        // Fallback to block model lookup (e.g. for block items like "minecraft:stone")
+        self.get(clean)
     }
 
     pub fn len(&self) -> usize {
@@ -437,16 +443,36 @@ mod tests {
     #[test]
     fn test_baked_model_database_get_item() {
         let mut db = BakedModelDatabase::new();
-        let model = BakedModel {
+        let sword = BakedModel {
             block_state: "minecraft:item/diamond_sword".to_string(),
             ..Default::default()
         };
-        db.insert("minecraft:item/diamond_sword".to_string(), model);
+        db.insert("minecraft:item/diamond_sword".to_string(), sword);
+
+        let mod_item = BakedModel {
+            block_state: "techmod:item/wrench".to_string(),
+            ..Default::default()
+        };
+        db.insert("techmod:item/wrench".to_string(), mod_item);
+
+        let stone_block = BakedModel {
+            block_state: "minecraft:stone".to_string(),
+            ..Default::default()
+        };
+        db.insert("minecraft:stone".to_string(), stone_block);
 
         assert!(db.get_item("minecraft:item/diamond_sword").is_some());
         assert!(db.get_item("item/diamond_sword").is_some());
         assert!(db.get_item("minecraft:diamond_sword").is_some());
         assert!(db.get_item("diamond_sword").is_some());
         assert!(db.get_item("iron_sword").is_none());
+
+        // Mod namespace item
+        assert!(db.get_item("techmod:wrench").is_some());
+        assert!(db.get_item("techmod:item/wrench").is_some());
+
+        // Block item fallback
+        assert!(db.get_item("minecraft:stone").is_some());
+        assert!(db.get_item("stone").is_some());
     }
 }

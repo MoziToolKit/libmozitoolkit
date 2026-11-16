@@ -291,6 +291,7 @@ impl PyEntityRenderPlan {
 pub(crate) fn build_plan_from_entities_with_map(
     entities: &[mtk_model::EntityInstance],
     map: Option<&mtk_texture::AtlasAddressMap>,
+    models: Option<&crate::model::PyBakedModelDatabase>,
     config: Option<&PyMesherConfig>,
     explicit_bounds: Option<[i32; 6]>,
     revision: u64,
@@ -315,16 +316,21 @@ pub(crate) fn build_plan_from_entities_with_map(
         deleted_keys: deleted_keys.unwrap_or_default(),
     };
 
-    let plan = mtk_model::build_entity_render_plan(entities, render_config, |tex| {
-        if let Some(m) = map {
-            let loc = mtk_material::MaterialResolver::resolve(tex, custom_aliases, m)
-                .map(|(_, s)| s)
-                .or_else(|| m.lookup_fallback())?;
-            Some((loc.uv_bounds, loc.chunk_id, loc.texture_id))
-        } else {
-            None
-        }
-    });
+    let plan = mtk_model::build_entity_render_plan(
+        entities,
+        render_config,
+        |tex| {
+            if let Some(m) = map {
+                let loc = mtk_material::MaterialResolver::resolve(tex, custom_aliases, m)
+                    .map(|(_, s)| s)
+                    .or_else(|| m.lookup_fallback())?;
+                Some((loc.uv_bounds, loc.chunk_id, loc.texture_id))
+            } else {
+                None
+            }
+        },
+        |item_id| models.and_then(|m| m.inner.get_item(item_id)),
+    );
 
     Ok(PyEntityRenderPlan { inner: plan })
 }
@@ -332,6 +338,7 @@ pub(crate) fn build_plan_from_entities_with_map(
 pub(crate) fn build_plan_from_entities(
     entities: &[mtk_model::EntityInstance],
     atlas: Option<&PyBakedAtlas>,
+    models: Option<&crate::model::PyBakedModelDatabase>,
     config: Option<&PyMesherConfig>,
     atlas_mapping_json: Option<&str>,
     explicit_bounds: Option<[i32; 6]>,
@@ -360,6 +367,7 @@ pub(crate) fn build_plan_from_entities(
     build_plan_from_entities_with_map(
         entities,
         map_ref,
+        models,
         config,
         explicit_bounds,
         revision,
@@ -380,7 +388,8 @@ pub(crate) fn build_plan_from_entities(
     coordinate_system=None,
     revision=0,
     authoritative=true,
-    deleted_keys=None
+    deleted_keys=None,
+    models=None
 ))]
 pub fn build_entity_render_plan(
     entities: Option<&Bound<'_, PyAny>>,
@@ -393,6 +402,7 @@ pub fn build_entity_render_plan(
     revision: u64,
     authoritative: bool,
     deleted_keys: Option<Vec<String>>,
+    models: Option<&crate::model::PyBakedModelDatabase>,
 ) -> PyResult<PyEntityRenderPlan> {
     let mut parsed_entities: Vec<mtk_model::EntityInstance> = Vec::new();
     let mut parse_warnings: Vec<mtk_model::EntityRenderWarning> = Vec::new();
@@ -472,6 +482,7 @@ pub fn build_entity_render_plan(
     let mut plan = build_plan_from_entities(
         &parsed_entities,
         atlas,
+        models,
         Some(&active_cfg_py),
         atlas_mapping_json,
         bounds,

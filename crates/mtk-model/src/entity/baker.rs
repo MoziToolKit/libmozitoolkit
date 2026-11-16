@@ -17,17 +17,26 @@ pub struct EntityBaker;
 
 impl EntityBaker {
     /// Bakes an `EntityInstance` into an untextured or raw-named local `BakedModel`.
-    pub fn bake_model(entity: &EntityInstance) -> Option<BakedModel> {
+    pub fn bake_model<'a, M>(entity: &EntityInstance, model_lookup: M) -> Option<BakedModel>
+    where
+        M: Fn(&str) -> Option<&'a BakedModel>,
+    {
         match &entity.kind {
             EntityKindData::Painting(p) => Some(painting::create_painting_baked_model(
                 &p.variant,
                 p.width as u32,
                 p.height as u32,
             )),
-            EntityKindData::ItemFrame(f) => Some(item_frame::create_item_frame_baked_model(
-                f.is_glowing,
-                f.is_invisible,
-            )),
+            EntityKindData::ItemFrame(f) => {
+                let item_model = if f.item_id.trim().is_empty() {
+                    None
+                } else {
+                    model_lookup(&f.item_id)
+                };
+                Some(item_frame::create_item_frame_with_item_baked_model(
+                    f, item_model,
+                ))
+            }
             EntityKindData::ArmorStand(_) => {
                 // Armor Stand procedural baked model (stub ready for expansion)
                 None
@@ -40,18 +49,20 @@ impl EntityBaker {
     ///
     /// The returned `MeshData` is strictly in local model coordinates (centered at (0,0,0)).
     /// Spatial translation, rotation, and scaling are applied by the DCC host via Object Transform.
-    pub fn bake_entity_mesh<F>(
+    pub fn bake_entity_mesh<'a, FA, FM>(
         entity: &EntityInstance,
-        mut atlas_lookup: F,
+        mut atlas_lookup: FA,
+        model_lookup: FM,
     ) -> Option<(MeshData, Vec<String>)>
     where
-        F: FnMut(&str) -> Option<([f32; 4], u16, u32)>,
+        FA: FnMut(&str) -> Option<([f32; 4], u16, u32)>,
+        FM: Fn(&str) -> Option<&'a BakedModel>,
     {
         if entity.validate().is_err() {
             return None;
         }
 
-        let mut model = Self::bake_model(entity)?;
+        let mut model = Self::bake_model(entity, model_lookup)?;
         model.remap_to_atlas_with(&mut atlas_lookup);
 
         let options = ModelMeshOptions {
@@ -96,9 +107,12 @@ mod tests {
             1,
             Some([10, 64, -20]),
         );
-        let (mesh, textures) =
-            EntityBaker::bake_entity_mesh(&painting, |_tex| Some(([0.0, 0.0, 0.5, 0.5], 3, 42)))
-                .expect("Bake succeeds");
+        let (mesh, textures) = EntityBaker::bake_entity_mesh(
+            &painting,
+            |_tex| Some(([0.0, 0.0, 0.5, 0.5], 3, 42)),
+            |_| None,
+        )
+        .expect("Bake succeeds");
 
         // 1x1 painting has exactly 6 faces (front, back, 4 edges) -> 24 vertices, 36 indices
         assert_eq!(mesh.vertex_count(), 24);

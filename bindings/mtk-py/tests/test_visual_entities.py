@@ -426,4 +426,51 @@ def test_supported_visual_entity_ids_and_session_subscription():
     assert session.subscribed_entities == supported
 
 
+def test_build_entity_render_plan_item_frame_with_models():
+    import glob
+    import os
+    cache_dirs = [
+        os.path.join(os.getcwd(), ".ci-cache"),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../MoziToolKit/.ci-cache")),
+    ]
+    cache_files = []
+    for d in cache_dirs:
+        if os.path.isdir(d):
+            cache_files.extend(glob.glob(os.path.join(d, "*.mtkcache")))
+    if not cache_files:
+        return
+
+    cache = libmtk_py.AssetCache.open(cache_files[0])
+    try:
+        models = cache.load_models()
+        atlas = cache.load_atlas()
+    except Exception:
+        return
+
+    entity = {
+        "id": "minecraft:item_frame",
+        "uuid": "frame-sword-test-uuid",
+        "position": [10.5, 64.0, 20.0],
+        "facing": "north",
+        "kind": {
+            "type": "minecraft:item_frame",
+            "item_id": "minecraft:diamond_sword",
+            "rotation": 0,
+            "is_glowing": False,
+            "is_invisible": False,
+        },
+    }
+
+    # 1. Build without models: frame only
+    plan_no_models = libmtk_py.build_entity_render_plan([entity], atlas=atlas)
+    node_no_models = plan_no_models.nodes[0]
+
+    # 2. Build with models: frame + item mesh
+    plan_with_models = libmtk_py.build_entity_render_plan([entity], atlas=atlas, models=models)
+    node_with_models = plan_with_models.nodes[0]
+
+    assert node_with_models.mesh.face_count > node_no_models.mesh.face_count
+    assert any("diamond_sword" in r["texture_key"] for r in node_with_models.material_routes)
+
+
 

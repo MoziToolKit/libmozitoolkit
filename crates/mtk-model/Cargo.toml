@@ -11,6 +11,7 @@ description = "Headless Minecraft BlockState parser and Model JSON data structur
 [dependencies]
 mtk-core = { workspace = true }
 mtk-cull = { workspace = true }
+mtk-material = { workspace = true }
 mtk-resource = { workspace = true }
 glam = { workspace = true }
 image = { workspace = true }

@@ -7,6 +7,7 @@ mod hardcoded;
 mod palettes;
 mod reapply;
 mod resolver;
+mod tint;
 
 pub use colormap::{get_default_colormaps, VanillaColormaps};
 
@@ -16,8 +17,8 @@ pub use hardcoded::{
     TINT_TYPE_GRASS, TINT_TYPE_HARDCODED, TINT_TYPE_NONE, TINT_TYPE_WATER,
 };
 pub use palettes::{
-    default_biome_palette, get_biome_palette, get_colormap_uv, hex_to_linear_rgba, BiomePalette,
-    CANONICAL_BIOMES,
+    get_biome_palette, get_colormap_uv, hex_to_linear_rgba, BiomePalette, CANONICAL_BIOMES,
 };
 pub use reapply::{compute_mesh_biome_attributes_paletted_flat, reapply_uniform_biome_tint_flat};
 pub use resolver::BiomeResolver;
+pub use tint::compute_face_tint;

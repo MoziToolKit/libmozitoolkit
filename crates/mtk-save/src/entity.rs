@@ -405,33 +405,60 @@ impl EntityParser {
             )
         };
 
-        let block_x = pos.x.floor() as i32;
-        let block_y = pos.y.floor() as i32;
-        let block_z = pos.z.floor() as i32;
+        let normal = facing.normal().as_dvec3();
+        let support_block = (pos - normal * 0.5).floor().as_ivec3();
 
-        if block_x < min_block.x
-            || block_x > max_block.x
-            || block_y < min_block.y
-            || block_y > max_block.y
-            || block_z < min_block.z
-            || block_z > max_block.z
-        {
+        let b_min = min_block.as_dvec3();
+        let b_max = (max_block + IVec3::ONE).as_dvec3();
+
+        // Item frame AABB is roughly pos +/- 0.375
+        let frame_min = pos - glam::DVec3::splat(0.375);
+        let frame_max = pos + glam::DVec3::splat(0.375);
+
+        let aabb_overlaps = frame_min.x < b_max.x
+            && frame_max.x > b_min.x
+            && frame_min.y < b_max.y
+            && frame_max.y > b_min.y
+            && frame_min.z < b_max.z
+            && frame_max.z > b_min.z;
+
+        let support_inside = support_block.x >= min_block.x
+            && support_block.x <= max_block.x
+            && support_block.y >= min_block.y
+            && support_block.y <= max_block.y
+            && support_block.z >= min_block.z
+            && support_block.z <= max_block.z;
+
+        let pos_inside = pos.x.floor() as i32 >= min_block.x
+            && pos.x.floor() as i32 <= max_block.x
+            && pos.y.floor() as i32 >= min_block.y
+            && pos.y.floor() as i32 <= max_block.y
+            && pos.z.floor() as i32 >= min_block.z
+            && pos.z.floor() as i32 <= max_block.z;
+
+        if !aabb_overlaps && !support_inside && !pos_inside {
             return None;
         }
 
         // 3. Item payload
         let item_comp = comp.compound("Item").or_else(|| comp.compound("item"));
-        let item_id = item_comp
+        let mut item_id = item_comp
             .and_then(|ic| ic.string("id").or_else(|| ic.string("Id")))
-            .map(|s| s.as_str().to_string())
+            .map(|s| s.as_str().trim().to_ascii_lowercase())
             .unwrap_or_default();
+        if !item_id.is_empty() && !item_id.contains(':') {
+            item_id = format!("minecraft:{}", item_id);
+        }
 
         let item_count = item_comp
             .and_then(|ic| {
                 ic.byte("Count")
                     .or_else(|| ic.byte("count"))
                     .map(|b| b as u8)
+                    .or_else(|| ic.int("Count").map(|i| i as u8))
                     .or_else(|| ic.int("count").map(|i| i as u8))
+                    .or_else(|| ic.short("Count").map(|s| s as u8))
+                    .or_else(|| ic.short("count").map(|s| s as u8))
             })
             .unwrap_or(1);
 
@@ -458,6 +485,10 @@ impl EntityParser {
         let item_rotation = comp
             .byte("ItemRotation")
             .or_else(|| comp.byte("item_rotation"))
+            .or_else(|| comp.int("ItemRotation").map(|i| i as i8))
+            .or_else(|| comp.int("item_rotation").map(|i| i as i8))
+            .or_else(|| comp.short("ItemRotation").map(|s| s as i8))
+            .or_else(|| comp.short("item_rotation").map(|s| s as i8))
             .unwrap_or(0) as u8;
 
         let is_glowing = comp
@@ -843,6 +874,54 @@ mod tests {
                 assert_eq!(f.item_id, "minecraft:filled_map");
                 assert_eq!(f.count, 3);
                 assert_eq!(f.map_id, Some(42));
+            }
+            _ => panic!("Expected ItemFrame kind"),
+        }
+    }
+
+    #[test]
+    fn test_parse_item_frame_modern_nbt_and_boundary() {
+        let mut comp = NbtCompound::new();
+        comp.entries.push((
+            NbtStr::from_borrowed("id"),
+            NbtTag::String(NbtStr::from_borrowed("minecraft:glow_item_frame")),
+        ));
+        // Placed on North surface of block (10, 64, 0), so pos.z is negative (-0.03125)
+        comp.entries.push((
+            NbtStr::from_borrowed("Pos"),
+            NbtTag::List(NbtList::Double(vec![10.5, 64.5, -0.03125])),
+        ));
+        comp.entries
+            .push((NbtStr::from_borrowed("Facing"), NbtTag::Byte(2))); // North
+        comp.entries
+            .push((NbtStr::from_borrowed("ItemRotation"), NbtTag::Int(4)));
+
+        let mut item = NbtCompound::new();
+        item.entries.push((
+            NbtStr::from_borrowed("id"),
+            NbtTag::String(NbtStr::from_borrowed("diamond_sword")),
+        ));
+        // Modern 1.20.5+ int count
+        item.entries
+            .push((NbtStr::from_borrowed("Count"), NbtTag::Int(1)));
+        comp.entries
+            .push((NbtStr::from_borrowed("Item"), NbtTag::Compound(item)));
+
+        // min_block has z = 0; pos.z is -0.03125 (floor is -1), but support block is z = 0
+        let entity = EntityParser::parse_entity_compound(
+            &comp,
+            IVec3::new(0, 0, 0),
+            IVec3::new(16, 128, 16),
+        )
+        .expect("Should parse item frame even if pos is slightly outside boundary");
+
+        assert_eq!(entity.id, "minecraft:glow_item_frame");
+        match entity.kind {
+            EntityKindData::ItemFrame(f) => {
+                assert_eq!(f.item_id, "minecraft:diamond_sword");
+                assert_eq!(f.count, 1);
+                assert_eq!(f.rotation, 4);
+                assert!(f.is_glowing);
             }
             _ => panic!("Expected ItemFrame kind"),
         }

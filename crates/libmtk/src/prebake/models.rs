@@ -304,7 +304,13 @@ pub(crate) fn prebake_all_models_with_progress(
             baked.rebuild_face_buckets();
             baked.deduplicate_faces();
 
-            let keys = vec![loc.as_string(), loc.path.clone()];
+            let mut keys = vec![loc.as_string(), loc.path.clone()];
+            if let Some(item_name) = loc.path.strip_prefix("item/") {
+                keys.push(format!("{}:{}", loc.namespace, item_name));
+                if loc.namespace == "minecraft" {
+                    keys.push(item_name.to_string());
+                }
+            }
 
             item_throttler.inc();
             Some((keys, baked))
