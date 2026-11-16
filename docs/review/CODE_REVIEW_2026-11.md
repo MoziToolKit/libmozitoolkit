@@ -248,3 +248,23 @@ commit `e1e3ae3` 把 `ItemTransforms` / `GuiLight` 烘进了 `BakedModel`，comm
 **未完成且必须回补的**：WS-1/2/4/5/6/8/10 全部；WS-3 的 `write_str` 上界与 JSON 失败改为协议错误；WS-7 的模型库生产面迁移；`ItemComponentsData` 三个死字段的删除。
 
 **测试结论修正**：初次审查中"gallery 材质槽偏移"与"`Vec<bool>` 位压缩越界"两条为假阳性，已在 §3.4 与 §5 标注。这说明并行审计的结论必须先复现再动手——本轮 8 份报告里已出现 2 条假阳性。
+
+---
+
+## 7. 追查记录：物品模型的 display 数据为什么是"猜"的（2026-11-16 补测）
+
+用真实 `.ci-cache`（`mtk_fp_db708a1fa2868db1`，20496 个模型）逐 key 精确检查，结论如下。
+
+**平面物品是好的**：数据库里 1668 个 `minecraft:item/*` 条目，**0 个** 是默认 `transforms`。`diamond_sword`（102 面）、`golden_apple`（52 面）、`lantern`、`torch` 都有完整 `fixed/gui/ground/...` 与 `gui_light`。所以"只序列化了平面模型的缩放"这个观察，准确的说法是：
+
+**三维物品模型根本没进数据库。** 1271 个原版 `models/item/*.json` 里有 **46 个缺失**，正是 `builtin/entity`（BEWLR）那一类：6 种箱子、18 种潜影盒、`banner`、`shield`、`conduit`、`decorated_pot`、`dragon_head`、`trident_in_hand/throwing` 等。
+
+而 `BakedModelDatabase::get_item("minecraft:item/chest")` 在精确查找失败后，会回退到 `self.get(clean)` —— 也就是**方块状态的模糊匹配器**，实测返回 `minecraft:chest` 方块模型（3 元素 / 18 面 / `transforms == default` / 无 `gui_light`）。这就是"大小和朝向全靠猜"的机制：
+
+1. 物品模型缺失（`prebake/models.rs` 空 elements 且无图层贴图 → `baked?` 静默丢弃）；
+2. `get_item` 用方块模型顶上，而方块模型不一定有 display（`block/chest` 链就没有，`block/stone` 链有）；
+3. 展示框/GUI 拿到单位变换，尺寸与朝向自然全错，且**没有任何 warning**。
+
+这与 §2.3 是同一类错误的两个面：能查到的数据不在生产 API 上，查不到的数据被静默替换成"看起来能用"的东西。
+
+分类与修法见 `FIX_BACKLOG.md` 的 M-01 附表（A 抽象模板 13 / B 回退方块几何 27 / C 复用内置 1 / D 专用几何或显式不支持 5）。
