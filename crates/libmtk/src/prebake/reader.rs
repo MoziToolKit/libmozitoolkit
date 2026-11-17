@@ -231,16 +231,66 @@ impl AssetCacheReader {
         output_dir: impl AsRef<Path>,
     ) -> Result<Vec<PathBuf>, MtkError> {
         let out_dir = output_dir.as_ref();
-        fs::create_dir_all(out_dir)?;
-        let mut extracted = Vec::new();
+        let mut targets_to_extract = Vec::new();
 
         for id in self.reader.iter_chunk_identifiers(*b"ATLS") {
             if let Some(filename) = id.strip_prefix("atlas/textures/") {
-                let target = out_dir.join(filename);
-                self.reader.extract_chunk_to_file(id, &target)?;
-                extracted.push(target);
+                let filename_path = Path::new(filename);
+                if filename.is_empty() || filename_path.as_os_str().is_empty() {
+                    return Err(MtkError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("Empty chunk filename in '{}'", id),
+                    )));
+                }
+
+                for segment in filename.split(['/', '\\']) {
+                    if segment == ".." {
+                        return Err(MtkError::Io(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            format!("Path traversal with '..' rejected in chunk id '{}'", id),
+                        )));
+                    }
+                }
+
+                let mut target = out_dir.to_path_buf();
+                for comp in filename_path.components() {
+                    match comp {
+                        std::path::Component::Normal(c) => target.push(c),
+                        std::path::Component::CurDir => {}
+                        std::path::Component::ParentDir => {
+                            return Err(MtkError::Io(std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                format!("Path traversal with '..' rejected in chunk id '{}'", id),
+                            )));
+                        }
+                        std::path::Component::RootDir | std::path::Component::Prefix(_) => {
+                            return Err(MtkError::Io(std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                format!("Absolute path rejected in chunk id '{}'", id),
+                            )));
+                        }
+                    }
+                }
+
+                if target == out_dir {
+                    return Err(MtkError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("Invalid target path for chunk id '{}'", id),
+                    )));
+                }
+
+                targets_to_extract.push((id, target));
             }
         }
+
+        fs::create_dir_all(out_dir)?;
+        let mut extracted = Vec::new();
+
+        for (id, target) in targets_to_extract {
+            self.reader.extract_chunk_to_file(id, &target)?;
+            extracted.push(target);
+        }
+
         if let Ok(mapping_str) = self.reader.read_chunk_str("atlas/mapping") {
             let target = out_dir.join("atlas_mapping.json");
             fs::write(&target, mapping_str)?;

@@ -14,6 +14,8 @@ pub(crate) const REGION_TOTAL_CHUNKS: usize = REGION_CHUNKS_AXIS * REGION_CHUNKS
 pub(crate) const REGION_HEADER_SIZE: usize = 4096;
 /// Size of one Anvil sector in bytes (4 KiB).
 pub(crate) const SECTOR_SIZE: usize = 4096;
+/// Maximum allowed size of decompressed chunk data (64 MiB).
+pub(crate) const MAX_DECOMPRESSED_CHUNK_SIZE: usize = 64 * 1024 * 1024;
 
 /// Location entry inside an Anvil region file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,6 +49,16 @@ impl RegionFile {
     /// Opens an Anvil `.mca` region file and loads its 4096-byte chunk location header.
     pub(crate) fn open(path: &Path) -> Result<Self, SaveError> {
         let mut file = File::open(path)?;
+        let file_len = file.metadata()?.len();
+        if file_len < REGION_HEADER_SIZE as u64 {
+            return Err(SaveError::InvalidRegionHeader(format!(
+                "Region file {} size ({} bytes) is smaller than header size ({} bytes)",
+                path.display(),
+                file_len,
+                REGION_HEADER_SIZE
+            )));
+        }
+
         let mut header = [0u8; REGION_HEADER_SIZE];
         file.read_exact(&mut header).map_err(|e| {
             SaveError::InvalidRegionHeader(format!(
@@ -110,16 +122,66 @@ impl RegionFile {
             return Ok(None);
         }
 
+        if loc.sector_offset < 2 {
+            return Err(SaveError::InvalidRegionHeader(format!(
+                "Chunk ({chunk_x}, {chunk_z}) has invalid sector offset: {}",
+                loc.sector_offset
+            )));
+        }
+
+        let file_len = self.file.metadata()?.len();
+        let sector_end = (loc.sector_offset as u64)
+            .checked_add(loc.sector_count as u64)
+            .ok_or_else(|| {
+                SaveError::InvalidRegionHeader("Sector offset calculation overflow".into())
+            })?
+            .checked_mul(SECTOR_SIZE as u64)
+            .ok_or_else(|| {
+                SaveError::InvalidRegionHeader("Sector byte offset calculation overflow".into())
+            })?;
+
+        if sector_end > file_len {
+            return Err(SaveError::InvalidRegionHeader(format!(
+                "Chunk ({chunk_x}, {chunk_z}) sector allocation extends past EOF ({sector_end} > {file_len})"
+            )));
+        }
+
         // Seek to chunk sector offset
         self.file.seek(SeekFrom::Start(loc.file_offset()))?;
 
         // 4 bytes: length of chunk payload (big endian)
         let mut len_buf = [0u8; 4];
-        self.file.read_exact(&mut len_buf)?;
+        self.file.read_exact(&mut len_buf).map_err(|e| {
+            SaveError::InvalidChunkData(format!(
+                "Failed to read chunk length for ({chunk_x}, {chunk_z}): {e}"
+            ))
+        })?;
         let chunk_len = u32::from_be_bytes(len_buf);
 
         if chunk_len == 0 {
             return Ok(None);
+        }
+
+        let allocated_bytes = (loc.sector_count as u64) * (SECTOR_SIZE as u64);
+        let max_payload_len = allocated_bytes.saturating_sub(4);
+        if (chunk_len as u64) > max_payload_len {
+            return Err(SaveError::InvalidChunkData(format!(
+                "Chunk length {chunk_len} exceeds allocated sector capacity ({max_payload_len} bytes in {} sectors)",
+                loc.sector_count
+            )));
+        }
+
+        let chunk_payload_end = loc
+            .file_offset()
+            .checked_add(4)
+            .and_then(|v| v.checked_add(chunk_len as u64))
+            .ok_or_else(|| {
+                SaveError::InvalidChunkData("Chunk payload offset calculation overflow".into())
+            })?;
+        if chunk_payload_end > file_len {
+            return Err(SaveError::InvalidChunkData(format!(
+                "Chunk payload extends past file length ({chunk_payload_end} > {file_len})"
+            )));
         }
 
         // 1 byte: compression type
@@ -130,30 +192,46 @@ impl RegionFile {
         let mut compressed_data = vec![0u8; compressed_size];
         self.file.read_exact(&mut compressed_data)?;
 
-        let mut decompressed = Vec::new();
-        match comp_type[0] {
+        let decompressed = match comp_type[0] {
             1 => {
                 // GZip
-                let mut gz = GzDecoder::new(&compressed_data[..]);
-                gz.read_to_end(&mut decompressed).map_err(|e| {
-                    SaveError::DecompressionFailed(format!("GZip decompression error: {}", e))
-                })?;
+                let gz = GzDecoder::new(&compressed_data[..]);
+                Self::decompress_limited(gz, "GZip")?
             }
             2 => {
                 // Zlib / Deflate (standard Java Edition)
-                let mut zlib = ZlibDecoder::new(&compressed_data[..]);
-                zlib.read_to_end(&mut decompressed).map_err(|e| {
-                    SaveError::DecompressionFailed(format!("Zlib decompression error: {}", e))
-                })?;
+                let zlib = ZlibDecoder::new(&compressed_data[..]);
+                Self::decompress_limited(zlib, "Zlib")?
             }
             3 => {
                 // Uncompressed
-                decompressed = compressed_data;
+                if compressed_data.len() > MAX_DECOMPRESSED_CHUNK_SIZE {
+                    return Err(SaveError::InvalidChunkData(format!(
+                        "Uncompressed chunk size {} exceeds 64 MiB limit",
+                        compressed_data.len()
+                    )));
+                }
+                compressed_data
             }
             other => return Err(SaveError::UnsupportedCompression(other)),
-        }
+        };
 
         Ok(Some(decompressed))
+    }
+
+    fn decompress_limited<R: Read>(mut reader: R, codec: &str) -> Result<Vec<u8>, SaveError> {
+        let mut decompressed = Vec::new();
+        let mut take = (&mut reader).take((MAX_DECOMPRESSED_CHUNK_SIZE as u64) + 1);
+        take.read_to_end(&mut decompressed).map_err(|e| {
+            SaveError::DecompressionFailed(format!("{codec} decompression error: {e}"))
+        })?;
+        if decompressed.len() > MAX_DECOMPRESSED_CHUNK_SIZE {
+            return Err(SaveError::DecompressionFailed(format!(
+                "{codec} decompressed chunk exceeded 64 MiB limit (got {} bytes)",
+                decompressed.len()
+            )));
+        }
+        Ok(decompressed)
     }
 }
 
@@ -214,6 +292,224 @@ mod tests {
             .expect("gzip chunk should be present");
         assert_eq!(decoded, payload);
         drop(region);
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn test_region_location_pointing_past_eof_returns_err() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        // 3 sectors total (12 KiB). Chunk (0,0) location points to sector 100.
+        let mut bytes = vec![0u8; SECTOR_SIZE * 3];
+        bytes[0..3].copy_from_slice(&[0, 0, 100]);
+        bytes[3] = 1;
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "mtk_save_past_eof_{}_{}.mca",
+            std::process::id(),
+            unique
+        ));
+        std::fs::write(&path, &bytes).unwrap();
+
+        let mut region = RegionFile::open(&path).unwrap();
+        let result = region.read_chunk_decompressed(0, 0);
+        assert!(
+            matches!(result, Err(SaveError::InvalidRegionHeader(_))),
+            "Expected InvalidRegionHeader, got: {:?}",
+            result
+        );
+        drop(region);
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn test_region_location_invalid_low_sector_offset_returns_err() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        // Chunk (0,0) points to sector 1 (timestamp table), which is < 2.
+        let mut bytes = vec![0u8; SECTOR_SIZE * 3];
+        bytes[0..3].copy_from_slice(&[0, 0, 1]);
+        bytes[3] = 1;
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "mtk_save_low_sector_{}_{}.mca",
+            std::process::id(),
+            unique
+        ));
+        std::fs::write(&path, &bytes).unwrap();
+
+        let mut region = RegionFile::open(&path).unwrap();
+        let result = region.read_chunk_decompressed(0, 0);
+        assert!(
+            matches!(result, Err(SaveError::InvalidRegionHeader(_))),
+            "Expected InvalidRegionHeader, got: {:?}",
+            result
+        );
+        drop(region);
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn test_region_chunk_length_exceeding_sector_capacity_returns_err() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        // Chunk (0,0) starts at sector 2 with sector_count 1 (4 KiB max).
+        // File has 3 sectors (12 KiB).
+        let mut bytes = vec![0u8; SECTOR_SIZE * 3];
+        bytes[0..3].copy_from_slice(&[0, 0, 2]);
+        bytes[3] = 1;
+
+        let data_offset = SECTOR_SIZE * 2;
+        // Hostile chunk length: 0x7FFF_FFFF (2 GiB)
+        let hostile_len: u32 = 0x7FFF_FFFF;
+        bytes[data_offset..data_offset + 4].copy_from_slice(&hostile_len.to_be_bytes());
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "mtk_save_huge_len_{}_{}.mca",
+            std::process::id(),
+            unique
+        ));
+        std::fs::write(&path, &bytes).unwrap();
+
+        let mut region = RegionFile::open(&path).unwrap();
+        let result = region.read_chunk_decompressed(0, 0);
+        assert!(
+            matches!(result, Err(SaveError::InvalidChunkData(_))),
+            "Expected InvalidChunkData, got: {:?}",
+            result
+        );
+        drop(region);
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn test_region_decompressed_gzip_exceeding_cap_returns_err() {
+        use flate2::write::GzEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        // 65 MiB of zeros compresses to ~65 KiB
+        let bomb_payload = vec![0u8; 65 * 1024 * 1024];
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
+        encoder.write_all(&bomb_payload).unwrap();
+        let compressed = encoder.finish().unwrap();
+
+        let sectors_needed = (compressed.len() + 5).div_ceil(SECTOR_SIZE) as u8;
+        let total_sectors = 2 + sectors_needed as usize;
+        let mut bytes = vec![0u8; SECTOR_SIZE * total_sectors];
+        bytes[0..3].copy_from_slice(&[0, 0, 2]);
+        bytes[3] = sectors_needed;
+
+        let data_offset = SECTOR_SIZE * 2;
+        let declared_len = (compressed.len() + 1) as u32;
+        bytes[data_offset..data_offset + 4].copy_from_slice(&declared_len.to_be_bytes());
+        bytes[data_offset + 4] = 1; // GZip
+        bytes[data_offset + 5..data_offset + 5 + compressed.len()].copy_from_slice(&compressed);
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "mtk_save_gz_bomb_{}_{}.mca",
+            std::process::id(),
+            unique
+        ));
+        std::fs::write(&path, &bytes).unwrap();
+
+        let mut region = RegionFile::open(&path).unwrap();
+        let result = region.read_chunk_decompressed(0, 0);
+        assert!(
+            matches!(result, Err(SaveError::DecompressionFailed(_))),
+            "Expected DecompressionFailed, got: {:?}",
+            result
+        );
+        drop(region);
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn test_region_decompressed_zlib_exceeding_cap_returns_err() {
+        use flate2::write::ZlibEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        // 65 MiB of zeros
+        let bomb_payload = vec![0u8; 65 * 1024 * 1024];
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
+        encoder.write_all(&bomb_payload).unwrap();
+        let compressed = encoder.finish().unwrap();
+
+        let sectors_needed = (compressed.len() + 5).div_ceil(SECTOR_SIZE) as u8;
+        let total_sectors = 2 + sectors_needed as usize;
+        let mut bytes = vec![0u8; SECTOR_SIZE * total_sectors];
+        bytes[0..3].copy_from_slice(&[0, 0, 2]);
+        bytes[3] = sectors_needed;
+
+        let data_offset = SECTOR_SIZE * 2;
+        let declared_len = (compressed.len() + 1) as u32;
+        bytes[data_offset..data_offset + 4].copy_from_slice(&declared_len.to_be_bytes());
+        bytes[data_offset + 4] = 2; // Zlib
+        bytes[data_offset + 5..data_offset + 5 + compressed.len()].copy_from_slice(&compressed);
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "mtk_save_zlib_bomb_{}_{}.mca",
+            std::process::id(),
+            unique
+        ));
+        std::fs::write(&path, &bytes).unwrap();
+
+        let mut region = RegionFile::open(&path).unwrap();
+        let result = region.read_chunk_decompressed(0, 0);
+        assert!(
+            matches!(result, Err(SaveError::DecompressionFailed(_))),
+            "Expected DecompressionFailed, got: {:?}",
+            result
+        );
+        drop(region);
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn test_malformed_location_table_file_too_small_returns_err() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "mtk_save_too_small_{}_{}.mca",
+            std::process::id(),
+            unique
+        ));
+        // Only 100 bytes (header requires 4096 bytes)
+        std::fs::write(&path, [0u8; 100]).unwrap();
+
+        let result = RegionFile::open(&path);
+        assert!(
+            matches!(result, Err(SaveError::InvalidRegionHeader(_))),
+            "Expected InvalidRegionHeader, got: {:?}",
+            result
+        );
         std::fs::remove_file(&path).unwrap();
     }
 }

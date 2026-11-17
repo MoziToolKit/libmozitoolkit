@@ -6,7 +6,7 @@ use std::path::Path;
 
 use crate::error::{PackageError, PackageResult};
 use crate::header::{CompressionType, PackageHeader, HEADER_SIZE};
-use crate::toc::TableOfContents;
+use crate::toc::{TableOfContents, MAX_DECOMPRESSED_CHUNK_SIZE};
 
 enum Storage {
     #[cfg(feature = "mmap")]
@@ -74,11 +74,12 @@ impl MtkPackageReader {
 
     fn from_storage(storage: Storage) -> PackageResult<Self> {
         let slice = storage.as_slice();
-        if slice.len() < HEADER_SIZE {
+        let file_len = slice.len() as u64;
+        if file_len < HEADER_SIZE as u64 {
             return Err(PackageError::OutOfBounds {
                 offset: 0,
                 length: HEADER_SIZE as u64,
-                file_size: slice.len() as u64,
+                file_size: file_len,
             });
         }
 
@@ -89,13 +90,18 @@ impl MtkPackageReader {
         let oob = || PackageError::OutOfBounds {
             offset: header.toc_offset,
             length: header.toc_length,
-            file_size: slice.len() as u64,
+            file_size: file_len,
         };
         let toc_start = usize::try_from(header.toc_offset).map_err(|_| oob())?;
         let toc_len = usize::try_from(header.toc_length).map_err(|_| oob())?;
         let toc_end = toc_start.checked_add(toc_len).ok_or_else(oob)?;
-        if toc_end > slice.len() {
+        if toc_end as u64 > file_len || header.toc_offset < HEADER_SIZE as u64 {
             return Err(oob());
+        }
+        if header.toc_offset % 64 != 0 {
+            return Err(PackageError::UnalignedOffset {
+                offset: header.toc_offset,
+            });
         }
 
         let toc_slice = &slice[toc_start..toc_end];
@@ -104,6 +110,82 @@ impl MtkPackageReader {
         } else {
             TableOfContents::decode_bytes(toc_slice)?
         };
+
+        // 3. Validate header.chunk_count matches TOC entries length
+        if header.chunk_count as usize != toc.entries.len() {
+            return Err(PackageError::InvalidToc(format!(
+                "Chunk count mismatch: header declared {}, TOC contains {}",
+                header.chunk_count,
+                toc.entries.len()
+            )));
+        }
+
+        // 4. Validate all TOC entries: offsets, alignment, bounds, duplicates, and non-overlapping
+        let mut seen_ids = std::collections::HashSet::new();
+        let mut intervals = Vec::with_capacity(toc.entries.len() + 1);
+
+        for entry in &toc.entries {
+            if !seen_ids.insert(&entry.identifier) {
+                return Err(PackageError::InvalidToc(format!(
+                    "Duplicate chunk identifier: '{}'",
+                    entry.identifier
+                )));
+            }
+
+            if entry.offset < HEADER_SIZE as u64 {
+                return Err(PackageError::OutOfBounds {
+                    offset: entry.offset,
+                    length: entry.compressed_size,
+                    file_size: file_len,
+                });
+            }
+
+            if entry.offset % 64 != 0 {
+                return Err(PackageError::UnalignedOffset {
+                    offset: entry.offset,
+                });
+            }
+
+            let end = entry.offset.checked_add(entry.compressed_size).ok_or(
+                PackageError::OutOfBounds {
+                    offset: entry.offset,
+                    length: entry.compressed_size,
+                    file_size: file_len,
+                },
+            )?;
+
+            if end > file_len {
+                return Err(PackageError::OutOfBounds {
+                    offset: entry.offset,
+                    length: entry.compressed_size,
+                    file_size: file_len,
+                });
+            }
+
+            intervals.push((entry.offset, end, entry.identifier.as_str()));
+        }
+
+        // Add TOC interval to verify chunks do not overlap with TOC
+        let toc_end_u64 = header
+            .toc_offset
+            .checked_add(header.toc_length)
+            .ok_or_else(oob)?;
+        intervals.push((header.toc_offset, toc_end_u64, "[TOC]"));
+
+        // Sort intervals by start offset, then end offset
+        intervals.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+
+        for i in 0..intervals.len().saturating_sub(1) {
+            let (curr_start, curr_end, curr_id) = intervals[i];
+            let (next_start, _, next_id) = intervals[i + 1];
+
+            if curr_end > next_start || curr_start == next_start {
+                return Err(PackageError::InvalidToc(format!(
+                    "Overlapping package entries: '{}' [{curr_start}..{curr_end}) and '{}' starting at {next_start}",
+                    curr_id, next_id
+                )));
+            }
+        }
 
         Ok(Self {
             storage,
@@ -175,16 +257,83 @@ impl MtkPackageReader {
             .get_by_identifier(identifier)
             .ok_or_else(|| PackageError::ChunkNotFound(identifier.to_string()))?;
 
+        if entry.decompressed_size > MAX_DECOMPRESSED_CHUNK_SIZE {
+            return Err(PackageError::DecompressionFailed {
+                identifier: identifier.to_string(),
+                source: std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "Declared decompressed size {} exceeds limit of {} bytes",
+                        entry.decompressed_size, MAX_DECOMPRESSED_CHUNK_SIZE
+                    ),
+                ),
+            });
+        }
+
         let raw_payload = self.get_chunk_raw(identifier)?;
 
         let decompressed = match entry.compression {
-            CompressionType::None => raw_payload.to_vec(),
-            CompressionType::Zstd => zstd::decode_all(Cursor::new(raw_payload)).map_err(|e| {
-                PackageError::DecompressionFailed {
-                    identifier: identifier.to_string(),
-                    source: e,
+            CompressionType::None => {
+                if raw_payload.len() as u64 != entry.decompressed_size {
+                    return Err(PackageError::DecompressionFailed {
+                        identifier: identifier.to_string(),
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!(
+                                "Decompressed size mismatch for uncompressed chunk '{}': declared {}, raw {}",
+                                identifier,
+                                entry.decompressed_size,
+                                raw_payload.len()
+                            ),
+                        ),
+                    });
                 }
-            })?,
+                raw_payload.to_vec()
+            }
+            CompressionType::Zstd => {
+                let mut decoder = zstd::Decoder::new(Cursor::new(raw_payload)).map_err(|e| {
+                    PackageError::DecompressionFailed {
+                        identifier: identifier.to_string(),
+                        source: e,
+                    }
+                })?;
+                let initial_cap = (entry.decompressed_size as usize).min(1024 * 1024);
+                let mut buf = Vec::with_capacity(initial_cap);
+                let mut limited = (&mut decoder).take(MAX_DECOMPRESSED_CHUNK_SIZE + 1);
+                limited
+                    .read_to_end(&mut buf)
+                    .map_err(|e| PackageError::DecompressionFailed {
+                        identifier: identifier.to_string(),
+                        source: e,
+                    })?;
+                if buf.len() as u64 > MAX_DECOMPRESSED_CHUNK_SIZE {
+                    return Err(PackageError::DecompressionFailed {
+                        identifier: identifier.to_string(),
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!(
+                                "Decompressed chunk '{}' exceeds limit of {} bytes",
+                                identifier, MAX_DECOMPRESSED_CHUNK_SIZE
+                            ),
+                        ),
+                    });
+                }
+                if buf.len() as u64 != entry.decompressed_size {
+                    return Err(PackageError::DecompressionFailed {
+                        identifier: identifier.to_string(),
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!(
+                                "Decompressed size mismatch for chunk '{}': declared {}, got {}",
+                                identifier,
+                                entry.decompressed_size,
+                                buf.len()
+                            ),
+                        ),
+                    });
+                }
+                buf
+            }
         };
 
         // Verify checksum on decompressed payload
@@ -223,11 +372,53 @@ impl MtkPackageReader {
         identifier: &str,
         target_path: impl AsRef<Path>,
     ) -> PackageResult<()> {
+        if identifier.is_empty() {
+            return Err(PackageError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Chunk identifier cannot be empty for file extraction",
+            )));
+        }
+
+        let id_path = Path::new(identifier);
+        for comp in id_path.components() {
+            match comp {
+                std::path::Component::ParentDir => {
+                    return Err(PackageError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!(
+                            "Path traversal with '..' rejected in chunk id '{}'",
+                            identifier
+                        ),
+                    )));
+                }
+                std::path::Component::RootDir | std::path::Component::Prefix(_) => {
+                    return Err(PackageError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("Absolute path rejected in chunk id '{}'", identifier),
+                    )));
+                }
+                _ => {}
+            }
+        }
+
+        for segment in identifier.split(['/', '\\']) {
+            if segment == ".." {
+                return Err(PackageError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!(
+                        "Path traversal with '..' rejected in chunk id '{}'",
+                        identifier
+                    ),
+                )));
+            }
+        }
+
         let data = self.read_chunk_decompressed(identifier)?;
-        if let Some(parent) = target_path.as_ref().parent() {
+        let target = target_path.as_ref();
+        if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(target_path, data)?;
+        std::fs::write(target, data)?;
         Ok(())
     }
 }

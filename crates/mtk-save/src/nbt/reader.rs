@@ -48,12 +48,18 @@ impl<'a> SliceReader<'a> {
     }
 
     #[inline]
+    pub fn remaining(&self) -> usize {
+        self.slice.len().saturating_sub(self.pos)
+    }
+
+    #[inline]
     pub fn read_exact(&mut self, n: usize) -> Result<&'a [u8], NbtError> {
-        if self.pos + n > self.slice.len() {
+        let new_pos = self.pos.checked_add(n).ok_or(NbtError::UnexpectedEof)?;
+        if new_pos > self.slice.len() {
             return Err(NbtError::UnexpectedEof);
         }
-        let sub = &self.slice[self.pos..self.pos + n];
-        self.pos += n;
+        let sub = &self.slice[self.pos..new_pos];
+        self.pos = new_pos;
         Ok(sub)
     }
 
@@ -100,6 +106,12 @@ impl<'a> SliceReader<'a> {
     #[inline]
     pub fn read_str(&mut self) -> Result<NbtStr<'a>, NbtError> {
         let len = self.read_u16_be()? as usize;
+        if self.remaining() < len {
+            return Err(NbtError::InvalidData(format!(
+                "String length {len} exceeds remaining stream size {}",
+                self.remaining()
+            )));
+        }
         let bytes = self.read_exact(len)?;
         let s = match str::from_utf8(bytes) {
             Ok(v) => Cow::Borrowed(v),
@@ -157,17 +169,55 @@ pub fn read_tag_payload<'a>(
                     "Negative byte array length: {len}"
                 )));
             }
-            let bytes = reader.read_exact(len as usize)?;
+            let count = len as usize;
+            if reader.remaining() < count {
+                return Err(NbtError::InvalidData(format!(
+                    "Byte array length {count} exceeds remaining stream size {}",
+                    reader.remaining()
+                )));
+            }
+            let bytes = reader.read_exact(count)?;
             Ok(NbtTag::ByteArray(bytes))
         }
         TAG_STRING => Ok(NbtTag::String(reader.read_str()?)),
         TAG_LIST => {
             let item_type = reader.read_u8()?;
             let len = reader.read_i32_be()?;
-            if len <= 0 {
+            if len < 0 {
+                return Err(NbtError::InvalidData(format!(
+                    "Negative list length: {len}"
+                )));
+            }
+            if len == 0 {
                 return Ok(NbtTag::List(NbtList::Empty));
             }
             let count = len as usize;
+            let min_size = match item_type {
+                TAG_BYTE => 1,
+                TAG_SHORT => 2,
+                TAG_INT => 4,
+                TAG_LONG => 8,
+                TAG_FLOAT => 4,
+                TAG_DOUBLE => 8,
+                TAG_BYTE_ARRAY => 4,
+                TAG_STRING => 2,
+                TAG_LIST => 5,
+                TAG_COMPOUND => 1,
+                TAG_INT_ARRAY => 4,
+                TAG_LONG_ARRAY => 4,
+                unknown => return Err(NbtError::UnknownTagId(unknown)),
+            };
+            let required_bytes = count.checked_mul(min_size).ok_or_else(|| {
+                NbtError::InvalidData(format!(
+                    "List length {count} overflows size calculation for element type {item_type}"
+                ))
+            })?;
+            if reader.remaining() < required_bytes {
+                return Err(NbtError::InvalidData(format!(
+                    "List length {count} of type {item_type} requires at least {required_bytes} bytes, but only {} bytes remain",
+                    reader.remaining()
+                )));
+            }
             match item_type {
                 TAG_BYTE => {
                     let mut vec = Vec::with_capacity(count);
@@ -220,7 +270,14 @@ pub fn read_tag_payload<'a>(
                                 "Negative byte array in list".into(),
                             ));
                         }
-                        vec.push(reader.read_exact(sub_len as usize)?);
+                        let sub_count = sub_len as usize;
+                        if reader.remaining() < sub_count {
+                            return Err(NbtError::InvalidData(format!(
+                                "Byte array in list requires {sub_count} bytes, but only {} remain",
+                                reader.remaining()
+                            )));
+                        }
+                        vec.push(reader.read_exact(sub_count)?);
                     }
                     Ok(NbtTag::List(NbtList::ByteArray(vec)))
                 }
@@ -255,7 +312,17 @@ pub fn read_tag_payload<'a>(
                         if sub_len < 0 {
                             return Err(NbtError::InvalidData("Negative int array in list".into()));
                         }
-                        vec.push(reader.read_exact(sub_len as usize * 4)?);
+                        let sub_count = sub_len as usize;
+                        let byte_count = sub_count.checked_mul(4).ok_or_else(|| {
+                            NbtError::InvalidData("Int array element length overflow".into())
+                        })?;
+                        if reader.remaining() < byte_count {
+                            return Err(NbtError::InvalidData(format!(
+                                "Int array in list requires {byte_count} bytes, but only {} remain",
+                                reader.remaining()
+                            )));
+                        }
+                        vec.push(reader.read_exact(byte_count)?);
                     }
                     Ok(NbtTag::List(NbtList::IntArray(vec)))
                 }
@@ -268,7 +335,17 @@ pub fn read_tag_payload<'a>(
                                 "Negative long array in list".into(),
                             ));
                         }
-                        vec.push(reader.read_exact(sub_len as usize * 8)?);
+                        let sub_count = sub_len as usize;
+                        let byte_count = sub_count.checked_mul(8).ok_or_else(|| {
+                            NbtError::InvalidData("Long array element length overflow".into())
+                        })?;
+                        if reader.remaining() < byte_count {
+                            return Err(NbtError::InvalidData(format!(
+                                "Long array in list requires {byte_count} bytes, but only {} remain",
+                                reader.remaining()
+                            )));
+                        }
+                        vec.push(reader.read_exact(byte_count)?);
                     }
                     Ok(NbtTag::List(NbtList::LongArray(vec)))
                 }
@@ -283,7 +360,16 @@ pub fn read_tag_payload<'a>(
                     "Negative int array length: {len}"
                 )));
             }
-            let byte_count = len as usize * 4;
+            let count = len as usize;
+            let byte_count = count.checked_mul(4).ok_or_else(|| {
+                NbtError::InvalidData(format!("Int array length {count} overflows usize"))
+            })?;
+            if reader.remaining() < byte_count {
+                return Err(NbtError::InvalidData(format!(
+                    "Int array length {count} requires {byte_count} bytes, but only {} remain",
+                    reader.remaining()
+                )));
+            }
             let bytes = reader.read_exact(byte_count)?;
             Ok(NbtTag::IntArray(bytes))
         }
@@ -294,10 +380,128 @@ pub fn read_tag_payload<'a>(
                     "Negative long array length: {len}"
                 )));
             }
-            let byte_count = len as usize * 8;
+            let count = len as usize;
+            let byte_count = count.checked_mul(8).ok_or_else(|| {
+                NbtError::InvalidData(format!("Long array length {count} overflows usize"))
+            })?;
+            if reader.remaining() < byte_count {
+                return Err(NbtError::InvalidData(format!(
+                    "Long array length {count} requires {byte_count} bytes, but only {} remain",
+                    reader.remaining()
+                )));
+            }
             let bytes = reader.read_exact(byte_count)?;
             Ok(NbtTag::LongArray(bytes))
         }
         unknown => Err(NbtError::UnknownTagId(unknown)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_list_huge_length_returns_err_immediately() {
+        let all_types = [
+            TAG_BYTE,
+            TAG_SHORT,
+            TAG_INT,
+            TAG_LONG,
+            TAG_FLOAT,
+            TAG_DOUBLE,
+            TAG_BYTE_ARRAY,
+            TAG_STRING,
+            TAG_LIST,
+            TAG_COMPOUND,
+            TAG_INT_ARRAY,
+            TAG_LONG_ARRAY,
+        ];
+
+        for &item_type in &all_types {
+            let mut payload = Vec::new();
+            payload.push(item_type);
+            payload.extend_from_slice(&0x7FFF_FFFFi32.to_be_bytes());
+            payload.extend_from_slice(&[1, 2, 3]);
+
+            let mut reader = SliceReader::new(&payload);
+            let result = read_tag_payload(&mut reader, TAG_LIST, 0);
+            assert!(
+                matches!(result, Err(NbtError::InvalidData(_))),
+                "item_type {item_type} did not return InvalidData"
+            );
+        }
+    }
+
+    #[test]
+    fn test_negative_list_length_returns_err() {
+        let mut payload = Vec::new();
+        payload.push(TAG_INT);
+        payload.extend_from_slice(&(-1i32).to_be_bytes());
+
+        let mut reader = SliceReader::new(&payload);
+        let result = read_tag_payload(&mut reader, TAG_LIST, 0);
+        assert!(matches!(result, Err(NbtError::InvalidData(_))));
+    }
+
+    #[test]
+    fn test_truncated_string_length_returns_err() {
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&500u16.to_be_bytes());
+        payload.extend_from_slice(b"short");
+
+        let mut reader = SliceReader::new(&payload);
+        let result = reader.read_str();
+        assert!(matches!(result, Err(NbtError::InvalidData(_))));
+    }
+
+    #[test]
+    fn test_truncated_byte_array_length_returns_err() {
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&1000i32.to_be_bytes());
+        payload.extend_from_slice(&[1, 2, 3]);
+
+        let mut reader = SliceReader::new(&payload);
+        let result = read_tag_payload(&mut reader, TAG_BYTE_ARRAY, 0);
+        assert!(matches!(result, Err(NbtError::InvalidData(_))));
+    }
+
+    #[test]
+    fn test_truncated_int_and_long_array_returns_err() {
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&100i32.to_be_bytes());
+        payload.extend_from_slice(&[1, 2, 3, 4]);
+
+        let mut reader = SliceReader::new(&payload);
+        let result = read_tag_payload(&mut reader, TAG_INT_ARRAY, 0);
+        assert!(matches!(result, Err(NbtError::InvalidData(_))));
+
+        let mut payload2 = Vec::new();
+        payload2.extend_from_slice(&100i32.to_be_bytes());
+        payload2.extend_from_slice(&[1, 2, 3, 4]);
+
+        let mut reader2 = SliceReader::new(&payload2);
+        let result2 = read_tag_payload(&mut reader2, TAG_LONG_ARRAY, 0);
+        assert!(matches!(result2, Err(NbtError::InvalidData(_))));
+    }
+
+    #[test]
+    fn test_negative_array_lengths_return_err() {
+        for &tag in &[TAG_BYTE_ARRAY, TAG_INT_ARRAY, TAG_LONG_ARRAY] {
+            let mut payload = Vec::new();
+            payload.extend_from_slice(&(-5i32).to_be_bytes());
+
+            let mut reader = SliceReader::new(&payload);
+            let result = read_tag_payload(&mut reader, tag, 0);
+            assert!(matches!(result, Err(NbtError::InvalidData(_))));
+        }
+    }
+
+    #[test]
+    fn test_checked_cursor_math_avoids_overflow() {
+        let buf = [1u8, 2, 3];
+        let mut reader = SliceReader::new(&buf);
+        let result = reader.read_exact(usize::MAX);
+        assert!(matches!(result, Err(NbtError::UnexpectedEof)));
     }
 }

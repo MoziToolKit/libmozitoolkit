@@ -204,7 +204,7 @@ impl PackageHeader {
 
         let version_major = u16::from_le_bytes([slice[4], slice[5]]);
         let version_minor = u16::from_le_bytes([slice[6], slice[7]]);
-        if version_major != CURRENT_VERSION_MAJOR {
+        if version_major != CURRENT_VERSION_MAJOR || version_minor != CURRENT_VERSION_MINOR {
             return Err(PackageError::UnsupportedVersion {
                 major: version_major,
                 minor: version_minor,
@@ -335,6 +335,31 @@ mod tests {
         match err {
             PackageError::HeaderCrcMismatch { .. } => {}
             other => panic!("Expected HeaderCrcMismatch, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_newer_version_rejected() {
+        let header = PackageHeader::new_asset_cache([0u8; 16], 100);
+
+        // Newer major version
+        let mut bytes = header.to_bytes();
+        bytes[4..6].copy_from_slice(&2u16.to_le_bytes());
+        let crc = crc32fast::hash(&bytes[0..60]);
+        bytes[60..64].copy_from_slice(&crc.to_le_bytes());
+        match PackageHeader::from_bytes(&bytes) {
+            Err(PackageError::UnsupportedVersion { major: 2, minor: 1 }) => {}
+            other => panic!("Expected UnsupportedVersion(2, 1), got {:?}", other),
+        }
+
+        // Newer minor version
+        let mut bytes = header.to_bytes();
+        bytes[6..8].copy_from_slice(&2u16.to_le_bytes());
+        let crc = crc32fast::hash(&bytes[0..60]);
+        bytes[60..64].copy_from_slice(&crc.to_le_bytes());
+        match PackageHeader::from_bytes(&bytes) {
+            Err(PackageError::UnsupportedVersion { major: 1, minor: 2 }) => {}
+            other => panic!("Expected UnsupportedVersion(1, 2), got {:?}", other),
         }
     }
 }

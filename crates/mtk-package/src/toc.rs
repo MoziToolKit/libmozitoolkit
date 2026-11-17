@@ -6,6 +6,9 @@ use std::io::{Cursor, Read, Write};
 use crate::error::{PackageError, PackageResult};
 use crate::header::CompressionType;
 
+/// Maximum decompressed size allowed per chunk or TOC (64 MiB).
+pub(crate) const MAX_DECOMPRESSED_CHUNK_SIZE: u64 = 64 * 1024 * 1024;
+
 /// Single chunk metadata entry in Table of Contents.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ChunkEntry {
@@ -83,6 +86,12 @@ impl ChunkEntry {
         let identifier = String::from_utf8(id_vec)
             .map_err(|e| PackageError::InvalidToc(format!("Invalid UTF-8 identifier: {}", e)))?;
 
+        if identifier.is_empty() {
+            return Err(PackageError::InvalidToc(
+                "Chunk identifier cannot be empty".to_string(),
+            ));
+        }
+
         Ok(Self {
             chunk_type,
             offset,
@@ -155,6 +164,14 @@ impl TableOfContents {
 
     /// Deserializes TOC from raw uncompressed bytes.
     pub(crate) fn decode_bytes(slice: &[u8]) -> PackageResult<Self> {
+        if slice.len() as u64 > MAX_DECOMPRESSED_CHUNK_SIZE {
+            return Err(PackageError::InvalidToc(format!(
+                "TOC size {} exceeds {} byte limit",
+                slice.len(),
+                MAX_DECOMPRESSED_CHUNK_SIZE
+            )));
+        }
+
         let mut cursor = Cursor::new(slice);
         let mut buf4 = [0u8; 4];
         cursor
@@ -176,6 +193,12 @@ impl TableOfContents {
         let mut toc = Self::with_capacity(count);
         for _ in 0..count {
             let entry = ChunkEntry::read_from(&mut cursor)?;
+            if toc.index_by_id.contains_key(&entry.identifier) {
+                return Err(PackageError::InvalidToc(format!(
+                    "Duplicate chunk identifier: '{}'",
+                    entry.identifier
+                )));
+            }
             toc.add_entry(entry);
         }
         Ok(toc)
@@ -192,12 +215,32 @@ impl TableOfContents {
 
     /// Decodes TOC from Zstd compressed bytes.
     pub(crate) fn decode_zstd(compressed_slice: &[u8]) -> PackageResult<Self> {
-        let decompressed = zstd::decode_all(Cursor::new(compressed_slice)).map_err(|e| {
+        let mut decoder = zstd::Decoder::new(Cursor::new(compressed_slice)).map_err(|e| {
             PackageError::DecompressionFailed {
                 identifier: "TOC".to_string(),
                 source: e,
             }
         })?;
+        let mut decompressed = Vec::new();
+        let mut limited = (&mut decoder).take(MAX_DECOMPRESSED_CHUNK_SIZE + 1);
+        limited
+            .read_to_end(&mut decompressed)
+            .map_err(|e| PackageError::DecompressionFailed {
+                identifier: "TOC".to_string(),
+                source: e,
+            })?;
+        if decompressed.len() as u64 > MAX_DECOMPRESSED_CHUNK_SIZE {
+            return Err(PackageError::DecompressionFailed {
+                identifier: "TOC".to_string(),
+                source: std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "TOC decompressed size exceeds {} byte limit",
+                        MAX_DECOMPRESSED_CHUNK_SIZE
+                    ),
+                ),
+            });
+        }
         Self::decode_bytes(&decompressed)
     }
 }

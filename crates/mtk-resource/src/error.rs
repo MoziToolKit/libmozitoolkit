@@ -18,6 +18,10 @@ pub enum ResourceError {
     #[error("Zip archive error: {0}")]
     Zip(#[from] zip::result::ZipError),
 
+    #[cfg(feature = "zip")]
+    #[error("Zip entry '{name}' exceeds size limit ({size} > {max})")]
+    ZipEntryTooLarge { name: String, size: u64, max: u64 },
+
     #[error("Missing vanilla base pack: {0}")]
     MissingVanillaBasePack(String),
 
