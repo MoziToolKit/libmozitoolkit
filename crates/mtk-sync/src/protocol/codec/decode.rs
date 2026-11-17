@@ -141,11 +141,17 @@ pub(crate) fn read_str<'a>(
 }
 
 #[inline]
-pub(crate) fn decode_entity_payload(bytes: &[u8]) -> Option<mtk_model::BlockEntityData> {
+pub(crate) fn decode_entity_payload(
+    bytes: &[u8],
+) -> Result<Option<mtk_model::BlockEntityData>, ProtocolError> {
     if bytes.is_empty() {
-        return None;
+        return Ok(None);
     }
-    serde_json::from_slice::<mtk_model::BlockEntityData>(bytes).ok()
+    serde_json::from_slice::<mtk_model::BlockEntityData>(bytes)
+        .map(Some)
+        .map_err(|e| ProtocolError::InvalidPayload {
+            detail: e.to_string(),
+        })
 }
 
 /// Decodes binary buffer into a strongly typed `Packet`.
@@ -469,7 +475,7 @@ fn decode_delta_entity(buf: &[u8], offset: &mut usize) -> Result<Packet, Protoco
 
     let entity = if payload_len > 0 {
         let payload_slice = read_slice(buf, offset, payload_len, "DeltaEntity payload")?;
-        decode_entity_payload(payload_slice)
+        decode_entity_payload(payload_slice)?
     } else {
         None
     };

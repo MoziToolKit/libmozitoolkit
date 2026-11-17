@@ -169,8 +169,10 @@ fn dispatch_single_client_message(
                 }
                 // Every worker start supplies a HELLO carrying the session auth token.
                 let hello_pkt = initial_hello.clone();
-                let bytes = encode_packet(&hello_pkt);
-                let _ = cmd_sender.send(ClientCommand::Send(bytes));
+                if let Err(err) = crate::client::transport::queue_packet(cmd_sender, &hello_pkt) {
+                    let _ = event_sender
+                        .send(SyncEvent::Warning(format!("failed to encode HELLO: {err}")));
+                }
             }
             true
         }
@@ -464,7 +466,10 @@ pub(crate) fn handle_packet(
             super::handlers_control::handle_cancel(reason, state, event_sender);
         }
         Packet::Ping { timestamp } => {
-            super::handlers_control::handle_ping(timestamp, cmd_sender);
+            if let Err(err) = super::handlers_control::handle_ping(timestamp, cmd_sender) {
+                let _ =
+                    event_sender.send(SyncEvent::Warning(format!("failed to encode PONG: {err}")));
+            }
         }
         Packet::Error { message, .. } => {
             super::handlers_control::handle_error(message, state, event_sender);

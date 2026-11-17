@@ -61,6 +61,7 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerP
                 0i64,
                 format!("{:?}", reason),
             ),
+            ServerEvent::Warning(message) => (5i32, 0i64, 0i64, 0i64, message.clone()),
         };
 
         let j_msg = match env.new_string(msg) {

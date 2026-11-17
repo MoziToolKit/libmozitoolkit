@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::storage::point_cloud::VoxelPointCloud;
 use crate::storage::world::VoxelStorage;
-use crate::types::MesherConfig;
+use crate::types::{MesherConfig, VoxelError};
 
 /// High-throughput sparse voxel container optimized for scene interchange (`.mtkscene`).
 ///
@@ -20,6 +20,7 @@ use crate::types::MesherConfig;
 /// and column-oriented (Structure-of-Arrays) voxel data.
 #[derive(Debug, Clone, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "SparseVoxelPayloadDef"))]
 pub struct SparseVoxelPayload {
     /// Spatial bounding box [min_x, min_y, min_z, size_x, size_y, size_z].
     pub bounds: [i32; 6],
@@ -34,11 +35,40 @@ pub struct SparseVoxelPayload {
     pub columns: SparseVoxelColumns,
 }
 
+#[cfg(feature = "serde")]
+#[derive(Deserialize)]
+struct SparseVoxelPayloadDef {
+    bounds: [i32; 6],
+    state_palette: Vec<String>,
+    biome_palette: Vec<String>,
+    #[serde(default)]
+    entity_palette: Vec<String>,
+    columns: SparseVoxelColumns,
+}
+
+#[cfg(feature = "serde")]
+impl TryFrom<SparseVoxelPayloadDef> for SparseVoxelPayload {
+    type Error = String;
+
+    fn try_from(def: SparseVoxelPayloadDef) -> Result<Self, Self::Error> {
+        let payload = SparseVoxelPayload {
+            bounds: def.bounds,
+            state_palette: def.state_palette,
+            biome_palette: def.biome_palette,
+            entity_palette: def.entity_palette,
+            columns: def.columns,
+        };
+        payload.validate().map_err(|e| e.to_string())?;
+        Ok(payload)
+    }
+}
+
 /// Columnar arrays of sparse voxel coordinates and palette indices.
 ///
 /// The contiguous memory layout provides optimal compression ratio under Zstd.
 #[derive(Debug, Clone, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "SparseVoxelColumnsDef"))]
 pub struct SparseVoxelColumns {
     /// World integer coordinates X.
     pub x: Vec<i32>,
@@ -55,6 +85,90 @@ pub struct SparseVoxelColumns {
     /// Optional combined light levels (sky nibble << 4 | block nibble).
     #[cfg_attr(feature = "serde", serde(default))]
     pub light_levels: Option<Vec<u8>>,
+}
+
+#[cfg(feature = "serde")]
+#[derive(Deserialize)]
+struct SparseVoxelColumnsDef {
+    x: Vec<i32>,
+    y: Vec<i32>,
+    z: Vec<i32>,
+    state_indices: Vec<u16>,
+    biome_indices: Vec<u16>,
+    entity_indices: Vec<i32>,
+    #[serde(default)]
+    light_levels: Option<Vec<u8>>,
+}
+
+#[cfg(feature = "serde")]
+impl TryFrom<SparseVoxelColumnsDef> for SparseVoxelColumns {
+    type Error = String;
+
+    fn try_from(def: SparseVoxelColumnsDef) -> Result<Self, Self::Error> {
+        let cols = SparseVoxelColumns {
+            x: def.x,
+            y: def.y,
+            z: def.z,
+            state_indices: def.state_indices,
+            biome_indices: def.biome_indices,
+            entity_indices: def.entity_indices,
+            light_levels: def.light_levels,
+        };
+        cols.validate().map_err(|e| e.to_string())?;
+        Ok(cols)
+    }
+}
+
+impl SparseVoxelColumns {
+    /// Validates column length equality and internal invariants.
+    pub fn validate(&self) -> Result<(), VoxelError> {
+        let n = self.x.len();
+        if self.y.len() != n {
+            return Err(VoxelError::InvalidPointCloud(format!(
+                "Ragged SparseVoxelColumns: y.len() ({}) != x.len() ({})",
+                self.y.len(),
+                n
+            )));
+        }
+        if self.z.len() != n {
+            return Err(VoxelError::InvalidPointCloud(format!(
+                "Ragged SparseVoxelColumns: z.len() ({}) != x.len() ({})",
+                self.z.len(),
+                n
+            )));
+        }
+        if self.state_indices.len() != n {
+            return Err(VoxelError::InvalidPointCloud(format!(
+                "Ragged SparseVoxelColumns: state_indices.len() ({}) != x.len() ({})",
+                self.state_indices.len(),
+                n
+            )));
+        }
+        if self.biome_indices.len() != n {
+            return Err(VoxelError::InvalidPointCloud(format!(
+                "Ragged SparseVoxelColumns: biome_indices.len() ({}) != x.len() ({})",
+                self.biome_indices.len(),
+                n
+            )));
+        }
+        if self.entity_indices.len() != n {
+            return Err(VoxelError::InvalidPointCloud(format!(
+                "Ragged SparseVoxelColumns: entity_indices.len() ({}) != x.len() ({})",
+                self.entity_indices.len(),
+                n
+            )));
+        }
+        if let Some(ref l) = self.light_levels {
+            if l.len() != n {
+                return Err(VoxelError::InvalidPointCloud(format!(
+                    "Ragged SparseVoxelColumns: light_levels.len() ({}) != x.len() ({})",
+                    l.len(),
+                    n
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 impl SparseVoxelPayload {
@@ -156,38 +270,170 @@ impl SparseVoxelPayload {
         }
     }
 
-    /// Constructs a `SparseVoxelPayload` from a `VoxelPointCloud` with zero parsing overhead.
-    pub fn from_point_cloud(cloud: &VoxelPointCloud) -> Self {
-        let count = cloud.len();
-        let state_indices: Vec<u16> = cloud
-            .state_indices
-            .iter()
-            .map(|&i| i.max(0) as u16)
-            .collect();
+    /// Validates payload invariants: column lengths, palette sizes, and palette index bounds.
+    pub fn validate(&self) -> Result<(), VoxelError> {
+        self.columns.validate()?;
 
-        let biome_indices: Vec<u16> = cloud
-            .biome_indices
-            .iter()
-            .map(|&i| i.max(0) as u16)
-            .collect();
+        if self.state_palette.len() > (u16::MAX as usize + 1) {
+            return Err(VoxelError::InvalidPointCloud(format!(
+                "State palette length {} exceeds maximum representable size 65536",
+                self.state_palette.len()
+            )));
+        }
+        if self.biome_palette.len() > (u16::MAX as usize + 1) {
+            return Err(VoxelError::InvalidPointCloud(format!(
+                "Biome palette length {} exceeds maximum representable size 65536",
+                self.biome_palette.len()
+            )));
+        }
+
+        let n = self.len();
+        if n > 0 {
+            if self.state_palette.is_empty() {
+                return Err(VoxelError::InvalidPointCloud(
+                    "SparseVoxelPayload contains voxels but state_palette is empty".to_string(),
+                ));
+            }
+            if self.biome_palette.is_empty() {
+                return Err(VoxelError::InvalidPointCloud(
+                    "SparseVoxelPayload contains voxels but biome_palette is empty".to_string(),
+                ));
+            }
+        }
+
+        let s_len = self.state_palette.len();
+        for (i, &s_idx) in self.columns.state_indices.iter().enumerate() {
+            if (s_idx as usize) >= s_len {
+                return Err(VoxelError::InvalidPointCloud(format!(
+                    "SparseVoxelPayload state index {} at voxel {} out of range (state_palette len {})",
+                    s_idx, i, s_len
+                )));
+            }
+        }
+
+        let b_len = self.biome_palette.len();
+        for (i, &b_idx) in self.columns.biome_indices.iter().enumerate() {
+            if (b_idx as usize) >= b_len {
+                return Err(VoxelError::InvalidPointCloud(format!(
+                    "SparseVoxelPayload biome index {} at voxel {} out of range (biome_palette len {})",
+                    b_idx, i, b_len
+                )));
+            }
+        }
+
+        let e_len = self.entity_palette.len();
+        for (i, &e_idx) in self.columns.entity_indices.iter().enumerate() {
+            if e_idx < -1 || (e_idx >= 0 && (e_idx as usize) >= e_len) {
+                return Err(VoxelError::InvalidPointCloud(format!(
+                    "SparseVoxelPayload entity index {} at voxel {} out of range (entity_palette len {})",
+                    e_idx, i, e_len
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Constructs a `SparseVoxelPayload` from a `VoxelPointCloud`.
+    ///
+    /// Validates representability of palette counts and per-point indices.
+    pub fn from_point_cloud(cloud: &VoxelPointCloud) -> Result<Self, VoxelError> {
+        let count = cloud.len();
+
+        if cloud.state_palette.len() > (u16::MAX as usize + 1) {
+            return Err(VoxelError::InvalidPointCloud(format!(
+                "State palette length {} exceeds maximum representable size 65536",
+                cloud.state_palette.len()
+            )));
+        }
+        if cloud.biome_palette.len() > (u16::MAX as usize + 1) {
+            return Err(VoxelError::InvalidPointCloud(format!(
+                "Biome palette length {} exceeds maximum representable size 65536",
+                cloud.biome_palette.len()
+            )));
+        }
+
+        if cloud.block_x.len() != count
+            || cloud.block_y.len() != count
+            || cloud.block_z.len() != count
+            || cloud.state_indices.len() != count
+            || cloud.biome_indices.len() != count
+        {
+            return Err(VoxelError::InvalidPointCloud(format!(
+                "Ragged VoxelPointCloud: lengths x={}, y={}, z={}, state={}, biome={}",
+                cloud.block_x.len(),
+                cloud.block_y.len(),
+                cloud.block_z.len(),
+                cloud.state_indices.len(),
+                cloud.biome_indices.len()
+            )));
+        }
+
+        let mut state_indices = Vec::with_capacity(count);
+        for (idx, &i) in cloud.state_indices.iter().enumerate() {
+            if i < 0 || i > (u16::MAX as i32) || (i as usize) >= cloud.state_palette.len() {
+                return Err(VoxelError::InvalidPointCloud(format!(
+                    "Unrepresentable or out-of-range state index {} at point {} (palette len {})",
+                    i,
+                    idx,
+                    cloud.state_palette.len()
+                )));
+            }
+            state_indices.push(i as u16);
+        }
+
+        let mut biome_indices = Vec::with_capacity(count);
+        for (idx, &i) in cloud.biome_indices.iter().enumerate() {
+            if i < 0 || i > (u16::MAX as i32) || (i as usize) >= cloud.biome_palette.len() {
+                return Err(VoxelError::InvalidPointCloud(format!(
+                    "Unrepresentable or out-of-range biome index {} at point {} (palette len {})",
+                    i,
+                    idx,
+                    cloud.biome_palette.len()
+                )));
+            }
+            biome_indices.push(i as u16);
+        }
 
         let entity_indices = if cloud.entity_indices.len() == count {
+            for (idx, &e) in cloud.entity_indices.iter().enumerate() {
+                if e < -1 || (e >= 0 && (e as usize) >= cloud.entity_palette.len()) {
+                    return Err(VoxelError::InvalidPointCloud(format!(
+                        "Out-of-range entity index {} at point {} (entity palette len {})",
+                        e,
+                        idx,
+                        cloud.entity_palette.len()
+                    )));
+                }
+            }
             cloud.entity_indices.clone()
-        } else {
+        } else if cloud.entity_indices.is_empty() {
             vec![-1; count]
+        } else {
+            return Err(VoxelError::InvalidPointCloud(format!(
+                "Ragged entity indices length {} != point count {}",
+                cloud.entity_indices.len(),
+                count
+            )));
         };
 
         let light_levels = if cloud.light_levels.len() == count {
             Some(cloud.light_levels.clone())
-        } else {
+        } else if cloud.light_levels.is_empty() {
             None
+        } else {
+            return Err(VoxelError::InvalidPointCloud(format!(
+                "Ragged light levels length {} != point count {}",
+                cloud.light_levels.len(),
+                count
+            )));
         };
 
         let bounds = cloud
             .bounds
             .unwrap_or_else(|| compute_bounds(&cloud.block_x, &cloud.block_y, &cloud.block_z));
 
-        Self {
+        let payload = Self {
             bounds,
             state_palette: cloud.state_palette.clone(),
             biome_palette: cloud.biome_palette.clone(),
@@ -201,16 +447,25 @@ impl SparseVoxelPayload {
                 entity_indices,
                 light_levels,
             },
-        }
+        };
+
+        payload.validate()?;
+        Ok(payload)
     }
 
     /// Converts this payload back into an authoritative `VoxelPointCloud` for DCC viewport display.
     pub fn to_point_cloud(&self, config: Option<&MesherConfig>) -> VoxelPointCloud {
-        let count = self.len();
+        let count = self
+            .columns
+            .x
+            .len()
+            .min(self.columns.y.len())
+            .min(self.columns.z.len());
         let state_indices: Vec<i32> = self
             .columns
             .state_indices
             .iter()
+            .take(count)
             .map(|&idx| idx as i32)
             .collect();
 
@@ -218,20 +473,25 @@ impl SparseVoxelPayload {
             .columns
             .biome_indices
             .iter()
+            .take(count)
             .map(|&idx| idx as i32)
             .collect();
 
-        let entity_indices = if self.columns.entity_indices.len() == count {
-            self.columns.entity_indices.clone()
+        let entity_indices = if self.columns.entity_indices.len() >= count {
+            self.columns.entity_indices[..count].to_vec()
         } else {
             vec![-1; count]
         };
 
-        let light_levels = self
-            .columns
-            .light_levels
-            .clone()
-            .unwrap_or_else(|| vec![0; count]);
+        let light_levels = if let Some(ref l) = self.columns.light_levels {
+            if l.len() >= count {
+                l[..count].to_vec()
+            } else {
+                vec![0; count]
+            }
+        } else {
+            vec![0; count]
+        };
 
         // Compute 3D positions with center offsets and mesher config transformations
         let mut positions = Vec::with_capacity(count * 3);
@@ -280,9 +540,9 @@ impl SparseVoxelPayload {
 
         VoxelPointCloud {
             positions,
-            block_x: self.columns.x.clone(),
-            block_y: self.columns.y.clone(),
-            block_z: self.columns.z.clone(),
+            block_x: self.columns.x[..count].to_vec(),
+            block_y: self.columns.y[..count].to_vec(),
+            block_z: self.columns.z[..count].to_vec(),
             state_palette: self.state_palette.clone(),
             state_indices,
             biome_palette: self.biome_palette.clone(),
@@ -296,7 +556,7 @@ impl SparseVoxelPayload {
     }
 
     /// Extracts sparse voxels directly from a `VoxelStorage` world.
-    pub fn from_storage(storage: &VoxelStorage, config: &MesherConfig) -> Self {
+    pub fn from_storage(storage: &VoxelStorage, config: &MesherConfig) -> Result<Self, VoxelError> {
         let cloud = VoxelPointCloud::extract_from_storage(storage, config);
         Self::from_point_cloud(&cloud)
     }
@@ -317,6 +577,15 @@ impl SparseVoxelPayload {
     #[cfg(feature = "serde")]
     pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(json)
+    }
+}
+
+impl TryFrom<&VoxelPointCloud> for SparseVoxelPayload {
+    type Error = VoxelError;
+
+    #[inline]
+    fn try_from(cloud: &VoxelPointCloud) -> Result<Self, Self::Error> {
+        Self::from_point_cloud(cloud)
     }
 }
 
@@ -428,7 +697,8 @@ mod tests {
         assert!(cloud.entity_at(1).unwrap().contains("\"minecraft:banner\""));
 
         // Roundtrip from point cloud back to sparse payload
-        let payload2 = SparseVoxelPayload::from_point_cloud(&cloud);
+        let payload2 =
+            SparseVoxelPayload::from_point_cloud(&cloud).expect("Must convert from point cloud");
         assert_eq!(payload.len(), payload2.len());
         assert_eq!(payload.state_palette, payload2.state_palette);
         assert_eq!(payload.entity_palette, payload2.entity_palette);

@@ -83,7 +83,8 @@ pub fn export_scene_package<'py>(
         None => None,
     };
 
-    let sparse_voxels = SparseVoxelPayload::from_point_cloud(&point_cloud.inner);
+    let sparse_voxels = SparseVoxelPayload::from_point_cloud(&point_cloud.inner)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
     let models = asset_cache
         .inner
         .load_models()

@@ -19,7 +19,7 @@ fn test_hello_and_welcome_codec_roundtrip() {
         subscribed_visual_entities: vec!["minecraft:painting".to_string()],
     };
 
-    let encoded = encode_packet(&hello);
+    let encoded = encode_packet(&hello).expect("encode packet");
     assert_eq!(&encoded[0..2], &PROTOCOL_MAGIC);
     assert_eq!(encoded[2], PROTOCOL_VERSION);
     assert_eq!(encoded[3], Opcode::Hello as u8);
@@ -39,7 +39,7 @@ fn test_hello_and_welcome_codec_roundtrip() {
         message_or_dimension: "minecraft:overworld".to_string(),
     };
 
-    let encoded_welcome = encode_packet(&welcome);
+    let encoded_welcome = encode_packet(&welcome).expect("encode packet");
     let decoded_welcome = decode_packet(&encoded_welcome).expect("Failed decoding Welcome");
     assert_eq!(decoded_welcome, welcome);
 }
@@ -65,7 +65,7 @@ fn test_baseline_begin_and_end_roundtrip() {
         biome_palette: vec!["minecraft:plains".to_string()],
     };
 
-    let encoded = encode_packet(&begin);
+    let encoded = encode_packet(&begin).expect("encode packet");
     let decoded = decode_packet(&encoded).expect("Failed decoding BaselineBegin");
     assert_eq!(decoded, begin);
 
@@ -78,7 +78,7 @@ fn test_baseline_begin_and_end_roundtrip() {
         status: 0,
     };
 
-    let encoded_end = encode_packet(&end);
+    let encoded_end = encode_packet(&end).expect("encode packet");
     let decoded_end = decode_packet(&encoded_end).expect("Failed decoding BaselineEnd");
     assert_eq!(decoded_end, end);
 }
@@ -107,7 +107,7 @@ fn test_delta_op_codec_and_hash_roundtrip() {
         changes,
     };
 
-    let encoded = encode_packet(&delta);
+    let encoded = encode_packet(&delta).expect("encode packet");
     let decoded = decode_packet(&encoded).expect("Failed decoding DeltaOp");
     assert_eq!(decoded, delta);
 }
@@ -128,7 +128,7 @@ fn test_corrupted_chunk_hash_rejection() {
         payload,
     };
 
-    let encoded = encode_packet(&chunk);
+    let encoded = encode_packet(&chunk).expect("encode packet");
     let res = decode_packet(&encoded);
     assert!(matches!(res, Err(ProtocolError::ChecksumMismatch { .. })));
 }
@@ -185,7 +185,7 @@ fn test_baseline_entities_and_delta_entity_roundtrip() {
         entities,
     };
 
-    let encoded = encode_packet(&baseline_entities);
+    let encoded = encode_packet(&baseline_entities).expect("encode packet");
     let decoded = decode_packet(&encoded).expect("Failed decoding BaselineEntities");
     assert_eq!(decoded, baseline_entities);
 
@@ -196,7 +196,7 @@ fn test_baseline_entities_and_delta_entity_roundtrip() {
         entity: Some(pot_entity),
     };
 
-    let encoded_delta = encode_packet(&delta_entity);
+    let encoded_delta = encode_packet(&delta_entity).expect("encode packet");
     let decoded_delta = decode_packet(&encoded_delta).expect("Failed decoding DeltaEntity");
     assert_eq!(decoded_delta, delta_entity);
 }
@@ -229,7 +229,7 @@ fn test_negative_coordinates_roundtrip_entities_and_deltas() {
             rel_pos: pos,
             entity: Some(pot_entity.clone()),
         };
-        let encoded = encode_packet(&delta);
+        let encoded = encode_packet(&delta).expect("encode packet");
         let decoded = decode_packet(&encoded).expect("DeltaEntity decode failed");
         assert_eq!(decoded, delta, "DeltaEntity mismatch for coord {:?}", pos);
 
@@ -239,7 +239,7 @@ fn test_negative_coordinates_roundtrip_entities_and_deltas() {
             rel_pos: pos,
             entity: None,
         };
-        let encoded_none = encode_packet(&delta_none);
+        let encoded_none = encode_packet(&delta_none).expect("encode packet");
         let decoded_none = decode_packet(&encoded_none).expect("DeltaEntity None decode failed");
         assert_eq!(
             decoded_none, delta_none,
@@ -259,7 +259,7 @@ fn test_negative_coordinates_roundtrip_entities_and_deltas() {
         snapshot_uuid: [0x55; 16],
         entities: baseline_entries.clone(),
     };
-    let encoded_bl = encode_packet(&baseline);
+    let encoded_bl = encode_packet(&baseline).expect("encode packet");
     let decoded_bl = decode_packet(&encoded_bl).expect("BaselineEntities decode failed");
     assert_eq!(
         decoded_bl, baseline,
@@ -284,7 +284,7 @@ fn test_negative_coordinates_roundtrip_entities_and_deltas() {
         batch_xxhash64: hash,
         changes: delta_changes.clone(),
     };
-    let encoded_op = encode_packet(&delta_op);
+    let encoded_op = encode_packet(&delta_op).expect("encode packet");
     let decoded_op = decode_packet(&encoded_op).expect("DeltaOp decode failed");
     assert_eq!(
         decoded_op, delta_op,
@@ -362,7 +362,7 @@ fn test_sync_codec_throughput_benchmark() {
         rel_pos: IVec3::new(-16, -64, -128),
         entity: Some(pot_entity),
     };
-    let encoded = encode_packet(&delta);
+    let encoded = encode_packet(&delta).expect("encode packet");
 
     // Warm-up
     for _ in 0..1000 {
@@ -438,7 +438,7 @@ fn test_visual_entities_codec_roundtrip() {
         entities_hash,
         entities: entities.clone(),
     };
-    let encoded_baseline = encode_packet(&baseline);
+    let encoded_baseline = encode_packet(&baseline).expect("encode packet");
     let decoded_baseline = decode_packet(&encoded_baseline).expect("Decode BaselineVisualEntities");
     assert_eq!(decoded_baseline, baseline);
 
@@ -448,7 +448,7 @@ fn test_visual_entities_codec_roundtrip() {
         seq_id: 101,
         delta: VisualEntityDelta::Upsert(painting.clone()),
     };
-    let enc_upsert = encode_packet(&delta_upsert);
+    let enc_upsert = encode_packet(&delta_upsert).expect("encode packet");
     let dec_upsert = decode_packet(&enc_upsert).expect("Decode DeltaVisualEntity UPSERT");
     assert_eq!(dec_upsert, delta_upsert);
 
@@ -460,7 +460,7 @@ fn test_visual_entities_codec_roundtrip() {
             uuid: painting.uuid.clone().unwrap(),
         },
     };
-    let enc_remove = encode_packet(&delta_remove);
+    let enc_remove = encode_packet(&delta_remove).expect("encode packet");
     assert_eq!(enc_remove.len(), 37);
     let dec_remove = decode_packet(&enc_remove).expect("Decode DeltaVisualEntity REMOVE");
     assert_eq!(dec_remove, delta_remove);

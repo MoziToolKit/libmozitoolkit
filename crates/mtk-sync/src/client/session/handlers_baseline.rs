@@ -12,9 +12,7 @@ use super::handlers_delta::apply_delta_entries_to_world;
 use super::state::{SessionState, SyncLifecycle};
 use super::watchdog::{abort_baseline, send_resync_request};
 use crate::client::ClientCommand;
-use crate::protocol::{
-    encode_packet, BaselineAckResult, Packet, ResyncReason, MAX_SELECTION_VOLUME,
-};
+use crate::protocol::{BaselineAckResult, Packet, ResyncReason, MAX_SELECTION_VOLUME};
 use crate::SyncEvent;
 
 pub(crate) fn handle_baseline_begin(
@@ -73,7 +71,11 @@ pub(crate) fn handle_baseline_begin(
                 snapshot_uuid,
                 reason,
             };
-            let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&cancel_pkt)));
+            if let Err(err) = crate::client::transport::queue_packet(cmd_sender, &cancel_pkt) {
+                let _ = event_sender.send(SyncEvent::Warning(format!(
+                    "failed to encode Cancel packet: {err}"
+                )));
+            }
             state.assembler = None;
             state.lifecycle = SyncLifecycle::ReceivingBaseline;
 
@@ -226,7 +228,11 @@ pub(crate) fn handle_baseline_end(
                     committed_seq: snapshot_seq,
                     result_code: BaselineAckResult::SuccessCommitted,
                 };
-                let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&ack_pkt)));
+                if let Err(err) = crate::client::transport::queue_packet(cmd_sender, &ack_pkt) {
+                    let _ = event_sender.send(SyncEvent::Warning(format!(
+                        "failed to encode Baseline ACK: {err}"
+                    )));
+                }
 
                 // 3. Replay in-flight staged deltas (S + 1 .. latest)
                 state.lifecycle = SyncLifecycle::ReplayingStaged;
@@ -360,7 +366,11 @@ pub(crate) fn handle_baseline_end(
                     committed_seq: snapshot_seq,
                     result_code: BaselineAckResult::ValidationFailed,
                 };
-                let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&ack_pkt)));
+                if let Err(err) = crate::client::transport::queue_packet(cmd_sender, &ack_pkt) {
+                    let _ = event_sender.send(SyncEvent::Warning(format!(
+                        "failed to encode Baseline ACK: {err}"
+                    )));
+                }
 
                 state.validation_failures = state.validation_failures.saturating_add(1);
                 if state.validation_failures >= 3 {

@@ -246,6 +246,10 @@ impl PyLiveSyncServer {
                         dict.set_item("client_id", client_id)?;
                         dict.set_item("reason", format!("{:?}", reason))?;
                     }
+                    mtk_sync::ServerEvent::Warning(message) => {
+                        dict.set_item("type", "warning")?;
+                        dict.set_item("message", message)?;
+                    }
                 }
                 list.append(dict)?;
             }

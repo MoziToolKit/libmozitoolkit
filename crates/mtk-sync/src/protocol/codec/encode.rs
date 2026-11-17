@@ -3,26 +3,41 @@
 //! Encodes typed `Packet` instances into WebSocket outgoing binary payloads.
 
 use crate::protocol::constants::*;
+use crate::protocol::error::ProtocolError;
 use crate::protocol::packet::*;
 
 /// Helper to write a little-endian u16-length prefixed string.
-fn write_str(buf: &mut Vec<u8>, s: &str) {
+fn write_str(buf: &mut Vec<u8>, s: &str) -> Result<(), ProtocolError> {
     let bytes = s.as_bytes();
+    if bytes.len() > u16::MAX as usize {
+        return Err(ProtocolError::StringTooLong {
+            actual: bytes.len(),
+            limit: u16::MAX as usize,
+        });
+    }
     buf.extend_from_slice(&(bytes.len() as u16).to_le_bytes());
     buf.extend_from_slice(bytes);
+    Ok(())
 }
 
 #[inline]
-fn write_uuid(buf: &mut Vec<u8>, uuid_str: &str) {
-    let (most_sig, least_sig) = crate::protocol::parse_uuid_bits(uuid_str);
+fn write_uuid(buf: &mut Vec<u8>, uuid_str: &str) -> Result<(), ProtocolError> {
+    let (most_sig, least_sig) = crate::protocol::hasher::parse_canonical_uuid(uuid_str)?;
     buf.extend_from_slice(&most_sig.to_le_bytes());
     buf.extend_from_slice(&least_sig.to_le_bytes());
+    Ok(())
 }
 
 #[inline]
-fn write_visual_entity(buf: &mut Vec<u8>, entity: &mtk_model::EntityInstance) {
-    let uuid_str = entity.uuid.as_deref().unwrap_or("");
-    write_uuid(buf, uuid_str);
+fn write_visual_entity(
+    buf: &mut Vec<u8>,
+    entity: &mtk_model::EntityInstance,
+) -> Result<(), ProtocolError> {
+    let uuid_str = entity
+        .uuid
+        .as_deref()
+        .ok_or_else(|| ProtocolError::InvalidUuid(String::new()))?;
+    write_uuid(buf, uuid_str)?;
     buf.extend_from_slice(&entity.position.x.to_le_bytes());
     buf.extend_from_slice(&entity.position.y.to_le_bytes());
     buf.extend_from_slice(&entity.position.z.to_le_bytes());
@@ -34,7 +49,7 @@ fn write_visual_entity(buf: &mut Vec<u8>, entity: &mtk_model::EntityInstance) {
     buf.extend_from_slice(&entity.scale.z.to_le_bytes());
     let facing = crate::protocol::direction_to_facing_byte(entity.facing);
     buf.push(facing);
-    write_str(buf, &entity.id);
+    write_str(buf, &entity.id)?;
     let payload = match &entity.kind {
         mtk_model::EntityKindData::Generic { payload, .. } if !payload.is_empty() => {
             payload.clone()
@@ -45,10 +60,11 @@ fn write_visual_entity(buf: &mut Vec<u8>, entity: &mtk_model::EntityInstance) {
     if !payload.is_empty() {
         buf.extend_from_slice(&payload);
     }
+    Ok(())
 }
 
 /// Encodes any `Packet` into a complete WebSocket binary payload with standard 4-byte header.
-pub fn encode_packet(packet: &Packet) -> Vec<u8> {
+pub fn encode_packet(packet: &Packet) -> Result<Vec<u8>, ProtocolError> {
     let mut buf = Vec::with_capacity(64);
     buf.extend_from_slice(&PROTOCOL_MAGIC);
     buf.push(PROTOCOL_VERSION);
@@ -84,12 +100,12 @@ pub fn encode_packet(packet: &Packet) -> Vec<u8> {
             buf.extend_from_slice(&cached_size.y.to_le_bytes());
             buf.extend_from_slice(&cached_size.z.to_le_bytes());
             buf.extend_from_slice(&cached_state_hash.to_le_bytes());
-            write_str(&mut buf, auth_token);
-            write_str(&mut buf, cached_dimension);
+            write_str(&mut buf, auth_token)?;
+            write_str(&mut buf, cached_dimension)?;
             if (*capabilities & CAP_SUPPORTS_VISUAL_ENTITIES) != 0 {
                 buf.extend_from_slice(&(subscribed_visual_entities.len() as u16).to_le_bytes());
                 for entity_id in subscribed_visual_entities {
-                    write_str(&mut buf, entity_id);
+                    write_str(&mut buf, entity_id)?;
                 }
             }
         }
@@ -118,7 +134,7 @@ pub fn encode_packet(packet: &Packet) -> Vec<u8> {
             buf.extend_from_slice(&current_size.z.to_le_bytes());
             buf.extend_from_slice(&current_state_hash.to_le_bytes());
             buf.push(*decision as u8);
-            write_str(&mut buf, message_or_dimension);
+            write_str(&mut buf, message_or_dimension)?;
         }
 
         Packet::BaselineBegin {
@@ -157,16 +173,16 @@ pub fn encode_packet(packet: &Packet) -> Vec<u8> {
             buf.push(*compression_mode);
             buf.push(*palette_bits_per_block);
             buf.push(*biome_bits_per_quart);
-            write_str(&mut buf, dimension);
+            write_str(&mut buf, dimension)?;
 
             buf.extend_from_slice(&(block_palette.len() as u32).to_le_bytes());
             for entry in block_palette {
-                write_str(&mut buf, entry);
+                write_str(&mut buf, entry)?;
             }
 
             buf.extend_from_slice(&(biome_palette.len() as u16).to_le_bytes());
             for entry in biome_palette {
-                write_str(&mut buf, entry);
+                write_str(&mut buf, entry)?;
             }
         }
 
@@ -262,7 +278,7 @@ pub fn encode_packet(packet: &Packet) -> Vec<u8> {
             buf.extend_from_slice(&(entries.len() as u16).to_le_bytes());
             for (id, s) in entries {
                 buf.extend_from_slice(&id.to_le_bytes());
-                write_str(&mut buf, s);
+                write_str(&mut buf, s)?;
             }
         }
 
@@ -308,7 +324,7 @@ pub fn encode_packet(packet: &Packet) -> Vec<u8> {
             buf.push(Opcode::Error as u8);
             buf.extend_from_slice(&epoch.to_le_bytes());
             buf.extend_from_slice(&(*error_code as u16).to_le_bytes());
-            write_str(&mut buf, message);
+            write_str(&mut buf, message)?;
         }
 
         Packet::BaselineEntities {
@@ -363,7 +379,7 @@ pub fn encode_packet(packet: &Packet) -> Vec<u8> {
             buf.extend_from_slice(&entities_hash.to_le_bytes());
             buf.extend_from_slice(&(entities.len() as u32).to_le_bytes());
             for e in entities {
-                write_visual_entity(&mut buf, e);
+                write_visual_entity(&mut buf, e)?;
             }
         }
 
@@ -378,14 +394,14 @@ pub fn encode_packet(packet: &Packet) -> Vec<u8> {
             buf.push(delta.action_byte());
             match delta {
                 VisualEntityDelta::Upsert(entity) => {
-                    write_visual_entity(&mut buf, entity);
+                    write_visual_entity(&mut buf, entity)?;
                 }
                 VisualEntityDelta::Remove { uuid } => {
-                    write_uuid(&mut buf, uuid);
+                    write_uuid(&mut buf, uuid)?;
                 }
             }
         }
     }
 
-    buf
+    Ok(buf)
 }

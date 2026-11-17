@@ -185,7 +185,7 @@ fn test_all_packets_truncated_payload_safety() {
     ];
 
     for (i, pkt) in packets.iter().enumerate() {
-        let encoded = encode_packet(pkt);
+        let encoded = encode_packet(pkt).expect("encode packet");
         let roundtrip = decode_packet(&encoded).expect("Roundtrip failed");
         assert_eq!(&roundtrip, pkt, "Packet {} roundtrip mismatch", i);
 
@@ -281,7 +281,7 @@ fn test_corrupt_packet_mutations_no_panic() {
         cached_dimension: "minecraft:overworld".to_string(),
         subscribed_visual_entities: Vec::new(),
     };
-    let encoded = encode_packet(&hello);
+    let encoded = encode_packet(&hello).expect("encode packet");
 
     let mut state: u64 = 0x123456789abcdef0;
     let mut next_u32 = || {

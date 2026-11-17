@@ -2,7 +2,7 @@ use crossbeam_channel::Sender;
 
 use super::state::{SessionState, SyncLifecycle};
 use crate::client::ClientCommand;
-use crate::protocol::{encode_packet, CancelReason, Packet, SyncDecision};
+use crate::protocol::{CancelReason, Packet, SyncDecision};
 use crate::SyncEvent;
 
 pub(crate) fn handle_welcome(
@@ -93,9 +93,16 @@ pub(crate) fn handle_cancel(
     )));
 }
 
-pub(crate) fn handle_ping(timestamp: u64, cmd_sender: &Sender<ClientCommand>) {
+/// Answers a PING with a PONG.
+///
+/// Encoding is fallible for consistency with every other outbound frame; the caller decides
+/// how to surface it.
+pub(crate) fn handle_ping(
+    timestamp: u64,
+    cmd_sender: &Sender<ClientCommand>,
+) -> Result<(), crate::protocol::ProtocolError> {
     let pong = Packet::Pong { timestamp };
-    let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&pong)));
+    crate::client::transport::queue_packet(cmd_sender, &pong)
 }
 
 pub(crate) fn handle_error(

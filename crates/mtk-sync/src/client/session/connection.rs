@@ -1,6 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use crate::client::{ClientCommand, ClientMessage, SyncClient};
+use crate::client::{ClientMessage, SyncClient};
 use crate::protocol::*;
 
 use super::dispatcher::{event_worker_loop, handle_packet};
@@ -26,10 +26,8 @@ impl LiveSyncSession {
             missing_to_seq: seq + 1,
             reason: ResyncReason::StateHashMismatch,
         };
-        let buf = encode_packet(&packet);
         if let Some(cmd) = &self.cmd_sender {
-            cmd.send(ClientCommand::Send(buf))
-                .map_err(|e| e.to_string())?;
+            crate::client::transport::queue_packet(cmd, &packet).map_err(|e| e.to_string())?;
             Ok(())
         } else {
             Err("Client not connected".to_string())

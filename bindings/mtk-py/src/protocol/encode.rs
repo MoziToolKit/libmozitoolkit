@@ -37,7 +37,8 @@ pub fn encode_welcome<'py>(
         decision: dec,
         message_or_dimension: dimension.to_string(),
     };
-    let bytes = mtk_sync::encode_packet(&pkt);
+    let bytes = mtk_sync::encode_packet(&pkt)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
     Ok(PyBytes::new(py, &bytes))
 }
 
@@ -90,7 +91,8 @@ pub fn encode_baseline_begin<'py>(
         block_palette,
         biome_palette,
     };
-    let bytes = mtk_sync::encode_packet(&pkt);
+    let bytes = mtk_sync::encode_packet(&pkt)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
     Ok(PyBytes::new(py, &bytes))
 }
 
@@ -133,7 +135,8 @@ pub fn encode_baseline_chunk<'py>(
         chunk_xxhash64: hash,
         payload: payload.to_vec(),
     };
-    let bytes = mtk_sync::encode_packet(&pkt);
+    let bytes = mtk_sync::encode_packet(&pkt)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
     Ok(PyBytes::new(py, &bytes))
 }
 
@@ -161,7 +164,8 @@ pub fn encode_baseline_end<'py>(
         final_state_hash,
         status,
     };
-    let bytes = mtk_sync::encode_packet(&pkt);
+    let bytes = mtk_sync::encode_packet(&pkt)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
     Ok(PyBytes::new(py, &bytes))
 }
 
@@ -200,7 +204,8 @@ pub fn encode_delta_op<'py>(
         batch_xxhash64,
         changes: delta_entries,
     };
-    let bytes = mtk_sync::encode_packet(&pkt);
+    let bytes = mtk_sync::encode_packet(&pkt)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
     Ok(PyBytes::new(py, &bytes))
 }
 
@@ -222,6 +227,7 @@ pub fn encode_palette_update<'py>(
         new_revision,
         entries,
     };
-    let bytes = mtk_sync::encode_packet(&pkt);
+    let bytes = mtk_sync::encode_packet(&pkt)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
     Ok(PyBytes::new(py, &bytes))
 }

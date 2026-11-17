@@ -21,12 +21,12 @@ pub use constants::{
     MAX_SELECTION_VOLUME, PROTOCOL_MAGIC, PROTOCOL_VERSION,
 };
 pub use error::ProtocolError;
-pub(crate) use hasher::parse_uuid_bits;
 pub use hasher::SparseBlockEntry;
 pub use hasher::{
     compute_sparse_state_hash, compute_sparse_state_hash_for_point_cloud,
     compute_sparse_state_hash_for_storage, compute_sparse_state_hash_from_raw,
     compute_visual_entities_hash, direction_to_facing_byte, facing_byte_to_direction, format_uuid,
+    parse_canonical_uuid,
 };
 pub use packet::{DeltaChangeEntry, Packet, VisualEntityDelta};
 pub use quart::{voxel_index_to_relative_coords, QuartGrid};

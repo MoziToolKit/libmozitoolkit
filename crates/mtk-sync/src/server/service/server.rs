@@ -175,7 +175,9 @@ impl LiveSyncServer {
             snapshot_uuid: [0u8; 16],
             reason: CancelReason::SelectionChanged,
         };
-        self.broadcast_packet(&cancel_pkt);
+        if let Err(err) = self.broadcast_packet(&cancel_pkt) {
+            self.warn(format!("failed to encode Cancel packet: {err}"));
+        }
     }
 
     /// Returns the combined set of subscribed visual entity types from all connected clients.
@@ -289,7 +291,9 @@ impl LiveSyncServer {
             seq_id,
             delta,
         };
-        self.broadcast_packet(&pkt);
+        if let Err(err) = self.broadcast_packet(&pkt) {
+            self.warn(format!("failed to encode visual entity delta: {err}"));
+        }
     }
 
     /// Broadcasts a pre-encoded raw RFC frame to all connected clients.
@@ -356,7 +360,7 @@ impl LiveSyncServer {
                     new_revision: pal.revision,
                     entries: new_palette_entries,
                 };
-                self.broadcast_packet(&pal_pkt);
+                self.broadcast_packet(&pal_pkt)?;
             }
 
             if !changes.is_empty() {
@@ -364,7 +368,7 @@ impl LiveSyncServer {
                     let seq = self.inner.sequence.fetch_add(1, Ordering::Relaxed);
                     let delta_packets = encode_delta_op(epoch, seq, pal.revision, chunk.to_vec());
                     for pkt in &delta_packets {
-                        self.broadcast_packet(pkt);
+                        self.broadcast_packet(pkt)?;
                     }
                 }
             }
@@ -382,20 +386,26 @@ impl LiveSyncServer {
                 rel_pos: *coord,
                 entity: entity_data,
             };
-            self.broadcast_packet(&ent_pkt);
+            self.broadcast_packet(&ent_pkt)?;
         }
 
         Ok(())
     }
 
+    /// Reports a non-fatal server-side problem to the host event stream.
+    fn warn(&self, message: String) {
+        let _ = self.inner.event_tx.send(ServerEvent::Warning(message));
+    }
+
     /// Broadcasts an arbitrary RFC packet to all connected clients.
-    pub fn broadcast_packet(&self, packet: &Packet) {
-        let bytes = encode_packet(packet);
+    pub fn broadcast_packet(&self, packet: &Packet) -> Result<(), ProtocolError> {
+        let bytes = encode_packet(packet)?;
         if let Ok(clients) = self.inner.clients.lock() {
             for client in clients.values() {
                 let _ = client.tx.send(ServerCommand::SendPacket(bytes.clone()));
             }
         }
+        Ok(())
     }
 
     /// Streams an authoritative Baseline dataset to a specific client, or to all clients if client_id is 0.
@@ -408,7 +418,7 @@ impl LiveSyncServer {
         if client_id == 0 {
             for client in clients.values() {
                 for pkt in &stream.packets {
-                    let bytes = encode_packet(pkt);
+                    let bytes = encode_packet(pkt)?;
                     let _ = client.tx.send(ServerCommand::SendPacket(bytes));
                 }
             }
@@ -416,7 +426,7 @@ impl LiveSyncServer {
         }
         if let Some(client) = clients.get(&client_id) {
             for pkt in &stream.packets {
-                let bytes = encode_packet(pkt);
+                let bytes = encode_packet(pkt)?;
                 let _ = client.tx.send(ServerCommand::SendPacket(bytes));
             }
             Ok(())
@@ -428,12 +438,13 @@ impl LiveSyncServer {
     }
 
     /// Broadcasts an incremental Delta or Visual Entity packet to all connected clients.
-    pub fn broadcast_delta(&self, delta_packet: &Packet) {
-        let bytes = encode_packet(delta_packet);
+    pub fn broadcast_delta(&self, delta_packet: &Packet) -> Result<(), ProtocolError> {
+        let bytes = encode_packet(delta_packet)?;
         let clients = self.inner.clients.lock().unwrap();
         for client in clients.values() {
             let _ = client.tx.send(ServerCommand::SendPacket(bytes.clone()));
         }
+        Ok(())
     }
 
     /// Polls pending server events delivered to the host environment.

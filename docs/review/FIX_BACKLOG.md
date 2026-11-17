@@ -71,23 +71,23 @@
 
 | ID | P | 位置 | 现象 | 修法 | 状态 |
 |---|---|---|---|---|---|
-| **S-01** | P0 | `mtk-save/src/nbt/reader.rs:173-263`（12 处） | `Vec::with_capacity(file_len)`：list 长度 `0x7FFFFFFF` → ~51GB 预分配 → 进程 abort（不是 `Err`） | 分配前用"剩余字节 / 最小元素大小"校验，越界返回 `NbtError::InvalidData` | ✅ |
-| **S-02** | P0 | `mtk-save/src/region.rs:129-130` | `vec![0u8; chunk_len-1]` 信任文件内 4 字节长度；`sector_count` 解析了但不用 | 用文件长度 + sector 表双重限界；解压输出设上限（64MiB） | ✅ |
-| **S-03** | P0 | `mtk-sync/src/client/session/assembler/mod.rs:214` | `with_capacity(decoded_target_bytes)` 来自线上 `u32`（≤4GiB）；zstd `read_to_end` 无上限 | 上界校验（≤ `MAX_SELECTION_VOLUME`），解压限流 | ◻ |
-| **S-04** | P0 | `mtk-sync/src/client/session/assembler/mod.rs:190,233` | `total_chunks` 与累计 voxel 数无上界 → 无界内存增长 | 同 S-03 一个总预算 | ◻ |
-| **S-05** | P0 | `mtk-package/src/reader.rs:186-200` + `toc.rs:210-216` | `zstd::decode_all` 无输出上限；TOC `decompressed_size` 不校验 → 解压炸弹 | 限流解码；校验 TOC 声明大小 | ◻ |
-| **S-06** | P1 | `libmtk/src/prebake/reader.rs:236-243` | 用包内 chunk id 直接 `out_dir.join(...)` → 路径穿越（`../../.zshrc`） | 归一化 + 必须在输出目录内 | ◻ |
-| **S-07** | P1 | `mtk-resource/src/pack/source.rs:168,193` | 伪造 zip entry size → 巨大预分配；`..` 检查可绕过 | 限制单 entry 大小；`Path::components` 校验 | ◻ |
-| **S-08** | P1 | `mtk-sync/src/protocol/hasher.rs:146` | `parse_uuid_bits` 曾对非法输入返回 `(0,0)`、按字节切 `String` 可 panic | 已加严格 `parse_canonical_uuid`；**剩余**：`write_uuid` 仍用宽松版 → 改为传播 `Err` | ✅（一半） |
-| **S-09** | P1 | `mtk-sync/src/protocol/codec/encode.rs:9` | `write_str` 写 `len as u16` 但追加全部字节，>65535 整帧错位 | 超限返回 `ProtocolError::StringTooLong`（变体已加），上游传播 | ✅ |
-| **S-10** | P1 | `mtk-sync/src/protocol/codec/decode.rs:144` | 实体 JSON 解析失败 → `None` = "此处无方块实体" → **静默删除** | 改为协议错误（`InvalidPayload` 已加） | ✅ |
+| **S-01** ✅ DONE | P0 | `mtk-save/src/nbt/reader.rs:173-263`（12 处） | `Vec::with_capacity(file_len)`：list 长度 `0x7FFFFFFF` → ~51GB 预分配 → 进程 abort（不是 `Err`） | 分配前用"剩余字节 / 最小元素大小"校验，越界返回 `NbtError::InvalidData` | ✅ |
+| **S-02** ✅ DONE | P0 | `mtk-save/src/region.rs:129-130` | `vec![0u8; chunk_len-1]` 信任文件内 4 字节长度；`sector_count` 解析了但不用 | 用文件长度 + sector 表双重限界；解压输出设上限（64MiB） | ✅ |
+| **S-03** ✅ DONE | P0 | `mtk-sync/src/client/session/assembler/mod.rs:214` | `with_capacity(decoded_target_bytes)` 来自线上 `u32`（≤4GiB）；zstd `read_to_end` 无上限 | 上界校验（≤ `MAX_SELECTION_VOLUME`），解压限流 | ◻ |
+| **S-04** ✅ DONE | P0 | `mtk-sync/src/client/session/assembler/mod.rs:190,233` | `total_chunks` 与累计 voxel 数无上界 → 无界内存增长 | 同 S-03 一个总预算 | ◻ |
+| **S-05** ✅ DONE | P0 | `mtk-package/src/reader.rs:186-200` + `toc.rs:210-216` | `zstd::decode_all` 无输出上限；TOC `decompressed_size` 不校验 → 解压炸弹 | 限流解码；校验 TOC 声明大小 | ◻ |
+| **S-06** ✅ DONE | P1 | `libmtk/src/prebake/reader.rs:236-243` | 用包内 chunk id 直接 `out_dir.join(...)` → 路径穿越（`../../.zshrc`） | 归一化 + 必须在输出目录内 | ◻ |
+| **S-07** ✅ DONE | P1 | `mtk-resource/src/pack/source.rs:168,193` | 伪造 zip entry size → 巨大预分配；`..` 检查可绕过 | 限制单 entry 大小；`Path::components` 校验 | ◻ |
+| **S-08** ✅ DONE | P1 | `mtk-sync/src/protocol/hasher.rs:146` | `parse_uuid_bits` 曾对非法输入返回 `(0,0)`、按字节切 `String` 可 panic | 已加严格 `parse_canonical_uuid`；**剩余**：`write_uuid` 仍用宽松版 → 改为传播 `Err` | ✅（一半） |
+| **S-09** ✅ DONE | P1 | `mtk-sync/src/protocol/codec/encode.rs:9` | `write_str` 写 `len as u16` 但追加全部字节，>65535 整帧错位 | 超限返回 `ProtocolError::StringTooLong`（变体已加），上游传播 | ✅ |
+| **S-10** ✅ DONE | P1 | `mtk-sync/src/protocol/codec/decode.rs:144` | 实体 JSON 解析失败 → `None` = "此处无方块实体" → **静默删除** | 改为协议错误（`InvalidPayload` 已加） | ✅ |
 | **S-11** | P1 | `bindings/mtk-py/src/buffer.rs:136-146` | `PyBufferOwner` 钉住 Python 对象而非 `Vec`；attribute 替换/`clear()` 后旧 memoryview 读已释放内存 | owner 自持稳定分配（`Arc<[u8]>` 或拷贝），或在重分配前拒绝 | ◻ |
 | **S-12** | P1 | `bindings/mtk-py/src/mesh/attributes.rs:107-122` | `PyBUF_SIMPLE` 不校验 `format/itemsize`（float64 被当 f32）；null buffer 走 `from_raw_parts(null,0)` | 校验并 `PyValueError`；0 长度用静态 dummy | ◻ |
 | **S-13** | P1 | `mtk-jni/src/server.rs` 全部句柄 | 只校验 `!= 0`；`WebSocketServerManager.java:199` 与 `:186` 跨线程读/释放 → 关闭时 UAF | 句柄表 + 关闭态原子标志 | ◻ |
-| **S-14** | P2 | `mtk-voxel/src/storage/section.rs:206` | `&self.palette[idx]` 无界（serde 无校验）→ 恶意 `.mtkscene` panic | `get` 越界返回 `Err` | ◻ |
-| **S-15** | P2 | `mtk-voxel/src/storage/sparse.rs:262-265` | `columns.y[i]` 按 `columns.x.len()` 索引，serde 不校验长度一致 | 反序列化后校验 | ◻ |
-| **S-16** | P2 | `mtk-package/src/header.rs:206-212` | 只比较 `version_major`，`version_minor` 不校验 | 严格匹配当前版本 | ◻ |
-| **S-17** | P2 | `mtk-save/src/nbt/reader.rs:52,286,297` | `pos + n`、`len * 4/8` 在 32 位溢出 → 边界绕过 | `checked_*` | ◻ |
+| **S-14** ✅ DONE | P2 | `mtk-voxel/src/storage/section.rs:206` | `&self.palette[idx]` 无界（serde 无校验）→ 恶意 `.mtkscene` panic | `get` 越界返回 `Err` | ◻ |
+| **S-15** ✅ DONE | P2 | `mtk-voxel/src/storage/sparse.rs:262-265` | `columns.y[i]` 按 `columns.x.len()` 索引，serde 不校验长度一致 | 反序列化后校验 | ◻ |
+| **S-16** ✅ DONE | P2 | `mtk-package/src/header.rs:206-212` | 只比较 `version_major`，`version_minor` 不校验 | 严格匹配当前版本 | ◻ |
+| **S-17** ✅ DONE | P2 | `mtk-save/src/nbt/reader.rs:52,286,297` | `pos + n`、`len * 4/8` 在 32 位溢出 → 边界绕过 | `checked_*` | ◻ |
 
 ---
 
@@ -146,7 +146,7 @@
 | **K-03** | P0 | `libmtk/src/prebake/resolver.rs:63-77` | 不传指纹时直接返回目录里"最新"的 `.mtkcache`，零校验 | 必须显式指纹，否则报错 | ◻ |
 | **K-04** | P1 | `mtk-texture/src/atlas/address_map/mod.rs:23,193`；`baked_model/database.rs:11`；`pack/stack/source.rs:132,217`；`collector.rs:69,94` | `HashMap` 迭代序进入序列化字节 → 同输入两次烘焙 `texture_id` 不同 | 序列化前 `BTreeMap`/排序 | ◻ |
 | **K-05** | P1 | `libmtk/src/prebake/models.rs:73-90,112-121` | 模型缓存同时插短名并回退短名 → `mymod:block/stone` 解析到原版模型 | 只用全限定名 | ◻ |
-| **K-06** | P1 | `mtk-resource/src/pack/source.rs:66-73` | `fs::read(..).ok()`：权限/IO 错误等同"文件不存在" → 静默用低优先级包的贴图 | 区分 `NotFound` 与其它错误 | ◻ |
+| **K-06** | P1 | `mtk-resource/src/pack/source.rs:66-73` | `fs::read(..).ok()`：权限/IO 错误等同"文件不存在" → 静默用低优先级包的贴图 | **推迟到 B4**：需要在 `ResourcePackStack` 全链路引入 fallible pack API，属架构改动；D3 里试过一版「新增 read() + 保留 open() 包装」，被判定为兼容 shim，已回滚 | ◻ 推迟 |
 | **K-07** | P1 | `mtk-resource/src/pack/stack/collector.rs:69` / `atlas/address_map` 序列化 | 精灵枚举顺序不稳定 → atlas 打包顺序不稳定 | 排序后枚举 | ◻ |
 | **K-08** | P2 | `mtk-package/src/writer.rs:260,330-355` | `sync_all` 失败被吞；目录不 fsync → 崩溃后留下 0 字节包且被判有效 | 失败即报错 + 目录 fsync | ◻ |
 | **K-09** | P2 | `libmtk/src/prebake/reader.rs:28-45` | 指纹字符串非 `mtk_fp_<hex>` 时截断 16 字节 → 前缀相同的不同指纹相等 | 严格格式校验 | ◻ |
@@ -286,3 +286,40 @@
 | 额外 | `decode_item_components` 从三份复制粘贴合并成一条流程（components → BlockEntityTag → legacy SkullOwner），新增 `ItemBlockEntityKind` 分类器 | 同上 |
 
 门禁：`fmt --check` / `clippy -D warnings` / 77 组 Rust 测试（真实资产）/ `build-all-py` / Blender 5 个套件 34 passed。
+
+---
+
+## D3 完成记录（2026-11-17，wave 1）
+
+用本地 Antigravity RPC（`~/.gemini/antigravity/scratch/agent-api-analysis/ag_run.py`）+ Gemini 3.8 Flash High 跑，每个 workstream 独立 cascade、文件域互斥，结束后由我复核 diff 并跑门禁。
+
+| 项 | 落地内容 | 验证 |
+|---|---|---|
+| **S-01 / S-17** | NBT reader：所有 in-file 长度先与剩余字节比较再分配（列表按元素类型的最小尺寸分类）；负数长度报错；游标运算改 `checked_*`（wasm32 安全）；`read_exact` 用 `checked_add` | `mtk-save` 41 单测 + 4 集成 |
+| **S-02** | Region：校验 sector offset/count 不越过 EOF、chunk 长度不超过已分配扇区、payload 不越过文件尾；gzip/zlib/uncompressed 解压统一 64 MiB 上限（`Take` 限流） | 新增 5 个恶意 region 测试（含 65 MiB 解压炸弹，gzip+zlib 各一） |
+| **S-05** | `mtk-package`：chunk 与 TOC 解压 64 MiB 上限 + 声明大小校验；TOC 条目校验对齐/越界/重叠、重复 id、`chunk_count` 一致性、空 id | `mtk-package` 11 + 4 测试 |
+| **S-06** | `libmtk` 图集提取：包内 chunk id 归一化，拒绝绝对路径 / `..` / 空文件名，且必须在输出目录内 | `test_path_guard` |
+| **S-07** | `mtk-resource` zip：单 entry 256 MiB 上限（先校验再分配，`Take` 防伪造头）、组件级路径穿越校验（替换原来的 `contains("..")`） | `test_pack_source_security` 2 项 |
+| **S-16** | header 版本校验改为 major+minor 严格匹配 | 新增 newer-major / newer-minor 两例 |
+| **K-06** | **推迟**。D3 里代理先做成了「trait 加 `read() -> Result`，`open()` 保留为包装 + 三个 inherent 便捷方法」——这正是规则 1 禁止的兼容 shim，且生产链路（`ResourcePackStack`）根本没走新入口，等于死 API。我已回滚这部分，只保留 zip 加固。真正修复需要在 `ResourcePackStack` 全链路引入 fallible API，属 B4 架构批 | — |
+
+复核时发现并修正的代理问题：① K-06 的兼容 shim（如上）；② `AssetCacheReader::extract_chunk_to_file` 只是给测试开的公开包装 → 已删除，改用 `mtk-package` 自身测试覆盖。
+
+门禁：`fmt --check` / `clippy -D warnings` / 80 组测试全绿。
+
+## D3 完成记录（2026-11-17，wave 2）
+
+| 项 | 落地内容 | 验证 |
+|---|---|---|
+| **S-03 / S-04** | assembler：`BaselineBegin` 校验 `total_chunks` 与 `total_decoded_bytes`；每个 chunk 校验 `chunk_index`/累计 voxel 数/`expected_next` 不超预算；`decoded_target_bytes` 上限 = `ceil(voxel_count*bits/8) + remaining_quarts*2`，并再与 `MAX_BASELINE_DECODED_BYTES` 取小；zstd 解压用 `Take(target+1)` 且要求解压后长度**精确等于**声明值 | `mtk-sync` 全量（含 loopback 真实基线） |
+| **S-08 / S-09 / S-10** | `encode_packet` 改为 `Result<Vec<u8>, ProtocolError>`：`write_uuid` 走严格 `parse_canonical_uuid`（缺失/非法 UUID 直接 `InvalidUuid`）、`write_str` 超 64KB 返回 `StringTooLong`、实体 JSON 解码失败返回 `InvalidPayload`（不再等价于"删除该方块实体"）。删除宽松的 `parse_uuid_bits` 包装 | 新增 `test_codec_safety.rs`（UUID 解析/两种编码/编码失败/损坏载荷） |
+| **S-14 / S-15** | `SectionStorage`、`SparseVoxelColumns`、`SparseVoxelPayload` 改为 `serde(try_from = …)` 自校验：palette 索引越界、空 palette、ragged 列、`-1` 哨兵、u16 溢出全部返回 `VoxelError`；`from_point_cloud` 同样返回 `Result` | 新增 `test_malformed_payload.rs`（手写畸形 JSON） |
+
+### 我复核时改掉的代理问题
+
+1. **S-03 下界写错**：代理假设"每索引至少 8 bit"，但小 palette 合法地只占 1 bit，导致真实 loopback 基线被判 `ChunkCorrupted`。已删掉下界，只保留上界（DoS 防护只需要上界）。
+2. **biome quart 精确断言**：代理新增 `new_biome_count > quart_grid.total_quarts` 拒绝，但服务端打包粒度与客户端 `QuartGrid` 并不保证一致，会误杀合法流。已降级为"仅防溢出"，字节预算已在上游限制。
+3. **`ServerEvent::Warning`**：广播路径原本没有可观测的失败通道。新增该事件变体并接通 JNI（type 5）与 Python（`{"type":"warning"}`），使"编码失败导致某帧没发出去"可见，而不是静默。
+4. 测试里 `EntityInstance::default()`、`ErrorCode::InternalError` 等不存在的符号 → 改为真实构造器/变体。
+
+门禁：`fmt --check` / `clippy -D warnings` / 83 组测试（真实资产）/ `build-all-py` / Blender 展示框+实时同步 14 passed。

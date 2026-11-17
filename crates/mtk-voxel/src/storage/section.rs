@@ -4,6 +4,8 @@ use glam::IVec3;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+use crate::types::VoxelError;
+
 pub use mtk_core::constants::voxel::{
     block_index, padded_index, PADDED_SIZE, PADDED_VOLUME, SECTION_SIZE, SECTION_VOLUME,
 };
@@ -29,6 +31,7 @@ pub(crate) fn extract_canonical_state_str(raw_state: &str) -> &str {
 /// 16x16x16 Chunk Section with dense palette-indexed storage and non-air tracking.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "SectionStorageDef"))]
 pub struct SectionStorage {
     /// Section coordinate in 16-block chunk grid (e.g. `[cx, cy, cz]`).
     pub coord: IVec3,
@@ -46,6 +49,38 @@ pub struct SectionStorage {
     /// Key is local block index (0..4095: lx * 256 + ly * 16 + lz).
     #[cfg_attr(feature = "serde", serde(default))]
     pub block_entities: HashMap<u16, mtk_model::BlockEntityData>,
+}
+
+#[cfg(feature = "serde")]
+#[derive(Deserialize)]
+struct SectionStorageDef {
+    coord: IVec3,
+    palette: Vec<String>,
+    #[serde(with = "serde_voxels")]
+    voxels: Box<[u16; SECTION_VOLUME]>,
+    non_air_count: u32,
+    #[serde(default)]
+    biomes: Option<super::biome::SectionBiomes>,
+    #[serde(default)]
+    block_entities: HashMap<u16, mtk_model::BlockEntityData>,
+}
+
+#[cfg(feature = "serde")]
+impl TryFrom<SectionStorageDef> for SectionStorage {
+    type Error = String;
+
+    fn try_from(def: SectionStorageDef) -> Result<Self, Self::Error> {
+        let storage = SectionStorage {
+            coord: def.coord,
+            palette: def.palette,
+            voxels: def.voxels,
+            non_air_count: def.non_air_count,
+            biomes: def.biomes,
+            block_entities: def.block_entities,
+        };
+        storage.validate().map_err(|e| e.to_string())?;
+        Ok(storage)
+    }
 }
 
 #[cfg(feature = "serde")]
@@ -88,6 +123,31 @@ mod serde_voxels {
 }
 
 impl SectionStorage {
+    /// Validates internal integrity of section palette and voxel palette indices.
+    pub fn validate(&self) -> Result<(), VoxelError> {
+        if self.palette.is_empty() {
+            return Err(VoxelError::MalformedSnapshot(
+                "SectionStorage palette cannot be empty".to_string(),
+            ));
+        }
+        if self.palette.len() > (u16::MAX as usize + 1) {
+            return Err(VoxelError::MalformedSnapshot(format!(
+                "SectionStorage palette length {} exceeds maximum representable size 65536",
+                self.palette.len()
+            )));
+        }
+        let pal_len = self.palette.len();
+        for (idx, &pal_idx) in self.voxels.iter().enumerate() {
+            if (pal_idx as usize) >= pal_len {
+                return Err(VoxelError::MalformedSnapshot(format!(
+                    "SectionStorage voxel at index {} has out-of-range palette index {} (palette size {})",
+                    idx, pal_idx, pal_len
+                )));
+            }
+        }
+        Ok(())
+    }
+
     /// Creates an empty section filled with `minecraft:air` at coordinate `coord`.
     pub fn new(coord: IVec3) -> Self {
         Self {
@@ -203,7 +263,10 @@ impl SectionStorage {
         let state_canon = extract_canonical_state_str(state);
         let idx = block_index(x, y, z);
         let old_pal_idx = self.voxels[idx];
-        let old_state = &self.palette[old_pal_idx as usize];
+        let old_state = match self.palette.get(old_pal_idx as usize) {
+            Some(s) => s.as_str(),
+            None => return false,
+        };
 
         if old_state == state_canon {
             return false;
@@ -213,6 +276,9 @@ impl SectionStorage {
         let new_pal_idx = if let Some(pos) = self.palette.iter().position(|s| s == state_canon) {
             pos as u16
         } else {
+            if self.palette.len() > u16::MAX as usize {
+                return false;
+            }
             let id = self.palette.len() as u16;
             self.palette.push(state_canon.to_string());
             id
@@ -354,6 +420,7 @@ impl SectionStorage {
 /// 18x18x18 Padded Voxel Array for zero-branching face culling and neighbor inspection.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "PaddedVoxelArrayDef"))]
 pub struct PaddedVoxelArray {
     /// Section coordinate in chunk grid.
     pub coord: IVec3,
@@ -371,11 +438,77 @@ pub struct PaddedVoxelArray {
     pub block_entities: HashMap<u16, mtk_model::BlockEntityData>,
 }
 
+#[cfg(feature = "serde")]
+#[derive(Deserialize)]
+struct PaddedVoxelArrayDef {
+    coord: IVec3,
+    palette: Vec<String>,
+    padded_voxels: Vec<u16>,
+    is_empty: bool,
+    #[serde(default)]
+    biome_data: Option<Vec<crate::biome::SmoothedBiomeColumn>>,
+    #[serde(default)]
+    block_entities: HashMap<u16, mtk_model::BlockEntityData>,
+}
+
+#[cfg(feature = "serde")]
+impl TryFrom<PaddedVoxelArrayDef> for PaddedVoxelArray {
+    type Error = String;
+
+    fn try_from(def: PaddedVoxelArrayDef) -> Result<Self, Self::Error> {
+        let arr = PaddedVoxelArray {
+            coord: def.coord,
+            palette: def.palette,
+            padded_voxels: def.padded_voxels,
+            is_empty: def.is_empty,
+            biome_data: def.biome_data,
+            block_entities: def.block_entities,
+        };
+        arr.validate().map_err(|e| e.to_string())?;
+        Ok(arr)
+    }
+}
+
 impl PaddedVoxelArray {
+    /// Validates internal integrity of padded array palette and voxel indices.
+    pub fn validate(&self) -> Result<(), VoxelError> {
+        if self.palette.is_empty() {
+            return Err(VoxelError::MalformedSnapshot(
+                "PaddedVoxelArray palette cannot be empty".to_string(),
+            ));
+        }
+        if self.palette.len() > (u16::MAX as usize + 1) {
+            return Err(VoxelError::MalformedSnapshot(format!(
+                "PaddedVoxelArray palette length {} exceeds maximum representable size 65536",
+                self.palette.len()
+            )));
+        }
+        if self.padded_voxels.len() != PADDED_VOLUME {
+            return Err(VoxelError::MalformedSnapshot(format!(
+                "PaddedVoxelArray padded_voxels.len() ({}) != PADDED_VOLUME ({})",
+                self.padded_voxels.len(),
+                PADDED_VOLUME
+            )));
+        }
+        let pal_len = self.palette.len();
+        for (idx, &pal_idx) in self.padded_voxels.iter().enumerate() {
+            if (pal_idx as usize) >= pal_len {
+                return Err(VoxelError::MalformedSnapshot(format!(
+                    "PaddedVoxelArray voxel at index {} has out-of-range palette index {} (palette size {})",
+                    idx, pal_idx, pal_len
+                )));
+            }
+        }
+        Ok(())
+    }
+
     /// Returns the blockstate string at padded coordinate `px, py, pz` in `0..18`.
     #[inline(always)]
     pub fn get_padded_state(&self, px: usize, py: usize, pz: usize) -> &str {
         let pad_idx = padded_index(px, py, pz);
+        if pad_idx >= self.padded_voxels.len() {
+            return "minecraft:air";
+        }
         let pal_idx = self.padded_voxels[pad_idx] as usize;
         if pal_idx < self.palette.len() {
             &self.palette[pal_idx]
@@ -387,7 +520,12 @@ impl PaddedVoxelArray {
     /// Returns the palette index at padded coordinate `px, py, pz` in `0..18`.
     #[inline(always)]
     pub fn get_padded_idx(&self, px: usize, py: usize, pz: usize) -> u16 {
-        self.padded_voxels[padded_index(px, py, pz)]
+        let pad_idx = padded_index(px, py, pz);
+        if pad_idx < self.padded_voxels.len() {
+            self.padded_voxels[pad_idx]
+        } else {
+            0
+        }
     }
 }
 

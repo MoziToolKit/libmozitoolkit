@@ -65,7 +65,7 @@ fn test_loopback_storage_baseline_assembly() {
     let mut end_pkt: Option<Packet> = None;
 
     for pkt in &baseline_stream.packets {
-        let wire_bytes = encode_packet(pkt);
+        let wire_bytes = encode_packet(pkt).expect("encode packet");
         let decoded = decode_packet(&wire_bytes).expect("Packet decode must succeed");
 
         match decoded {
@@ -169,7 +169,7 @@ fn test_loopback_raw_array_baseline_assembly() {
     let mut end_pkt: Option<Packet> = None;
 
     for pkt in &stream.packets {
-        let wire_bytes = encode_packet(pkt);
+        let wire_bytes = encode_packet(pkt).expect("encode packet");
         let decoded = decode_packet(&wire_bytes).expect("Decode must succeed");
         match decoded {
             Packet::BaselineBegin { .. } => {
@@ -286,7 +286,7 @@ fn test_loopback_delta_batch_encode_and_decode() {
     let packets = encode_delta_op(1, 100, 1, changes.clone());
     assert_eq!(packets.len(), 1);
 
-    let wire_bytes = encode_packet(&packets[0]);
+    let wire_bytes = encode_packet(&packets[0]).expect("encode packet");
     let decoded = decode_packet(&wire_bytes).expect("Decode delta must succeed");
 
     if let Packet::DeltaOp {

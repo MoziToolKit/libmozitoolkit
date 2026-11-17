@@ -109,6 +109,14 @@ impl BaselineAssembler {
             return Err(CancelReason::ReasonBadChunk);
         }
 
+        if total_chunks == 0 || (total_chunks as u64) > MAX_SELECTION_VOLUME {
+            return Err(CancelReason::ReasonBadChunk);
+        }
+
+        if _total_decoded_bytes as usize > MAX_BASELINE_DECODED_BYTES {
+            return Err(CancelReason::ReasonBadChunk);
+        }
+
         Ok(Self {
             epoch,
             snapshot_uuid,
@@ -191,6 +199,10 @@ impl BaselineAssembler {
             return Err(ResyncReason::ChunkCorrupted);
         }
 
+        if chunk_index >= self.total_chunks || self.chunks_received >= self.total_chunks {
+            return Err(ResyncReason::ChunkCorrupted);
+        }
+
         if chunk_index != self.chunks_received {
             return Err(ResyncReason::SequenceGap);
         }
@@ -207,20 +219,39 @@ impl BaselineAssembler {
             return Err(ResyncReason::SequenceGap);
         }
 
-        // Decompress payload
-        let decompressed: Vec<u8> = if self.compression_mode == 1 {
-            let mut decoder = zstd::stream::Decoder::new(&payload[..])
-                .map_err(|_| ResyncReason::ChunkCorrupted)?;
-            let mut buf = Vec::with_capacity(decoded_target_bytes as usize);
-            decoder
-                .read_to_end(&mut buf)
-                .map_err(|_| ResyncReason::ChunkCorrupted)?;
-            buf
-        } else {
-            payload.clone()
+        // Voxel count must not exceed remaining selection volume budget
+        let new_voxel_count = self
+            .raw_voxel_indices
+            .len()
+            .checked_add(voxel_count as usize)
+            .ok_or(ResyncReason::ChunkCorrupted)?;
+        if new_voxel_count > self.total_voxels {
+            return Err(ResyncReason::ChunkCorrupted);
+        }
+
+        let new_expected_next = self
+            .expected_next_voxel_index
+            .checked_add(voxel_count as u64)
+            .ok_or(ResyncReason::ChunkCorrupted)?;
+        if new_expected_next > self.total_voxels as u64 {
+            return Err(ResyncReason::ChunkCorrupted);
+        }
+
+        // Bound `decoded_target_bytes` before it is used for an allocation.
+        //
+        // The wire announces the decompressed size of a chunk, which holds `voxel_count`
+        // bit-packed indices plus an optional slice of the quart biome stream. Both streams use
+        // at most 16 bits per entry, so this is a generous finite ceiling; a lower bound is
+        // deliberately not enforced because a small palette legitimately packs down to 1 bit
+        // per index (and a chunk may also carry an empty biome continuation).
+        let max_remaining_quarts = {
+            let quart_grid = QuartGrid::from_bounds(self.min_pos, self.size);
+            quart_grid
+                .total_quarts
+                .saturating_sub(self.raw_quart_biome_indices.len())
         };
 
-        // Unpack voxel indices
+        // Width actually used by the packer; the palette-derived fallback mirrors the encoder.
         let bits = if self.palette_bits_per_block > 0 {
             self.palette_bits_per_block
         } else if self.block_palette.len() > 256 {
@@ -229,11 +260,49 @@ impl BaselineAssembler {
             8
         };
 
+        let voxel_bytes_len = (voxel_count as usize)
+            .checked_mul(bits as usize)
+            .map(|b| b.div_ceil(8))
+            .ok_or(ResyncReason::ChunkCorrupted)?;
+        let max_biome_bytes = max_remaining_quarts
+            .checked_mul(2)
+            .ok_or(ResyncReason::ChunkCorrupted)?;
+
+        let max_allowed_bytes = voxel_bytes_len
+            .checked_add(max_biome_bytes)
+            .ok_or(ResyncReason::ChunkCorrupted)?
+            .min(MAX_BASELINE_DECODED_BYTES);
+
+        if (decoded_target_bytes as usize) > max_allowed_bytes {
+            return Err(ResyncReason::ChunkCorrupted);
+        }
+
+        // Decompress payload bounded by Read::take
+        let target_len = decoded_target_bytes as usize;
+        let decompressed: Vec<u8> = if self.compression_mode == 1 {
+            let decoder = zstd::stream::Decoder::new(&payload[..])
+                .map_err(|_| ResyncReason::ChunkCorrupted)?;
+            let mut buf = Vec::with_capacity(target_len);
+            let mut limited = decoder.take((target_len as u64) + 1);
+            limited
+                .read_to_end(&mut buf)
+                .map_err(|_| ResyncReason::ChunkCorrupted)?;
+            if buf.len() != target_len {
+                return Err(ResyncReason::ChunkCorrupted);
+            }
+            buf
+        } else {
+            if payload.len() != target_len {
+                return Err(ResyncReason::ChunkCorrupted);
+            }
+            payload.clone()
+        };
+
+        // Unpack voxel indices
         let unpacked = unpack_lsb_indices(&decompressed, voxel_count as usize, bits);
         self.raw_voxel_indices.extend(unpacked);
 
         // Check if there are remaining biome bytes at the end of the chunk
-        let voxel_bytes_len = (voxel_count as usize * bits as usize).div_ceil(8);
         if decompressed.len() > voxel_bytes_len {
             let biome_slice = &decompressed[voxel_bytes_len..];
             let biome_bits = if self.biome_bits_per_quart > 0 {
@@ -242,6 +311,12 @@ impl BaselineAssembler {
                 8
             };
             let remaining_biomes = biome_slice.len() * 8 / biome_bits as usize;
+            // Overflow guard only: the byte budget above already bounds the stream, and the
+            // server's quart granularity is not guaranteed to match this client's grid exactly.
+            self.raw_quart_biome_indices
+                .len()
+                .checked_add(remaining_biomes)
+                .ok_or(ResyncReason::ChunkCorrupted)?;
             let unpacked_biomes = unpack_lsb_indices(biome_slice, remaining_biomes, biome_bits);
             self.raw_quart_biome_indices.extend(unpacked_biomes);
         }

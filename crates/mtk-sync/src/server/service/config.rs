@@ -68,6 +68,11 @@ pub enum ServerEvent {
         client_id: u64,
         reason: ResyncReason,
     },
+    /// A packet could not be encoded and was therefore not broadcast.
+    ///
+    /// Encoding only fails for invalid host-supplied data (an oversized identifier or a
+    /// malformed UUID), which must be visible instead of silently dropping a frame.
+    Warning(String),
 }
 
 #[derive(Debug)]

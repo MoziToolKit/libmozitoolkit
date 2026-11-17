@@ -12,7 +12,21 @@ use crossbeam_channel::{Receiver, Sender};
 use tungstenite::protocol::Message;
 use url::Url;
 
-use crate::protocol::{decode_packet, Packet};
+use crate::protocol::{decode_packet, encode_packet, Packet, ProtocolError};
+
+/// Encodes `packet` and queues it for the transport thread.
+///
+/// The encoding error is returned so callers can surface it (an oversized identifier or a
+/// malformed UUID is host data, not a transport failure). The channel send itself stays
+/// best-effort because the transport thread may already be gone.
+pub(crate) fn queue_packet(
+    sender: &Sender<ClientCommand>,
+    packet: &Packet,
+) -> Result<(), ProtocolError> {
+    let bytes = encode_packet(packet)?;
+    let _ = sender.send(ClientCommand::Send(bytes));
+    Ok(())
+}
 
 /// Commands sent from the session controller to the network client thread.
 #[derive(Debug)]

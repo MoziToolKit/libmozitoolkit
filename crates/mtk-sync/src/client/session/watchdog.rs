@@ -4,7 +4,7 @@ use crossbeam_channel::Sender;
 
 use super::state::{SessionState, SyncLifecycle};
 use crate::client::ClientCommand;
-use crate::protocol::{encode_packet, Packet, ResyncReason};
+use crate::protocol::{Packet, ResyncReason};
 use crate::SyncEvent;
 
 /// Sends a `RESYNC_REQUEST` at most once per second, preventing livelock storms
@@ -31,7 +31,11 @@ pub(crate) fn send_resync_request(
         missing_to_seq: state.sequence + 1,
         reason,
     };
-    let _ = cmd_sender.send(ClientCommand::Send(encode_packet(&resync_pkt)));
+    if let Err(err) = crate::client::transport::queue_packet(cmd_sender, &resync_pkt) {
+        let _ = event_sender.send(SyncEvent::Warning(format!(
+            "failed to encode RESYNC request: {err}"
+        )));
+    }
     let _ = event_sender.send(SyncEvent::StreamProgress {
         stage: "sync_request".to_string(),
         current: 0,

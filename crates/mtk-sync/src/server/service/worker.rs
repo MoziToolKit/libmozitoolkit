@@ -49,7 +49,11 @@ pub(crate) fn run_client_worker(
                     let ctx = inner.get_handshake_context(&config, addr);
                     match decide_handshake(&hello_pkt, &ctx) {
                         Ok(res) => {
-                            let welcome_bytes = encode_packet(&res.welcome_packet);
+                            let Ok(welcome_bytes) = encode_packet(&res.welcome_packet) else {
+                                let _ = ws.close(None);
+                                inner.remove_client(client_id);
+                                return;
+                            };
                             if ws
                                 .write(tungstenite::Message::Binary(welcome_bytes.into()))
                                 .is_err()
@@ -91,13 +95,14 @@ pub(crate) fn run_client_worker(
                             break;
                         }
                         Err(_) => {
-                            let err_bytes = encode_packet(&Packet::Error {
+                            if let Ok(err_bytes) = encode_packet(&Packet::Error {
                                 epoch: inner.epoch.load(Ordering::Relaxed),
                                 error_code: ErrorCode::UnknownOpcode,
                                 message: "Malformed handshake".to_string(),
-                            });
-                            let _ = ws.write(tungstenite::Message::Binary(err_bytes.into()));
-                            let _ = ws.flush();
+                            }) {
+                                let _ = ws.write(tungstenite::Message::Binary(err_bytes.into()));
+                                let _ = ws.flush();
+                            }
                             let _ = ws.close(None);
                             inner.remove_client(client_id);
                             return;
@@ -105,13 +110,14 @@ pub(crate) fn run_client_worker(
                     }
                 }
                 _ => {
-                    let err_bytes = encode_packet(&Packet::Error {
+                    if let Ok(err_bytes) = encode_packet(&Packet::Error {
                         epoch: inner.epoch.load(Ordering::Relaxed),
                         error_code: ErrorCode::UnknownOpcode,
                         message: "Expected HELLO packet".to_string(),
-                    });
-                    let _ = ws.write(tungstenite::Message::Binary(err_bytes.into()));
-                    let _ = ws.flush();
+                    }) {
+                        let _ = ws.write(tungstenite::Message::Binary(err_bytes.into()));
+                        let _ = ws.flush();
+                    }
                     let _ = ws.close(None);
                     inner.remove_client(client_id);
                     return;
@@ -177,9 +183,19 @@ pub(crate) fn run_client_worker(
                     match pkt {
                         Packet::Ping { timestamp } => {
                             let pong_pkt = Packet::Pong { timestamp };
-                            let pong_bytes = encode_packet(&pong_pkt);
-                            let _ = ws.write(tungstenite::Message::Binary(pong_bytes.into()));
-                            let _ = ws.flush();
+                            match encode_packet(&pong_pkt) {
+                                Ok(pong_bytes) => {
+                                    let _ =
+                                        ws.write(tungstenite::Message::Binary(pong_bytes.into()));
+                                    let _ = ws.flush();
+                                }
+                                Err(err) => {
+                                    let _ = inner.event_tx.send(ServerEvent::Warning(format!(
+                                        "failed to encode PONG: {err}"
+                                    )));
+                                    break;
+                                }
+                            }
                         }
                         Packet::BaselineAck { result_code, .. } => {
                             if result_code != BaselineAckResult::SuccessCommitted {
@@ -205,9 +221,10 @@ pub(crate) fn run_client_worker(
                         error_code: ErrorCode::UnknownOpcode,
                         message: "Malformed packet".to_string(),
                     };
-                    let err_bytes = encode_packet(&err_pkt);
-                    let _ = ws.write(tungstenite::Message::Binary(err_bytes.into()));
-                    let _ = ws.flush();
+                    if let Ok(err_bytes) = encode_packet(&err_pkt) {
+                        let _ = ws.write(tungstenite::Message::Binary(err_bytes.into()));
+                        let _ = ws.flush();
+                    }
                     break;
                 }
             }
