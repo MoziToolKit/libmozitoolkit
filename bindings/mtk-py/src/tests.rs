@@ -71,7 +71,9 @@ fn test_python_voxel_storage_and_world_mesher() {
         storage.set_bounds(0, 0, 0, 16, 16, 16);
         storage.set_block(0, 0, 0, "minecraft:stone", None);
         assert_eq!(storage.get_block(0, 0, 0), "minecraft:stone");
-        assert_eq!(storage.inner.dirty_sections.len(), 1);
+        // (0,0,0) sits on the shared corner of 8 sections, all of which sample it through
+        // the mesher's 18^3 padded neighbourhood.
+        assert_eq!(storage.inner.dirty_sections.len(), 8);
 
         let config = PyMesherConfig::default();
         let mut world = PyVoxelWorld::from_storage(&storage, Some(&config), None, None, None);

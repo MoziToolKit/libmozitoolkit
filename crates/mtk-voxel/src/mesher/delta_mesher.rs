@@ -63,8 +63,14 @@ mod tests {
             |_| ModelSource::None,
             &config,
         );
-        assert_eq!(meshes.len(), 1);
-        assert!(!meshes[0].1.is_empty());
+        // The edit sits on the shared corner of the 8 sections around it, and the mesher
+        // samples all of them through the 18^3 padded array, so all 8 are rebuilt; only the
+        // section that actually owns the block has geometry.
+        assert_eq!(meshes.len(), 8);
+        assert_eq!(
+            meshes.iter().filter(|(_, mesh)| !mesh.is_empty()).count(),
+            1
+        );
         assert!(world.dirty_sections.is_empty());
     }
 }

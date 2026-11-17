@@ -21,10 +21,11 @@ fn test_voxel_world_lifecycle_and_used_chunks() {
     let used_chunks = world.used_chunk_ids();
     assert_eq!(used_chunks, &[0]);
 
-    // Test incremental delta modification
+    // Test incremental delta modification. (0,0,0) is a section corner, so the mesher's
+    // 3x3x3 padded neighbourhood invalidates all 8 touching sections.
     world.set_block(0, 0, 0, "minecraft:air", None);
     let rebuilt = world.rebuild_dirty().unwrap();
-    assert_eq!(rebuilt.len(), 1);
+    assert_eq!(rebuilt.len(), 8);
 
     let updated_mesh = world.get_world_mesh().unwrap();
     assert!(!updated_mesh.is_empty());
@@ -172,9 +173,10 @@ fn test_incremental_rebuild_preserves_cross_section_seam_welding() {
     assert_no_duplicate_vertex_positions(full);
 
     // An unrelated edit inside Section 0 forces the incremental (dirty) assembly path.
+    // Local x = 0 touches the -X boundary, so the neighbour section is invalidated too.
     world.set_block(0, 5, 5, "minecraft:dirt", None);
     let rebuilt = world.rebuild_dirty().unwrap();
-    assert_eq!(rebuilt.len(), 1);
+    assert_eq!(rebuilt.len(), 2);
 
     let incremental = world.get_world_mesh().unwrap().clone();
     // Two welded cubes (12) + one welded dirt cube (8).

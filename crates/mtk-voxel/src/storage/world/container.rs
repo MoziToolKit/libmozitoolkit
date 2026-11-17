@@ -280,37 +280,53 @@ impl VoxelStorage {
             sec_biomes.set_biome(lx, ly, lz, b);
         }
 
-        let changed = sec.set_local(lx, ly, lz, state);
-        if changed {
+        let state_changed = sec.set_local(lx, ly, lz, state);
+        // A biome-only edit changes the baked tint even when the blockstate is unchanged, so
+        // dirtiness must track both.
+        let biome_changed = biome.is_some();
+        if state_changed || biome_changed {
             self.dirty_sections.insert(sec_coord);
             self.known_empty_sections.remove(&sec_coord);
 
-            let has_bounds = self.size_x > 0 && self.size_y > 0 && self.size_z > 0;
-            let max_x = self.min_x + self.size_x - 1;
-            let max_y = self.min_y + self.size_y - 1;
-            let max_z = self.min_z + self.size_z - 1;
-
-            // Check boundary neighbors and mark dirty for cross-section face culling
-            if (x & 15) == 0 && (!has_bounds || x > self.min_x) {
-                self.dirty_sections.insert(sec_coord + IVec3::new(-1, 0, 0));
-            } else if (x & 15) == 15 && (!has_bounds || x < max_x) {
-                self.dirty_sections.insert(sec_coord + IVec3::new(1, 0, 0));
-            }
-            if (y & 15) == 0 && (!has_bounds || y > self.min_y) {
-                self.dirty_sections.insert(sec_coord + IVec3::new(0, -1, 0));
-            } else if (y & 15) == 15 && (!has_bounds || y < max_y) {
-                self.dirty_sections.insert(sec_coord + IVec3::new(0, 1, 0));
-            }
-            if (z & 15) == 0 && (!has_bounds || z > self.min_z) {
-                self.dirty_sections.insert(sec_coord + IVec3::new(0, 0, -1));
-            } else if (z & 15) == 15 && (!has_bounds || z < max_z) {
-                self.dirty_sections.insert(sec_coord + IVec3::new(0, 0, 1));
+            // The mesher samples a full 3x3x3 neighbourhood (18^3 padded array), so an edit on
+            // a section border also invalidates every diagonal neighbour, not just the six
+            // orthogonal ones. Each axis contributes -1/0/+1 depending on the local coordinate.
+            let x_offsets: &[i32] = if lx == 0 {
+                &[-1, 0]
+            } else if lx == 15 {
+                &[0, 1]
+            } else {
+                &[0]
+            };
+            let y_offsets: &[i32] = if ly == 0 {
+                &[-1, 0]
+            } else if ly == 15 {
+                &[0, 1]
+            } else {
+                &[0]
+            };
+            let z_offsets: &[i32] = if lz == 0 {
+                &[-1, 0]
+            } else if lz == 15 {
+                &[0, 1]
+            } else {
+                &[0]
+            };
+            for &dx in x_offsets {
+                for &dy in y_offsets {
+                    for &dz in z_offsets {
+                        if dx != 0 || dy != 0 || dz != 0 {
+                            self.dirty_sections
+                                .insert(sec_coord + IVec3::new(dx, dy, dz));
+                        }
+                    }
+                }
             }
 
             self.advance_generation();
         }
 
-        changed
+        state_changed
     }
 
     /// Returns the biome registry identifier for block coordinate `(x, y, z)`.
@@ -474,5 +490,58 @@ impl crate::source::VoxelWriter for VoxelStorage {
 
     fn clear(&mut self) {
         VoxelStorage::clear(self);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn biome_only_change_still_marks_the_section_dirty() {
+        let mut storage = VoxelStorage::new();
+        storage.set_block(3, 64, 3, "minecraft:grass_block", Some("minecraft:plains"));
+        storage.clear_dirty_sections();
+
+        // Same blockstate, different biome: the baked tint changes, so the section must be
+        // remeshed even though `set_local` reports "unchanged".
+        let changed =
+            storage.set_block(3, 64, 3, "minecraft:grass_block", Some("minecraft:desert"));
+
+        assert!(!changed, "blockstate is identical");
+        assert_eq!(storage.get_biome(3, 64, 3), "minecraft:desert");
+        assert!(
+            storage.dirty_sections.contains(&IVec3::new(0, 4, 0)),
+            "biome-only edit must dirty the section, got {:?}",
+            storage.dirty_sections
+        );
+    }
+
+    #[test]
+    fn corner_edit_dirties_every_diagonal_neighbour() {
+        let mut storage = VoxelStorage::new();
+        // Local (0,0,0) of section (1,1,1) sits on the shared corner of 8 sections: the
+        // mesher samples all of them through the 18^3 padded array.
+        storage.set_block(16, 16, 16, "minecraft:stone", None);
+        storage.clear_dirty_sections();
+
+        storage.set_block(16, 16, 16, "minecraft:dirt", None);
+
+        let expected: Vec<IVec3> = (-1..=0)
+            .flat_map(|dx| {
+                (-1..=0)
+                    .flat_map(move |dy| (-1..=0).map(move |dz| IVec3::new(1 + dx, 1 + dy, 1 + dz)))
+            })
+            .filter(|c| *c != IVec3::new(1, 1, 1))
+            .collect();
+
+        assert_eq!(expected.len(), 7);
+        for coord in expected {
+            assert!(
+                storage.dirty_sections.contains(&coord),
+                "corner edit must dirty neighbour {coord:?}, got {:?}",
+                storage.dirty_sections
+            );
+        }
     }
 }

@@ -395,7 +395,9 @@ pub fn sample_quad_corner_biome_tints(
         let cy = ly + offset[1];
         let cz = lz + offset[2];
 
-        let qy = if is_3d { (cy >> 2) & 3 } else { 0 };
+        // `cy` is a local corner coordinate and can be 16 (ly = 15 plus the +1 corner
+        // offset), so this must clamp rather than wrap modulo four.
+        let qy = if is_3d { (cy >> 2).min(3) } else { 0 };
 
         // 4 dual-grid neighbor columns around this vertex corner
         let x0 = cx.saturating_sub(1).min(15);
@@ -465,6 +467,45 @@ pub fn sample_quad_corner_biome_tints(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_top_corner_samples_the_highest_quart_layer() {
+        use crate::biome::SmoothedBiomeColumn;
+
+        // 3D biome mode: 64 quart layers, each expanded to a 16x16 column grid.
+        let mut cols = vec![SmoothedBiomeColumn::default(); 1024];
+        for (index, col) in cols.iter_mut().enumerate() {
+            let layer = index >> 8;
+            col.grass_color = if layer == 3 {
+                [0.0, 1.0, 0.0, 1.0]
+            } else {
+                [1.0, 0.0, 0.0, 1.0]
+            };
+            col.has_custom_grass = false;
+        }
+
+        // Top face of the topmost block: ly = 15, corner offsets reach cy = 16.
+        let offsets = [[0, 0, 0], [0, 1, 0], [1, 0, 0], [1, 1, 0]];
+        let tint_data = [0.0, 0.0, 1.0, mtk_material::TINT_TYPE_GRASS as f32];
+        let (_, corners) = sample_quad_corner_biome_tints(
+            Some(&cols),
+            0,
+            15,
+            0,
+            &offsets,
+            tint_data,
+            [0.0, 0.0, 0.0, 1.0],
+            None,
+            true,
+        );
+
+        for (index, corner) in corners.iter().enumerate() {
+            assert!(
+                (corner[1] - 1.0).abs() < 1e-5 && corner[0].abs() < 1e-5,
+                "corner {index} at ly=15 must sample quart layer 3 (green), got {corner:?}"
+            );
+        }
+    }
 
     #[test]
     fn test_sample_quad_corner_biome_tints_none_biome_data_does_not_panic() {

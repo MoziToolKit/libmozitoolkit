@@ -448,7 +448,9 @@ mod tests {
         storage.set_bounds(0, 0, 0, 16, 16, 16);
         storage.set_block(0, 0, 0, "minecraft:stone");
         assert_eq!(storage.get_block(0, 0, 0), "minecraft:stone");
-        assert_eq!(storage.dirty_section_count(), 1);
+        // (0,0,0) is a section corner: all 8 sections sharing it are invalidated because the
+        // mesher samples a 3x3x3 padded neighbourhood.
+        assert_eq!(storage.dirty_section_count(), 8);
 
         let culler = WasmFaceCuller::new(0, 0).unwrap();
         let config = WasmMesherConfig::new(true, true, true, Some(2));

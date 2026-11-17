@@ -95,16 +95,16 @@
 
 | ID | P | 位置 | 现象 | 修法 | 状态 |
 |---|---|---|---|---|---|
-| **V-01** | P0 | `mtk-voxel/src/mesher/ao.rs:156,167` | `shade_corner12/13` 返回 `shade0`（应为 `shade1`）→ 凹角两角漏光（0.8 而非 0.4） | 改返回值；补非 1.0 亮度用例 | ✅（代码明确） |
+| ~~**V-01**~~ | — | `mtk-voxel/src/mesher/ao.rs:156,167` | `shade_corner12/13` 返回 `shade0`（应为 `shade1`）→ 凹角两角漏光（0.8 而非 0.4） | 改返回值；补非 1.0 亮度用例 | ✅（代码明确） |
 | **V-02** | P0 | `mtk-voxel/src/mesher/grid_pool.rs:61-64` | 顶点去重只按位置、忽略法线 → 焊接后 2/3 面法线是错的轴 | key 加 `normal`；或焊接后重算法线 | ◻ |
-| **V-03** | P1 | `mtk-voxel/src/world/sync.rs:86` | `dirty_sections = dirty` 覆盖而非合并 → 同步前的脏段丢失，网格永久陈旧 | `extend` + 去重 | ◻ |
-| **V-04** | P1 | `mtk-voxel/src/storage/world/container.rs:283-284` | 只改 biome 时不动 dirty → 染色永不刷新 | biome 变更也置脏 | ◻ |
-| **V-05** | P1 | `container.rs:296-310` | 只标 6 正交邻居，padded apron 采样 8 对角 → 角落 AO/流体高度陈旧 | 标 26 邻居（或至少 18） | ◻ |
-| **V-06** | P1 | `mtk-voxel/src/mesher/shading/resolver.rs:398` | `(cy >> 2) & 3` 在 `cy=16` 回绕到 0 → 3D biome 最上角采样最底层 | `min(cy>>2, 3)` | ◻ |
+| **V-03** ✅ DONE | P1 | `mtk-voxel/src/world/sync.rs:86` | `dirty_sections = dirty` 覆盖而非合并 → 同步前的脏段丢失，网格永久陈旧 | `extend` + 去重 | ◻ |
+| **V-04** ✅ DONE | P1 | `mtk-voxel/src/storage/world/container.rs:283-284` | 只改 biome 时不动 dirty → 染色永不刷新 | biome 变更也置脏 | ◻ |
+| **V-05** ✅ DONE | P1 | `container.rs:296-310` | 只标 6 正交邻居，padded apron 采样 8 对角 → 角落 AO/流体高度陈旧 | 标 26 邻居（或至少 18） | ◻ |
+| **V-06** ✅ DONE | P1 | `mtk-voxel/src/mesher/shading/resolver.rs:398` | `(cy >> 2) & 3` 在 `cy=16` 回绕到 0 → 3D biome 最上角采样最底层 | `min(cy>>2, 3)` | ◻ |
 | **V-07** | P2 | `mtk-voxel/src/fluid/height.rs:82-100 vs 126-141` | 流体高度公式两份，waterlogged 分支不一致 | 收敛成一份 | ◻ |
 | **V-08** | P2 | `mtk-voxel/src/mesher/section_mesher.rs:55` | 早退按 `non_air_count==0`：空气格里的方块实体（悬挂告示牌/头颅）完全无几何 | 有 block entity 也进 mesher | ◻ |
 | **V-09** ✅ DONE | P2 | `mtk-model/src/entity/item_frame.rs:343-380` | 展示框物品 `surface_offset = -0.015`、`BASE_ITEM_SCALE=0.5` 等魔数，与 vanilla `ItemFrameRenderer` 无对应注释；FIXED 变换的旋转用 `EulerRot::XYZ`（JOML `rotationXYZ` 是 Rz·Ry·Rx） | 抽常量 + 注明 vanilla 出处；用四元数对齐 JOML 顺序（当前只有铜像有 2 轴 fixed，风险低但别留坑） | ✅ |
-| **M-13** | P1 | `mtk-model/src/parser/model_json.rs:37-45` | `scale: [f32;3]` 强制数组；大量资源包写 `"scale": 1.0`（标量）→ 整个模型 JSON 解析失败 → 模型静默缺失 | 自定义反序列化接受标量/数组 | ◻ |
+| ~~**M-13**~~ | — | `mtk-model/src/parser/model_json.rs:37-45` | `scale: [f32;3]` 强制数组；大量资源包写 `"scale": 1.0`（标量）→ 整个模型 JSON 解析失败 → 模型静默缺失 | 自定义反序列化接受标量/数组 | ◻ |
 | **M-14** | P2 | `mtk-model/src/item/generator.rs:462-520` | `default_item_generated_transforms()` 手工抄 vanilla `item/generated.json`，与真实 JSON 会漂移 | 从真实 JSON 读取，或加一致性测试 | ◻ |
 | **C-01** | P1 | `mtk-resource/src/meta.rs:8-28` | `.mcmeta` 的 `frames` 解析了但从不使用，`frametime` 丢失 → 动画帧序/时长错 | 序列化/消费 `frames`，或删字段 | ◻ |
 | **C-02** | P1 | `mtk-resource/src/pack/stack/collector.rs:176-190` | atlas `filter` 源用 `String::contains` 且顺序相关 → 行为随机 | 正则 + 顺序无关的两阶段 | ◻ |
@@ -323,3 +323,34 @@
 4. 测试里 `EntityInstance::default()`、`ErrorCode::InternalError` 等不存在的符号 → 改为真实构造器/变体。
 
 门禁：`fmt --check` / `clippy -D warnings` / 83 组测试（真实资产）/ `build-all-py` / Blender 展示框+实时同步 14 passed。
+
+---
+
+## D4 记录（2026-11-17）
+
+### 已修（真实缺陷，均有先红后绿的测试）
+
+| 项 | 内容 | 测试 |
+|---|---|---|
+| **V-04** | `set_block` 只在方块状态变化时置脏 → 仅改 biome 时染色永不刷新。现在 state/biome 任一变化都置脏 | `biome_only_change_still_marks_the_section_dirty` |
+| **V-05** | 只标 6 个正交邻居，而 mesher 采样 3×3×3 padded 邻域 → 角/边编辑留下陈旧 AO 与流体高度。改为按局部坐标 0/15 计算 -1/0/+1 组合（最多 8 个 section） | `corner_edit_dirties_every_diagonal_neighbour` + `sync_dirties_diagonal_neighbours_of_a_changed_section` |
+| **V-03** | `sync_from_storage` 用 `=` 覆盖 `dirty_sections` → 同步前本地排队的脏段被丢弃。改为合并，并回报合并后的总数 | `sync_keeps_dirt_queued_before_the_sync` |
+| **V-06** | 角点 biome 采样 `(cy >> 2) & 3` 在 `ly=15`（cy=16）回绕到 0 层 → 顶面用最底层的 quart 染色。改为 `.min(3)` | `test_top_corner_samples_the_highest_quart_layer` |
+
+`sync.rs` 的三处重复 6 邻居数组同时收敛为一张 `NEIGHBOUR_OFFSETS_26` 表。
+连带更新 5 处依赖旧"只脏 1 段"行为的测试（`delta_mesher`、`test_world`×2、`mtk-py`、`mtk-wasm`），并在注释里写明原因。
+
+### 再次撤回的假阳性（附原版源码证据）
+
+| 项 | 结论 |
+|---|---|
+| **V-01** AO 凹角 `shade_corner12/13` 返回 `shade0` | **假**。26.2 `BlockModelLighter.prepareQuadAmbientOcclusion` 四个分支**全都**是 `shadeCorner0N = shade0`，与 Rust 逐行一致。已还原改动 |
+| **M-13** `"scale": 0.5` 标量应被接受 | **假**。原版 `ItemTransform.Deserializer.getVector3f` 要求 3 元数组，否则抛 `JsonParseException`。我们的问题不是"不够宽容"，而是**方块模型解析失败时静默丢弃** → 归入 M-03 的方块模型半边 |
+
+### 降级
+
+| 项 | 结论 |
+|---|---|
+| **V-02** 焊接顶点法线 | 机制确认：`GridVertexPool` 只按整数坐标去重，`MeshData.normals` 是 per-vertex → 共享角点的 3 个面只有 1 个法线正确。但宿主注入网格时 `use_smooth=False`（默认），Blender 用面法线，**当前无可见影响**。属潜在问题：任何 custom-normal / GLTF / 其他 DCC 消费方会着色错误。修复需付 3 倍顶点代价，暂记为 P2 待决策 |
+
+门禁：`fmt --check` / `clippy -D warnings` / 83 组测试（真实资产）/ `build-all-py` / Blender 生化+实体增量 29 passed。
