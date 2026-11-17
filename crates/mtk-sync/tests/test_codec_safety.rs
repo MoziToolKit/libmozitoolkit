@@ -1,3 +1,6 @@
+use glam::{DVec3, Vec3};
+use mtk_core::Direction;
+use mtk_model::EntityInstance;
 use mtk_sync::protocol::{
     decode_packet, encode_packet, format_uuid, parse_canonical_uuid, ErrorCode, Opcode, Packet,
     ProtocolError, VisualEntityDelta, PROTOCOL_MAGIC, PROTOCOL_VERSION,
@@ -30,26 +33,20 @@ fn test_canonical_uuid_parsing() {
     assert_eq!(format_uuid(most2, least2), dashed);
 }
 
-/// Minimal item frame instance with a stable identity for codec tests.
-fn frame_entity() -> mtk_model::EntityInstance {
-    mtk_model::EntityInstance::new_item_frame(
-        Some("c0ffee00-1234-5678-9abc-def012345678".to_string()),
-        glam::DVec3::new(0.0, 64.0, 0.0),
-        mtk_core::Direction::North,
-        glam::Vec3::ZERO,
-        "minecraft:diamond_sword".to_string(),
+#[test]
+fn test_encode_entity_invalid_uuid() {
+    let entity = EntityInstance::new_item_frame(
+        Some("not-a-valid-uuid".to_string()),
+        DVec3::ZERO,
+        Direction::North,
+        Vec3::ZERO,
+        "minecraft:stick",
         1,
         0,
         false,
         false,
         None,
-    )
-}
-
-#[test]
-fn test_encode_entity_invalid_uuid() {
-    let mut entity = frame_entity();
-    entity.uuid = Some("not-a-valid-uuid".to_string());
+    );
 
     let pkt = Packet::DeltaVisualEntity {
         epoch: 1,
@@ -65,8 +62,18 @@ fn test_encode_entity_invalid_uuid() {
     );
 
     // Entity with absent UUID must also return explicit error
-    let mut entity_nil = frame_entity();
-    entity_nil.uuid = None;
+    let entity_nil = EntityInstance::new_item_frame(
+        None,
+        DVec3::ZERO,
+        Direction::North,
+        Vec3::ZERO,
+        "minecraft:stick",
+        1,
+        0,
+        false,
+        false,
+        None,
+    );
 
     let pkt_nil = Packet::DeltaVisualEntity {
         epoch: 1,
@@ -86,7 +93,7 @@ fn test_encode_string_too_long() {
     let long_str = "x".repeat(70_000);
     let pkt = Packet::Error {
         epoch: 1,
-        error_code: ErrorCode::UnknownOpcode,
+        error_code: ErrorCode::InvalidBounds,
         message: long_str,
     };
 
