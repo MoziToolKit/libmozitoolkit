@@ -1527,3 +1527,30 @@ fn vanilla_euler_rotation_model_parses_and_bakes() {
         "template is expected to use Euler rotations, found none"
     );
 }
+
+/// Real-asset guard: hanging signs use the Euler element rotation form, so they only bake once
+/// the parser understands it. Before that fix every `template_hanging_sign_rot_*` model failed
+/// to parse and the block silently produced no geometry.
+#[test]
+fn vanilla_hanging_sign_bakes_with_euler_rotations() {
+    let root = require_assets!();
+    let blockstate = "minecraft:oak_hanging_sign[facing=north,rotation=0,waterlogged=false]";
+    let def = read_vanilla_blockstate(&root, "oak_hanging_sign");
+    let loader = vanilla_model_loader(&root);
+
+    let mut baker = ModelBaker::new();
+    let baked = baker
+        .bake_blockstate(blockstate, def.as_ref(), loader)
+        .expect("hanging sign must bake");
+
+    assert!(
+        !baked.elements.is_empty(),
+        "hanging sign must produce elements, got none"
+    );
+    let mesh = baked.to_mesh(false);
+    assert!(
+        mesh.face_count() > 0,
+        "hanging sign mesh must have faces, got {}",
+        mesh.face_count()
+    );
+}
