@@ -76,8 +76,8 @@ fn test_dragon_and_piglin_heads() {
         .rotation
         .as_ref()
         .expect("Dragon jaw should have rotation");
-    assert_eq!(jaw_rot.axis, "x");
-    assert_eq!(jaw_rot.angle, 11.5);
+    assert_eq!(jaw_rot.single_axis().map(|(a, _)| a), Some("x"));
+    assert_eq!(jaw_rot.single_axis().map(|(_, t)| t), Some(11.5));
     assert_eq!(jaw_rot.origin, [8.0, 3.0, 14.0]);
 
     let bs_piglin = BlockState::parse("minecraft:piglin_head[rotation=4]").unwrap();
@@ -102,8 +102,8 @@ fn test_dragon_and_piglin_heads() {
         .rotation
         .as_ref()
         .expect("Right ear should have rotation");
-    assert_eq!(right_ear_rot.axis, "z");
-    assert_eq!(right_ear_rot.angle, 30.0);
+    assert_eq!(right_ear_rot.single_axis().map(|(a, _)| a), Some("z"));
+    assert_eq!(right_ear_rot.single_axis().map(|(_, t)| t), Some(30.0));
     assert_eq!(right_ear_rot.origin, [12.5, 6.0, 8.0]);
 
     let left_ear = &elems_piglin[3];
@@ -111,8 +111,8 @@ fn test_dragon_and_piglin_heads() {
         .rotation
         .as_ref()
         .expect("Left ear should have rotation");
-    assert_eq!(left_ear_rot.axis, "z");
-    assert_eq!(left_ear_rot.angle, -30.0);
+    assert_eq!(left_ear_rot.single_axis().map(|(a, _)| a), Some("z"));
+    assert_eq!(left_ear_rot.single_axis().map(|(_, t)| t), Some(-30.0));
     assert_eq!(left_ear_rot.origin, [3.5, 6.0, 8.0]);
 
     // Verify left and right ears have different face UVs

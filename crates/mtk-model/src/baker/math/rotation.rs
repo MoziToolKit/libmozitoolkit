@@ -3,7 +3,13 @@ use mtk_core::Direction;
 
 use crate::parser::model_json::RotationJson;
 
-/// Applies local element rotation (around element origin [0..16], axis, angle, and rescale).
+/// Applies local element rotation around the element origin.
+///
+/// Supports both vanilla rotation shapes:
+/// - single axis (`{axis, angle}`), including the `rescale` stretch for 22.5/45/67.5 degrees;
+/// - three-axis Euler (`{x, y, z}`), composed as `Rz * Ry * Rx` to match vanilla
+///   `Matrix4f.rotationZYX(z, y, x)`. Euler elements are not rescaled: vanilla's models that use
+///   this form never set `rescale`.
 pub(crate) fn rotate_element_point(p: Vec3, rot: &RotationJson) -> Vec3 {
     let origin = Vec3::new(
         rot.origin[0] / 16.0,
@@ -11,33 +17,54 @@ pub(crate) fn rotate_element_point(p: Vec3, rot: &RotationJson) -> Vec3 {
         rot.origin[2] / 16.0,
     );
     let mut v = p - origin;
-    let rad = rot.angle.to_radians();
-    let (s, c) = rad.sin_cos();
 
-    match rot.axis.to_ascii_lowercase().as_str() {
-        "x" => {
-            v = Vec3::new(v.x, v.y * c - v.z * s, v.y * s + v.z * c);
+    if let Some((axis, angle)) = rot.single_axis() {
+        let rad = angle.to_radians();
+        let (s, c) = rad.sin_cos();
+        let axis = axis.to_ascii_lowercase();
+
+        match axis.as_str() {
+            "x" => {
+                v = Vec3::new(v.x, v.y * c - v.z * s, v.y * s + v.z * c);
+            }
+            "y" => {
+                v = Vec3::new(v.x * c + v.z * s, v.y, -v.x * s + v.z * c);
+            }
+            "z" => {
+                v = Vec3::new(v.x * c - v.y * s, v.x * s + v.y * c, v.z);
+            }
+            _ => {}
         }
-        "y" => {
-            v = Vec3::new(v.x * c + v.z * s, v.y, -v.x * s + v.z * c);
+
+        if rot.rescale.unwrap_or(false)
+            && ((angle.abs() - 22.5).abs() < 0.1
+                || (angle.abs() - 45.0).abs() < 0.1
+                || (angle.abs() - 67.5).abs() < 0.1)
+        {
+            let scale = 1.0 / rad.cos();
+            match axis.as_str() {
+                "x" => v = Vec3::new(v.x, v.y * scale, v.z * scale),
+                "y" => v = Vec3::new(v.x * scale, v.y, v.z * scale),
+                "z" => v = Vec3::new(v.x * scale, v.y * scale, v.z),
+                _ => {}
+            }
         }
-        "z" => {
+    } else if let Some((rx, ry, rz)) = rot.euler() {
+        // Vanilla order: rotate about Z, then Y, then X.
+        if rz != 0.0 {
+            let rad = rz.to_radians();
+            let (s, c) = rad.sin_cos();
             v = Vec3::new(v.x * c - v.y * s, v.x * s + v.y * c, v.z);
         }
-        _ => {}
-    }
-
-    if rot.rescale.unwrap_or(false)
-        && ((rot.angle.abs() - 22.5).abs() < 0.1
-            || (rot.angle.abs() - 45.0).abs() < 0.1
-            || (rot.angle.abs() - 67.5).abs() < 0.1)
-    {
-        let scale = 1.0 / rad.cos();
-        match rot.axis.to_ascii_lowercase().as_str() {
-            "x" => v = Vec3::new(v.x, v.y * scale, v.z * scale),
-            "y" => v = Vec3::new(v.x * scale, v.y, v.z * scale),
-            "z" => v = Vec3::new(v.x * scale, v.y * scale, v.z),
-            _ => {}
+        if ry != 0.0 {
+            let rad = ry.to_radians();
+            let (s, c) = rad.sin_cos();
+            v = Vec3::new(v.x * c + v.z * s, v.y, -v.x * s + v.z * c);
+        }
+        if rx != 0.0 {
+            let rad = rx.to_radians();
+            let (s, c) = rad.sin_cos();
+            v = Vec3::new(v.x, v.y * c - v.z * s, v.y * s + v.z * c);
         }
     }
 
@@ -147,4 +174,89 @@ pub(crate) fn calculate_facing(positions: &[Vec3; 4]) -> Direction {
         }
     }
     best_dir
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::model_json::RotationValue;
+
+    fn rotation(origin: [f32; 3], value: RotationValue) -> RotationJson {
+        RotationJson {
+            origin,
+            value,
+            rescale: None,
+        }
+    }
+
+    #[test]
+    fn euler_rotation_matches_vanilla_rotation_zyx() {
+        // 90 degrees about Y maps +X to -Z.
+        let euler = rotation(
+            [0.0, 0.0, 0.0],
+            RotationValue::Euler {
+                x: 0.0,
+                y: 90.0,
+                z: 0.0,
+            },
+        );
+        let rotated = rotate_element_point(Vec3::new(1.0, 0.0, 0.0), &euler);
+        assert!(
+            (rotated - Vec3::new(0.0, 0.0, -1.0)).length() < 1e-5,
+            "{rotated:?}"
+        );
+
+        // 90 degrees about Z maps +X to +Y.
+        let euler_z = rotation(
+            [0.0, 0.0, 0.0],
+            RotationValue::Euler {
+                x: 0.0,
+                y: 0.0,
+                z: 90.0,
+            },
+        );
+        let rotated_z = rotate_element_point(Vec3::new(1.0, 0.0, 0.0), &euler_z);
+        assert!(
+            (rotated_z - Vec3::new(0.0, 1.0, 0.0)).length() < 1e-5,
+            "{rotated_z:?}"
+        );
+    }
+
+    #[test]
+    fn euler_and_single_axis_agree_for_one_axis() {
+        let single = rotation(
+            [0.0, 0.0, 0.0],
+            RotationValue::SingleAxis {
+                axis: "y".to_string(),
+                angle: -67.5,
+            },
+        );
+        let euler = rotation(
+            [0.0, 0.0, 0.0],
+            RotationValue::Euler {
+                x: 0.0,
+                y: -67.5,
+                z: 0.0,
+            },
+        );
+        let point = Vec3::new(0.3, 0.7, -0.2);
+        let a = rotate_element_point(point, &single);
+        let b = rotate_element_point(point, &euler);
+        assert!((a - b).length() < 1e-5, "{a:?} vs {b:?}");
+    }
+
+    #[test]
+    fn euler_rotation_respects_the_origin() {
+        let euler = rotation(
+            [8.0, 8.0, 8.0],
+            RotationValue::Euler {
+                x: 0.0,
+                y: 180.0,
+                z: 0.0,
+            },
+        );
+        // Rotating the pivot itself must be a no-op.
+        let pivot = Vec3::splat(0.5);
+        assert!((rotate_element_point(pivot, &euler) - pivot).length() < 1e-6);
+    }
 }

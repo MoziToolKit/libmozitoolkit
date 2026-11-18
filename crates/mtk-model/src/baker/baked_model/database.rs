@@ -101,9 +101,16 @@ impl BakedModelDatabase {
     }
 
     /// Records a model that was discovered but could not be baked into geometry.
+    ///
+    /// The first reason recorded for a key wins: the same model can be reached through several
+    /// pipeline stages (resolution, then baking) and the earliest failure is the informative one.
     pub fn push_bake_failure(&mut self, key: impl Into<String>, reason: impl Into<String>) {
+        let key = key.into();
+        if self.bake_failures.iter().any(|failure| failure.key == key) {
+            return;
+        }
         self.bake_failures.push(ModelBakeFailure {
-            key: key.into(),
+            key,
             reason: reason.into(),
         });
     }

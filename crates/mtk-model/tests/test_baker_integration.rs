@@ -1476,3 +1476,54 @@ fn test_texture_alpha_dynamic_cull_meta_update() {
         );
     }
 }
+
+/// Vanilla element rotations come in two shapes; both must parse and bake.
+///
+/// `block/template_hanging_sign_rot_3.json` uses the three-axis Euler form
+/// (`{"x": 180, "y": -67.5, "z": -180, "origin": [...]}`), which used to make the entire model
+/// JSON fail to deserialize and silently drop every hanging-sign variant.
+#[test]
+fn element_rotation_accepts_single_axis_and_euler_forms() {
+    use mtk_model::{RotationJson, RotationValue};
+
+    let single: RotationJson =
+        serde_json::from_str(r#"{"origin": [8, 8, 8], "axis": "y", "angle": -22.5}"#)
+            .expect("single-axis rotation must parse");
+    assert_eq!(single.single_axis(), Some(("y", -22.5)));
+    assert!(single.euler().is_none());
+
+    let euler: RotationJson =
+        serde_json::from_str(r#"{"origin": [8, 0, 8], "x": 180, "y": -67.5, "z": -180}"#)
+            .expect("euler rotation must parse");
+    assert_eq!(euler.euler(), Some((180.0, -67.5, -180.0)));
+    assert!(euler.single_axis().is_none());
+    assert!(matches!(euler.value, RotationValue::Euler { .. }));
+}
+
+#[test]
+fn vanilla_euler_rotation_model_parses_and_bakes() {
+    let Some(root) = mtk_testkit::assets_root() else {
+        eprintln!("[mtk] skipping: no vanilla assets");
+        return;
+    };
+    let path = root.join("assets/minecraft/models/block/template_hanging_sign_rot_3.json");
+    if !path.is_file() {
+        eprintln!("[mtk] skipping: {} not present", path.display());
+        return;
+    }
+    let bytes = std::fs::read(&path).expect("read model");
+    let model: mtk_model::BlockModelJson =
+        serde_json::from_slice(&bytes).expect("hanging sign template must parse");
+
+    let elements = model.elements.as_ref().expect("elements");
+    assert!(!elements.is_empty());
+    let rotated = elements
+        .iter()
+        .filter_map(|element| element.rotation.as_ref())
+        .filter(|rotation| rotation.euler().is_some())
+        .count();
+    assert!(
+        rotated > 0,
+        "template is expected to use Euler rotations, found none"
+    );
+}

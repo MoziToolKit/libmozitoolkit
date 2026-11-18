@@ -76,24 +76,35 @@ pub(crate) fn prebake_all_models_with_progress(
     let mut item_model_locs: Vec<ResourceLocation> = Vec::new();
     let mut seen_items = std::collections::HashSet::new();
 
+    // Diagnostics collected during indexing; reported through `bake_failures` at the end.
+    let mut discovery_failures: Vec<(String, &'static str)> = Vec::new();
+
     for pack in stack.packs().iter().rev() {
         for file in pack.list_files("assets/") {
             if file.ends_with(".json") && file.contains("/models/") {
-                if let Some(bytes) = pack.open(&file) {
-                    if let Ok(model) = serde_json::from_slice::<BlockModelJson>(&bytes) {
-                        if let Some(loc) =
-                            ResourceLocation::from_asset_path(&file, "models", "json")
-                        {
-                            let canon = loc.as_string();
-                            model_cache.insert(canon.clone(), model.clone());
-                            if loc.namespace == "minecraft" {
-                                model_cache.insert(loc.path.clone(), model.clone());
-                            }
-                            if loc.path.starts_with("item/") && seen_items.insert(canon) {
-                                item_model_locs.push(loc);
-                            }
+                let Some(bytes) = pack.open(&file) else {
+                    continue;
+                };
+                let Some(loc) = ResourceLocation::from_asset_path(&file, "models", "json") else {
+                    continue;
+                };
+                let canon = loc.as_string();
+                // Zero-length model files exist as intentional placeholders in some packs
+                // (the model is provided by a resource pack lower in the stack).
+                if bytes.iter().all(u8::is_ascii_whitespace) {
+                    continue;
+                }
+                match serde_json::from_slice::<BlockModelJson>(&bytes) {
+                    Ok(model) => {
+                        model_cache.insert(canon.clone(), model.clone());
+                        if loc.namespace == "minecraft" {
+                            model_cache.insert(loc.path.clone(), model.clone());
+                        }
+                        if loc.path.starts_with("item/") && seen_items.insert(canon) {
+                            item_model_locs.push(loc);
                         }
                     }
+                    Err(_) => discovery_failures.push((canon, "invalid_model_json")),
                 }
             }
         }
@@ -123,29 +134,52 @@ pub(crate) fn prebake_all_models_with_progress(
     };
 
     // 2. Pre-resolve all discovered model JSON definitions into an immutable shared map
-    #[cfg(feature = "parallel")]
-    let resolved_map: HashMap<String, std::sync::Arc<mtk_model::ResolvedBlockModel>> = {
-        model_cache
-            .par_iter()
-            .filter_map(|(id, model)| {
-                model
-                    .resolve_hierarchy(id, |parent_id| get_model(parent_id))
-                    .ok()
-                    .map(|r| (id.clone(), std::sync::Arc::new(r)))
+    type ResolveOutcome =
+        Result<(String, std::sync::Arc<mtk_model::ResolvedBlockModel>), (String, &'static str)>;
+
+    let resolve_one = |id: &String, model: &BlockModelJson| -> ResolveOutcome {
+        model
+            .resolve_hierarchy(id, |parent_id| get_model(parent_id))
+            .map(|resolved| (id.clone(), std::sync::Arc::new(resolved)))
+            .map_err(|error| {
+                // Templates reference variables their children define, so resolving them
+                // standalone always fails; only a genuinely broken hierarchy is worth reporting.
+                let reason = if matches!(error, mtk_model::ModelError::CircularParentHierarchy(_)) {
+                    "circular_parent_hierarchy"
+                } else {
+                    "unresolved_template"
+                };
+                (id.clone(), reason)
             })
-            .collect()
     };
 
-    #[cfg(not(feature = "parallel"))]
-    let resolved_map: HashMap<String, std::sync::Arc<mtk_model::ResolvedBlockModel>> = model_cache
-        .iter()
-        .filter_map(|(id, model)| {
-            model
-                .resolve_hierarchy(id, |parent_id| get_model(parent_id))
-                .ok()
-                .map(|r| (id.clone(), std::sync::Arc::new(r)))
-        })
+    #[cfg(feature = "parallel")]
+    let resolve_results: Vec<ResolveOutcome> = model_cache
+        .par_iter()
+        .map(|(id, model)| resolve_one(id, model))
         .collect();
+
+    #[cfg(not(feature = "parallel"))]
+    let resolve_results: Vec<ResolveOutcome> = model_cache
+        .iter()
+        .map(|(id, model)| resolve_one(id, model))
+        .collect();
+
+    let mut resolved_map: HashMap<String, std::sync::Arc<mtk_model::ResolvedBlockModel>> =
+        HashMap::with_capacity(resolve_results.len());
+    for outcome in resolve_results {
+        match outcome {
+            Ok(pair) => {
+                resolved_map.insert(pair.0, pair.1);
+            }
+            // Only a circular hierarchy is a real defect; template resolution failures are
+            // expected (see `resolve_one`). A blockstate that cannot bake is reported below.
+            Err((id, "circular_parent_hierarchy")) if id.contains(':') => {
+                discovery_failures.push((id, "circular_parent_hierarchy"))
+            }
+            Err(_) => {}
+        }
+    }
 
     let shared_resolved = std::sync::Arc::new(resolved_map);
 
@@ -153,10 +187,12 @@ pub(crate) fn prebake_all_models_with_progress(
     let mut blockstate_defs: Vec<(ResourceLocation, BlockStateDefinition)> = Vec::new();
     for loc in &blockstate_locs {
         let path = loc.to_asset_path("blockstates", "json");
-        if let Some(bytes) = stack.open_asset_raw(&path) {
-            if let Ok(def) = serde_json::from_slice::<BlockStateDefinition>(&bytes) {
-                blockstate_defs.push((loc.clone(), def));
-            }
+        let Some(bytes) = stack.open_asset_raw(&path) else {
+            continue;
+        };
+        match serde_json::from_slice::<BlockStateDefinition>(&bytes) {
+            Ok(def) => blockstate_defs.push((loc.clone(), def)),
+            Err(_) => discovery_failures.push((loc.as_string(), "invalid_blockstate_json")),
         }
     }
 
@@ -166,17 +202,25 @@ pub(crate) fn prebake_all_models_with_progress(
 
     // 4. Bake all states concurrently
     #[cfg(feature = "parallel")]
-    let baked_pairs: Vec<(String, mtk_model::BakedVariantGroup)> = blockstate_defs
+    let baked_results: Vec<(
+        Vec<(String, mtk_model::BakedVariantGroup)>,
+        Vec<(String, &'static str)>,
+    )> = blockstate_defs
         .par_iter()
-        .flat_map(|(loc, def)| {
+        .map(|(loc, def)| {
             let states = def.enumerate_all_states(&loc.as_string());
             let mut local_baker =
                 ModelBaker::with_shared_resolved(std::sync::Arc::clone(&shared_resolved));
             let mut remap_cache: HashMap<String, Option<([f32; 4], u16, u32)>> = HashMap::new();
             let mut pairs = Vec::new();
+            let mut failures: Vec<(String, &'static str)> = Vec::new();
             for state_str in states {
-                if let Ok(mut group) =
-                    local_baker.bake_blockstate_variants(&state_str, Some(def), |id| get_model(id))
+                let baked =
+                    local_baker.bake_blockstate_variants(&state_str, Some(def), |id| get_model(id));
+                let Ok(mut group) = baked else {
+                    failures.push((state_str, "bake_failed"));
+                    continue;
+                };
                 {
                     if let Some(atlas) = atlas_map {
                         group.remap_to_atlas_with(|tex| {
@@ -206,22 +250,30 @@ pub(crate) fn prebake_all_models_with_progress(
                 }
             }
             throttler.inc();
-            pairs
+            (pairs, failures)
         })
         .collect();
 
     #[cfg(not(feature = "parallel"))]
-    let baked_pairs: Vec<(String, mtk_model::BakedVariantGroup)> = blockstate_defs
+    let baked_results: Vec<(
+        Vec<(String, mtk_model::BakedVariantGroup)>,
+        Vec<(String, &'static str)>,
+    )> = blockstate_defs
         .iter()
-        .flat_map(|(loc, def)| {
+        .map(|(loc, def)| {
             let states = def.enumerate_all_states(&loc.as_string());
             let mut local_baker =
                 ModelBaker::with_shared_resolved(std::sync::Arc::clone(&shared_resolved));
             let mut remap_cache: HashMap<String, Option<([f32; 4], u16, u32)>> = HashMap::new();
             let mut pairs = Vec::new();
+            let mut failures: Vec<(String, &'static str)> = Vec::new();
             for state_str in states {
-                if let Ok(mut group) =
-                    local_baker.bake_blockstate_variants(&state_str, Some(def), |id| get_model(id))
+                let baked =
+                    local_baker.bake_blockstate_variants(&state_str, Some(def), |id| get_model(id));
+                let Ok(mut group) = baked else {
+                    failures.push((state_str, "bake_failed"));
+                    continue;
+                };
                 {
                     if let Some(atlas) = atlas_map {
                         group.remap_to_atlas_with(|tex| {
@@ -251,9 +303,15 @@ pub(crate) fn prebake_all_models_with_progress(
                 }
             }
             throttler.inc();
-            pairs
+            (pairs, failures)
         })
         .collect();
+
+    let mut baked_pairs: Vec<(String, mtk_model::BakedVariantGroup)> = Vec::new();
+    for (pairs, failures) in baked_results {
+        baked_pairs.extend(pairs);
+        discovery_failures.extend(failures);
+    }
 
     // Abstract item models are not renderable items: inheritance-only templates and `air`.
     // Being referenced as a parent is NOT a reliable signal — real items such as
@@ -418,7 +476,7 @@ pub(crate) fn prebake_all_models_with_progress(
             db.insert(key, model.clone());
         }
     }
-    for (key, reason) in &item_failures {
+    for (key, reason) in discovery_failures.iter().chain(item_failures.iter()) {
         db.push_bake_failure(key.clone(), *reason);
     }
     db.deduplicate_all();

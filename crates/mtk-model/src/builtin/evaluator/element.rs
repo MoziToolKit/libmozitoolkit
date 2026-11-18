@@ -115,8 +115,7 @@ pub fn parse_element_node(
         let angle = rot_obj.get("angle").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
         Some(RotationJson {
             origin,
-            axis,
-            angle,
+            value: crate::parser::model_json::RotationValue::SingleAxis { axis, angle },
             rescale: None,
         })
     } else {

@@ -367,3 +367,33 @@
 | M-05 缺失告警 | 展示框装 `minecraft:shield` | `item_model_missing` 警告，且框本体仍然烘焙 |
 | V-04 | 只改 biome 后 `rebuild_dirty` → 比较 `mtk_biome_tint_color` | 修复前 FAILED、修复后 PASS（`biome_only_change_updates_the_baked_tint`） |
 | V-05 | 在对角 section 放遮挡块 → 比较相邻 section 的 `mtk_ao` | 修复前 FAILED、修复后 PASS（`diagonal_edit_updates_neighbour_section_ao`） |
+
+## D5：M-03b 完成 + 顺带修掉一个原版内容 bug
+
+### M-03b 落地
+
+预烘现在把**方块侧**的失败也记进 `BakedModelDatabase.bake_failures`（此前 `if let Ok(..)` 全程静默）：
+
+| 原因 | 触发点 |
+|---|---|
+| `invalid_model_json` | `models/**/*.json` 无法解析为 `BlockModelJson`（零字节占位文件跳过） |
+| `invalid_blockstate_json` | `blockstates/*.json` 无法解析 |
+| `bake_failed` | blockstate 枚举出的某个状态烘焙失败 |
+| `circular_parent_hierarchy` | 模型父子链成环（模板单独解析失败属正常，不报） |
+| `no_geometry` / `no_texture_layers` | 物品模型无法产出几何（已有） |
+
+`push_bake_failure` 改为同 key 去重、保留最早原因（同一模型会经过解析→烘焙多阶段）。
+真实资产实测：**vanilla 失败 5 条**（全部是已知不支持的 BEWLR 物品），**SPBR 叠加后 6 条**（多出 `item/potion_revert`），再无模板噪声。
+
+### 顺带修掉的真 bug：元素旋转只支持一种形式
+
+M-03b 立刻报出 `minecraft:block/template_hanging_sign_rot_3` → `invalid_model_json`。原因：
+
+- 原版 `CuboidModelElement.getRotation` 支持两种形式：`{axis, angle}` 与 `{x, y, z}`（按 `axis`/`angle` 是否存在切换）
+- 我们只实现前者 → **整份模型 JSON 解析失败**，所有使用欧拉角模板的挂挂牌变体静默丢几何
+
+修复：
+
+- `RotationJson.value: RotationValue`（`#[serde(untagged)]`，`SingleAxis { axis, angle }` / `Euler { x, y, z }`），`RotationJson` 与 `RotationValue` 在 crate 根导出
+- `rotate_element_point` 支持欧拉形式，按原版 `Matrix4f.rotationZYX(z, y, x)` 顺序（Z→Y→X）；`rescale` 仅单轴形式（原版欧拉模型不使用）
+- 测试：两种形式解析、`R_y(90)`/`R_z(90)` 数值、单轴与单轴欧拉等价、绕 pivot 旋转不变、真实 vanilla 模板解析成功

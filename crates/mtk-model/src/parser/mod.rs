@@ -8,6 +8,6 @@ pub use blockstate::{
 };
 pub use model_json::{
     BlockModelJson, GuiLight, ItemDisplayContext, ItemTransforms, ModelOverride, ModelTransform,
-    ResolvedBlockModel,
+    ResolvedBlockModel, RotationJson, RotationValue,
 };
 pub use obj::{mesh_to_obj_string, BakedObjFace};

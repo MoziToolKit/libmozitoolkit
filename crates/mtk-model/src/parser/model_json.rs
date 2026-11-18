@@ -544,15 +544,61 @@ pub struct RotationJson {
     /// Origin pivot point in [0, 16] space.
     pub origin: [f32; 3],
 
-    /// Rotation axis: "x", "y", or "z".
-    pub axis: String,
-
-    /// Rotation angle in degrees: typically -45.0, -22.5, 0.0, 22.5, or 45.0.
-    pub angle: f32,
+    /// Rotation value: either a single axis/angle pair or a three-axis Euler rotation.
+    #[serde(flatten)]
+    pub value: RotationValue,
 
     /// Whether to rescale the face to stretch to the cube bounds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rescale: Option<bool>,
+}
+
+/// Element rotation payload.
+///
+/// Vanilla (`CuboidModelElement.getRotation`) accepts two shapes and picks by the presence of
+/// `axis`/`angle`:
+/// - `{ "axis": "y", "angle": 22.5, "origin": [..] }` -> [`RotationValue::SingleAxis`]
+/// - `{ "x": 180, "y": -67.5, "z": -180, "origin": [..] }` -> [`RotationValue::Euler`]
+///
+/// Only supporting the first form made the whole model JSON fail to parse, which silently
+/// dropped vanilla content such as `block/template_hanging_sign_rot_*`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum RotationValue {
+    /// Single axis rotation in degrees.
+    SingleAxis {
+        /// Rotation axis: "x", "y", or "z".
+        axis: String,
+        /// Rotation angle in degrees: typically multiples of 22.5.
+        angle: f32,
+    },
+    /// Three-axis Euler rotation, applied as `Rz * Ry * Rx` (vanilla `rotationZYX(z, y, x)`).
+    Euler {
+        #[serde(default)]
+        x: f32,
+        #[serde(default)]
+        y: f32,
+        #[serde(default)]
+        z: f32,
+    },
+}
+
+impl RotationJson {
+    /// Rotation as a single axis/angle pair, if this is the single-axis form.
+    pub fn single_axis(&self) -> Option<(&str, f32)> {
+        match &self.value {
+            RotationValue::SingleAxis { axis, angle } => Some((axis.as_str(), *angle)),
+            RotationValue::Euler { .. } => None,
+        }
+    }
+
+    /// Euler angles in degrees, if this is the three-axis form.
+    pub fn euler(&self) -> Option<(f32, f32, f32)> {
+        match &self.value {
+            RotationValue::Euler { x, y, z } => Some((*x, *y, *z)),
+            RotationValue::SingleAxis { .. } => None,
+        }
+    }
 }
 
 /// Face properties of an element.
