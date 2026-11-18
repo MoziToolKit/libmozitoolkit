@@ -246,12 +246,18 @@ pub(crate) fn handle_baseline_end(
                             } = pkt
                             {
                                 current_seq = seq_id;
-                                apply_delta_entries_to_world(
+                                let (_, rejected) = apply_delta_entries_to_world(
                                     &changes,
                                     &state.palette_map,
                                     world,
                                     state.min_pos,
+                                    state.size,
                                 );
+                                if rejected > 0 {
+                                    let _ = event_sender.send(SyncEvent::Warning(format!(
+                                        "Dropped {rejected} staged delta entries outside the selection"
+                                    )));
+                                }
                             }
                         }
                         state.sequence = current_seq;
@@ -332,12 +338,18 @@ pub(crate) fn handle_baseline_end(
                                 } = pkt
                                 {
                                     state.sequence = seq_id;
-                                    apply_delta_entries_to_world(
+                                    let (_, rejected) = apply_delta_entries_to_world(
                                         &changes,
                                         &state.palette_map,
                                         world,
                                         state.min_pos,
+                                        state.size,
                                     );
+                                    if rejected > 0 {
+                                        let _ = event_sender.send(SyncEvent::Warning(format!(
+                                            "Dropped {rejected} replayed delta entries outside the selection"
+                                        )));
+                                    }
                                     if state.dirty_since.is_none() {
                                         state.dirty_since = Some(Instant::now());
                                     }

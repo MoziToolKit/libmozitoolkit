@@ -51,62 +51,116 @@ pub(crate) fn handle_delta_blocks(
         _ => return,
     };
 
-    let expected = state.sequence + 1;
-    if seq_id == expected || (state.sequence == 0 && seq_id <= expected) {
-        state.sequence = seq_id;
-        let affected =
-            apply_delta_entries_to_world(&changes, &state.palette_map, world, state.min_pos);
-        if state.dirty_since.is_none() {
-            state.dirty_since = Some(Instant::now());
+    match advance_sequence(state, seq_id) {
+        SeqOutcome::Contiguous | SeqOutcome::Duplicate => {
+            let (affected, rejected) = apply_delta_entries_to_world(
+                &changes,
+                &state.palette_map,
+                world,
+                state.min_pos,
+                state.size,
+            );
+            if rejected > 0 {
+                let _ = event_sender.send(SyncEvent::Warning(format!(
+                    "Dropped {rejected} delta entries outside the selection ({}x{}x{} at {}, {}, {})",
+                    state.size.x, state.size.y, state.size.z, state.min_pos.x, state.min_pos.y,
+                    state.min_pos.z
+                )));
+            }
+            if state.dirty_since.is_none() {
+                state.dirty_since = Some(Instant::now());
+            }
+            state.last_delta_at = Some(Instant::now());
+            state.pending_dirty_rebuild = true;
+            state.last_progress_at = Instant::now();
+            let _ = event_sender.send(SyncEvent::DeltaApplied {
+                change_count: changes.len(),
+                affected_sections: affected,
+            });
         }
-        state.last_delta_at = Some(Instant::now());
-        state.pending_dirty_rebuild = true;
-        state.last_progress_at = Instant::now();
-        let _ = event_sender.send(SyncEvent::DeltaApplied {
-            change_count: changes.len(),
-            affected_sections: affected,
-        });
-    } else if seq_id < expected {
-        // Duplicate / already applied delta (e.g. replay overlap). Ignore.
-    } else {
-        // Sequence gap detected: recover from a clean snapshot instead of
-        // silently diverging from the server.
-        state.awaiting_baseline();
-        send_resync_request(
-            state,
-            cmd_sender,
-            event_sender,
-            ResyncReason::SequenceGap,
-            &format!(
-                "Delta sequence gap (expected {}, got {}); resynchronizing...",
-                expected, seq_id
-            ),
-        );
+        SeqOutcome::Gap { expected } => {
+            // Recover from a clean snapshot instead of silently diverging from the server.
+            state.awaiting_baseline();
+            send_resync_request(
+                state,
+                cmd_sender,
+                event_sender,
+                ResyncReason::SequenceGap,
+                &format!(
+                    "Delta sequence gap (expected {}, got {}); resynchronizing...",
+                    expected, seq_id
+                ),
+            );
+        }
     }
 }
 
 pub(crate) fn handle_palette_update(
     epoch: u64,
+    seq_id: u64,
     new_revision: u32,
     entries: Vec<(u16, String)>,
     state: &mut SessionState,
+    cmd_sender: &Sender<ClientCommand>,
+    event_sender: &Sender<SyncEvent>,
 ) {
-    if epoch == state.epoch {
-        state.palette_revision = new_revision;
-        for (id, str_val) in entries {
-            state.palette_map.insert(id, str_val);
+    if epoch != state.epoch {
+        return;
+    }
+
+    // The palette payload is self-describing (id -> name) and additive, so a replay is harmless.
+    // The sequence still has to move, otherwise the next delta reads as a gap.
+    match advance_sequence(state, seq_id) {
+        SeqOutcome::Contiguous | SeqOutcome::Duplicate => {
+            state.palette_revision = new_revision;
+            for (id, str_val) in entries {
+                state.palette_map.insert(id, str_val);
+            }
+        }
+        SeqOutcome::Gap { expected } => {
+            state.awaiting_baseline();
+            send_resync_request(
+                state,
+                cmd_sender,
+                event_sender,
+                ResyncReason::SequenceGap,
+                &format!(
+                    "Palette update sequence gap (expected {}, got {}); resynchronizing...",
+                    expected, seq_id
+                ),
+            );
         }
     }
 }
 
 pub(crate) fn handle_delta_entity(
     epoch: u64,
+    seq_id: u64,
     rel_pos: IVec3,
     entity: &Option<mtk_model::BlockEntityData>,
     state: &mut SessionState,
     world: &Arc<RwLock<VoxelWorld>>,
+    cmd_sender: &Sender<ClientCommand>,
+    event_sender: &Sender<SyncEvent>,
 ) {
     if epoch == state.epoch {
+        match advance_sequence(state, seq_id) {
+            SeqOutcome::Contiguous | SeqOutcome::Duplicate => {}
+            SeqOutcome::Gap { expected } => {
+                state.awaiting_baseline();
+                send_resync_request(
+                    state,
+                    cmd_sender,
+                    event_sender,
+                    ResyncReason::SequenceGap,
+                    &format!(
+                        "Block entity sequence gap (expected {}, got {}); resynchronizing...",
+                        expected, seq_id
+                    ),
+                );
+                return;
+            }
+        }
         if rel_pos.x < 0
             || rel_pos.x >= state.size.x
             || rel_pos.y < 0
@@ -138,17 +192,35 @@ pub(crate) fn handle_delta_entity(
 }
 
 /// Applies a list of delta entries into VoxelWorld storage.
+///
+/// Returns the touched sections plus the number of entries rejected for landing outside the
+/// selection. `rel_pos` comes straight off the wire, so it must be range checked before it is
+/// added to a world coordinate: an out-of-range value overflows `min_pos + rel_pos` and used to
+/// panic the session worker thread, wedging the client in `ReceivingBaseline` forever.
 pub(crate) fn apply_delta_entries_to_world(
     changes: &[DeltaChangeEntry],
     palette_map: &HashMap<u16, String>,
     world: &Arc<RwLock<VoxelWorld>>,
     min_pos: IVec3,
-) -> Vec<IVec3> {
+    size: IVec3,
+) -> (Vec<IVec3>, usize) {
     let mut string_changes: Vec<(i32, i32, i32, &str)> = Vec::with_capacity(changes.len());
+    let mut rejected = 0usize;
     for entry in changes {
-        let abs_x = min_pos.x + entry.rel_pos.x;
-        let abs_y = min_pos.y + entry.rel_pos.y;
-        let abs_z = min_pos.z + entry.rel_pos.z;
+        let rel = entry.rel_pos;
+        let inside = rel.x >= 0
+            && rel.y >= 0
+            && rel.z >= 0
+            && rel.x < size.x
+            && rel.y < size.y
+            && rel.z < size.z;
+        if !inside {
+            rejected += 1;
+            continue;
+        }
+        let abs_x = min_pos.x + rel.x;
+        let abs_y = min_pos.y + rel.y;
+        let abs_z = min_pos.z + rel.z;
         let state_str = palette_map
             .get(&entry.state_id)
             .map(|s| s.as_str())
@@ -166,7 +238,7 @@ pub(crate) fn apply_delta_entries_to_world(
             affected.push(sec);
         }
     }
-    affected
+    (affected, rejected)
 }
 
 /// Applies continuous visual entity updates or removals into VoxelWorld storage.
@@ -224,5 +296,56 @@ pub(crate) fn handle_delta_visual_entity(
             upserted,
             deleted_uuids,
         });
+    }
+}
+
+/// Verdict on the sequence number carried by a sequenced server packet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SeqOutcome {
+    /// Exactly the next packet; the session sequence was advanced.
+    Contiguous,
+    /// Already applied (replay overlap); payload is idempotent and the sequence stays put.
+    Duplicate,
+    /// One or more packets are missing; the caller must resynchronize.
+    Gap { expected: u64 },
+}
+
+/// Advances the session sequence for a sequenced packet.
+///
+/// Every sequenced packet type (delta, palette, block entity) shares one counter: if one of them
+/// silently skips the bookkeeping, the *next* delta looks like a gap and the client re-downloads
+/// the whole selection.
+pub(crate) fn advance_sequence(state: &mut SessionState, seq_id: u64) -> SeqOutcome {
+    let expected = state.sequence + 1;
+    if seq_id == expected || (state.sequence == 0 && seq_id <= expected) {
+        state.sequence = seq_id;
+        SeqOutcome::Contiguous
+    } else if seq_id < expected {
+        SeqOutcome::Duplicate
+    } else {
+        SeqOutcome::Gap { expected }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{advance_sequence, SeqOutcome};
+    use crate::client::session::state::SessionState;
+
+    #[test]
+    fn sequence_advances_only_on_the_next_packet() {
+        let mut state = SessionState {
+            sequence: 41,
+            ..Default::default()
+        };
+        assert_eq!(advance_sequence(&mut state, 42), SeqOutcome::Contiguous);
+        assert_eq!(state.sequence, 42);
+        assert_eq!(advance_sequence(&mut state, 42), SeqOutcome::Duplicate);
+        assert_eq!(state.sequence, 42);
+        assert_eq!(
+            advance_sequence(&mut state, 45),
+            SeqOutcome::Gap { expected: 43 }
+        );
+        assert_eq!(state.sequence, 42, "a gap must not move the sequence");
     }
 }

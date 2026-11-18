@@ -24,7 +24,7 @@ pub use client::{
     normalize_stream_progress, BaselineAssembler, LiveSyncSession, SyncEvent, SyncLifecycle,
 };
 pub use protocol::{
-    compute_sparse_state_hash, compute_sparse_state_hash_for_point_cloud,
+    compute_delta_batch_hash, compute_sparse_state_hash, compute_sparse_state_hash_for_point_cloud,
     compute_sparse_state_hash_for_storage, compute_sparse_state_hash_from_raw,
     compute_visual_entities_hash, decode_packet, direction_to_facing_byte, encode_packet,
     facing_byte_to_direction, format_uuid, read_visual_entity, voxel_index_to_relative_coords,

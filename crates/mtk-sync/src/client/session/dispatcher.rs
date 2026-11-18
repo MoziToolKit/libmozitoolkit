@@ -434,19 +434,37 @@ pub(crate) fn handle_packet(
         }
         Packet::PaletteUpdate {
             epoch,
+            seq_id,
             new_revision,
             entries,
             ..
         } => {
-            super::handlers_delta::handle_palette_update(epoch, new_revision, entries, state);
+            super::handlers_delta::handle_palette_update(
+                epoch,
+                seq_id,
+                new_revision,
+                entries,
+                state,
+                cmd_sender,
+                event_sender,
+            );
         }
         Packet::DeltaEntity {
             epoch,
+            seq_id,
             rel_pos,
             ref entity,
-            ..
         } => {
-            super::handlers_delta::handle_delta_entity(epoch, rel_pos, entity, state, world);
+            super::handlers_delta::handle_delta_entity(
+                epoch,
+                seq_id,
+                rel_pos,
+                entity,
+                state,
+                world,
+                cmd_sender,
+                event_sender,
+            );
         }
         Packet::DeltaVisualEntity {
             epoch,
