@@ -354,3 +354,16 @@
 | **V-02** 焊接顶点法线 | 机制确认：`GridVertexPool` 只按整数坐标去重，`MeshData.normals` 是 per-vertex → 共享角点的 3 个面只有 1 个法线正确。但宿主注入网格时 `use_smooth=False`（默认），Blender 用面法线，**当前无可见影响**。属潜在问题：任何 custom-normal / GLTF / 其他 DCC 消费方会着色错误。修复需付 3 倍顶点代价，暂记为 P2 待决策 |
 
 门禁：`fmt --check` / `clippy -D warnings` / 83 组测试（真实资产）/ `build-all-py` / Blender 生化+实体增量 29 passed。
+
+### D4 验证（运行时，不只单测）
+
+| 验证对象 | 方式 | 结果 |
+|---|---|---|
+| D1 物品模型进缓存 | 真实 `26.2-Fabric.jar` 跑 `ModelBaker.bake_all` → 17,994 模型 / 0.5 s；`get_item` + `get_item_transforms` | `item/chest` 18 面 `fixed=[0,180,0] gui=[30,45,0]`；`shulker_box` 14、`decorated_pot` 22、`conduit` 6、`copper_chest` 18；`diamond_sword` 102 |
+| D1 失败可观测 | `db.bake_failures` | 恰好 5 条：`shield`/`shield_blocking`/`trident_in_hand`/`trident_throwing`/`amethyst_bud` |
+| D1 不再猜 | `db.get_mesh(item/shield)` | `None`（不再回退方块模型） |
+| D1 方块条目未被污染 | `get_item_transforms("minecraft:chest")` | `[]`（无 item display 数据） |
+| D1 展示框融合 | `build_entity_render_plan` 传入 chest 展示框 | 40 面（22 框 + 18 箱），路由含 `entity/chest/normal` |
+| M-05 缺失告警 | 展示框装 `minecraft:shield` | `item_model_missing` 警告，且框本体仍然烘焙 |
+| V-04 | 只改 biome 后 `rebuild_dirty` → 比较 `mtk_biome_tint_color` | 修复前 FAILED、修复后 PASS（`biome_only_change_updates_the_baked_tint`） |
+| V-05 | 在对角 section 放遮挡块 → 比较相邻 section 的 `mtk_ao` | 修复前 FAILED、修复后 PASS（`diagonal_edit_updates_neighbour_section_ao`） |

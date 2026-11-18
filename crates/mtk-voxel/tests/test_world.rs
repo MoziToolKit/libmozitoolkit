@@ -252,3 +252,108 @@ fn test_rebuild_world_empty_mesh_does_not_panic() {
     let res_cb = world.rebuild_all_with_progress(None);
     assert!(res_cb.is_ok());
 }
+
+/// End-to-end proof for biome-only edits: the rebuilt mesh must carry a different tint.
+///
+/// `set_block` reports "unchanged" when the blockstate is identical, so this only works if
+/// the biome write itself marks the section dirty (V-04) and the mesher samples the new biome.
+#[test]
+fn biome_only_change_updates_the_baked_tint() {
+    use mtk_core::attribute_constants::ATTR_BIOME_TINT_COLOR;
+    use mtk_core::AttributeData;
+
+    fn tint_of(mesh: &mtk_core::MeshData) -> Vec<[f32; 4]> {
+        match &mesh
+            .get_custom_attribute(ATTR_BIOME_TINT_COLOR)
+            .expect("biome tint corner attribute")
+            .data
+        {
+            AttributeData::Float4(values) => values.clone(),
+            other => panic!("expected Float4 tint data, got {other:?}"),
+        }
+    }
+
+    let mut world = VoxelWorld::new(None, None, None);
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+    // Blockstate identical in both calls; only the biome differs.
+    world.set_block(4, 0, 4, "minecraft:grass_block", Some("minecraft:plains"));
+    let before = tint_of(world.rebuild_all().unwrap());
+
+    let changed = world.set_block(4, 0, 4, "minecraft:grass_block", Some("minecraft:desert"));
+    assert!(!changed, "blockstate did not change");
+
+    let rebuilt = world.rebuild_dirty().unwrap();
+    assert!(
+        !rebuilt.is_empty(),
+        "a biome-only edit must trigger an incremental remesh"
+    );
+
+    let after = tint_of(world.get_world_mesh().unwrap());
+    assert_eq!(before.len(), after.len(), "tint buffer size must match");
+    assert_ne!(
+        before, after,
+        "desert tint must differ from plains tint for a grass block"
+    );
+}
+
+/// End-to-end proof for diagonal-neighbour invalidation (V-05).
+///
+/// A block at `(15,0,15)` shades its top face from the cells around `(16,1,16)`, which live in
+/// the *diagonal* section `(1,0,1)`. Editing that cell must remesh section `(0,0,0)`; before
+/// the fix only the six orthogonal neighbours were invalidated and the AO stayed stale.
+#[test]
+fn diagonal_edit_updates_neighbour_section_ao() {
+    use mtk_core::{AttributeData, MeshData};
+
+    fn ao_of(world: &mut VoxelWorld, coord: glam::IVec3) -> Vec<f32> {
+        let rebuild = world.rebuild_dirty().unwrap();
+        let rebuilt = rebuild
+            .iter()
+            .find(|(c, _)| *c == coord)
+            .map(|(_, mesh)| mesh.clone())
+            .or_else(|| world.get_section_cache().get(&coord).cloned());
+        let mesh: MeshData = rebuilt.expect("section must have a cached mesh");
+        match &mesh
+            .get_custom_attribute(mtk_core::attribute_constants::ATTR_AO)
+            .expect("ao attribute")
+            .data
+        {
+            AttributeData::Float(values) => values.clone(),
+            other => panic!("expected Float ao data, got {other:?}"),
+        }
+    }
+
+    let mut world = VoxelWorld::new(None, None, None);
+    world.set_bounds(0, 0, 0, 32, 16, 32);
+
+    // Shaded block in section (0,0,0), touching the (+X,+Z) section corner.
+    world.set_block(15, 0, 15, "minecraft:stone", None);
+    world.rebuild_all().unwrap();
+    let before = ao_of(&mut world, glam::IVec3::new(0, 0, 0));
+    assert!(
+        before.iter().all(|value| (*value - 1.0).abs() < 1e-5),
+        "an isolated block starts fully lit, got {before:?}"
+    );
+
+    // Occluder in the diagonal section (1,0,1) touching the same corner.
+    world.set_block(16, 1, 16, "minecraft:stone", None);
+
+    let rebuilt = world.rebuild_dirty().unwrap();
+    assert!(
+        rebuilt
+            .iter()
+            .any(|(coord, _)| *coord == glam::IVec3::new(0, 0, 0)),
+        "section (0,0,0) must be rebuilt after a diagonal edit, got {:?}",
+        rebuilt.iter().map(|(c, _)| *c).collect::<Vec<_>>()
+    );
+
+    let after = ao_of(&mut world, glam::IVec3::new(0, 0, 0));
+    assert_ne!(
+        before, after,
+        "diagonal occluder must darken the neighbour section's corner AO"
+    );
+    assert!(
+        after.iter().any(|value| *value < 1.0),
+        "at least one corner must be shaded, got {after:?}"
+    );
+}
