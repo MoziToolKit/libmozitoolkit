@@ -22,6 +22,8 @@ mod voxel;
 
 mod buffer;
 mod profile;
+mod progress;
+mod threading;
 mod unstable;
 
 use pyo3::prelude::*;

@@ -14,6 +14,8 @@ use mtk_voxel::{VoxelStorage, VoxelWorld};
 use crate::cull::PyFaceCuller;
 use crate::mesh::PyMeshData;
 use crate::model::PyBakedModelDatabase;
+use crate::progress::PyProgressCallback;
+use crate::threading::run_detached;
 use crate::voxel::{PyMesherConfig, PyVoxelStorage};
 
 /// Python wrapper for Minecraft world metadata from `level.dat`.
@@ -162,30 +164,18 @@ pub fn load_and_mesh_minecraft_save(
     let min_coord = IVec3::new(min_block.0, min_block.1, min_block.2);
     let max_coord = IVec3::new(max_block.0, max_block.1, max_block.2);
 
-    let cb_opt = callback.as_ref();
-    let on_progress = cb_opt.map(|cb| {
-        move |prog: mtk_core::ProgressReport| {
-            Python::attach(|py| {
-                let dict = PyDict::new(py);
-                let _ = dict.set_item("stage", prog.stage);
-                let _ = dict.set_item("current", prog.current);
-                let _ = dict.set_item("total", prog.total);
-                let _ = dict.set_item("message", &prog.message);
-                let _ = dict.set_item("percent", prog.percent());
-                let _ = cb.call1(py, (dict,));
-            });
-        }
-    });
-    let progress_ref: Option<mtk_core::ProgressCallback<'_>> = on_progress
+    let progress_cb = callback.as_ref().map(PyProgressCallback::new);
+    let on_progress = progress_cb
         .as_ref()
-        .map(|f| f as &(dyn Fn(mtk_core::ProgressReport) + Send + Sync));
+        .map(PyProgressCallback::as_core_callback);
+    let progress_ref: Option<mtk_core::ProgressCallback<'_>> = on_progress.as_deref();
 
     let mut storage = VoxelStorage::new();
     // Must detach: the loader decodes regions on rayon workers, and any progress callback
     // re-attaches to Python. Holding the GIL here deadlocks the process the moment the first
     // progress tick fires from a worker (observed as "import save freezes Blender").
     let _loaded_sections = profiler.measure("load_region_chunks", "io", |_| {
-        py.detach(|| {
+        run_detached(py, || {
             SaveLoader::load_box_into_storage_with_progress(
                 path,
                 dimension,
@@ -249,21 +239,20 @@ pub fn load_and_mesh_minecraft_save(
 
     let (mesh, _world_profile, dynamic_entity_atlases, dynamic_entity_slots, _active_config) =
         profiler.measure("mesh_voxel_world", "mesh", |p| {
-            let res = py
-                .detach(|| {
-                    world.ensure_dynamic_entities_resolved_sync_with_progress(progress_ref);
-                    let m = world.rebuild_all_with_progress(progress_ref)?.clone();
-                    let prof = world.last_profile.clone();
-                    let (dyn_atlases, dyn_slots) = world.dynamic_entity_atlases_if_used();
-                    Ok::<_, mtk_voxel::VoxelError>((
-                        m,
-                        prof,
-                        dyn_atlases,
-                        dyn_slots,
-                        world.config.clone(),
-                    ))
-                })
-                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+            let res = run_detached(py, || {
+                world.ensure_dynamic_entities_resolved_sync_with_progress(progress_ref);
+                let m = world.rebuild_all_with_progress(progress_ref)?.clone();
+                let prof = world.last_profile.clone();
+                let (dyn_atlases, dyn_slots) = world.dynamic_entity_atlases_if_used();
+                Ok::<_, mtk_voxel::VoxelError>((
+                    m,
+                    prof,
+                    dyn_atlases,
+                    dyn_slots,
+                    world.config.clone(),
+                ))
+            })
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
             if let Some(wp) = res.1.clone() {
                 p.attach_sub_profile(wp, Some("mesh"));

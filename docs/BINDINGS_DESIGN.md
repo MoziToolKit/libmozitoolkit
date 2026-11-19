@@ -89,3 +89,44 @@ bindings/
    当用户环境未正确加载 `libmtk_py` 动态库时，`bridge` 层必须给出清晰的引导提示（如指向偏好设置中的 Wheel 安装面板），而非直接抛出未捕获的 ImportError 导致崩溃。
 3. **测试覆盖铁律**：
    任何新添加的核心能力，必须先在底层 Rust Crate 实现单元测试并保证 `cargo test` 绿灯，随后在 `mtk-py` 导出并编写对应的 Python 集成测试。
+
+---
+
+## 4. 线程与 GIL 契约（强制）
+
+原生核心大量使用 rayon。绑定层与核心之间的线程边界只有两条规则，且都由
+`tools/ci_guardrails.py` 机械校验：
+
+1. **所有可能阻塞或派发线程的入口必须经 `crate::threading::run_detached(py, …)`。**
+   等价于 `py.detach`，但它是唯一被门禁认可的边界标记。若在持有 GIL 的情况下让 worker
+   线程回调 Python（`Python::attach`），worker 会等一个被"正阻塞在 `par_iter().collect()`
+   的调用线程"持有的锁 —— 整进程死锁（2026-11 存档导入卡死即此）。
+2. **进度回调可能来自任意线程。**
+   `mtk_core::ProgressCallback` 是 `Send + Sync`，网格化与预烘会从 rayon worker 逐项上报。
+   因此：
+   - 绑定侧只允许在 `run_detached` 区域内把回调交给原生代码；
+   - 宿主侧的回调**不得直接触碰宿主主线程资源**（Blender 的 `bpy`/`wm`），必须投递到
+     线程安全队列，由主线程轮询消费（`MoziToolKit/utils/async_task.py` 的 `AsyncTask`
+     就是标准范式：`queue.put` + modal timer 抽干）。
+   - 回调抛出的异常会被吞掉（原生活动已经完成，没有回传通道）；需要暴露诊断就写日志/事件，
+     不要指望回调的异常。
+
+### 4.1 门禁实现
+
+`check_threaded_bindings_detach()` 在 `bindings/mtk-py/src` 内做函数级扫描：
+
+- 任何 `Option<ProgressCallback…>` 变量的**使用**，必须位于 `run_detached(...)` /
+  `py.detach(...)` 的括号区间内；
+- 任何直接出现的 `par_iter(` / `into_par_iter(` 也必须在同一区间内。
+
+它只在"使用点"报错，而不是"函数里出现过 detach 就放行"——这正是旧实现漏掉的那类 bug
+（同一函数里网格阶段 detach 了，加载阶段没有）。
+
+### 4.2 线程预算
+
+- 默认：`max(1, available_parallelism() - 2)`。用户机器上通常还有浏览器/后台任务，
+  给宿主主线程和系统留两个核；
+- 用户可在插件偏好里显式指定线程数，显式值优先；
+- 规划中（T-2）：`libmtk_py.set_thread_count(n)` 一次设定进程级策略，让所有 rayon 站点
+  （存档解码、图集烘焙、材质重映射、预烘）都听同一个值，而不是像现在只有 5 个
+  `execute_parallel` 站点生效。

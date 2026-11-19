@@ -228,6 +228,215 @@ def check_unwrap_expect_in_bindings_and_adapters() -> list[str]:
     return errors
 
 
+# ---------------------------------------------------------------------------
+# Threading / GIL guardrails
+# ---------------------------------------------------------------------------
+
+# A variable that holds a core progress callback, i.e. host code invoked by native work.
+_CALLBACK_VAR_RE = re.compile(
+    r"let\s+(?:mut\s+)?(\w+)\s*:\s*Option<\s*(?:mtk_core::)?ProgressCallback"
+)
+_DETACH_CALL_RE = re.compile(r"\b(?:py\s*\.\s*detach|run_detached)\s*\(")
+_PARALLEL_CALL_RE = re.compile(r"\b(?:into_)?par_iter\s*\(")
+
+
+def _code_mask(text: str) -> list[bool]:
+    """Marks characters that are Rust code (not comment/string/char literal).
+
+    Brace matching must ignore braces inside `format!("{x}")`, raw strings and comments,
+    otherwise every `fn` body would appear to end at the first format placeholder.
+    """
+    mask = [True] * len(text)
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if ch == "/" and i + 1 < n and text[i + 1] == "/":
+            j = text.find("\n", i)
+            j = n if j == -1 else j
+            for k in range(i, j):
+                mask[k] = False
+            i = j
+            continue
+        if ch == "/" and i + 1 < n and text[i + 1] == "*":
+            depth = 1
+            j = i + 2
+            while j < n and depth:
+                if text.startswith("/*", j):
+                    depth += 1
+                    j += 2
+                elif text.startswith("*/", j):
+                    depth -= 1
+                    j += 2
+                else:
+                    j += 1
+            for k in range(i, j):
+                mask[k] = False
+            i = j
+            continue
+        # raw strings: r"..." / r#"..."# / br#"..."#
+        if ch in "rb" and i + 1 < n:
+            j = i
+            if text[j] == "b":
+                j += 1
+            if j < n and text[j] == "r":
+                j += 1
+                hashes = 0
+                while j < n and text[j] == "#":
+                    hashes += 1
+                    j += 1
+                if j < n and text[j] == '"':
+                    terminator = '"' + "#" * hashes
+                    end = text.find(terminator, j + 1)
+                    end = n if end == -1 else end + len(terminator)
+                    for k in range(i, end):
+                        mask[k] = False
+                    i = end
+                    continue
+        if ch == '"':
+            j = i + 1
+            while j < n:
+                if text[j] == "\\":
+                    j += 2
+                    continue
+                if text[j] == '"':
+                    j += 1
+                    break
+                j += 1
+            for k in range(i, j):
+                mask[k] = False
+            i = j
+            continue
+        if ch == "'":
+            # char literal ('{' / '\n') vs lifetime annotation ('a). Only mask real literals.
+            j = i + 1
+            if j < n and text[j] == "\\":
+                j += 2
+            else:
+                j += 1
+            if j < n and text[j] == "'":
+                for k in range(i, j + 1):
+                    mask[k] = False
+                i = j + 1
+                continue
+            i += 1
+            continue
+        i += 1
+    return mask
+
+
+def _match_pair(text: str, mask: list[bool], start: int, opener: str, closer: str) -> int:
+    depth = 0
+    for i in range(start, len(text)):
+        if not mask[i]:
+            continue
+        if text[i] == opener:
+            depth += 1
+        elif text[i] == closer:
+            depth -= 1
+            if depth == 0:
+                return i
+    return len(text) - 1
+
+
+def _iter_functions(text: str, mask: list[bool]):
+    """Yields (name, body_start, body_end) for every `fn` with a block body."""
+    for match in re.finditer(r"\bfn\s+([A-Za-z_]\w*)", text):
+        if not mask[match.start()]:
+            continue
+        i = match.end()
+        while i < len(text) and not (mask[i] and text[i] == "("):
+            if mask[i] and text[i] in "{;":
+                i = -1
+                break
+            i += 1
+        if i < 0 or i >= len(text):
+            continue
+        params_end = _match_pair(text, mask, i, "(", ")")
+        j = params_end + 1
+        while j < len(text) and not (mask[j] and text[j] in "{;"):
+            j += 1
+        if j >= len(text) or not mask[j] or text[j] != "{":
+            continue  # trait declaration without body
+        body_end = _match_pair(text, mask, j, "{", "}")
+        yield match.group(1), j, body_end
+
+
+def _detach_spans(text: str, mask: list[bool], body_start: int, body_end: int) -> list[tuple[int, int]]:
+    spans = []
+    for match in _DETACH_CALL_RE.finditer(text, body_start, body_end + 1):
+        if not mask[match.start()]:
+            continue
+        open_paren = text.index("(", match.start())
+        spans.append((match.start(), _match_pair(text, mask, open_paren, "(", ")")))
+    return spans
+
+
+def _inside(spans: list[tuple[int, int]], position: int) -> bool:
+    return any(start <= position <= end for start, end in spans)
+
+
+def check_threaded_bindings_detach() -> list[str]:
+    """Host callbacks and rayon work must only run inside a GIL-released (detached) region.
+
+    The 2026-11 deadlock: the save loader decoded regions on rayon workers and fired the Python
+    progress callback from them while the binding still held the GIL. A function-level "does it
+    detach somewhere" check would have missed it, so this checks that every *use* of a
+    progress-callback variable, and every direct rayon call, sits inside a detach closure.
+    """
+    errors: list[str] = []
+    base = LIB_ROOT / "bindings/mtk-py/src"
+    if not base.exists():
+        return errors
+
+    for rs_path in sorted(base.rglob("*.rs")):
+        if rs_path.name == "tests.rs" or "/tests/" in rs_path.as_posix():
+            continue
+        rel = rs_path.relative_to(LIB_ROOT).as_posix()
+        content = rs_path.read_text(encoding="utf-8")
+        cfg_test_pos = content.find("#[cfg(test)]")
+        if cfg_test_pos != -1:
+            content = content[:cfg_test_pos]
+        mask = _code_mask(content)
+
+        for _name, body_start, body_end in _iter_functions(content, mask):
+            body_text = content[body_start : body_end + 1]
+            spans = _detach_spans(content, mask, body_start, body_end)
+
+            callback_vars = [
+                (match.group(1), match.start(1))
+                for match in _CALLBACK_VAR_RE.finditer(content, body_start, body_end + 1)
+                if mask[match.start()]
+            ]
+            for var, decl_offset in callback_vars:
+                for use in re.finditer(rf"\b{re.escape(var)}\b", body_text):
+                    absolute = body_start + use.start()
+                    if not mask[absolute]:
+                        continue
+                    if absolute == decl_offset:
+                        continue  # the binding itself, not a use
+                    if _inside(spans, absolute):
+                        continue
+                    line = content.count("\n", 0, absolute) + 1
+                    errors.append(
+                        f"{rel}:{line}: `{var}` is passed to native work outside a "
+                        "`py.detach`/`run_detached` region; host callbacks must never run while "
+                        "the GIL is held (see BINDINGS_DESIGN threading contract)"
+                    )
+
+            for call in _PARALLEL_CALL_RE.finditer(body_text):
+                absolute = body_start + call.start()
+                if not mask[absolute] or _inside(spans, absolute):
+                    continue
+                line = content.count("\n", 0, absolute) + 1
+                errors.append(
+                    f"{rel}:{line}: direct rayon call outside a `py.detach`/`run_detached` "
+                    "region; the binding must release the GIL first"
+                )
+
+    return errors
+
+
 def check_docs_drift() -> list[str]:
     errors: list[str] = []
     doc_files = [
@@ -262,6 +471,7 @@ def main() -> int:
     errors.extend(check_pub_mod_and_mtk_py_pub_use())
     errors.extend(check_dead_rust_exports())
     errors.extend(check_unwrap_expect_in_bindings_and_adapters())
+    errors.extend(check_threaded_bindings_detach())
     errors.extend(check_docs_drift())
 
     if args.json:

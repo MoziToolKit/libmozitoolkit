@@ -666,3 +666,35 @@ Python 后台线程（AsyncTask）
 
 **教训**：任何"宿主回调 + 原生线程池"的组合都必须在**足够大的负载**下测试线程亲和性，
 小样本会被 rayon 的调用线程执行优化掩盖。
+
+---
+
+## 11. 线程治理（T-1 已落地，T-2/T-3 待做）
+
+起因：B2b 的并行加载在真实宿主里触发 GIL 死锁（见 §10.5）。复盘结论是"契约没写下来"，
+而不是"多线程本身危险"。因此新增一条治理线：
+
+| 步 | 内容 | 状态 |
+|---|---|---|
+| **T-1** | 门禁 + 绑定层边界 helper + 契约文档 | ✅ 本轮 |
+| **T-2** | `mtk-core::threading`（缓存池 + 进程级线程覆盖）+ 13 个 rayon 站点收敛 + `libmtk_py.set_thread_count/threading_info` | 待做 |
+| **T-3** | 三个回调入口的大负载线程亲和测试（save/mesh/prebake）+ 绑定契约测试 | 待做 |
+
+### T-1 落地内容
+
+- `tools/ci_guardrails.py::check_threaded_bindings_detach()`：函数级扫描
+  `bindings/mtk-py/src`，任何 `Option<ProgressCallback…>` 变量的**使用点**、以及任何
+  `par_iter`/`into_par_iter`，都必须落在 `run_detached(...)`/`py.detach(...)` 的区间内。
+  带一个能正确跳注释/字符串/原始字符串的括号匹配器，避免 `format!("{x}")` 的干扰。
+  **已验证**：对旧版 `save.rs`（加载不 detach）报错 1 条；对临时注入的
+  `par_iter` 无 detach 探针报错 1 条；对当前树通过。
+- `bindings/mtk-py/src/threading.rs::run_detached`：唯一认可的 GIL 释放边界（文档 + 门禁锚点）。
+- `bindings/mtk-py/src/progress.rs::PyProgressCallback`：把两份重复的 dict 构造/attach 逻辑
+  收敛成一处，并把"回调可能来自任意线程、宿主必须自行 marshal"写在类型旁边。
+- `docs/BINDINGS_DESIGN.md §4`：线程与 GIL 契约、门禁实现、线程预算。
+
+### 已定但未实现的策略（T-2 输入）
+
+- 默认线程数 = `max(1, available_parallelism() - 2)`（给宿主与系统留两个核）；
+- 用户显式指定时以用户值为准（插件偏好 `thread_count`）；
+- 目标：一次 `set_thread_count` 让**所有** rayon 站点生效，而不是现在的 5/13。

@@ -10,6 +10,9 @@ use std::path::Path;
 use mtk_resource::ZipPack;
 use mtk_resource::{DirectoryPack, ResourcePackStack};
 
+use crate::progress::PyProgressCallback;
+use crate::threading::run_detached;
+
 /// Python wrapper for layered Minecraft resource packs (`ResourcePackStack`).
 #[pyclass(name = "ResourcePackStack")]
 #[derive(Default)]
@@ -330,29 +333,16 @@ pub fn precompile_all_assets<'py>(
         resolver_overrides,
     };
 
-    let cb_opt = callback.as_ref();
-    let on_progress = cb_opt.map(|cb| {
-        move |prog: mtk_core::ProgressReport| {
-            Python::attach(|py| {
-                let dict = PyDict::new(py);
-                let _ = dict.set_item("stage", prog.stage);
-                let _ = dict.set_item("current", prog.current);
-                let _ = dict.set_item("total", prog.total);
-                let _ = dict.set_item("message", &prog.message);
-                let _ = dict.set_item("percent", prog.percent());
-                let _ = cb.call1(py, (dict,));
-            });
-        }
-    });
-    let progress_ref: Option<mtk_core::ProgressCallback<'_>> = on_progress
+    let progress_cb = callback.as_ref().map(PyProgressCallback::new);
+    let on_progress = progress_cb
         .as_ref()
-        .map(|f| f as &(dyn Fn(mtk_core::ProgressReport) + Send + Sync));
+        .map(PyProgressCallback::as_core_callback);
+    let progress_ref: Option<mtk_core::ProgressCallback<'_>> = on_progress.as_deref();
 
-    let res = py
-        .detach(|| {
-            libmtk::precompile_all_assets_with_progress(&stack.inner, cache_dir, &cfg, progress_ref)
-        })
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+    let res = run_detached(py, || {
+        libmtk::precompile_all_assets_with_progress(&stack.inner, cache_dir, &cfg, progress_ref)
+    })
+    .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
     Ok(PyPrecompileResult {
         success: res.success,
