@@ -51,7 +51,7 @@ impl LiveSyncSession {
         let hello = Packet::Hello {
             min_version: PROTOCOL_VERSION as u16,
             max_version: PROTOCOL_VERSION as u16,
-            capabilities: 0x07,
+            capabilities: 0x03,
             flags: 0,
             cached_world_uuid: server_uuid,
             cached_epoch: epoch,
@@ -61,7 +61,6 @@ impl LiveSyncSession {
             cached_state_hash: state_hash,
             auth_token: self.auth_token.clone(),
             cached_dimension: dimension,
-            subscribed_visual_entities: self.subscribed_entities(),
         };
         self.start_with_hello(url, auto_reconnect, max_reconnect_attempts, Some(hello))
     }
@@ -100,10 +99,8 @@ impl LiveSyncSession {
         // HELLO; token-protected servers then rejected the client with
         // "Authentication failed" even though both sides held the same secret.
         let initial_hello = match initial_hello {
-            Some(hello) => {
-                with_auth_token(hello, &self.auth_token, self.subscribed_entities.as_deref())
-            }
-            None => default_hello(&self.auth_token, self.subscribed_entities.as_deref()),
+            Some(hello) => with_auth_token(hello, &self.auth_token),
+            None => default_hello(&self.auth_token),
         };
 
         // Drop any mesh/progress events left over from the previous connection so a

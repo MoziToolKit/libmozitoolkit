@@ -551,7 +551,6 @@ impl SparseVoxelPayload {
             entity_indices,
             light_levels,
             bounds: Some(effective_bounds),
-            entities: Vec::new(),
         }
     }
 

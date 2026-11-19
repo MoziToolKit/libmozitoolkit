@@ -199,7 +199,6 @@ fn test_palette_count_overflow_rejects() {
         entity_indices: vec![-1],
         light_levels: vec![],
         bounds: None,
-        entities: vec![],
     };
 
     let res = SparseVoxelPayload::from_point_cloud(&cloud);

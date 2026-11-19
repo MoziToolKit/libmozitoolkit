@@ -49,7 +49,6 @@ pub(crate) struct ServerInner {
     pub(crate) selection: Mutex<Option<SelectionContext>>,
     pub(crate) palette: Mutex<PaletteState>,
     pub(crate) clients: Mutex<HashMap<u64, ClientHandle>>,
-    pub(crate) client_subscriptions: Mutex<HashMap<u64, Vec<String>>>,
     pub(crate) event_tx: Sender<ServerEvent>,
     pub(crate) event_rx: Receiver<ServerEvent>,
     pub(crate) local_addr: Mutex<Option<SocketAddr>>,
@@ -66,7 +65,6 @@ impl ServerInner {
             selection: Mutex::new(None),
             palette: Mutex::new(PaletteState::default()),
             clients: Mutex::new(HashMap::new()),
-            client_subscriptions: Mutex::new(HashMap::new()),
             event_tx,
             event_rx,
             local_addr: Mutex::new(None),
@@ -80,15 +78,6 @@ impl ServerInner {
     pub(crate) fn remove_client(&self, client_id: u64) {
         if let Ok(mut clients) = self.clients.lock() {
             clients.remove(&client_id);
-        }
-        if let Ok(mut subs) = self.client_subscriptions.lock() {
-            subs.remove(&client_id);
-        }
-    }
-
-    pub(crate) fn set_client_subscriptions(&self, client_id: u64, subscribed: Vec<String>) {
-        if let Ok(mut subs) = self.client_subscriptions.lock() {
-            subs.insert(client_id, subscribed);
         }
     }
 

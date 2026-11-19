@@ -48,7 +48,6 @@ pub struct SceneExportRequest<'a, S: SceneAtlasSource> {
     pub dynamic_entity_atlases: Option<&'a HashMap<u16, Vec<u8>>>,
     pub dynamic_entity_slots: Option<&'a HashMap<String, (u16, u16)>>,
     pub ctm_mode: CtmMode<'a>,
-    pub entities: Option<&'a [mtk_model::EntityInstance]>,
 }
 
 /// Builds all components of a Scene Interchange bundle in memory.
@@ -78,12 +77,11 @@ pub(crate) fn build_scene_interchange<S: SceneAtlasSource>(
         CtmMode::Explicit(rules) => Some(rules.to_vec()),
     };
 
-    // 2. Collect all unique texture and blockstate identifiers (plus tree-shaken CTM sub-tiles and visual entities)
+    // 2. Collect all unique texture and blockstate identifiers (plus tree-shaken CTM sub-tiles)
     let assets = collector::collect_needed_assets(
         req.voxels,
         req.source_models,
         effective_ctm_rules.as_deref(),
-        req.entities,
     );
 
     // 3. Crop referenced sprites into DecodedSprite instances
@@ -149,7 +147,6 @@ pub(crate) fn build_scene_interchange<S: SceneAtlasSource>(
         colormaps,
         biome_resolver_json,
         assets.shaken_ctm_rules,
-        req.entities,
     )?;
 
     Ok(result)
@@ -161,7 +158,6 @@ pub fn export_scene_package<S: SceneAtlasSource>(
     req: SceneExportRequest<'_, S>,
 ) -> Result<SceneExportResult, MtkError> {
     let voxels = req.voxels;
-    let entities = req.entities;
     let raw_dynamic_entity_slots = req.dynamic_entity_slots;
     let mut result = build_scene_interchange(req)?;
 
@@ -205,7 +201,6 @@ pub fn export_scene_package<S: SceneAtlasSource>(
     } else {
         None
     };
-    write_req.entities = entities;
 
     write_scene_package(path, write_req)?;
 

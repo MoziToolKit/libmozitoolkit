@@ -102,14 +102,6 @@ impl<'a> NbtTag<'a> {
     }
 
     #[inline]
-    pub fn short(&self) -> Option<i16> {
-        match self {
-            Self::Short(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-    #[inline]
     pub fn int(&self) -> Option<i32> {
         match self {
             Self::Int(v) => Some(*v),
@@ -212,11 +204,6 @@ impl<'a> NbtCompound<'a> {
     }
 
     #[inline]
-    pub fn short(&self, key: &str) -> Option<i16> {
-        self.get(key).and_then(|t| t.short())
-    }
-
-    #[inline]
     pub fn int(&self, key: &str) -> Option<i32> {
         self.get(key).and_then(|t| t.int())
     }
@@ -288,22 +275,6 @@ impl<'a> NbtList<'a> {
     pub fn strings(&self) -> Option<&[NbtStr<'a>]> {
         match self {
             Self::String(v) => Some(v),
-            _ => None,
-        }
-    }
-
-    #[inline]
-    pub fn doubles(&self) -> Option<&[f64]> {
-        match self {
-            Self::Double(v) => Some(v.as_slice()),
-            _ => None,
-        }
-    }
-
-    #[inline]
-    pub fn floats(&self) -> Option<&[f32]> {
-        match self {
-            Self::Float(v) => Some(v.as_slice()),
             _ => None,
         }
     }

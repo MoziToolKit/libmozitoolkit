@@ -26,7 +26,6 @@ pub struct SceneBundle {
     pub colormaps: Option<Arc<mtk_material::VanillaColormaps>>,
     pub dynamic_entity_slots: Option<HashMap<String, (u16, u16)>>,
     pub ctm_solver: Option<mtk_resource::CtmSolver>,
-    pub entities: Vec<mtk_model::EntityInstance>,
 }
 
 /// High-level reader for `.mtkscene` packages.
@@ -44,7 +43,7 @@ impl ScenePackageReader {
 
     /// Unpacks all major components of the scene package in a single pass.
     pub fn unpack(&self) -> Result<SceneBundle, MtkError> {
-        let mut metadata = self.effective_metadata();
+        let metadata = self.effective_metadata();
         let sparse_voxels = self.read_sparse_voxels()?;
         let models = self.read_models()?;
         let atlas_mapping = self.read_atlas_mapping()?;
@@ -63,11 +62,6 @@ impl ScenePackageReader {
         let colormaps = self.read_colormaps()?;
         let dynamic_entity_slots = self.read_dynamic_entity_slots()?;
         let ctm_solver = self.read_ctm_solver()?;
-        let entities = self.read_entities()?;
-        if !entities.is_empty() {
-            metadata.capabilities.has_visual_entities = true;
-            metadata.visual_entities_count = entities.len();
-        }
 
         Ok(SceneBundle {
             metadata,
@@ -80,7 +74,6 @@ impl ScenePackageReader {
             colormaps,
             dynamic_entity_slots,
             ctm_solver,
-            entities,
         })
     }
 
@@ -303,31 +296,6 @@ impl ScenePackageReader {
         Ok(Some(map))
     }
 
-    /// Checks whether continuous visual entities (paintings, item frames, etc.) are carried in this package.
-    pub fn has_visual_entities(&self) -> bool {
-        self.reader.has_chunk("entities/instances")
-    }
-
-    /// Reads and deserializes continuous visual entities from the optional ENTI chunk.
-    pub fn read_entities(&self) -> Result<Vec<mtk_model::EntityInstance>, MtkError> {
-        if !self.has_visual_entities() {
-            Ok(Vec::new())
-        } else {
-            let bytes = self
-                .reader
-                .read_chunk_decompressed("entities/instances")
-                .map_err(MtkError::Package)?;
-            let ents: Vec<mtk_model::EntityInstance> =
-                serde_json::from_slice(&bytes).map_err(MtkError::Json)?;
-            for ent in &ents {
-                ent.validate()
-                    .map_err(mtk_model::ModelError::from)
-                    .map_err(MtkError::from)?;
-            }
-            Ok(ents)
-        }
-    }
-
     /// Returns the effective capabilities of this scene package.
     pub fn effective_capabilities(&self) -> crate::scene::metadata::SceneCapabilities {
         let mut caps = self.metadata.capabilities;
@@ -336,9 +304,6 @@ impl ScenePackageReader {
         }
         if !caps.has_ctm && self.has_ctm_rules() {
             caps.has_ctm = true;
-        }
-        if !caps.has_visual_entities && self.has_visual_entities() {
-            caps.has_visual_entities = true;
         }
         if let Ok(Some(map)) = self.read_atlas_mapping() {
             if !caps.has_pbr {
@@ -380,17 +345,10 @@ impl ScenePackageReader {
         caps
     }
 
-    /// Returns the reconciled scene metadata with effective capabilities and entity counts.
+    /// Returns the reconciled scene metadata with effective capabilities.
     pub fn effective_metadata(&self) -> crate::scene::metadata::SceneMetadata {
         let mut meta = self.metadata.clone();
         meta.capabilities = self.effective_capabilities();
-        if self.has_visual_entities() {
-            meta.capabilities.has_visual_entities = true;
-            if let Ok(ents) = self.read_entities() {
-                meta.visual_entities_count = ents.len();
-                meta.capabilities.has_visual_entities = !ents.is_empty();
-            }
-        }
         meta
     }
 

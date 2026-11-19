@@ -476,7 +476,6 @@ fn test_negative_unaligned_selection_with_multi_biomes_end_to_end() {
         &raw_biomes,
         &biome_to_name,
         &[],
-        &[],
         &config,
     )
     .expect("encode_baseline_from_raw should succeed");

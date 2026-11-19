@@ -92,7 +92,6 @@ impl VoxelWorld {
         self.storage.has_explicit_bounds = new_storage.has_explicit_bounds;
         self.storage.primary_biome = new_storage.primary_biome.clone();
         self.storage.biome_column_map = new_storage.biome_column_map.clone();
-        self.storage.entities = new_storage.entities.clone();
 
         // Never drop dirt queued before this sync: a section edited locally between meshes
         // would otherwise keep its stale geometry until something else touched it.

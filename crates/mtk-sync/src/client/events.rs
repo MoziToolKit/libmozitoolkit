@@ -52,12 +52,6 @@ pub enum SyncEvent {
         affected_sections: Vec<IVec3>,
     },
 
-    /// Continuous visual entities have been updated (created, modified, or removed).
-    VisualEntitiesUpdated {
-        upserted: Vec<mtk_model::EntityInstance>,
-        deleted_uuids: Vec<String>,
-    },
-
     /// Live sync validation completed.
     Verified { is_verified: bool, message: String },
 

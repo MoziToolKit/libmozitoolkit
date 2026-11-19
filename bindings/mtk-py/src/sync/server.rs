@@ -89,15 +89,6 @@ impl PyLiveSyncServer {
             .unwrap_or_default()
     }
 
-    /// Returns the combined set of subscribed visual entity types from all connected clients.
-    pub fn subscribed_visual_entities(&self) -> PyResult<Vec<String>> {
-        let server = self
-            .inner
-            .as_ref()
-            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Server is stopped"))?;
-        Ok(server.subscribed_visual_entities())
-    }
-
     /// Updates the authoritative selection.
     #[pyo3(signature = (min_pos, size, dimension="minecraft:overworld".to_string()))]
     pub fn set_selection(
@@ -176,7 +167,6 @@ impl PyLiveSyncServer {
                 &raw_biomes,
                 &biome_palette,
                 &entities,
-                &[],
             )
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("{:?}", e)))
     }

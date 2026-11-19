@@ -7,7 +7,7 @@ use glam::IVec3;
 use std::collections::HashMap;
 use xxhash_rust::xxh64::Xxh64;
 
-use mtk_model::{BlockEntityData, EntityInstance};
+use mtk_model::BlockEntityData;
 use mtk_voxel::VoxelStorage;
 
 use crate::protocol::{
@@ -139,7 +139,6 @@ pub fn encode_baseline_from_storage(
     min_pos: IVec3,
     size: IVec3,
     dimension: &str,
-    visual_entities: &[EntityInstance],
     config: &BaselineEncoderConfig,
 ) -> Result<BaselineStream, ProtocolError> {
     let total_voxels = validate_baseline_bounds(size)?;
@@ -211,7 +210,6 @@ pub fn encode_baseline_from_storage(
         biome_palette,
         quart_biome_indices,
         block_entities,
-        visual_entities.to_vec(),
         state_hash,
         config,
     )
@@ -227,7 +225,6 @@ pub fn encode_baseline_from_raw(
     raw_biomes: &[u32],
     biome_to_name: &[String],
     block_entities: &[(IVec3, String)], // Relative coords + JSON string
-    visual_entities: &[EntityInstance],
     config: &BaselineEncoderConfig,
 ) -> Result<BaselineStream, ProtocolError> {
     let total_voxels = validate_baseline_bounds(size)?;
@@ -317,7 +314,6 @@ pub fn encode_baseline_from_raw(
         biome_palette,
         quart_biome_indices,
         parsed_block_entities,
-        visual_entities.to_vec(),
         state_hash,
         config,
     )
@@ -333,7 +329,6 @@ fn assemble_baseline_stream(
     biome_palette: Vec<String>,
     quart_biome_indices: Vec<u16>,
     block_entities: Vec<(IVec3, BlockEntityData)>,
-    visual_entities: Vec<EntityInstance>,
     state_hash: u64,
     config: &BaselineEncoderConfig,
 ) -> Result<BaselineStream, ProtocolError> {
@@ -484,18 +479,7 @@ fn assemble_baseline_stream(
         });
     }
 
-    // 4. Optional BASELINE_VISUAL_ENTITIES (RFC v3.2 Continuous Visual Entities)
-    if !visual_entities.is_empty() {
-        let entities_hash = crate::protocol::compute_visual_entities_hash(&visual_entities);
-        packets.push(Packet::BaselineVisualEntities {
-            epoch: config.epoch,
-            snapshot_seq: config.snapshot_seq,
-            entities_hash,
-            entities: visual_entities,
-        });
-    }
-
-    // 5. BASELINE_END must be sent after all payload chunks and entities
+    // 4. BASELINE_END must be sent after all payload chunks and entities
     packets.push(end_packet);
 
     Ok(BaselineStream {

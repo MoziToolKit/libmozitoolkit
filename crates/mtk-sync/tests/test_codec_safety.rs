@@ -1,9 +1,6 @@
-use glam::{DVec3, Vec3};
-use mtk_core::Direction;
-use mtk_model::EntityInstance;
 use mtk_sync::protocol::{
     decode_packet, encode_packet, format_uuid, parse_canonical_uuid, ErrorCode, Opcode, Packet,
-    ProtocolError, VisualEntityDelta, PROTOCOL_MAGIC, PROTOCOL_VERSION,
+    ProtocolError, PROTOCOL_MAGIC, PROTOCOL_VERSION,
 };
 
 #[test]
@@ -31,61 +28,6 @@ fn test_canonical_uuid_parsing() {
     let (most2, least2) = parse_canonical_uuid(hex32).expect("32-hex uuid must parse");
     assert_eq!((most2, least2), (most, least));
     assert_eq!(format_uuid(most2, least2), dashed);
-}
-
-#[test]
-fn test_encode_entity_invalid_uuid() {
-    let entity = EntityInstance::new_item_frame(
-        Some("not-a-valid-uuid".to_string()),
-        DVec3::ZERO,
-        Direction::North,
-        Vec3::ZERO,
-        "minecraft:stick",
-        1,
-        0,
-        false,
-        false,
-        None,
-    );
-
-    let pkt = Packet::DeltaVisualEntity {
-        epoch: 1,
-        seq_id: 10,
-        delta: VisualEntityDelta::Upsert(entity),
-    };
-
-    let res = encode_packet(&pkt);
-    assert!(
-        matches!(res, Err(ProtocolError::InvalidUuid(_))),
-        "expected InvalidUuid, got {:?}",
-        res
-    );
-
-    // Entity with absent UUID must also return explicit error
-    let entity_nil = EntityInstance::new_item_frame(
-        None,
-        DVec3::ZERO,
-        Direction::North,
-        Vec3::ZERO,
-        "minecraft:stick",
-        1,
-        0,
-        false,
-        false,
-        None,
-    );
-
-    let pkt_nil = Packet::DeltaVisualEntity {
-        epoch: 1,
-        seq_id: 11,
-        delta: VisualEntityDelta::Upsert(entity_nil),
-    };
-    let res_nil = encode_packet(&pkt_nil);
-    assert!(
-        matches!(res_nil, Err(ProtocolError::InvalidUuid(_))),
-        "expected InvalidUuid for absent UUID, got {:?}",
-        res_nil
-    );
 }
 
 #[test]

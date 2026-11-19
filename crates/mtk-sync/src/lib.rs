@@ -25,11 +25,10 @@ pub use client::{
 };
 pub use protocol::{
     compute_delta_batch_hash, compute_sparse_state_hash, compute_sparse_state_hash_for_point_cloud,
-    compute_sparse_state_hash_for_storage, compute_sparse_state_hash_from_raw,
-    compute_visual_entities_hash, decode_packet, direction_to_facing_byte, encode_packet,
-    facing_byte_to_direction, format_uuid, read_visual_entity, voxel_index_to_relative_coords,
-    DeltaChangeEntry, Opcode, Packet, QuartGrid, SparseBlockEntry, SyncDecision, VisualEntityDelta,
-    DELTA_VISUAL_ACTION_REMOVE, DELTA_VISUAL_ACTION_UPSERT, PROTOCOL_MAGIC, PROTOCOL_VERSION,
+    compute_sparse_state_hash_for_storage, compute_sparse_state_hash_from_raw, decode_packet,
+    direction_to_facing_byte, encode_packet, facing_byte_to_direction, format_uuid,
+    voxel_index_to_relative_coords, DeltaChangeEntry, Opcode, Packet, QuartGrid, SparseBlockEntry,
+    SyncDecision, PROTOCOL_MAGIC, PROTOCOL_VERSION,
 };
 pub use server::{
     decide_handshake, encode_baseline_from_raw, encode_baseline_from_storage, encode_delta_op,

@@ -4,8 +4,10 @@ use serde::{Deserialize, Serialize};
 /// Protocol magic header bytes: 'M' (0x4D), 'T' (0x54).
 pub const PROTOCOL_MAGIC: [u8; 2] = [0x4D, 0x54];
 
-/// Canonical protocol version number (Version 3.1, Protocol v3).
-pub const PROTOCOL_VERSION: u8 = 0x03;
+/// Canonical protocol version number (Version 4.0, Protocol v4).
+///
+/// 4.0 drops the continuous visual entity stream (opcodes 0x13/0x14) that 3.x carried.
+pub const PROTOCOL_VERSION: u8 = 0x04;
 
 /// Standard 4-byte header size: Magic(2) + Version(1) + Opcode(1).
 pub(crate) const HEADER_SIZE: usize = 4;
@@ -16,7 +18,6 @@ pub(crate) const MAX_BASELINE_DECODED_BYTES: usize = 256 * 1024 * 1024; // 256 M
 pub const MAX_SELECTION_VOLUME: u64 = 33_554_432; // 32M voxels
 pub const MAX_DELTA_BATCH_CHANGES: usize = 16384;
 pub(crate) const MAX_DELTA_STAGING_BATCHES: usize = 256;
-pub(crate) const MAX_VISUAL_ENTITIES: usize = 1_000_000;
 
 /// Protocol Opcode enumeration (RFC Section 4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -49,14 +50,10 @@ pub enum Opcode {
     Pong = 0x0F,
     /// 0x10: Diagnostic Error Response (Bidirectional)
     Error = 0x10,
-    /// 0x11: Sparse BlockEntity Stream (RFC v3.2, S -> C)
+    /// 0x11: Sparse BlockEntity Stream (S -> C)
     BaselineEntities = 0x11,
-    /// 0x12: Sparse BlockEntity Delta Update (RFC v3.2, S -> C)
+    /// 0x12: Sparse BlockEntity Delta Update (S -> C)
     DeltaEntity = 0x12,
-    /// 0x13: Continuous Visual Entity Stream (RFC v3.2, S -> C)
-    BaselineVisualEntities = 0x13,
-    /// 0x14: Continuous Visual Entity Delta Update (RFC v3.2, S -> C)
-    DeltaVisualEntity = 0x14,
 }
 
 impl Opcode {
@@ -77,8 +74,6 @@ impl Opcode {
             0x10 => Some(Opcode::Error),
             0x11 => Some(Opcode::BaselineEntities),
             0x12 => Some(Opcode::DeltaEntity),
-            0x13 => Some(Opcode::BaselineVisualEntities),
-            0x14 => Some(Opcode::DeltaVisualEntity),
             _ => None,
         }
     }
@@ -158,7 +153,6 @@ pub enum ResyncReason {
     PaletteRevisionMismatch = 0x02,
     StateHashMismatch = 0x03,
     ChunkCorrupted = 0x04,
-    VisualEntitiesHashMismatch = 0x06,
 }
 
 impl ResyncReason {
@@ -168,19 +162,10 @@ impl ResyncReason {
             0x02 => Some(ResyncReason::PaletteRevisionMismatch),
             0x03 => Some(ResyncReason::StateHashMismatch),
             0x04 => Some(ResyncReason::ChunkCorrupted),
-            0x06 => Some(ResyncReason::VisualEntitiesHashMismatch),
             _ => None,
         }
     }
 }
-
-/// Client capability flag: supports continuous visual entity stream (RFC v3.2).
-pub const CAP_SUPPORTS_VISUAL_ENTITIES: u32 = 0x0000_0004;
-
-/// Delta Visual Entity action: Upsert entity.
-pub const DELTA_VISUAL_ACTION_UPSERT: u8 = 0x01;
-/// Delta Visual Entity action: Remove entity by UUID.
-pub const DELTA_VISUAL_ACTION_REMOVE: u8 = 0x02;
 
 /// Protocol Error code (RFC Section 4.14).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

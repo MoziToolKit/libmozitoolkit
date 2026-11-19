@@ -11,7 +11,7 @@ use mtk_voxel::{FluidType, SparseVoxelPayload};
 /// Collected asset identifiers needed by the scene.
 #[derive(Debug, Default, Clone)]
 pub struct NeededSceneAssets {
-    /// Texture paths/identifiers needed across all models and entities.
+    /// Texture paths/identifiers needed across all models.
     pub needed_textures: BTreeSet<String>,
     /// Unique blockstates referenced in the sparse voxel grid.
     pub needed_blockstates: BTreeSet<String>,
@@ -19,12 +19,11 @@ pub struct NeededSceneAssets {
     pub shaken_ctm_rules: Vec<mtk_resource::CtmRule>,
 }
 
-/// Collects all unique blockstate strings and texture paths required to render the voxels and visual entities.
+/// Collects all unique blockstate strings and texture paths required to render the voxels.
 pub fn collect_needed_assets(
     voxels: &SparseVoxelPayload,
     source_models: &BakedModelDatabase,
     source_ctm_rules: Option<&[mtk_resource::CtmRule]>,
-    visual_entities: Option<&[mtk_model::EntityInstance]>,
 ) -> NeededSceneAssets {
     let mut needed_textures = BTreeSet::new();
     let mut needed_blockstates = BTreeSet::new();
@@ -145,18 +144,6 @@ pub fn collect_needed_assets(
                     needed_textures.insert(tile_loc.to_string());
                 }
                 shaken_ctm_rules.push(rule.clone());
-            }
-        }
-    }
-
-    // 6. Inspect continuous visual entities (Paintings, Item Frames, Mobs, Display Entities, etc.)
-    if let Some(entities) = visual_entities {
-        for ent in entities {
-            for tex in ent.required_textures() {
-                needed_textures.insert(tex);
-            }
-            for bs in ent.required_blockstates() {
-                needed_blockstates.insert(bs);
             }
         }
     }

@@ -6,7 +6,6 @@ use glam::IVec3;
 use xxhash_rust::xxh64::Xxh64;
 
 use super::decode_baseline::*;
-use super::decode_visual::*;
 use crate::protocol::constants::*;
 use crate::protocol::error::ProtocolError;
 use crate::protocol::packet::*;
@@ -100,24 +99,6 @@ pub(crate) fn read_u32_le(
 }
 
 #[inline]
-pub(crate) fn read_f32_le(
-    buf: &[u8],
-    offset: &mut usize,
-    field: &'static str,
-) -> Result<f32, ProtocolError> {
-    read_array::<4>(buf, offset, field).map(f32::from_le_bytes)
-}
-
-#[inline]
-pub(crate) fn read_f64_le(
-    buf: &[u8],
-    offset: &mut usize,
-    field: &'static str,
-) -> Result<f64, ProtocolError> {
-    read_array::<8>(buf, offset, field).map(f64::from_le_bytes)
-}
-
-#[inline]
 pub(crate) fn read_u64_le(
     buf: &[u8],
     offset: &mut usize,
@@ -193,8 +174,6 @@ pub fn decode_packet(buf: &[u8]) -> Result<Packet, ProtocolError> {
         Opcode::Error => decode_error(buf, &mut offset),
         Opcode::BaselineEntities => decode_baseline_entities(buf, &mut offset),
         Opcode::DeltaEntity => decode_delta_entity(buf, &mut offset),
-        Opcode::BaselineVisualEntities => decode_baseline_visual_entities(buf, &mut offset),
-        Opcode::DeltaVisualEntity => decode_delta_visual_entity(buf, &mut offset),
     }
 }
 
@@ -222,15 +201,6 @@ fn decode_hello(buf: &[u8], offset: &mut usize) -> Result<Packet, ProtocolError>
     let auth_token = read_str(buf, offset, "Hello auth_token")?.to_string();
     let cached_dimension = read_str(buf, offset, "Hello cached_dimension")?.to_string();
 
-    let mut subscribed_visual_entities = Vec::new();
-    if (capabilities & CAP_SUPPORTS_VISUAL_ENTITIES) != 0 && *offset + 2 <= buf.len() {
-        let count = read_u16_le(buf, offset, "Hello subscribed count")? as usize;
-        for _ in 0..count {
-            let id = read_str(buf, offset, "Hello subscribed entity id")?.to_string();
-            subscribed_visual_entities.push(id);
-        }
-    }
-
     Ok(Packet::Hello {
         min_version,
         max_version,
@@ -244,7 +214,6 @@ fn decode_hello(buf: &[u8], offset: &mut usize) -> Result<Packet, ProtocolError>
         cached_state_hash,
         auth_token,
         cached_dimension,
-        subscribed_visual_entities,
     })
 }
 

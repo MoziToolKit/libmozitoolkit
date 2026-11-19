@@ -2007,23 +2007,3 @@ fn test_spawner_does_not_cull_underlying_block_face() {
         "Cobblestone top face under spawner must NOT be culled (no hollow void underneath spawner)!"
     );
 }
-
-#[test]
-fn test_entity_baker_painting_mesh() {
-    let painting = mtk_model::EntityInstance::new_painting(
-        Some("12345678-1234-1234-1234-123456789abc".to_string()),
-        glam::DVec3::new(5.0, 10.0, 5.0),
-        mtk_core::Direction::North,
-        glam::Vec3::ZERO,
-        "kebab",
-        1,
-        1,
-        Some([5, 10, 5]),
-    );
-    let (mesh, textures) = mtk_model::EntityBaker::bake_entity_mesh(&painting, |_| None, |_| None)
-        .expect("Bake painting mesh");
-    assert_eq!(mesh.quad_count(), 6);
-    assert_eq!(mesh.vertex_count(), 24);
-    assert!(textures.contains(&"minecraft:painting/kebab".to_string()));
-    assert!(textures.contains(&"minecraft:painting/back".to_string()));
-}

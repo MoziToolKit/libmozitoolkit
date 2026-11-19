@@ -4,11 +4,9 @@ use mtk_voxel::{VoxelStorage, VoxelWriter};
 use std::path::{Path, PathBuf};
 
 use crate::chunk::ChunkParser;
-use crate::entity::EntityParser;
 use crate::error::SaveError;
 use crate::level::LevelData;
 use crate::region::RegionFile;
-use mtk_model::EntityInstance;
 
 /// High-level loader providing automatic Minecraft world directory discovery,
 /// metadata extraction, and on-demand spatial bounding box slicing.
@@ -176,66 +174,6 @@ impl SaveLoader {
         }
     }
 
-    /// Resolves the entities directory for a given dimension name.
-    pub(crate) fn resolve_dimension_entities_dir(
-        save_dir: &Path,
-        dimension: &str,
-    ) -> Option<PathBuf> {
-        let dim_clean = dimension.trim().to_lowercase();
-
-        // If the path itself is already an entities folder
-        if save_dir.is_dir() && save_dir.file_name().is_some_and(|f| f == "entities") {
-            return Some(save_dir.to_path_buf());
-        }
-
-        match dim_clean.as_str() {
-            "overworld" | "minecraft:overworld" => {
-                let p1 = save_dir.join("entities");
-                if p1.is_dir() {
-                    return Some(p1);
-                }
-                let p2 = save_dir.join("dimensions/minecraft/overworld/entities");
-                if p2.is_dir() {
-                    return Some(p2);
-                }
-            }
-            "nether" | "the_nether" | "minecraft:the_nether" => {
-                let p = save_dir.join("dimensions/minecraft/the_nether/entities");
-                if p.is_dir() {
-                    return Some(p);
-                }
-            }
-            "end" | "the_end" | "minecraft:the_end" => {
-                let p = save_dir.join("dimensions/minecraft/the_end/entities");
-                if p.is_dir() {
-                    return Some(p);
-                }
-            }
-            custom => {
-                let parts: Vec<&str> = custom.split(':').collect();
-                if parts.len() == 2 {
-                    let p = save_dir.join(format!("dimensions/{}/{}/entities", parts[0], parts[1]));
-                    if p.is_dir() {
-                        return Some(p);
-                    }
-                } else {
-                    let p = save_dir.join(format!("dimensions/minecraft/{}/entities", custom));
-                    if p.is_dir() {
-                        return Some(p);
-                    }
-                }
-            }
-        }
-
-        // Fallback: check direct entities folder
-        let direct_entities = save_dir.join("entities");
-        if direct_entities.is_dir() {
-            Some(direct_entities)
-        } else {
-            None
-        }
-    }
-
     /// Loads only the required chunk sections within `[min_block, max_block]` into a target `VoxelStorage`.
     ///
     /// Performs direct-seek MCA reads, uncompressing only intersecting chunks and Y sections.
@@ -261,25 +199,8 @@ impl SaveLoader {
         storage: &mut VoxelStorage,
         progress: Option<ProgressCallback>,
     ) -> Result<usize, SaveError> {
-        let (sections, entities) = Self::load_box_with_entities(
-            save_dir, dimension, min_block, max_block, storage, progress,
-        )?;
-        storage.entities = entities;
-        Ok(sections)
-    }
-
-    /// Loads chunk sections and extracts decoupled continuous visual entities within `[min_block, max_block]`.
-    pub fn load_box_with_entities(
-        save_dir: &Path,
-        dimension: &str,
-        min_block: IVec3,
-        max_block: IVec3,
-        storage: &mut VoxelStorage,
-        progress: Option<ProgressCallback>,
-    ) -> Result<(usize, Vec<EntityInstance>), SaveError> {
         let region_dir = Self::resolve_dimension_region_dir(save_dir, dimension)
             .ok_or_else(|| SaveError::RegionDirNotFound(save_dir.to_path_buf()))?;
-        let entities_dir = Self::resolve_dimension_entities_dir(save_dir, dimension);
 
         // 1. Calculate bounding box ranges
         let true_min = min_block.min(max_block);
@@ -303,7 +224,6 @@ impl SaveLoader {
             .with_prefix("Loading chunk");
 
         let mut loaded_sections = 0usize;
-        let mut loaded_entities = Vec::new();
 
         // 2. Iterate only over regions that overlap the bounding box
         for rx in min_reg_x..=max_reg_x {
@@ -389,69 +309,7 @@ impl SaveLoader {
                             loaded_sections += 1;
                         }
 
-                        // Extract legacy entities from region chunk NBT if separate entities dir is absent
-                        if entities_dir.is_none() {
-                            if let Ok(entities) =
-                                EntityParser::parse_entities(&decompressed, true_min, true_max)
-                            {
-                                loaded_entities.extend(entities);
-                            }
-                        }
-
                         throttler.inc();
-                    }
-                }
-            }
-        }
-
-        // 3. Scan and extract visual entities from separate entities/*.mca directory (1.17+ format)
-        if let Some(ref ent_dir) = entities_dir {
-            // Expand entity chunk bounds by 1 chunk in X and Z to capture entities
-            // whose Pos placed them in adjacent chunks but whose AABB overlaps the selection
-            let min_ent_sec_x = min_sec_x - 1;
-            let max_ent_sec_x = max_sec_x + 1;
-            let min_ent_sec_z = min_sec_z - 1;
-            let max_ent_sec_z = max_sec_z + 1;
-
-            let min_ent_reg_x = min_ent_sec_x.div_euclid(32);
-            let max_ent_reg_x = max_ent_sec_x.div_euclid(32);
-            let min_ent_reg_z = min_ent_sec_z.div_euclid(32);
-            let max_ent_reg_z = max_ent_sec_z.div_euclid(32);
-
-            for rx in min_ent_reg_x..=max_ent_reg_x {
-                for rz in min_ent_reg_z..=max_ent_reg_z {
-                    let mca_path = ent_dir.join(format!("r.{}.{}.mca", rx, rz));
-                    if !mca_path.exists() {
-                        continue;
-                    }
-
-                    let mut region_file = match RegionFile::open(&mca_path) {
-                        Ok(rf) => rf,
-                        Err(_) => continue,
-                    };
-
-                    let chunk_start_x = (rx * 32).max(min_ent_sec_x);
-                    let chunk_end_x = (rx * 32 + 31).min(max_ent_sec_x);
-                    let chunk_start_z = (rz * 32).max(min_ent_sec_z);
-                    let chunk_end_z = (rz * 32 + 31).min(max_ent_sec_z);
-
-                    for cx in chunk_start_x..=chunk_end_x {
-                        for cz in chunk_start_z..=chunk_end_z {
-                            if !region_file.has_chunk(cx, cz) {
-                                continue;
-                            }
-
-                            let decompressed = match region_file.read_chunk_decompressed(cx, cz) {
-                                Ok(Some(d)) => d,
-                                _ => continue,
-                            };
-
-                            if let Ok(entities) =
-                                EntityParser::parse_entities(&decompressed, true_min, true_max)
-                            {
-                                loaded_entities.extend(entities);
-                            }
-                        }
                     }
                 }
             }
@@ -471,16 +329,10 @@ impl SaveLoader {
                 "load_chunks",
                 total_chunks,
                 total_chunks,
-                format!(
-                    "Loaded {} chunk sections from {} chunks ({} entities)",
-                    loaded_sections,
-                    total_chunks,
-                    loaded_entities.len()
-                ),
+                format!("Loaded {loaded_sections} chunk sections from {total_chunks} chunks"),
             ));
         }
 
-        storage.entities = loaded_entities.clone();
-        Ok((loaded_sections, loaded_entities))
+        Ok(loaded_sections)
     }
 }

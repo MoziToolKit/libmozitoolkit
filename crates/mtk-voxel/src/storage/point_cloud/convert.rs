@@ -20,9 +20,7 @@ impl VoxelPointCloud {
     pub fn extract_from_storage(storage: &VoxelStorage, config: &MesherConfig) -> Self {
         let non_empty = storage.get_all_non_empty_sections();
         if non_empty.is_empty() {
-            let mut empty_cloud = Self::new();
-            empty_cloud.entities = storage.entities.clone();
-            return empty_cloud;
+            return Self::new();
         }
 
         let mut effective_config = config.clone();
@@ -43,7 +41,6 @@ impl VoxelPointCloud {
             .sum();
 
         let mut cloud = Self::with_capacity(total_est);
-        cloud.entities = storage.entities.clone();
         if has_bounds {
             cloud.bounds = Some([bx, by, bz, sx, sy, sz]);
         }
@@ -176,7 +173,6 @@ impl VoxelPointCloud {
     /// marks all populated sections as dirty for subsequent meshing, and restores block entities.
     pub fn reconstruct_storage(&self) -> VoxelStorage {
         let mut storage = VoxelStorage::new();
-        storage.entities = self.entities.clone();
         let count = self.len();
         if count == 0 {
             return storage;
@@ -263,7 +259,6 @@ impl VoxelPointCloud {
             );
         }
 
-        storage.entities = self.entities.clone();
         storage.finalize_biome_metadata();
         storage.mark_all_sections_dirty();
         storage

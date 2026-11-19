@@ -5,11 +5,10 @@
 
 use glam::IVec3;
 use jni::objects::{JByteArray, JClass, JIntArray, JObjectArray, JString};
-use jni::sys::{jboolean, jbyte, jdouble, jfloat, jint, jlong, jobjectArray};
+use jni::sys::{jboolean, jint, jlong};
 use jni::JNIEnv;
 
 use mtk_sync::server::{LiveSyncServer, ServerConfig};
-use mtk_sync::VisualEntityDelta;
 
 use super::convert::{extract_int_array, extract_optional_string_array, extract_string_array};
 
@@ -184,7 +183,6 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerS
     biome_palette: JObjectArray,
     entity_coords: JIntArray,
     entity_payloads: JObjectArray,
-    visual_entities_bytes: JByteArray,
 ) -> jboolean {
     if handle == 0 {
         return 0;
@@ -225,19 +223,6 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerS
         block_entities.push((IVec3::new(rx, ry, rz), e_payloads[i].clone()));
     }
 
-    let mut visual_entities = Vec::new();
-    if !visual_entities_bytes.is_null() {
-        if let Ok(bytes) = env.convert_byte_array(&visual_entities_bytes) {
-            let mut offset = 0;
-            while offset < bytes.len() {
-                match mtk_sync::protocol::read_visual_entity(&bytes, &mut offset) {
-                    Ok(e) => visual_entities.push(e),
-                    Err(_) => break,
-                }
-            }
-        }
-    }
-
     match server.submit_baseline(
         client_id as u64,
         IVec3::new(min_x, min_y, min_z),
@@ -248,138 +233,10 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerS
         &biomes,
         &biome_names,
         &block_entities,
-        &visual_entities,
     ) {
         Ok(_) => 1,
         Err(_) => 0,
     }
-}
-
-/// Returns the combined array of subscribed visual entity types from all connected clients.
-#[no_mangle]
-pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerGetSubscribedVisualEntities(
-    mut env: JNIEnv,
-    _class: JClass,
-    handle: jlong,
-) -> jobjectArray {
-    if handle == 0 {
-        return std::ptr::null_mut();
-    }
-    let server = unsafe { &*(handle as *const LiveSyncServer) };
-    let subs = server.subscribed_visual_entities();
-
-    let string_class = match env.find_class("java/lang/String") {
-        Ok(c) => c,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let result_arr = match env.new_object_array(
-        subs.len() as i32,
-        &string_class,
-        jni::objects::JObject::null(),
-    ) {
-        Ok(arr) => arr,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    for (i, s) in subs.iter().enumerate() {
-        let j_str = match env.new_string(s) {
-            Ok(js) => js,
-            Err(_) => return std::ptr::null_mut(),
-        };
-        if env
-            .set_object_array_element(&result_arr, i as i32, &j_str)
-            .is_err()
-        {
-            return std::ptr::null_mut();
-        }
-    }
-
-    result_arr.into_raw()
-}
-
-/// Submits an incremental visual entity UPSERT to the server.
-#[no_mangle]
-pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerSubmitVisualEntityUpsert(
-    mut env: JNIEnv,
-    _class: JClass,
-    handle: jlong,
-    most_sig: jlong,
-    least_sig: jlong,
-    id: JString,
-    x: jdouble,
-    y: jdouble,
-    z: jdouble,
-    pitch: jfloat,
-    yaw: jfloat,
-    roll: jfloat,
-    scale_x: jfloat,
-    scale_y: jfloat,
-    scale_z: jfloat,
-    facing: jbyte,
-    custom_payload: JByteArray,
-) {
-    if handle == 0 {
-        return;
-    }
-    let server = unsafe { &*(handle as *const LiveSyncServer) };
-    let id_str: String = match env.get_string(&id) {
-        Ok(s) => s.into(),
-        Err(_) => return,
-    };
-    let payload = if !custom_payload.is_null() {
-        env.convert_byte_array(&custom_payload).unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-
-    // Must match `mtk_sync::protocol::format_uuid` exactly (canonical 8-4-4-4-12 dashed
-    // form). The live-sync decoder rebuilds UUIDs with that formatter, and
-    // `entity_render_key` keys host objects on the UUID string, so any divergence here
-    // makes the same entity upsert and delete under different keys.
-    let uuid_str = mtk_sync::protocol::format_uuid(most_sig as u64, least_sig as u64);
-    let facing_dir = mtk_sync::protocol::facing_byte_to_direction(facing as u8);
-    let kind: mtk_model::EntityKindData = if !payload.is_empty() {
-        serde_json::from_slice(&payload).unwrap_or_else(|_| mtk_model::EntityKindData::Generic {
-            custom_id: id_str.clone(),
-            payload: payload.clone(),
-        })
-    } else {
-        mtk_model::EntityKindData::Generic {
-            custom_id: id_str.clone(),
-            payload: Vec::new(),
-        }
-    };
-
-    let entity = mtk_model::EntityInstance {
-        uuid: Some(uuid_str),
-        id: id_str,
-        custom_name: None,
-        position: glam::DVec3::new(x, y, z),
-        facing: facing_dir,
-        rotation: glam::Vec3::new(pitch, yaw, roll),
-        scale: glam::Vec3::new(scale_x, scale_y, scale_z),
-        kind,
-    };
-
-    server.submit_visual_entity_delta(VisualEntityDelta::Upsert(entity));
-}
-
-/// Submits an incremental visual entity REMOVE to the server.
-#[no_mangle]
-pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerSubmitVisualEntityRemove(
-    _env: JNIEnv,
-    _class: JClass,
-    handle: jlong,
-    most_sig: jlong,
-    least_sig: jlong,
-) {
-    if handle == 0 {
-        return;
-    }
-    let server = unsafe { &*(handle as *const LiveSyncServer) };
-    let uuid_str = mtk_sync::protocol::format_uuid(most_sig as u64, least_sig as u64);
-    server.submit_visual_entity_delta(VisualEntityDelta::Remove { uuid: uuid_str });
 }
 
 /// Broadcasts a pre-encoded raw RFC frame to all connected clients.

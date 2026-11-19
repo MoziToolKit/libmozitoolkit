@@ -215,10 +215,6 @@ pub fn parse_canonical_uuid(s: &str) -> Result<(u64, u64), crate::protocol::erro
 /// must decide whether to propagate the error or use a nil placeholder.
 ///
 /// Callers that need strict validation must use [`parse_canonical_uuid`] directly.
-pub(crate) fn parse_uuid_bits(uuid_str: &str) -> (u64, u64) {
-    parse_canonical_uuid(uuid_str).unwrap_or((0, 0))
-}
-
 /// Helper to format most_sig and least_sig u64 into canonical 8-4-4-4-12 UUID string.
 pub fn format_uuid(most: u64, least: u64) -> String {
     format!(
@@ -256,61 +252,6 @@ pub fn facing_byte_to_direction(facing: u8) -> Option<mtk_core::Direction> {
         5 => Some(mtk_core::Direction::East),
         _ => None,
     }
-}
-
-/// Computes the authoritative deterministic xxHash64 over a list of visual entities (RFC v3.2).
-/// Bit-for-bit aligned with Java `VisualEntityEntry.computeEntitiesHash`.
-pub fn compute_visual_entities_hash(entities: &[mtk_model::EntityInstance]) -> u64 {
-    if entities.is_empty() {
-        return 0;
-    }
-
-    let mut sorted: Vec<&mtk_model::EntityInstance> = entities.iter().collect();
-    sorted.sort_by(|a, b| {
-        let u_a = a.uuid.as_deref().unwrap_or("");
-        let u_b = b.uuid.as_deref().unwrap_or("");
-        u_a.cmp(u_b)
-    });
-
-    let mut hasher = Xxh64::new(0);
-    for e in sorted {
-        let uuid_str = e.uuid.as_deref().unwrap_or("");
-        let (most_sig, least_sig) = parse_uuid_bits(uuid_str);
-        hasher.update(&most_sig.to_le_bytes());
-        hasher.update(&least_sig.to_le_bytes());
-
-        let id_bytes = e.id.as_bytes();
-        hasher.update(&(id_bytes.len() as u16).to_le_bytes());
-        hasher.update(id_bytes);
-
-        hasher.update(&e.position.x.to_bits().to_le_bytes());
-        hasher.update(&e.position.y.to_bits().to_le_bytes());
-        hasher.update(&e.position.z.to_bits().to_le_bytes());
-
-        hasher.update(&e.rotation.x.to_bits().to_le_bytes());
-        hasher.update(&e.rotation.y.to_bits().to_le_bytes());
-        hasher.update(&e.rotation.z.to_bits().to_le_bytes());
-
-        hasher.update(&e.scale.x.to_bits().to_le_bytes());
-        hasher.update(&e.scale.y.to_bits().to_le_bytes());
-        hasher.update(&e.scale.z.to_bits().to_le_bytes());
-
-        let facing = direction_to_facing_byte(e.facing);
-        hasher.update(&[facing]);
-
-        let payload = match &e.kind {
-            mtk_model::EntityKindData::Generic { payload, .. } if !payload.is_empty() => {
-                payload.clone()
-            }
-            _ => serde_json::to_vec(&e.kind).unwrap_or_default(),
-        };
-        hasher.update(&(payload.len() as u32).to_le_bytes());
-        if !payload.is_empty() {
-            hasher.update(&payload);
-        }
-    }
-
-    hasher.digest()
 }
 
 /// Computes the sparse authoritative canonical state_hash directly from a `VoxelStorage`.

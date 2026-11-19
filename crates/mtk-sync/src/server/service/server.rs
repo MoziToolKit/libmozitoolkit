@@ -9,7 +9,7 @@ use glam::IVec3;
 
 use crate::protocol::{
     compute_sparse_state_hash_from_raw, encode_packet, CancelReason, DeltaChangeEntry, Packet,
-    ProtocolError, VisualEntityDelta,
+    ProtocolError,
 };
 use crate::server::baseline::{encode_baseline_from_raw, BaselineEncoderConfig, BaselineStream};
 use crate::server::delta::encode_delta_op;
@@ -180,21 +180,6 @@ impl LiveSyncServer {
         }
     }
 
-    /// Returns the combined set of subscribed visual entity types from all connected clients.
-    pub fn subscribed_visual_entities(&self) -> Vec<String> {
-        let mut set = std::collections::HashSet::new();
-        if let Ok(subs) = self.inner.client_subscriptions.lock() {
-            for list in subs.values() {
-                for s in list {
-                    set.insert(s.clone());
-                }
-            }
-        }
-        let mut res: Vec<String> = set.into_iter().collect();
-        res.sort();
-        res
-    }
-
     /// Authoritatively packages and streams a Baseline dataset to a client (or broadcasts if client_id == 0).
     pub fn submit_baseline(
         &self,
@@ -207,7 +192,6 @@ impl LiveSyncServer {
         raw_biomes: &[u32],
         biome_palette: &[String],
         block_entities: &[(IVec3, String)],
-        visual_entities: &[mtk_model::EntityInstance],
     ) -> Result<u64, ProtocolError> {
         let entity_map: HashMap<IVec3, &str> = block_entities
             .iter()
@@ -274,26 +258,11 @@ impl LiveSyncServer {
             raw_biomes,
             biome_palette,
             block_entities,
-            visual_entities,
             &encoder_config,
         )?;
 
         self.stream_baseline(client_id, &stream)?;
         Ok(state_hash)
-    }
-
-    /// Broadcasts an incremental Visual Entity change (Upsert or Remove).
-    pub fn submit_visual_entity_delta(&self, delta: VisualEntityDelta) {
-        let epoch = self.inner.epoch.load(Ordering::Relaxed);
-        let seq_id = self.inner.sequence.fetch_add(1, Ordering::Relaxed);
-        let pkt = Packet::DeltaVisualEntity {
-            epoch,
-            seq_id,
-            delta,
-        };
-        if let Err(err) = self.broadcast_packet(&pkt) {
-            self.warn(format!("failed to encode visual entity delta: {err}"));
-        }
     }
 
     /// Broadcasts a pre-encoded raw RFC frame to all connected clients.

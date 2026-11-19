@@ -16,7 +16,6 @@ fn test_all_packets_truncated_payload_safety() {
         cached_state_hash: 0xDEADBEEFCAFE,
         auth_token: "secret_token".to_string(),
         cached_dimension: "minecraft:overworld".to_string(),
-        subscribed_visual_entities: Vec::new(),
     };
 
     let welcome = Packet::Welcome {
@@ -279,7 +278,6 @@ fn test_corrupt_packet_mutations_no_panic() {
         cached_state_hash: 0xDEADBEEFCAFE,
         auth_token: "secret_token".to_string(),
         cached_dimension: "minecraft:overworld".to_string(),
-        subscribed_visual_entities: Vec::new(),
     };
     let encoded = encode_packet(&hello).expect("encode packet");
 

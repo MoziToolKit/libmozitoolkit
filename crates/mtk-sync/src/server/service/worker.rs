@@ -68,17 +68,6 @@ pub(crate) fn run_client_worker(
                                 return;
                             }
 
-                            let subscribed = if let Packet::Hello {
-                                ref subscribed_visual_entities,
-                                ..
-                            } = hello_pkt
-                            {
-                                subscribed_visual_entities.clone()
-                            } else {
-                                Vec::new()
-                            };
-                            inner.set_client_subscriptions(client_id, subscribed);
-
                             let _ = inner
                                 .event_tx
                                 .send(ServerEvent::ClientConnected { client_id, addr });

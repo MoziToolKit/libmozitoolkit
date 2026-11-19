@@ -5,7 +5,12 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 /// Current format version for `.mtkscene` scene interchange packages.
-pub(crate) const SCENE_PACKAGE_FORMAT_VERSION: u32 = 1;
+/// `.mtkscene` package format version.
+///
+/// 2 removed the continuous visual entity payload (paintings, item frames, armor stands), so a
+/// version 1 package can no longer describe a scene exactly and is rejected instead of being read
+/// with a silently dropped entity layer.
+pub(crate) const SCENE_PACKAGE_FORMAT_VERSION: u32 = 2;
 
 /// Detailed capability flags declared by this scene interchange package.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -22,15 +27,12 @@ pub struct SceneCapabilities {
     /// Whether dynamic entity slots or textures (skins, banners) are bundled.
     #[serde(default)]
     pub has_dynamic_entities: bool,
-    /// Whether continuous visual entities (paintings, item frames, armor stands) are bundled.
-    #[serde(default)]
-    pub has_visual_entities: bool,
 }
 
 /// Global metadata manifest for `.mtkscene` scene interchange packages.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SceneMetadata {
-    /// Format version number (currently 1).
+    /// Format version number (see `SCENE_PACKAGE_FORMAT_VERSION`).
     pub format_version: u32,
     /// Generator identifier (e.g. "MoziToolKit 2.1.0 / libmozitoolkit").
     pub generator: String,
@@ -46,9 +48,6 @@ pub struct SceneMetadata {
     pub unique_biomes_count: usize,
     /// Number of block entities present in the sparse voxel palette.
     pub unique_entities_count: usize,
-    /// Number of continuous visual entities (paintings, item frames, armor stands) bundled.
-    #[serde(default)]
-    pub visual_entities_count: usize,
     /// Resolution of the accompanying scene mini-atlas [width, height] (or [0, 0] if none).
     pub atlas_resolution: [u32; 2],
     /// Whether the package contains dedicated animated atlas chunks for fluid/fire playback.
@@ -79,7 +78,6 @@ impl SceneMetadata {
             unique_states_count: 0,
             unique_biomes_count: 0,
             unique_entities_count: 0,
-            visual_entities_count: 0,
             atlas_resolution: [0, 0],
             has_animated_atlas: false,
             capabilities: SceneCapabilities::default(),

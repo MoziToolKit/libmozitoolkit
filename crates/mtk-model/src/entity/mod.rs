@@ -1,28 +1,11 @@
 //! High-level typed BlockEntity representation decoupled from BlockState strings.
 
-pub mod baker;
 pub mod banner;
 pub(crate) mod copper_statue;
-pub mod instance;
-pub mod item_frame;
-pub mod painting;
 pub(crate) mod pot;
-pub mod render;
 pub mod skull;
 
-pub use baker::EntityBaker;
 pub use banner::BannerPatternLayer;
-pub use instance::{
-    find_supported_visual_entity, is_supported_visual_entity, supported_visual_entity_ids,
-    ArmorStandData, EntityBuildCapability, EntityInstance, EntityKindData, EntityValidationError,
-    ItemComponentsData, ItemFrameData, PaintingData, SupportedVisualEntity, ENTITY_ID_ARMOR_STAND,
-    ENTITY_ID_GLOW_ITEM_FRAME, ENTITY_ID_ITEM_FRAME, ENTITY_ID_PAINTING, SUPPORTED_VISUAL_ENTITIES,
-};
-pub use render::{
-    build_entity_render_plan, entity_render_key, host_transform_to_mc, EntityMaterialRoute,
-    EntityRenderConfig, EntityRenderNode, EntityRenderPlan, EntityRenderTransform,
-    EntityRenderWarning, ENTITY_RENDER_SCHEMA_VERSION,
-};
 pub use skull::{PlayerProfileData, SkullKind};
 
 use serde::{Deserialize, Serialize};
@@ -193,7 +176,6 @@ impl BlockEntityData {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mtk_core::Direction;
 
     #[test]
     fn test_canonical_visual_nbt_json_roundtrip() {
@@ -262,44 +244,6 @@ mod tests {
         assert!(g_json.contains("\"custom:copper_statue\""));
         let g_parsed = BlockEntityData::from_visual_json(&g_json).expect("Parse generic");
         assert_eq!(generic, g_parsed);
-    }
-
-    #[test]
-    fn test_entity_instance_roundtrip() {
-        let painting = EntityInstance::new_painting(
-            Some("12345678-1234-1234-1234-123456789abc".to_string()),
-            glam::DVec3::new(10.5, 64.0, -20.5),
-            Direction::South,
-            glam::Vec3::new(0.0, std::f32::consts::PI, 0.0),
-            "kebab",
-            1,
-            1,
-            Some([10, 64, -20]),
-        );
-        let json = serde_json::to_string(&painting).expect("Serialize entity instance");
-        assert!(json.contains("\"minecraft:painting\""));
-        assert!(json.contains("\"kebab\""));
-        assert!(json.contains("\"12345678-1234-1234-1234-123456789abc\""));
-        let parsed: EntityInstance =
-            serde_json::from_str(&json).expect("Deserialize entity instance");
-        assert_eq!(painting, parsed);
-
-        let frame = EntityInstance::new_item_frame(
-            Some("87654321-4321-4321-4321-cba987654321".to_string()),
-            glam::DVec3::new(5.0, 65.0, 3.0),
-            Direction::West,
-            glam::Vec3::new(0.0, std::f32::consts::FRAC_PI_2, 0.0),
-            "minecraft:diamond_sword",
-            1,
-            2,
-            true,
-            false,
-            None,
-        );
-        let frame_json = serde_json::to_string(&frame).expect("Serialize item frame");
-        assert!(frame_json.contains("\"minecraft:diamond_sword\""));
-        let frame_parsed: EntityInstance = serde_json::from_str(&frame_json).expect("Parse frame");
-        assert_eq!(frame, frame_parsed);
     }
 
     #[test]

@@ -95,7 +95,6 @@ fn test_build_scene_interchange_pipeline() {
         dynamic_entity_atlases: None,
         dynamic_entity_slots: None,
         ctm_mode: CtmMode::Disabled,
-        entities: None,
     })
     .expect("Build scene interchange");
 
@@ -169,7 +168,6 @@ fn test_uv_coordinate_formula_orientation() {
         dynamic_entity_atlases: None,
         dynamic_entity_slots: None,
         ctm_mode: CtmMode::Disabled,
-        entities: None,
     })
     .expect("Build scene interchange");
 
@@ -330,7 +328,6 @@ fn test_export_with_overlay_and_animated_strips() {
         dynamic_entity_atlases: None,
         dynamic_entity_slots: None,
         ctm_mode: CtmMode::Disabled,
-        entities: None,
     })
     .expect("Build scene interchange with overlay and anim");
 
@@ -554,7 +551,6 @@ fn test_scene_export_pbr_channels_and_colormaps_roundtrip() {
             dynamic_entity_atlases: None,
             dynamic_entity_slots: None,
             ctm_mode: CtmMode::Disabled,
-            entities: None,
         },
     )
     .expect("Export scene package");
@@ -696,7 +692,6 @@ fn test_scene_export_ctm_rules_and_subtiles_roundtrip() {
             dynamic_entity_atlases: None,
             dynamic_entity_slots: None,
             ctm_mode: CtmMode::Explicit(&[rule]),
-            entities: None,
         },
     )
     .expect("Export scene package with CTM");
@@ -856,7 +851,6 @@ fn test_scene_export_banner_with_patterns_and_custom_baker() {
             dynamic_entity_atlases: None,
             dynamic_entity_slots: None,
             ctm_mode: CtmMode::Disabled,
-            entities: None,
         },
     )
     .expect("Export banner scene package");

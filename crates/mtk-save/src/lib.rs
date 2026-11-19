@@ -12,7 +12,6 @@
 
 mod block_entity;
 mod chunk;
-mod entity;
 mod error;
 mod level;
 mod loader;

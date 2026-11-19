@@ -50,9 +50,8 @@ fn test_loopback_storage_baseline_assembly() {
     };
 
     // 1. Server encodes baseline stream
-    let baseline_stream =
-        encode_baseline_from_storage(&storage, min_pos, size, dimension, &[], &config)
-            .expect("Server baseline encoding must succeed");
+    let baseline_stream = encode_baseline_from_storage(&storage, min_pos, size, dimension, &config)
+        .expect("Server baseline encoding must succeed");
 
     assert!(
         baseline_stream.total_chunks > 1,
@@ -157,7 +156,6 @@ fn test_loopback_raw_array_baseline_assembly() {
         &raw_biomes,
         &biome_names,
         &[],
-        &[],
         &config,
     )
     .expect("Raw encoding must succeed");
@@ -222,7 +220,6 @@ fn make_test_hello(
         cached_state_hash: hash,
         auth_token: token.to_string(),
         cached_dimension: "minecraft:overworld".to_string(),
-        subscribed_visual_entities: vec![],
     }
 }
 
