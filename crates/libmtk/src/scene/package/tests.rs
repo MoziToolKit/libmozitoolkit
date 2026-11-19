@@ -1,5 +1,5 @@
 use super::*;
-use crate::scene::metadata::SceneMetadata;
+use crate::package::PackageManifest;
 use crate::MtkError;
 use mtk_model::{BakedModelDatabase, BlockEntityData};
 use mtk_package::{ChunkWriteOptions, PackageProfile};
@@ -42,7 +42,7 @@ fn test_scene_package_roundtrip() {
         Some(14),
     );
 
-    let mut metadata = SceneMetadata::new(voxels.bounds, voxels.len());
+    let mut metadata = PackageManifest::new_scene(voxels.bounds, voxels.len());
     metadata.unique_states_count = voxels.state_palette.len();
     metadata.unique_biomes_count = voxels.biome_palette.len();
     metadata.unique_entities_count = voxels.entity_palette.len();
@@ -98,7 +98,7 @@ fn test_scene_package_roundtrip() {
     assert_eq!(bundle.texture_names[0], "atlas/textures/atlas_0.png");
     assert_eq!(
         bundle.metadata.format_version,
-        crate::scene::metadata::SCENE_PACKAGE_FORMAT_VERSION
+        crate::package::SCENE_PACKAGE_FORMAT_VERSION
     );
 
     let _ = std::fs::remove_file(&temp_path);
@@ -122,7 +122,7 @@ fn test_scene_package_gates_profile_and_version() {
         [0u8; 16],
     )
     .expect("Create writer");
-    let mut metadata = SceneMetadata::new([0, 0, 0, 1, 1, 1], 1);
+    let mut metadata = PackageManifest::new_scene([0, 0, 0, 1, 1, 1], 1);
     writer
         .add_json_chunk(*b"META", "manifest", &metadata, &ChunkWriteOptions::raw())
         .unwrap();
@@ -156,7 +156,7 @@ fn test_scene_package_gates_profile_and_version() {
         Err(e) => e,
     };
     match err {
-        MtkError::UnsupportedSceneFormatVersion(99) => {}
+        MtkError::UnsupportedSceneFormatVersion { found: 99 } => {}
         other => panic!(
             "Expected UnsupportedSceneFormatVersion(99), got {:?}",
             other
@@ -175,7 +175,7 @@ fn test_scene_package_corrupted_colormap_error() {
             .unwrap()
             .as_nanos()
     ));
-    let metadata = SceneMetadata::new([0, 0, 0, 1, 1, 1], 1);
+    let metadata = PackageManifest::new_scene([0, 0, 0, 1, 1, 1], 1);
     let mut writer = mtk_package::MtkPackageFileWriter::create(
         &temp_path,
         PackageProfile::SceneInterchange,
@@ -215,7 +215,7 @@ fn test_validate_missing_atlas_mapping_and_models() {
             .unwrap()
             .as_nanos()
     ));
-    let metadata = SceneMetadata::new([0, 0, 0, 1, 1, 1], 1);
+    let metadata = PackageManifest::new_scene([0, 0, 0, 1, 1, 1], 1);
     let mut writer = mtk_package::MtkPackageFileWriter::create(
         &temp_path,
         PackageProfile::SceneInterchange,
@@ -245,7 +245,7 @@ fn test_validate_missing_texture_slice_and_unmapped_model_texture() {
             .unwrap()
             .as_nanos()
     ));
-    let metadata = SceneMetadata::new([0, 0, 0, 1, 1, 1], 1);
+    let metadata = PackageManifest::new_scene([0, 0, 0, 1, 1, 1], 1);
     let mut writer = mtk_package::MtkPackageFileWriter::create(
         &temp_path,
         PackageProfile::SceneInterchange,
@@ -327,7 +327,7 @@ fn test_validate_dynamic_entity_slots_missing_chunk() {
             .unwrap()
             .as_nanos()
     ));
-    let metadata = SceneMetadata::new([0, 0, 0, 1, 1, 1], 1);
+    let metadata = PackageManifest::new_scene([0, 0, 0, 1, 1, 1], 1);
     let mut writer = mtk_package::MtkPackageFileWriter::create(
         &temp_path,
         PackageProfile::SceneInterchange,
@@ -387,7 +387,7 @@ fn test_validate_dynamic_entity_slots_valid() {
             .as_nanos()
     ));
 
-    let metadata = SceneMetadata::new([0, 0, 0, 1, 1, 1], 1);
+    let metadata = PackageManifest::new_scene([0, 0, 0, 1, 1, 1], 1);
     let mut writer = mtk_package::MtkPackageFileWriter::create(
         &temp_path,
         PackageProfile::SceneInterchange,

@@ -12,9 +12,7 @@ use mtk_resource::{AtlasCategory, ResourcePackStack};
 use mtk_texture::{AtlasBuilder, AtlasBuilderConfig};
 
 use crate::prebake::models::prebake_all_models_with_progress;
-use crate::prebake::reader::{
-    fingerprint_str_to_bytes16, CacheManifest, ASSET_CACHE_FORMAT_VERSION,
-};
+use crate::prebake::reader::fingerprint_str_to_bytes16;
 use crate::MtkError;
 
 #[cfg(feature = "parallel")]
@@ -407,20 +405,10 @@ fn precompile_all_assets_inner(
         Ok(())
     })?;
 
-    // 4. Save Cache Manifest inside package & finalize container
-    let epoch_now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-
-    let manifest = CacheManifest {
-        format_version: ASSET_CACHE_FORMAT_VERSION,
-        fingerprint: fingerprint.clone(),
-        pack_count: stack.len(),
-        atlas_chunks: chunk_count,
-        baked_models: baked_count,
-        created_at_epoch_secs: epoch_now,
-    };
+    // 4. Save the manifest inside the package & finalize the container
+    let mut manifest = crate::PackageManifest::new_cache(fingerprint.clone(), stack.len());
+    manifest.atlas_chunks = chunk_count;
+    manifest.baked_models = baked_count;
 
     profiler.measure("finalize", "bake", |_| -> Result<_, MtkError> {
         writer.add_json_chunk(

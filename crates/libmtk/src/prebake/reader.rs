@@ -5,8 +5,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
-
 use mtk_material::BiomeResolver;
 use mtk_model::BakedModelDatabase;
 use mtk_package::{MtkPackageReader, CURRENT_VERSION_MAJOR};
@@ -21,22 +19,7 @@ fn missing(chunk_id: &str) -> MtkError {
     ))
 }
 
-/// Format version for compiled cache compatibility checking.
-///
-/// v10: chest up/down faces carry the corrected v orientation (upper plane v-descending, lower
-///     plane v-ascending) and copper/ender sheets are selected like the client does.
-/// v9: chest geometry comes from a native generator (derived from `ChestModel`/`ChestRenderer`,
-///     expressed in the y-up block-model space).
-/// v8: item models whose geometry comes from a block (chest, shulker box, decorated pot, conduit)
-///     are baked with their own display transforms, and element rotations accept the Euler form;
-///     older caches miss that geometry and are invalidated.
-/// v7: Model JSON display transforms (ItemTransforms) and GuiLight are deserialized, inherited and baked into BakedModel; older caches are invalidated.
-/// v6: Prebake pipeline multi-threaded atlas and model baking improvements.
-/// v5: the baked model database uses Postcard + Zstd instead of Bincode,
-///     producing smaller `models.bin` payloads; older caches are invalidated.
-/// v4: LabPBR is decoded at precompile time; atlas chunks carry `_n` (GL normal + height),
-///     `_orm` (AO/roughness/metallic/emission) and `_aux` (IOR/porosity/SSS/transmission).
-pub const ASSET_CACHE_FORMAT_VERSION: u32 = 10;
+pub use crate::package::ASSET_CACHE_FORMAT_VERSION;
 
 /// Derives the 16-byte package-header fingerprint from a fingerprint string.
 ///
@@ -49,30 +32,6 @@ pub fn fingerprint_str_to_bytes16(fp: &str) -> [u8; 16] {
     out[..8].copy_from_slice(&xxhash_rust::xxh64::xxh64(bytes, 0).to_le_bytes());
     out[8..].copy_from_slice(&xxhash_rust::xxh64::xxh64(bytes, 1).to_le_bytes());
     out
-}
-
-/// Metadata manifest stored in `.mtkcache` container for integrity and invalidation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CacheManifest {
-    pub format_version: u32,
-    pub fingerprint: String,
-    pub pack_count: usize,
-    pub atlas_chunks: usize,
-    pub baked_models: usize,
-    pub created_at_epoch_secs: u64,
-}
-
-impl CacheManifest {
-    /// Read manifest directly from a `.mtkcache` package file.
-    pub fn read_from_package(path: &Path) -> Option<Self> {
-        let reader = MtkPackageReader::open_file(path).ok()?;
-        reader.read_chunk_json("manifest").ok()
-    }
-
-    /// Check if manifest matches a given stack fingerprint and format version.
-    pub fn is_valid_for(&self, fingerprint: &str) -> bool {
-        self.format_version == ASSET_CACHE_FORMAT_VERSION && self.fingerprint == fingerprint
-    }
 }
 
 /// High-performance reader for precompiled asset cache packages (`.mtkcache`).
@@ -105,8 +64,8 @@ impl AssetCacheReader {
         if hdr.fingerprint != fp_bytes || hdr.version_major != CURRENT_VERSION_MAJOR {
             return false;
         }
-        CacheManifest::read_from_package(p)
-            .is_some_and(|manifest| manifest.is_valid_for(fingerprint))
+        crate::PackageManifest::read_from_package(p)
+            .is_some_and(|manifest| manifest.is_valid_cache_for(fingerprint))
     }
 
     /// Returns package header reference.
@@ -120,8 +79,8 @@ impl AssetCacheReader {
     }
 
     /// Reads cache manifest metadata.
-    pub fn manifest(&self) -> Result<CacheManifest, MtkError> {
-        let manifest: CacheManifest = self.reader.read_chunk_json("manifest")?;
+    pub fn manifest(&self) -> Result<crate::PackageManifest, MtkError> {
+        let manifest: crate::PackageManifest = self.reader.read_chunk_json("manifest")?;
         Ok(manifest)
     }
 

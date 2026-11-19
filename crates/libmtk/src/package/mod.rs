@@ -18,6 +18,14 @@ use mtk_package::MtkPackageReader;
 use mtk_texture::RgbaBuffer;
 use mtk_voxel::SparseVoxelPayload;
 
+pub mod manifest;
+pub mod source;
+
+pub use manifest::{
+    PackageManifest, SceneCapabilities, ASSET_CACHE_FORMAT_VERSION, SCENE_PACKAGE_FORMAT_VERSION,
+};
+pub use source::AssetBundle;
+
 use crate::MtkError;
 use mtk_texture::AtlasAddressMap;
 

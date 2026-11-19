@@ -31,14 +31,10 @@ pub fn create_test_cache_package(
     )
     .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
 
-    let manifest = libmtk::CacheManifest {
-        format_version: libmtk::ASSET_CACHE_FORMAT_VERSION,
-        fingerprint: fingerprint.to_string(),
-        pack_count: 1,
-        atlas_chunks: 1,
-        baked_models: 50,
-        created_at_epoch_secs: created_at,
-    };
+    let mut manifest = libmtk::PackageManifest::new_cache(fingerprint.to_string(), 1);
+    manifest.created_at_epoch_secs = created_at;
+    manifest.atlas_chunks = 1;
+    manifest.baked_models = 50;
     let json_str = serde_json::to_string(&manifest)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
     writer

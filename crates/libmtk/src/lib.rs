@@ -19,16 +19,18 @@ mod prebake;
 mod scene;
 
 pub use package::{chunks, PackageContents};
+pub use package::{
+    AssetBundle, PackageManifest, SceneCapabilities,
+    ASSET_CACHE_FORMAT_VERSION as CACHE_FORMAT_VERSION, SCENE_PACKAGE_FORMAT_VERSION,
+};
 pub use prebake::{
     evaluate_cache_status, fingerprint_str_to_bytes16, newest_cache_package, prebake_all_models,
     precompile_all_assets, precompile_all_assets_with_progress, resolve_active_cache_package,
-    AssetCacheReader, CacheManifest, PrecompileConfig, PrecompileResult,
-    ASSET_CACHE_FORMAT_VERSION,
+    AssetCacheReader, PrecompileConfig, PrecompileResult, ASSET_CACHE_FORMAT_VERSION,
 };
 pub use scene::{
-    export_scene_package, CtmMode, SceneAtlasSource, SceneBundle, SceneCapabilities,
-    SceneExportRequest, SceneExportResult, SceneExporterConfig, SceneMetadata, ScenePackageReader,
-    ValidationReport,
+    export_scene_package, CtmMode, SceneAtlasSource, SceneBundle, SceneExportRequest,
+    SceneExportResult, SceneExporterConfig, ScenePackageReader, ValidationReport,
 };
 
 /// Unified error type for all `libmtk` application-layer operations.
@@ -71,8 +73,11 @@ pub enum MtkError {
     #[error("Invalid package profile for scene: expected SceneInterchange, found {0:?}")]
     InvalidSceneProfile(mtk_package::PackageProfile),
 
-    #[error("Unsupported scene package format version: expected 1, found {0}")]
-    UnsupportedSceneFormatVersion(u32),
+    #[error("Unsupported scene package format version: found {found}")]
+    UnsupportedSceneFormatVersion { found: u32 },
+
+    #[error("Unsupported asset cache format version: found {found}")]
+    UnsupportedCacheFormatVersion { found: u32 },
 
     #[error("Thread pool error: {0}")]
     ThreadPool(String),

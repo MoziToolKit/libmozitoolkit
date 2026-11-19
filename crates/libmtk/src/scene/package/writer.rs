@@ -8,13 +8,13 @@ use mtk_package::{ChunkWriteOptions, MtkPackageFileWriter, PackageProfile};
 use mtk_texture::AtlasAddressMap;
 use mtk_voxel::SparseVoxelPayload;
 
-use crate::scene::metadata::SceneMetadata;
+use crate::package::PackageManifest;
 use crate::MtkError;
 
 /// Request parameters for writing an `.mtkscene` scene interchange package.
 #[derive(Debug, Clone)]
 pub(crate) struct SceneWriteRequest<'a> {
-    pub(crate) metadata: &'a SceneMetadata,
+    pub(crate) metadata: &'a PackageManifest,
     pub(crate) voxels: &'a SparseVoxelPayload,
     pub(crate) models: Option<&'a BakedModelDatabase>,
     pub(crate) atlas_mapping: Option<&'a AtlasAddressMap>,
@@ -28,7 +28,7 @@ pub(crate) struct SceneWriteRequest<'a> {
 impl<'a> SceneWriteRequest<'a> {
     /// Creates a minimal `SceneWriteRequest` with required fields.
     pub(crate) fn new(
-        metadata: &'a SceneMetadata,
+        metadata: &'a PackageManifest,
         voxels: &'a SparseVoxelPayload,
         atlas_textures: &'a [(String, Vec<u8>)],
     ) -> Self {

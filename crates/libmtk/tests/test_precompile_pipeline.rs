@@ -131,21 +131,14 @@ fn test_precompile_all_assets_end_to_end() {
 #[test]
 fn cache_manifest_validation_checks_the_format_version() {
     let fp = "mtk_fp_0123456789abcdef";
-    let current = libmtk::CacheManifest {
-        format_version: ASSET_CACHE_FORMAT_VERSION,
-        fingerprint: fp.to_string(),
-        pack_count: 1,
-        atlas_chunks: 1,
-        baked_models: 1,
-        created_at_epoch_secs: 0,
-    };
-    assert!(current.is_valid_for(fp));
+    let current = libmtk::PackageManifest::new_cache(fp.to_string(), 1);
+    assert!(current.is_valid_cache_for(fp));
 
-    let stale = libmtk::CacheManifest {
+    let stale = libmtk::PackageManifest {
         format_version: ASSET_CACHE_FORMAT_VERSION - 1,
         ..current.clone()
     };
-    assert!(!stale.is_valid_for(fp));
+    assert!(!stale.is_valid_cache_for(fp));
 }
 
 #[test]
@@ -182,13 +175,14 @@ fn cache_header_validation_rejects_a_stale_manifest_format_version() {
             .add_json_chunk(
                 *b"META",
                 "manifest",
-                &libmtk::CacheManifest {
+                &libmtk::PackageManifest {
                     format_version,
                     fingerprint: fingerprint.to_string(),
                     pack_count: 1,
                     atlas_chunks: 1,
                     baked_models: 1,
                     created_at_epoch_secs: 0,
+                    ..Default::default()
                 },
                 &ChunkWriteOptions::zstd_fast(),
             )

@@ -10,13 +10,13 @@ use mtk_texture::AtlasAddressMap;
 use mtk_voxel::SparseVoxelPayload;
 
 use super::validator::{validate_scene_package, ValidationReport};
-use crate::scene::metadata::SceneMetadata;
+use crate::package::PackageManifest;
 use crate::MtkError;
 
 /// Unpacked contents of a `.mtkscene` scene interchange package.
 #[derive(Debug, Clone)]
 pub struct SceneBundle {
-    pub metadata: SceneMetadata,
+    pub metadata: PackageManifest,
     pub sparse_voxels: SparseVoxelPayload,
     pub models: Option<BakedModelDatabase>,
     pub atlas_mapping: Option<AtlasAddressMap>,
@@ -31,7 +31,7 @@ pub struct SceneBundle {
 /// High-level reader for `.mtkscene` packages.
 pub struct ScenePackageReader {
     reader: MtkPackageReader,
-    metadata: SceneMetadata,
+    metadata: PackageManifest,
 }
 
 impl ScenePackageReader {
@@ -94,11 +94,11 @@ impl ScenePackageReader {
             return Err(MtkError::InvalidSceneProfile(profile));
         }
 
-        let metadata: SceneMetadata = reader.read_chunk_json("manifest")?;
-        if metadata.format_version != crate::scene::metadata::SCENE_PACKAGE_FORMAT_VERSION {
-            return Err(MtkError::UnsupportedSceneFormatVersion(
-                metadata.format_version,
-            ));
+        let metadata: PackageManifest = reader.read_chunk_json("manifest")?;
+        if metadata.format_version != crate::package::SCENE_PACKAGE_FORMAT_VERSION {
+            return Err(MtkError::UnsupportedSceneFormatVersion {
+                found: metadata.format_version,
+            });
         }
 
         Ok(Self { reader, metadata })
@@ -106,7 +106,7 @@ impl ScenePackageReader {
 
     /// Returns the global scene metadata.
     #[inline]
-    pub fn metadata(&self) -> &SceneMetadata {
+    pub fn metadata(&self) -> &PackageManifest {
         &self.metadata
     }
 
@@ -233,7 +233,7 @@ impl ScenePackageReader {
     }
 
     /// Returns the effective capabilities of this scene package.
-    pub fn effective_capabilities(&self) -> crate::scene::metadata::SceneCapabilities {
+    pub fn effective_capabilities(&self) -> crate::package::SceneCapabilities {
         let mut caps = self.metadata.capabilities;
         if !caps.has_colormaps && self.has_colormaps() {
             caps.has_colormaps = true;
@@ -282,7 +282,7 @@ impl ScenePackageReader {
     }
 
     /// Returns the reconciled scene metadata with effective capabilities.
-    pub fn effective_metadata(&self) -> crate::scene::metadata::SceneMetadata {
+    pub fn effective_metadata(&self) -> crate::package::PackageManifest {
         let mut meta = self.metadata.clone();
         meta.capabilities = self.effective_capabilities();
         meta
