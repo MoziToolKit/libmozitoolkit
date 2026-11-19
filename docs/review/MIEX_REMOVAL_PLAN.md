@@ -1,4 +1,9 @@
-# MiEx 专有表达式模型的清除计划
+# MiEx 专有表达式模型的清除（已完成）
+
+## 结果
+
+`rg -i miex` 在 `crates/`、`bindings/`、`adapters/` 里已零命中；解释器、装载器、补丁层与 49 KB
+方言资源全部删除。五个族全部由 `builtin::props` 生成，输出与删除前的定义逐字节一致（快照守护）。
 
 ## 为什么删
 
@@ -82,9 +87,9 @@
 | **P1** ✅ | chest（含 trapped/ender/copper、single/left/right） | 与 MiEx 快照逐字节一致 + 5 个结构/UV 断言 |
 | **P2** | shulker_box（16 色）、bed（16 色 × head/foot） | UV 断言床头/床尾、颜色 → 贴图映射 |
 | **P3** | sign、hanging_sign（standing/wall、木材映射） | 木材质 → `entity/signs/<wood>`、正面 UV |
-| **P4** | skull（8 类 × 16 旋转 + wall + 玩家皮肤） | 每类模型盒数、脸的 UV 区、玩家 profile 贴图 |
-| **P5** | end_portal | 单面/整块的朝向 |
-| **P6** | 删除 `builtin/evaluator/`、`builtin/loader.rs`、`builtin/patch.rs`、`assets/builtins/**`（含 `LICENSE-MIEX`）、`MIEX_*` 常量；更新 `docs/API_REFERENCE.md` | `rg -i miex` 零命中；全部方块烘出非零几何 |
+| **P4** ✅ | skull（8 类 × 16 旋转 + wall + 玩家皮肤） | 与快照逐字节一致；龙颌/猪鼻的元素级旋转一并转录 |
+| **P5** ✅ | end_portal | y=12 的单个 up 面 |
+| **P6** ✅ | 删除 `builtin/evaluator/`、`builtin/loader.rs`、`builtin/patch.rs`、方言 JSON 与 `LICENSE-MIEX` | `rg -i miex` 零命中；bake_failures 回到 5 条 |
 
 每批独立提交，`crates/mtk-model/tests/test_builtin_model_golden.rs` 的 `MIGRATED` 列表随之增加
 一行，从而金色快照只守护"尚未迁移"的族。

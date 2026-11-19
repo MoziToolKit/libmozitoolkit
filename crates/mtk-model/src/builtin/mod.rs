@@ -1,26 +1,19 @@
-//! Built-in geometry for block kinds whose vanilla renderer is not a plain block model.
+//! Built-in geometry for block kinds whose client renderer draws them instead of a block model.
 //!
-//! Two sources live here:
-//! - Blockbench-compatible BlockModel JSON and blockstate fallbacks for blocks that ship no
-//!   static JSON in the vanilla JAR (chests, beds, shulker boxes, signs, bells, skulls).
-//! - `props`: procedural generators for block kinds whose geometry is a function of their
-//!   blockstate alone (the copper golem statue). They stay in core on purpose: the statue is a
-//!   block, so no continuous-entity pack is involved.
+//! - `props`: procedural generators, one per family (chest, shulker box, skull, end portal, copper
+//!   golem statue). A generator produces the same `BlockModelJson` the resource pack would, so the
+//!   ordinary model baker handles it.
+//! - `vanilla`: plain BlockModel/blockstate JSON for blocks the jar still ships without geometry
+//!   (bells, conduits, decorated pots, end gateways).
 
-pub(crate) mod evaluator;
-pub(crate) mod loader;
-pub(crate) mod patch;
 pub(crate) mod props;
 pub(crate) mod vanilla;
-
-use loader::MiExModelLoader;
 
 use crate::baker::BakedModel;
 use crate::parser::blockstate::{BlockState, BlockStateDefinition};
 use crate::parser::model_json::BlockModelJson;
 
-/// Universal Builtin Model Registry driving dynamic models from raw upstream MiEx JSON definitions
-/// and embedded vanilla fallback definitions.
+/// Builtin geometry registry consulted only when the resource pack has no model for a blockstate.
 pub struct BuiltinModelRegistry;
 
 impl BuiltinModelRegistry {
@@ -32,8 +25,7 @@ impl BuiltinModelRegistry {
         vanilla::get_builtin_baked_block_entity_model(blockstate, entity)
     }
 
-    /// Attempts to provide a builtin fallback `BlockModelJson` using upstream MiEx JSON templates
-    /// or procedural fallbacks, enriched with dynamic entity data.
+    /// Attempts to provide builtin geometry for a block that has no model in the resource pack.
     pub fn get_block_entity_model_json(
         blockstate: &BlockState,
         entity: Option<&crate::block_entity::BlockEntityData>,
@@ -44,7 +36,10 @@ impl BuiltinModelRegistry {
         if let Some(model) = crate::builtin::props::shulker::build_shulker_model(blockstate) {
             return Some(model);
         }
-        if let Some(model) = MiExModelLoader::load_for_block_entity(blockstate, entity) {
+        if let Some(model) = crate::builtin::props::skull::build_skull_model(blockstate, entity) {
+            return Some(model);
+        }
+        if let Some(model) = crate::builtin::props::end_portal::build_end_portal_model(blockstate) {
             return Some(model);
         }
         vanilla::get_builtin_block_entity_model_json(blockstate, entity)

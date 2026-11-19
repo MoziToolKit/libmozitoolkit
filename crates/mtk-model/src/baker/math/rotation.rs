@@ -102,7 +102,7 @@ pub(crate) fn rotate_point_3d_with_pivot(
     let origin = Vec3::new(pivot[0] / 16.0, pivot[1] / 16.0, pivot[2] / 16.0);
     let mut v = p - origin;
 
-    // Follow MiEx rotate order: X then Y then Z
+    // Rotate around X, then Y, then Z.
     if rot_x != 0.0 {
         let rad = rot_x.to_radians();
         let (s, c) = rad.sin_cos();

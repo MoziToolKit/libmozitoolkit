@@ -138,7 +138,7 @@ impl ChestType {
 
 /// Sheet for `short_name`, i.e. `Sheets.chooseSprite(ChestRenderer.getChestMaterial(...), type)`.
 ///
-/// Two details the MiEx definition got wrong and that a naive port inherits:
+/// Two details a naive port gets wrong:
 /// - Ender chests have a single sheet: `Sheets.chooseSprite` returns `ENDER_CHEST_LOCATION` for
 ///   every `ChestType`, and `entity/chest/ender_left.png` does not exist. Appending the shape
 ///   suffix makes a double ender chest fall back to an untextured model.
@@ -247,8 +247,8 @@ pub(crate) fn build_chest_model(blockstate: &BlockState) -> Option<BlockModelJso
 
     let mut textures = HashMap::new();
     textures.insert("texture".to_string(), TextureValue::Path(texture));
-    // Particles stay on the generic chest sheet for every material, which is what the MiEx
-    // definition produced; only the geometry switches to the material sheet.
+    // Particles stay on the generic chest sheet for every material; only the geometry switches to
+    // the material sheet.
     textures.insert(
         "particle".to_string(),
         TextureValue::Path("minecraft:entity/chest/normal".to_string()),

@@ -9,7 +9,7 @@ use mtk_texture::{AtlasBuilder, AtlasBuilderConfig, DecodedSprite};
 #[derive(Args, Debug)]
 pub struct CtmTestArgs {
     /// Directory containing CTM resource pack zip files
-    #[arg(short, long, default_value = "MiEx")]
+    #[arg(short, long, default_value = ".")]
     pub packs_dir: PathBuf,
 
     /// Path to base vanilla JAR file

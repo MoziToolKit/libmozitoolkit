@@ -1,6 +1,6 @@
 //! Embedded vanilla fallback blockstates and JSON models strictly for blocks lacking
 //! static JSON models in vanilla (bell, decorated pot, end portal) or bridging
-//! model ID lookups to dynamic MiEx AST evaluations.
+//! model ID lookups to the generators in `builtin::props`.
 
 pub mod banner;
 pub mod bell;
@@ -67,7 +67,7 @@ pub fn get_builtin_model_by_id(model_id: &str) -> Option<BlockModelJson> {
     }
 
     // Models whose geometry comes from a renderer: evaluate the canonical blockstate through the
-    // same path the baker uses (native generators first, remaining MiEx definitions after).
+    // same path the baker uses (generators, then the plain-JSON fallbacks below).
     let canonical_state = match stem {
         "chest" => "minecraft:chest[facing=north,type=single]",
         "chest_left" => "minecraft:chest[facing=north,type=left]",

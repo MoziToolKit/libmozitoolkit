@@ -1,9 +1,8 @@
 use super::helpers::make_simple_faces;
-use crate::builtin::patch::apply_bell_patches;
-use crate::parser::model_json::{BlockModelJson, ElementJson, TextureValue};
+use crate::parser::model_json::{BlockModelJson, ElementJson, FaceJson, TextureValue};
 use std::collections::HashMap;
 
-/// Synthesizes vanilla bell frame models and applies bell body patches.
+/// Synthesizes the vanilla bell frame (it ships no block model) plus its body.
 pub fn create_builtin_bell_model(stem: &str) -> Option<BlockModelJson> {
     let mut textures = HashMap::new();
     textures.insert(
@@ -95,6 +94,169 @@ pub fn create_builtin_bell_model(stem: &str) -> Option<BlockModelJson> {
         ..Default::default()
     };
 
-    apply_bell_patches("block/bell_", &mut model);
+    add_bell_body(&mut model);
     Some(model)
+}
+
+fn add_bell_body(model: &mut BlockModelJson) {
+    // Insert bell_body texture if missing
+    let textures = model.textures.get_or_insert_with(HashMap::new);
+    if !textures.contains_key("bell_body") {
+        textures.insert(
+            "bell_body".to_string(),
+            crate::parser::model_json::TextureValue::Path("entity/bell/bell_body".to_string()),
+        );
+    }
+
+    let elements = model.elements.get_or_insert_with(Vec::new);
+
+    // The bell body itself (the frame above is synthesized from the blockstate).
+    let bell_elem_1 = ElementJson {
+        from: [5.0, 6.0, 5.0],
+        to: [11.0, 13.0, 11.0],
+        rotation: None,
+        transform: None,
+        shade: Some(true),
+        light_emission: None,
+        faces: {
+            let mut f = HashMap::new();
+            f.insert(
+                "north".to_string(),
+                FaceJson {
+                    uv: Some([3.0, 3.0, 6.0, 6.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "east".to_string(),
+                FaceJson {
+                    uv: Some([6.0, 3.0, 9.0, 6.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "south".to_string(),
+                FaceJson {
+                    uv: Some([9.0, 3.0, 12.0, 6.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "west".to_string(),
+                FaceJson {
+                    uv: Some([0.0, 3.0, 3.0, 6.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "up".to_string(),
+                FaceJson {
+                    uv: Some([3.0, 0.0, 6.0, 3.0]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "down".to_string(),
+                FaceJson {
+                    uv: Some([6.0, 0.0, 9.0, 3.0]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f
+        },
+    };
+
+    let bell_elem_2 = ElementJson {
+        from: [4.0, 4.0, 4.0],
+        to: [12.0, 6.0, 12.0],
+        rotation: None,
+        transform: None,
+        shade: Some(true),
+        light_emission: None,
+        faces: {
+            let mut f = HashMap::new();
+            f.insert(
+                "north".to_string(),
+                FaceJson {
+                    uv: Some([4.0, 10.5, 8.0, 11.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "east".to_string(),
+                FaceJson {
+                    uv: Some([8.0, 10.5, 12.0, 11.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "south".to_string(),
+                FaceJson {
+                    uv: Some([12.0, 10.5, 16.0, 11.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "west".to_string(),
+                FaceJson {
+                    uv: Some([0.0, 10.5, 4.0, 11.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "up".to_string(),
+                FaceJson {
+                    uv: Some([4.0, 6.5, 8.0, 10.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f.insert(
+                "down".to_string(),
+                FaceJson {
+                    uv: Some([8.0, 6.5, 12.0, 10.5]),
+                    texture: "#bell_body".to_string(),
+                    cullface: None,
+                    rotation: None,
+                    tintindex: None,
+                },
+            );
+            f
+        },
+    };
+
+    elements.push(bell_elem_1);
+    elements.push(bell_elem_2);
 }

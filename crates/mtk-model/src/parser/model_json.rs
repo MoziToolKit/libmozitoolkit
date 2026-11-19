@@ -488,7 +488,7 @@ impl TextureValue {
     }
 }
 
-/// Optional 3D transformation for elements (e.g. from MiEx builtin models).
+/// Optional 3D transformation for elements (used by the builtin generators).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BuiltinTransform {
     /// Euler rotation angles [rx, ry, rz] in degrees.
@@ -519,7 +519,7 @@ pub struct ElementJson {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rotation: Option<RotationJson>,
 
-    /// Optional 3D transformation (from builtin MiEx models).
+    /// Optional 3D transformation (used by the builtin generators).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transform: Option<BuiltinTransform>,
 

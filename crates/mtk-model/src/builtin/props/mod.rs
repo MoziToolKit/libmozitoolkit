@@ -7,4 +7,6 @@
 pub(crate) mod chest;
 pub(crate) mod copper_statue;
 pub(crate) mod cube;
+pub(crate) mod end_portal;
 pub(crate) mod shulker;
+pub(crate) mod skull;

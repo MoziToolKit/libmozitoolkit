@@ -1,10 +1,8 @@
-//! Snapshots the builtin block-model output for the block families still served by the MiEx
-//! definition interpreter.
+//! Snapshots the builtin block-model output.
 //!
-//! The plan is to replace that interpreter with native generators (see
-//! `docs/review/MIEX_REMOVAL_PLAN.md`). The snapshot is the visual reference: for every family that
-//! has not been migrated yet it records the interpreter's output verbatim, and a native generator
-//! must reproduce it exactly.
+//! The generators were converted family by family from the definition interpreter that used to
+//! serve them (see `docs/review/MIEX_REMOVAL_PLAN.md`), so this snapshot is the visual reference the
+//! conversion was verified against.
 //!
 //! Chest entries were updated once, on purpose: the interpreter handed the baker the client's
 //! top/bottom rectangles in the client's own v order, which renders those faces upside down (the
@@ -14,7 +12,7 @@
 use mtk_model::{BlockModelJson, BlockState, BuiltinModelRegistry};
 
 #[test]
-fn builtin_models_match_the_miex_snapshot() {
+fn builtin_models_match_the_snapshot() {
     let fixture = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/builtin_models_golden.json"

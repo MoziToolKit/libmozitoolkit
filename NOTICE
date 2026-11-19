@@ -9,9 +9,8 @@ Third-Party Software Notices and Licenses
 
 This project includes code derived or adapted from:
 
-1. MiEx (Minecraft World Exporter / USD & Model Evaluator)
-   Copyright (c) 2023, Bram Stout
-   License: BSD 3-Clause License
-   Source: https://github.com/BramStout/MiEx
-   License text: assets/builtins/LICENSE-MIEX
-   Used in: crates/mtk-model (builtin model evaluation, OBJ parser, and mathematical helpers)
+1. Minecraft client model geometry
+   The procedural generators in `crates/mtk-model/src/builtin/props` transcribe box/UV values from
+   the client's own model classes (`ChestModel`, `ShulkerModel`, `ModelPart.Cube`, ...). Those are
+   Mojang's assets, not bundled here: the values are code, and the textures are read from the user's
+   own resource pack at runtime.

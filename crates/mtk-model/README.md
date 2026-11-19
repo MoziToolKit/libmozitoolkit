@@ -39,7 +39,7 @@
 - **递归模型继承树展开 (Hierarchy Resolution)**：支持多达 32 层的父模型继承（`parent`），合并子父级纹理字典，精准展开 `#texture` 变量引用并将纹理绑定写入三维要素 (Element)。
 - **混合式实体模型架构 (Hybrid Parametric & Vanilla Model Architecture)**：
   - **普通方块 (Vanilla-First Pipeline)**：100% 遵循原版 BlockState 状态机与 BlockModel JSON 规范，无头烘焙红石线缆、连接墙、楼梯以及各类第三方材质包自定义模型；
-  - **实体方块 (BER Parametric Fallback Layer)**：针对 Java 原版通过 `BlockEntityRenderer` 动态绘制且在 assets 中缺失 elements 的实体方块（箱子、床、潜影盒、头颅、告示牌、悬挂告示牌、末地传送门等），内置轻量 MiEx 表达式参数化模型求值器与 Minecraft 实体 Box UV 计算内核，优雅消解状态组合爆炸与手调 UV 倒置问题；
+  - **实体方块生成器 (`builtin::props`)**：针对 Java 原版通过 `BlockEntityRenderer` 绘制、assets 中只有 `particle` 占位模型的方块（箱子、潜影盒、头颅、末地传送门、铜像），以 Rust 程序化生成器产出 `BlockModelJson`，几何与 UV 逐条对齐客户端源码，不存在表达式方言或运行时解释；
   - **外部材质包优先**：若用户材质包中提供了包含真实 elements 的实体方块模型，管线自动优先消费外部规范 JSON，实现与资源包生态的完美兼容。
 
 - **紧凑状态烘焙与防膨胀架构 (Compact State Enumeration & Anti-Bloat)**：
@@ -355,5 +355,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 本项目遵循 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](../../LICENSE) 开源协议。
 
 ### 第三方代码署名 (Third-Party Notices)
-本 Crate 包含部分派生与移植自 [MiEx](https://github.com/BramStout/MiEx) (Copyright (c) 2023 Bram Stout) 的模型表达式求值、OBJ 解析与内置模型结构代码，遵循 **BSD 3-Clause License**。
-BSD 3-Clause 许可证全文请参阅仓库 [`assets/builtins/LICENSE-MIEX`](../../assets/builtins/LICENSE-MIEX) 与根目录 [`NOTICE`](../../NOTICE)。根据开源许可规范，BSD-3 与 GPL-3 保持完全兼容，在此明确注明原始作者版权归属。
+`builtin::props` 的盒子与 UV 数值转写自 Minecraft 客户端自身的模型类（`ChestModel`、`ShulkerModel`、`ModelPart.Cube` 等）；贴图在运行时从用户自己的资源包读取，仓库内不包含任何 Mojang 资源。详见根目录 [`NOTICE`](../../NOTICE)。

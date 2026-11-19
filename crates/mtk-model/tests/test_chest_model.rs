@@ -1,7 +1,7 @@
 //! Structural checks for the native chest generator.
 //!
 //! These assert the vanilla contract (`ChestModel` / `ChestRenderer`) directly, so they stay valid
-//! after the MiEx definitions are deleted.
+//! so they stay valid now that the definition interpreter is gone.
 
 use mtk_model::{BlockState, BuiltinModelRegistry};
 
@@ -39,9 +39,8 @@ fn single_chest_has_three_boxes_and_four_facings() {
     }
 }
 
-/// All six faces are emitted for every layer: the MiEx definitions (and therefore the client's
-/// current output) carry the full box, with the shared-side panel supplied by the `_left`/`_right`
-/// sheet rather than suppressed.
+/// All six faces are emitted for every layer: the client draws the full box and the `_left`/
+/// `_right` sheets supply the shared-side panel.
 #[test]
 fn every_chest_layer_emits_all_six_faces() {
     for state in [
@@ -107,7 +106,7 @@ fn body_face_uvs_use_the_y_up_mapping() {
 
 /// Every chest texture must resolve for every shape.
 ///
-/// Two cases the MiEx definition got wrong: ender chests have one sheet for all shapes (there is no
+/// Two cases a naive port gets wrong: ender chests have one sheet for all shapes (there is no
 /// `ender_left.png`), and copper chests pick a sheet per oxidation state.
 #[test]
 fn chest_sheets_cover_every_shape_and_oxidation_state() {

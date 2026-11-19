@@ -1,7 +1,7 @@
 //! Dumps the builtin block-model JSON for a curated set of blockstates.
 //!
-//! Used to snapshot the current output (MiEx interpreter) before replacing it with native Rust
-//! generators, so the conversion can be verified instead of judged by eye.
+//! Regenerates `tests/fixtures/builtin_models_golden.json`. The snapshot pins the geometry the
+//! generators produce, so a change shows up as an explicit diff rather than by eye.
 
 use mtk_model::{BlockState, BuiltinModelRegistry};
 

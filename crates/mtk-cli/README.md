@@ -84,7 +84,7 @@ Commands:
 
 | 参数 | 说明 |
 | :--- | :--- |
-| `-p, --packs-dir <DIR>` (默认 `MiEx`) | 扫描包含 CTM / Continuity 资源包的目录 |
+| `-p, --packs-dir <DIR>` (默认 `.`) | 扫描包含 CTM / Continuity 资源包的目录 |
 | `-j, --jar <JAR>` (默认 `26.2-Fabric.jar`) | 基础原版 JAR 文件路径 |
 
 ---
