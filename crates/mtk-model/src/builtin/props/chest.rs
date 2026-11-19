@@ -9,6 +9,11 @@
 //!
 //! Chests ship no client model JSON — the jar only carries a `particle` placeholder — so this
 //! generator is the production geometry source, not an optimization.
+//!
+//! The numbers below are the client's boxes expressed in the block-model space (y up, +z south).
+//! `ModelPart` is y-down, so every box is flipped on y and the face UVs are permuted; the two
+//! double-chest layers also swap names, which is why the `_left` sheet pairs with the geometry the
+//! client uses for its right half. `tests/test_chest_model.rs` pins this against the client.
 
 use std::collections::HashMap;
 
@@ -17,95 +22,83 @@ use crate::parser::blockstate::BlockState;
 use crate::parser::model_json::{
     BlockModelJson, BuiltinTransform, ElementJson, FaceJson, TextureValue,
 };
-use mtk_core::Direction;
 
 /// Texture sheet the chest models are unwrapped against (vanilla `Sheets.CHEST_SHEET`).
 const CHEST_TEXTURE_SIZE: f32 = 64.0;
 
-/// One textured box of a chest layer.
-///
-/// `hidden` mirrors the client's `visibleFaces` argument. It is not an optimisation: the shared face
-/// of a double chest has no opaque pixels in the `_left`/`_right` sheets (verified for
-/// `entity/chest/normal_left.png`), so the face is blank in vanilla as well.
+/// One textured box of a chest layer, in y-up block-model space.
 struct ChestBox {
     tex_offs: [f32; 2],
-    origin: [f32; 3],
-    dimensions: [f32; 3],
-    hidden: &'static [Direction],
+    /// Minimum corner of the vanilla box, after the z mirror.
+    min: [f32; 3],
+    /// Maximum corner of the vanilla box, after the z mirror.
+    max: [f32; 3],
 }
 
-/// `ChestModel.createSingleBodyLayer()`.
+/// Single chest: `ChestModel.createSingleBodyLayer()` on a y-up, +z-south grid.
+///
+/// `min`/`max` are the vanilla box after the z mirror; the emitted corner order comes from
+/// [`model_corners`].
 const SINGLE_BOXES: [ChestBox; 3] = [
     // bottom: texOffs(0, 19).addBox(1, 0, 1, 14, 10, 14)
     ChestBox {
         tex_offs: [0.0, 19.0],
-        origin: [1.0, 0.0, 1.0],
-        dimensions: [14.0, 10.0, 14.0],
-        hidden: &[],
+        min: [1.0, 0.0, 1.0],
+        max: [15.0, 10.0, 15.0],
     },
     // lid: texOffs(0, 0).addBox(1, 0, 0, 14, 5, 14) at PartPose.offset(0, 9, 1)
     ChestBox {
         tex_offs: [0.0, 0.0],
-        origin: [1.0, 9.0, 1.0],
-        dimensions: [14.0, 5.0, 14.0],
-        hidden: &[],
+        min: [1.0, 9.0, 1.0],
+        max: [15.0, 14.0, 15.0],
     },
     // lock: texOffs(0, 0).addBox(7, -2, 14, 2, 4, 1) at PartPose.offset(0, 9, 1)
     ChestBox {
         tex_offs: [0.0, 0.0],
-        origin: [7.0, 7.0, 15.0],
-        dimensions: [2.0, 4.0, 1.0],
-        hidden: &[],
+        min: [7.0, 7.0, 0.0],
+        max: [9.0, 11.0, 1.0],
     },
 ];
 
-/// `ChestModel.createDoubleBodyLeftLayer()`: the left half, west face suppressed.
+/// `_left` sheet: `createDoubleBodyRightLayer()` after the z mirror.
 const LEFT_BOXES: [ChestBox; 3] = [
-    // bottom: addBox(0, 0, 1, 15, 10, 14) with visibleFaces = allOfEnumExcept(WEST)
+    // bottom/lid: addBox(1, 0, 1, 15, 10|5, 14)
     ChestBox {
         tex_offs: [0.0, 19.0],
-        origin: [0.0, 0.0, 1.0],
-        dimensions: [15.0, 10.0, 14.0],
-        hidden: &[Direction::West],
+        min: [1.0, 0.0, 1.0],
+        max: [16.0, 10.0, 15.0],
     },
-    // lid: addBox(0, 0, 0, 15, 5, 14) at (0, 9, 1)
     ChestBox {
         tex_offs: [0.0, 0.0],
-        origin: [0.0, 9.0, 1.0],
-        dimensions: [15.0, 5.0, 14.0],
-        hidden: &[Direction::West],
+        min: [1.0, 9.0, 1.0],
+        max: [16.0, 14.0, 15.0],
     },
-    // lock: addBox(0, -2, 14, 1, 4, 1) at (0, 9, 1)
+    // lock: addBox(15, -2, 14, 1, 4, 1)
     ChestBox {
         tex_offs: [0.0, 0.0],
-        origin: [0.0, 7.0, 15.0],
-        dimensions: [1.0, 4.0, 1.0],
-        hidden: &[Direction::West],
+        min: [15.0, 7.0, 0.0],
+        max: [16.0, 11.0, 1.0],
     },
 ];
 
-/// `ChestModel.createDoubleBodyRightLayer()`: the right half, east face suppressed.
+/// `_right` sheet: `createDoubleBodyLeftLayer()` after the z mirror.
 const RIGHT_BOXES: [ChestBox; 3] = [
-    // bottom: addBox(1, 0, 1, 15, 10, 14) with visibleFaces = allOfEnumExcept(EAST)
+    // bottom/lid: addBox(0, 0, 1, 15, 10|5, 14)
     ChestBox {
         tex_offs: [0.0, 19.0],
-        origin: [1.0, 0.0, 1.0],
-        dimensions: [15.0, 10.0, 14.0],
-        hidden: &[Direction::East],
+        min: [0.0, 0.0, 1.0],
+        max: [15.0, 10.0, 15.0],
     },
-    // lid: addBox(1, 0, 0, 15, 5, 14) at (0, 9, 1)
     ChestBox {
         tex_offs: [0.0, 0.0],
-        origin: [1.0, 9.0, 1.0],
-        dimensions: [15.0, 5.0, 14.0],
-        hidden: &[Direction::East],
+        min: [0.0, 9.0, 1.0],
+        max: [15.0, 14.0, 15.0],
     },
-    // lock: addBox(15, -2, 14, 1, 4, 1) at (0, 9, 1)
+    // lock: addBox(0, -2, 14, 1, 4, 1)
     ChestBox {
         tex_offs: [0.0, 0.0],
-        origin: [15.0, 7.0, 15.0],
-        dimensions: [1.0, 4.0, 1.0],
-        hidden: &[Direction::East],
+        min: [0.0, 7.0, 0.0],
+        max: [1.0, 11.0, 1.0],
     },
 ];
 
@@ -203,10 +196,15 @@ pub(crate) fn build_chest_model(blockstate: &BlockState) -> Option<BlockModelJso
         .boxes()
         .iter()
         .map(|spec| {
-            let cube = CubeSpec::new(spec.tex_offs, spec.origin, spec.dimensions);
+            let dimensions = [
+                spec.max[0] - spec.min[0],
+                spec.max[1] - spec.min[1],
+                spec.max[2] - spec.min[2],
+            ];
+            let cube = CubeSpec::new(spec.tex_offs, spec.min, dimensions);
             let mut faces = HashMap::new();
-            for face in visible_faces_except(spec.hidden) {
-                let uv = cube.face_uvs(face);
+            for face in visible_faces_except(&[]) {
+                let uv = cube.model_face_uvs(face);
                 let scale = 16.0 / CHEST_TEXTURE_SIZE;
                 faces.insert(
                     face.as_str().to_string(),
@@ -219,10 +217,10 @@ pub(crate) fn build_chest_model(blockstate: &BlockState) -> Option<BlockModelJso
                     },
                 );
             }
-            let (min, max) = cube.bounds();
+            let (from, to) = crate::builtin::props::cube::model_corners(spec.min, spec.max);
             ElementJson {
-                from: min,
-                to: max,
+                from,
+                to,
                 rotation: None,
                 transform: Some(transform.clone()),
                 shade: Some(true),
@@ -233,9 +231,13 @@ pub(crate) fn build_chest_model(blockstate: &BlockState) -> Option<BlockModelJso
         .collect();
 
     let mut textures = HashMap::new();
-    // Vanilla's chest sheet is not an atlas sprite, so `particle` points at the same texture.
-    textures.insert("texture".to_string(), TextureValue::Path(texture.clone()));
-    textures.insert("particle".to_string(), TextureValue::Path(texture));
+    textures.insert("texture".to_string(), TextureValue::Path(texture));
+    // Particles stay on the generic chest sheet for every material, which is what the MiEx
+    // definition produced; only the geometry switches to the material sheet.
+    textures.insert(
+        "particle".to_string(),
+        TextureValue::Path("minecraft:entity/chest/normal".to_string()),
+    );
 
     Some(BlockModelJson {
         parent: None,

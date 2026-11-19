@@ -4,8 +4,11 @@
 //! procedural generator can describe geometry the way the vanilla renderer does — boxes with a
 //! texture offset, optional mirroring and a visible-face mask — instead of a bespoke JSON dialect.
 //!
-//! Conventions (identical to the client):
-//! - Coordinates are in `[0, 16]` block units, y up, +z south.
+//! Conventions:
+//! - Coordinates are in `[0, 16]` block units, **y up**, +z south — the block-model space our
+//!   baker uses. The client's `ModelPart` space is y *down* (the renderer applies
+//!   `scale(-1, -1, 1)`), so a box transcribed from a `*Model` class must be flipped on y and its
+//!   face UVs permuted; [`CubeSpec::model_face_uvs`] does the UV part, [`flip_y`] the geometry.
 //! - `origin` is the box's minimum corner; `dimensions` are its extents.
 //! - UVs are returned in texture *pixels*; the caller divides by `texture_size / 16` to reach the
 //!   `[0, 16]` model space used by `BlockModelJson`.
@@ -37,21 +40,30 @@ impl CubeSpec {
         }
     }
 
-    /// Axis-aligned bounds `(min, max)` in model units.
-    pub fn bounds(&self) -> ([f32; 3], [f32; 3]) {
-        let mut min = self.origin;
-        let mut max = [
-            self.origin[0] + self.dimensions[0],
-            self.origin[1] + self.dimensions[1],
-            self.origin[2] + self.dimensions[2],
-        ];
-        if self.mirror {
-            std::mem::swap(&mut min[0], &mut max[0]);
-        }
-        (min, max)
+    /// UV rectangle for `face` in the block-model space (y up), in texels.
+    ///
+    /// `ModelPart.Cube` unwraps in y-down space, where the client's "up" panel is the block model's
+    /// "down" face. Flipping a box onto y up therefore swaps the up/down panels and, because the
+    /// depth axis is also mirrored, the north/south ones; east/west are unaffected.
+    pub fn model_face_uvs(&self, face: Direction) -> [f32; 4] {
+        let rect = match face {
+            Direction::Up => self.face_uvs(Direction::Down),
+            Direction::Down => self.face_uvs(Direction::Up),
+            Direction::North => self.face_uvs(Direction::South),
+            Direction::South => self.face_uvs(Direction::North),
+            Direction::East | Direction::West => self.face_uvs(face),
+        };
+        // Some of the client's rectangles come out with v descending; the block model stores
+        // rectangles in ascending corner order and the baker derives the orientation from the face.
+        [
+            rect[0].min(rect[2]),
+            rect[1].min(rect[3]),
+            rect[0].max(rect[2]),
+            rect[1].max(rect[3]),
+        ]
     }
 
-    /// UV rectangle for `face`, in texels, as `ModelPart.Cube` computes it.
+    /// UV rectangle for `face`, in texels, as `ModelPart.Cube` computes it (y-down space).
     ///
     /// Returns `None` for faces hidden by the caller's mask (handled outside this type) — the
     /// rectangle itself is always well defined.
@@ -78,6 +90,15 @@ impl CubeSpec {
             Direction::South => [u3, v1, u4, v2],
         }
     }
+}
+
+/// Builds the `(from, to)` pair the block-model baker expects for a box.
+///
+/// The baker derives face winding from the corner order, so the emitted `from`/`to` are not simply
+/// min/max: x and y come from the maximum corner while z comes from the minimum, which is the
+/// ordering that matches the client's rendering once the box is expressed on a y-up, +z-south grid.
+pub fn model_corners(min: [f32; 3], max: [f32; 3]) -> ([f32; 3], [f32; 3]) {
+    ([max[0], max[1], min[2]], [min[0], min[1], max[2]])
 }
 
 /// Faces of a box that are visible from outside, i.e. `allOfEnumExcept(hidden)`.
@@ -135,11 +156,11 @@ mod tests {
         assert!(faces.contains(&Direction::West));
     }
 
+    /// The corner order the baker expects: x/y from the maximum, z from the minimum.
     #[test]
-    fn bounds_use_minimum_corner_and_extents() {
-        let cube = CubeSpec::new([0.0, 0.0], [2.0, 3.0, 4.0], [5.0, 6.0, 7.0]);
-        let (min, max) = cube.bounds();
-        assert_eq!(min, [2.0, 3.0, 4.0]);
-        assert_eq!(max, [7.0, 9.0, 11.0]);
+    fn model_corners_put_x_and_y_at_the_maximum() {
+        let (from, to) = model_corners([1.0, 9.0, 1.0], [15.0, 14.0, 15.0]);
+        assert_eq!(from, [15.0, 14.0, 1.0]);
+        assert_eq!(to, [1.0, 9.0, 15.0]);
     }
 }

@@ -9,6 +9,9 @@ fn main() {
     let states = [
         "minecraft:chest[facing=north,type=single,waterlogged=false]",
         "minecraft:chest[facing=east,type=left,waterlogged=false]",
+        "minecraft:chest[facing=north,type=right,waterlogged=false]",
+        "minecraft:chest[facing=south,type=right,waterlogged=false]",
+        "minecraft:chest[facing=west,type=left,waterlogged=false]",
         "minecraft:trapped_chest[facing=south,type=single,waterlogged=false]",
         "minecraft:ender_chest[facing=west,type=single,waterlogged=false]",
         "minecraft:red_bed[facing=north,occupied=false,part=head]",

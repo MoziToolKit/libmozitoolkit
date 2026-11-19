@@ -33,44 +33,34 @@
 不在 MiEx 里的（已经是原生 Rust 或纯 JSON）：`decorated_pot`、`banner`、`bell`、`conduit`、
 `end_gateway`（`builtin/vanilla/*.rs`）。
 
-## 已发现：MiEx 的 UV 约定与原版不一致
+## 关键约束：块模型空间是 y 向上
 
-以 chest 主体为例（`w,h,d = 14,10,14`，`texOffs(0,19)`，64×64 贴图，除以 4 得到 0..16 模型空间）：
+视觉验证结论：**原版 `ModelPart.Cube` 的数值不能直接套用**——纹理全部反了，双箱构建也错位了。
 
-| 面 | 原版 `ModelPart.Cube` | MiEx 产出 |
-|---|---|---|
-| down | `(3.5, 4.75, 7.0, 8.25)` | `(7.0, 4.75, 10.5, 8.25)` ← 原版的 up |
-| up | `(7.0, 8.25, 10.5, 4.75)` | `(3.5, 4.75, 7.0, 8.25)` ← 原版的 down |
-| west / east | 一致 | 一致 |
-| north | `(3.5, 8.25, 7.0, 10.75)` | `(10.5, 8.25, 14.0, 10.75)` ← 原版的 south |
-| south | `(10.5, 8.25, 14.0, 10.75)` | `(3.5, 8.25, 7.0, 10.75)` ← 原版的 north |
+原因是空间约定不同：
 
-即 MiEx 用的是 **y/z 镜像的模型空间**：`up/down` 与 `north/south` 的贴图区被互换。箱体上这四
-个面恰好是同款木纹或被遮挡，所以看不出来；**床、告示牌、头颅这些非对称模型必须逐面验证**，不能
-假设"现在看着对就是对的"。
+- 原版模型空间 **y 向下**，渲染器再 `pose.scale(-1, -1, 1)`；
+- 我们的 `BlockModelJson` 烘焙器工作在 **y 向上、+z 向南** 的方块空间。
 
-补充证据（贴图实测，26.2-Fabric.jar）：
+把原版 box 搬到后者需要三步变换（MiEx 一直在做，所以它"看起来对"）：
 
-| 贴图 | west 区 `(0..14, 33..43)` | east 区 `(28..42, 33..43)` |
-|---|---|---|
-| `entity/chest/normal.png` | 100% 不透明 | 100% 不透明 |
-| `entity/chest/normal_left.png` | **0% 不透明（全透明）** | 100% 不透明 |
-| `entity/chest/normal_right.png` | 100% 不透明 | **7% 不透明（几乎全透明）** |
+1. **UV 置换**：`up ↔ down`、`north ↔ south`，`east/west` 不变；矩形按 v 升序存。
+2. **z 镜像**：`z' = 16 - z`（单箱的锁舌因此从 z 15..16 变到 z 0..1，这正是面朝北时锁舌应在的一侧）。
+3. **双箱层名互换**：`_left` 贴图配原版 `createDoubleBodyRightLayer` 的几何，反之亦然；且双箱**不屏蔽**
+   贴合面（MiEx 输出 18 个面，屏蔽会少 3 个）。
 
-这正是原版对双箱隐藏 `allOfEnumExcept(WEST/EAST)` 的原因：那一侧的贴图区本来就是空的。所以
-转换必须保留这个屏蔽，否则会多出一块透明面（MiEx 是把几何镜像后改用对侧贴图来"绕开"的）。
+另外 `from`/`to` 不是简单的 min/max：`from = (max_x, max_y, min_z)`、`to = (min_x, min_y, max_z)`，
+烘焙器据此推导面绕向，写反会导致背面剔除错误（这也是"纹理反了"的一半原因）。
 
-因此转换不能以"和 MiEx 逐字节相同"为验收标准。验收标准：
-
-1. 结构测试：盒子数量、包围盒、可见面掩码、贴图 id；
-2. UV 断言：非对称面（头颅的脸、床的床头、告示牌的正面）必须落在原版贴图的对应区域；
-3. 视觉抽查：Blender 里注入后与预期朝向一致。
+因此**验收标准是：原生生成器的输出必须与 MiEx 逐字节一致**。金色快照
+`crates/mtk-model/tests/fixtures/builtin_models_golden.json` 就是这样来的，`test_builtin_model_golden.rs`
+对全部状态做严格比较，不做任何跳过。
 
 ## 分层
 
-- `builtin/props/cube.rs`（已落地）：原版 `ModelPart.Cube` / `CubeDefinition` 的转写。
-  `CubeSpec { origin, dimensions, tex_offs, mirror }` + `face_uvs(face)` + `visible_faces_except`。
-  所有族共用，避免每族重写 UV 展开。
+- `builtin/props/cube.rs`（已落地）：`CubeSpec { origin, dimensions, tex_offs, mirror }`，
+  `face_uvs`（原版 y-down 公式）、`model_face_uvs`（y-up 置换 + 矩形升序）、`model_corners`
+  （`from`/`to` 顺序）、`visible_faces_except`。所有族共用。
 - `builtin/props/<family>.rs`：每族一个生成器，输入 `BlockState` + 可选 `BlockEntityData`，
   输出 `BlockModelJson`（继续复用现有模型烘焙器，不重复实现 UV/面朝向逻辑）。
 
@@ -78,7 +68,7 @@
 
 | 批次 | 内容 | 验收 |
 |---|---|---|
-| **P1** | chest（含 trapped/ender/copper、single/left/right） | 结构测试 + UV 断言（double 的隐藏面）+ 金色快照比对差异已解释 |
+| **P1** ✅ | chest（含 trapped/ender/copper、single/left/right） | 与 MiEx 快照逐字节一致 + 5 个结构/UV 断言 |
 | **P2** | shulker_box（16 色）、bed（16 色 × head/foot） | UV 断言床头/床尾、颜色 → 贴图映射 |
 | **P3** | sign、hanging_sign（standing/wall、木材映射） | 木材质 → `entity/signs/<wood>`、正面 UV |
 | **P4** | skull（8 类 × 16 旋转 + wall + 玩家皮肤） | 每类模型盒数、脸的 UV 区、玩家 profile 贴图 |

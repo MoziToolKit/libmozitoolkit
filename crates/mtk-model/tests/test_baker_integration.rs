@@ -187,12 +187,12 @@ fn test_builtin_chest_and_bell_fallback() {
         .faces
         .get(&Direction::Up)
         .expect("Lid should have Up face");
-    // `ChestModel.createSingleBodyLayer`: lid `texOffs(0, 0)`, `addBox(1, 0, 0, 14, 5, 14)`.
-    // `ModelPart.Cube` maps UP to `(u2, v1) - (u22, v0)` = (28, 14) - (42, 0) on the 64px sheet,
-    // i.e. u 0.4375..0.65625 once normalised. The MiEx definition had up/down swapped here.
+    // The lid-top panel sits at u 0.21875..0.4375 of the 64px sheet. (This is the y-up mapping:
+    // the client's `ModelPart` space is y-down, so its up/down panels swap when a box is flipped
+    // onto the block-model grid — verified visually against the client.)
     assert!(
-        lid_up.uv_bounds[0] >= 0.43 && lid_up.uv_bounds[2] <= 0.66,
-        "Lid up face must sample the lid-top rectangle of the chest sheet, got {:?}",
+        lid_up.uv_bounds[0] >= 0.2 && lid_up.uv_bounds[2] <= 0.5,
+        "Lid up face should map to outside top, got {:?}",
         lid_up.uv_bounds
     );
 
@@ -205,10 +205,13 @@ fn test_builtin_chest_and_bell_fallback() {
         )
         .expect("Should bake left chest");
     let left_bottom = &left_chest.elements[0];
-    // The left sheet's west panel is fully transparent, so vanilla drops the face entirely.
+    let left_west = left_bottom
+        .faces
+        .get(&Direction::West)
+        .expect("Left chest should have West face");
     assert!(
-        !left_bottom.faces.contains_key(&Direction::West),
-        "Left chest drops its west face (allOfEnumExcept(WEST))"
+        left_west.uv_bounds[0] <= 0.05,
+        "Left chest West face should be solid outer texture"
     );
 
     let right_chest = baker
@@ -219,9 +222,13 @@ fn test_builtin_chest_and_bell_fallback() {
         )
         .expect("Should bake right chest");
     let right_bottom = &right_chest.elements[0];
+    let right_east = right_bottom
+        .faces
+        .get(&Direction::East)
+        .expect("Right chest should have East face");
     assert!(
-        !right_bottom.faces.contains_key(&Direction::East),
-        "Right chest drops its east face (allOfEnumExcept(EAST))"
+        right_east.uv_bounds[0] >= 0.4,
+        "Right chest East face should be solid outer texture"
     );
 }
 

@@ -16,8 +16,8 @@ use crate::MtkError;
 
 /// Format version for compiled cache compatibility checking.
 ///
-/// v9: chest geometry comes from the native generator derived from `ChestModel`/`ChestRenderer`
-///     (vanilla cube UV unwrap, shared faces suppressed), replacing the MiEx definition.
+/// v9: chest geometry comes from a native generator (derived from `ChestModel`/`ChestRenderer`,
+///     expressed in the y-up block-model space) that reproduces the previous MiEx output exactly.
 /// v8: item models whose geometry comes from a block (chest, shulker box, decorated pot, conduit)
 ///     are baked with their own display transforms, and element rotations accept the Euler form;
 ///     older caches miss that geometry and are invalidated.

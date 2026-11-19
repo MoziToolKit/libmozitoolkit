@@ -2,20 +2,11 @@
 //! definition interpreter.
 //!
 //! The plan is to replace that interpreter with native generators (see
-//! `docs/review/MIEX_REMOVAL_PLAN.md`). Each family's states are listed in `MIGRATED` once its
-//! native generator lands; the snapshot then guards the remaining families against silent drift
-//! while the migration is in flight.
+//! `docs/review/MIEX_REMOVAL_PLAN.md`). The interpreter's output is the visual reference: it is
+//! what the client renders today after the y-down -> y-up conversion, so a native generator must
+//! reproduce it exactly. This test therefore compares *every* state, migrated or not.
 
 use mtk_model::{BlockModelJson, BlockState, BuiltinModelRegistry};
-
-/// States already served by a native Rust generator (no longer compared to the MiEx snapshot).
-const MIGRATED: &[&str] = &[
-    // P1: chest now comes from builtin::props::chest, derived from ChestModel/ChestRenderer.
-    "minecraft:chest[facing=north,type=single,waterlogged=false]",
-    "minecraft:chest[facing=east,type=left,waterlogged=false]",
-    "minecraft:trapped_chest[facing=south,type=single,waterlogged=false]",
-    "minecraft:ender_chest[facing=west,type=single,waterlogged=false]",
-];
 
 #[test]
 fn builtin_models_match_the_miex_snapshot() {
@@ -29,9 +20,6 @@ fn builtin_models_match_the_miex_snapshot() {
 
     let mut mismatches = Vec::new();
     for (state, expected) in golden.as_object().expect("object") {
-        if MIGRATED.contains(&state.as_str()) {
-            continue;
-        }
         // Compare the model structs, not the JSON text: the fields are `f32`, so both sides agree
         // exactly, while a text round-trip can disagree in the last printed digit.
         let expected: Option<BlockModelJson> =

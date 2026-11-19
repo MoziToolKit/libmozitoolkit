@@ -39,46 +39,43 @@ fn single_chest_has_three_boxes_and_four_facings() {
     }
 }
 
-/// The shared face of a double chest is suppressed because its texture panel is blank: the west
-/// rect `(0..14, 33..43)` of `entity/chest/normal_left.png` is fully transparent.
+/// All six faces are emitted for every layer: the MiEx definitions (and therefore the client's
+/// current output) carry the full box, with the shared-side panel supplied by the `_left`/`_right`
+/// sheet rather than suppressed.
 #[test]
-fn double_chest_halves_suppress_the_shared_face() {
-    let left = model("minecraft:chest[facing=north,type=left,waterlogged=false]");
-    for element in left.elements.as_ref().expect("elements") {
-        assert!(
-            !element.faces.contains_key("west"),
-            "createDoubleBodyLeftLayer passes allOfEnumExcept(WEST)"
-        );
-        assert_eq!(element.faces.len(), 5);
-    }
-
-    let right = model("minecraft:chest[facing=north,type=right,waterlogged=false]");
-    for element in right.elements.as_ref().expect("elements") {
-        assert!(
-            !element.faces.contains_key("east"),
-            "createDoubleBodyRightLayer passes allOfEnumExcept(EAST)"
-        );
-        assert_eq!(element.faces.len(), 5);
+fn every_chest_layer_emits_all_six_faces() {
+    for state in [
+        "minecraft:chest[facing=north,type=single,waterlogged=false]",
+        "minecraft:chest[facing=north,type=left,waterlogged=false]",
+        "minecraft:chest[facing=north,type=right,waterlogged=false]",
+    ] {
+        let model = model(state);
+        for element in model.elements.as_ref().expect("elements") {
+            assert_eq!(element.faces.len(), 6, "{state}");
+        }
     }
 }
 
 /// The halves must not be identical: `createDoubleBodyLeftLayer` extends to x=0, the right layer
 /// starts at x=1 and carries the latch on the far side.
+/// The halves are mirror images: the `_left` sheet pairs with the geometry the client uses for its
+/// right half, so the latch sits at high x on the left sheet and low x on the right sheet, and both
+/// halves keep their body inside the block.
 #[test]
-fn double_chest_halves_use_the_matching_layer_geometry() {
+fn double_chest_halves_are_mirrored() {
     let left = model("minecraft:chest[facing=north,type=left,waterlogged=false]");
-    let left_body = &left.elements.as_ref().expect("elements")[0];
-    assert_eq!(left_body.from, [0.0, 0.0, 1.0]);
-    assert_eq!(left_body.to, [15.0, 10.0, 15.0]);
-    let left_lock = &left.elements.as_ref().expect("elements")[2];
-    assert_eq!(left_lock.from, [0.0, 7.0, 15.0]);
+    let left_elements = left.elements.as_ref().expect("elements");
+    assert_eq!(left_elements[0].from, [16.0, 10.0, 1.0]);
+    assert_eq!(left_elements[0].to, [1.0, 0.0, 15.0]);
+    assert_eq!(left_elements[2].from, [16.0, 11.0, 0.0]);
+    assert_eq!(left_elements[2].to, [15.0, 7.0, 1.0]);
 
     let right = model("minecraft:chest[facing=north,type=right,waterlogged=false]");
-    let right_body = &right.elements.as_ref().expect("elements")[0];
-    assert_eq!(right_body.from, [1.0, 0.0, 1.0]);
-    assert_eq!(right_body.to, [16.0, 10.0, 15.0]);
-    let right_lock = &right.elements.as_ref().expect("elements")[2];
-    assert_eq!(right_lock.from, [15.0, 7.0, 15.0]);
+    let right_elements = right.elements.as_ref().expect("elements");
+    assert_eq!(right_elements[0].from, [15.0, 10.0, 1.0]);
+    assert_eq!(right_elements[0].to, [0.0, 0.0, 15.0]);
+    assert_eq!(right_elements[2].from, [1.0, 11.0, 0.0]);
+    assert_eq!(right_elements[2].to, [0.0, 7.0, 1.0]);
 }
 
 #[test]
@@ -115,12 +112,10 @@ fn chest_material_selects_the_vanilla_sheet() {
     }
 }
 
-/// The body's top face must sample the lid-area rectangle of the chest sheet, not the bottom one.
-///
-/// MiEx emitted these two rectangles swapped (its model space is y/z mirrored); the conversion
-/// follows `ModelPart.Cube`, which is the authority.
+/// The body's faces must sample the panels the client actually shows: the y-up conversion swaps
+/// the client's up/down and north/south rectangles, which was verified visually.
 #[test]
-fn body_face_uvs_follow_the_vanilla_cube_unwrap() {
+fn body_face_uvs_use_the_y_up_mapping() {
     let model = model("minecraft:chest[facing=north,type=single,waterlogged=false]");
     let elements = model.elements.as_ref().expect("elements");
     let body = &elements[0];
@@ -133,13 +128,13 @@ fn body_face_uvs_follow_the_vanilla_cube_unwrap() {
             .expect("uv present")
     };
 
-    // CubeSpec::face_uvs on a 64px sheet, scaled by 16/64.
-    // up: (u2, v1) - (u22, v0) = (28, 33) - (42, 19)
-    assert_eq!(uv("up"), [7.0, 8.25, 10.5, 4.75]);
-    // down: (u1, v0) - (u2, v1) = (14, 19) - (28, 33)
-    assert_eq!(uv("down"), [3.5, 4.75, 7.0, 8.25]);
-    // north: (u1, v1) - (u2, v2) = (14, 33) - (28, 43)
-    assert_eq!(uv("north"), [3.5, 8.25, 7.0, 10.75]);
-    // south: (u3, v1) - (u4, v2) = (42, 33) - (56, 43)
-    assert_eq!(uv("south"), [10.5, 8.25, 14.0, 10.75]);
+    // `CubeSpec::model_face_uvs` on a 64px sheet, scaled by 16/64.
+    // up samples the client's down panel: (u1, v0) - (u2, v1) = (14, 19) - (28, 33)
+    assert_eq!(uv("up"), [3.5, 4.75, 7.0, 8.25]);
+    // down samples the client's up panel: (u2, v1) - (u22, v0) = (28, 33) - (42, 19)
+    assert_eq!(uv("down"), [7.0, 4.75, 10.5, 8.25]);
+    // north samples the client's south panel: (u3, v1) - (u4, v2) = (42, 33) - (56, 43)
+    assert_eq!(uv("north"), [10.5, 8.25, 14.0, 10.75]);
+    // south samples the client's north panel: (u1, v1) - (u2, v2) = (14, 33) - (28, 43)
+    assert_eq!(uv("south"), [3.5, 8.25, 7.0, 10.75]);
 }
