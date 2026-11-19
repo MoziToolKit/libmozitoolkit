@@ -78,40 +78,6 @@ fn double_chest_halves_are_mirrored() {
     assert_eq!(right_elements[2].to, [0.0, 7.0, 1.0]);
 }
 
-#[test]
-fn chest_material_selects_the_vanilla_sheet() {
-    for (state, expected) in [
-        (
-            "minecraft:chest[facing=north,type=single,waterlogged=false]",
-            "minecraft:entity/chest/normal",
-        ),
-        (
-            "minecraft:trapped_chest[facing=north,type=single,waterlogged=false]",
-            "minecraft:entity/chest/trapped",
-        ),
-        (
-            "minecraft:ender_chest[facing=north,type=single,waterlogged=false]",
-            "minecraft:entity/chest/ender",
-        ),
-        (
-            "minecraft:chest[facing=north,type=left,waterlogged=false]",
-            "minecraft:entity/chest/normal_left",
-        ),
-        (
-            "minecraft:chest[facing=north,type=right,waterlogged=false]",
-            "minecraft:entity/chest/normal_right",
-        ),
-    ] {
-        let model = model(state);
-        let textures = model.textures.as_ref().expect("textures");
-        let texture = match textures.get("texture").expect("texture key") {
-            mtk_model::TextureValue::Path(path) => path.clone(),
-            other => panic!("unexpected texture value {other:?}"),
-        };
-        assert_eq!(texture, expected, "{state}");
-    }
-}
-
 /// The body's faces must sample the panels the client actually shows: the y-up conversion swaps
 /// the client's up/down and north/south rectangles, which was verified visually.
 #[test]
@@ -137,4 +103,51 @@ fn body_face_uvs_use_the_y_up_mapping() {
     assert_eq!(uv("north"), [10.5, 8.25, 14.0, 10.75]);
     // south samples the client's north panel: (u1, v1) - (u2, v2) = (14, 33) - (28, 43)
     assert_eq!(uv("south"), [3.5, 8.25, 7.0, 10.75]);
+}
+
+/// Every chest texture must resolve for every shape.
+///
+/// Two cases the MiEx definition got wrong: ender chests have one sheet for all shapes (there is no
+/// `ender_left.png`), and copper chests pick a sheet per oxidation state.
+#[test]
+fn chest_sheets_cover_every_shape_and_oxidation_state() {
+    let cases = [
+        // (block id, expected base sheet)
+        ("chest", "normal"),
+        ("trapped_chest", "trapped"),
+        ("copper_chest", "copper"),
+        ("waxed_copper_chest", "copper"),
+        ("exposed_copper_chest", "copper_exposed"),
+        ("waxed_exposed_copper_chest", "copper_exposed"),
+        ("weathered_copper_chest", "copper_weathered"),
+        ("waxed_weathered_copper_chest", "copper_weathered"),
+        ("oxidized_copper_chest", "copper_oxidized"),
+        ("waxed_oxidized_copper_chest", "copper_oxidized"),
+    ];
+
+    let sheet = |state: &str| -> String {
+        let model = model(state);
+        let textures = model.textures.as_ref().expect("textures");
+        match textures.get("texture").expect("texture key") {
+            mtk_model::TextureValue::Path(path) => path.clone(),
+            other => panic!("unexpected texture value {other:?}"),
+        }
+    };
+
+    for (block, base) in cases {
+        for (shape, suffix) in [("single", ""), ("left", "_left"), ("right", "_right")] {
+            let state = format!("minecraft:{block}[facing=north,type={shape},waterlogged=false]");
+            assert_eq!(
+                sheet(&state),
+                format!("minecraft:entity/chest/{base}{suffix}"),
+                "{state}"
+            );
+        }
+    }
+
+    // Ender chests ignore the shape suffix entirely.
+    for shape in ["single", "left", "right"] {
+        let state = format!("minecraft:ender_chest[facing=north,type={shape},waterlogged=false]");
+        assert_eq!(sheet(&state), "minecraft:entity/chest/ender", "{state}");
+    }
 }

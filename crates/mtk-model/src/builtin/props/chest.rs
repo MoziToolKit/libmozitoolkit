@@ -136,19 +136,38 @@ impl ChestType {
     }
 }
 
-/// Chest material, i.e. `Sheets.chooseSprite` families.
-fn chest_material(short_name: &str) -> &'static str {
-    // `ChestRenderer.getChestMaterial`: copper chests read their oxidation from the block, trapped
-    // chests use the trapped sheet, everything else falls back to the normal chest sheet.
-    if short_name.contains("copper") {
+/// Sheet for `short_name`, i.e. `Sheets.chooseSprite(ChestRenderer.getChestMaterial(...), type)`.
+///
+/// Two details the MiEx definition got wrong and that a naive port inherits:
+/// - Ender chests have a single sheet: `Sheets.chooseSprite` returns `ENDER_CHEST_LOCATION` for
+///   every `ChestType`, and `entity/chest/ender_left.png` does not exist. Appending the shape
+///   suffix makes a double ender chest fall back to an untextured model.
+/// - Copper chests pick a sheet per oxidation state (`copper`, `_exposed`, `_weathered`,
+///   `_oxidized`); waxed variants share the sheet of their oxidation state.
+fn chest_sheet(short_name: &str, chest_type: ChestType) -> String {
+    if short_name == "ender_chest" {
+        return "minecraft:entity/chest/ender".to_string();
+    }
+
+    let base = if short_name.contains("oxidized") {
+        "copper_oxidized"
+    } else if short_name.contains("weathered") {
+        "copper_weathered"
+    } else if short_name.contains("exposed") {
+        "copper_exposed"
+    } else if short_name.contains("copper") {
+        // Plain and waxed-unaffected copper share `copper.png`.
         "copper"
-    } else if short_name.starts_with("trapped_chest") || short_name == "trapped_chest" {
+    } else if short_name.contains("trapped") {
         "trapped"
-    } else if short_name.starts_with("ender_chest") || short_name == "ender_chest" {
-        "ender"
     } else {
         "normal"
-    }
+    };
+
+    format!(
+        "minecraft:entity/chest/{base}{}",
+        chest_type.texture_suffix()
+    )
 }
 
 /// `-facing.toYRot()` for the four horizontal facings.
@@ -173,12 +192,8 @@ pub(crate) fn build_chest_model(blockstate: &BlockState) -> Option<BlockModelJso
         return None;
     }
 
-    let material = chest_material(short);
     let chest_type = ChestType::parse(blockstate.properties.get("type").map(String::as_str));
-    let texture = format!(
-        "minecraft:entity/chest/{material}{}",
-        chest_type.texture_suffix()
-    );
+    let texture = chest_sheet(short, chest_type);
 
     let facing = blockstate
         .properties
