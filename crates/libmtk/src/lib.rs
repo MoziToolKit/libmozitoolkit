@@ -14,9 +14,11 @@
 
 use thiserror::Error;
 
+mod package;
 mod prebake;
 mod scene;
 
+pub use package::{chunks, PackageContents};
 pub use prebake::{
     evaluate_cache_status, fingerprint_str_to_bytes16, newest_cache_package, prebake_all_models,
     precompile_all_assets, precompile_all_assets_with_progress, resolve_active_cache_package,

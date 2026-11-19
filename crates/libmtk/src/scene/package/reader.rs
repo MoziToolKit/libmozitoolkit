@@ -41,6 +41,11 @@ impl ScenePackageReader {
         Self::validate_and_build(reader)
     }
 
+    /// Typed access to the payloads shared with the asset cache.
+    pub fn contents(&self) -> crate::PackageContents<'_> {
+        crate::PackageContents::new(&self.reader)
+    }
+
     /// Unpacks all major components of the scene package in a single pass.
     pub fn unpack(&self) -> Result<SceneBundle, MtkError> {
         let metadata = self.effective_metadata();
@@ -113,29 +118,17 @@ impl ScenePackageReader {
 
     /// Reads and deserializes the sparse voxel grid payload.
     pub fn read_sparse_voxels(&self) -> Result<SparseVoxelPayload, MtkError> {
-        let bytes = self.reader.read_chunk_decompressed("voxels/sparse")?;
-        let voxels: SparseVoxelPayload = postcard::from_bytes(&bytes)?;
-        Ok(voxels)
+        self.contents().sparse_voxels()
     }
 
     /// Reads the tree-shaken baked model database if present.
     pub fn read_models(&self) -> Result<Option<BakedModelDatabase>, MtkError> {
-        if !self.reader.has_chunk("models/database") {
-            return Ok(None);
-        }
-        let bytes = self.reader.read_chunk_decompressed("models/database")?;
-        let db = BakedModelDatabase::from_binary(&bytes)?;
-        Ok(Some(db))
+        self.contents().models()
     }
 
     /// Reads the scene mini-atlas address map if present.
     pub fn read_atlas_mapping(&self) -> Result<Option<AtlasAddressMap>, MtkError> {
-        if !self.reader.has_chunk("atlas/mapping") {
-            return Ok(None);
-        }
-        let json = self.reader.read_chunk_str("atlas/mapping")?;
-        let map = AtlasAddressMap::from_json(&json)?;
-        Ok(Some(map))
+        self.contents().atlas_mapping()
     }
 
     /// Reads all mini-atlas textures (`atlas/textures/*.png`) present in the package.
@@ -156,17 +149,7 @@ impl ScenePackageReader {
         chunk_id: &str,
         flip_v: bool,
     ) -> Result<mtk_texture::RgbaBuffer, MtkError> {
-        let normalized_id = if chunk_id.starts_with("atlas/textures/") {
-            chunk_id.to_string()
-        } else {
-            format!("atlas/textures/{}", chunk_id)
-        };
-        let png_bytes = self.reader.read_chunk_decompressed(&normalized_id)?;
-        let mut buf = mtk_texture::RgbaBuffer::from_png_bytes(&png_bytes)?;
-        if flip_v {
-            buf.flip_v();
-        }
-        Ok(buf)
+        self.contents().texture_rgba(chunk_id, flip_v)
     }
 
     /// Reads and decodes a texture chunk (PNG) directly into normalized [0.0, 1.0] float32 pixels.
@@ -175,16 +158,7 @@ impl ScenePackageReader {
         chunk_id: &str,
         flip_v: bool,
     ) -> Result<(u32, u32, Vec<f32>), MtkError> {
-        let normalized_id = if chunk_id.starts_with("atlas/textures/") {
-            chunk_id.to_string()
-        } else {
-            format!("atlas/textures/{}", chunk_id)
-        };
-        let png_bytes = self.reader.read_chunk_decompressed(&normalized_id)?;
-        let buf = mtk_texture::RgbaBuffer::from_png_bytes(&png_bytes)?;
-        let (w, h) = (buf.width, buf.height);
-        let f32_pixels = buf.to_f32_buffer(flip_v);
-        Ok((w, h, f32_pixels))
+        self.contents().texture_f32(chunk_id, flip_v)
     }
 
     /// Extracts a single texture chunk to disk.
@@ -208,66 +182,32 @@ impl ScenePackageReader {
 
     /// Checks whether the package contains custom resource pack colormaps.
     pub fn has_colormaps(&self) -> bool {
-        self.reader.has_chunk("biome/colormap/grass")
-            || self.reader.has_chunk("biome/colormap/foliage")
-            || self.reader.has_chunk("biome/colormap/dry_foliage")
+        self.contents().has_colormaps()
     }
 
     /// Reads raw decompressed PNG bytes for a specific colormap channel (e.g. `"grass"`, `"foliage"`).
     pub fn read_colormap(&self, name: &str) -> Result<Option<Vec<u8>>, MtkError> {
-        let chunk_id = format!("biome/colormap/{name}");
-        if !self.reader.has_chunk(&chunk_id) {
-            return Ok(None);
-        }
-        let bytes = self
-            .reader
-            .read_chunk_decompressed(&chunk_id)
-            .map_err(MtkError::Package)?;
-        Ok(Some(bytes))
+        self.contents().colormap(name)
     }
 
     /// Reads resident colormaps carried by this scene package without global side effects.
     pub fn read_colormaps(&self) -> Result<Option<Arc<mtk_material::VanillaColormaps>>, MtkError> {
-        let grass = self.read_colormap("grass")?;
-        let foliage = self.read_colormap("foliage")?;
-        let dry_foliage = self.read_colormap("dry_foliage")?;
-
-        if grass.is_none() && foliage.is_none() && dry_foliage.is_none() {
-            return Ok(None);
-        }
-
-        let colormaps = mtk_material::VanillaColormaps::with_overrides(
-            grass.as_deref(),
-            foliage.as_deref(),
-            dry_foliage.as_deref(),
-        )
-        .map_err(|e| MtkError::Texture(mtk_texture::TextureError::Baking(e)))?;
-
-        Ok(Some(Arc::new(colormaps)))
+        self.contents().colormaps()
     }
 
     /// Reads the packaged BiomeResolver if present in the package.
     pub fn read_biome_resolver(&self) -> Result<Option<mtk_material::BiomeResolver>, MtkError> {
-        if !self.reader.has_chunk("biome/mapping") {
-            return Ok(None);
-        }
-        let json_str = self.reader.read_chunk_str("biome/mapping")?;
-        let resolver = mtk_material::BiomeResolver::from_json(&json_str)?;
-        Ok(Some(resolver))
+        self.contents().biome_resolver()
     }
 
     /// Checks whether custom CTM rules are carried in this package.
     pub fn has_ctm_rules(&self) -> bool {
-        self.reader.has_chunk("ctm/rules")
+        self.contents().has(crate::chunks::CTM_RULES)
     }
 
     /// Reads raw CTM rules JSON from this package if present.
     pub fn read_ctm_rules_json(&self) -> Result<Option<String>, MtkError> {
-        if !self.has_ctm_rules() {
-            return Ok(None);
-        }
-        let json = self.reader.read_chunk_str("ctm/rules")?;
-        Ok(Some(json))
+        self.contents().ctm_rules_json()
     }
 
     /// Reads and constructs an indexed CtmSolver from the packaged rules if present.
@@ -282,18 +222,14 @@ impl ScenePackageReader {
 
     /// Checks whether dynamic entity slots mapping is carried in this package.
     pub fn has_dynamic_entity_slots(&self) -> bool {
-        self.reader.has_chunk("entity/slots")
+        self.contents().has(crate::chunks::ENTITY_SLOTS)
     }
 
     /// Reads dynamic entity slots mapping `key -> (chunk_id, slot_idx)` from this package if present.
     pub fn read_dynamic_entity_slots(
         &self,
     ) -> Result<Option<HashMap<String, (u16, u16)>>, MtkError> {
-        if !self.has_dynamic_entity_slots() {
-            return Ok(None);
-        }
-        let map: HashMap<String, (u16, u16)> = self.reader.read_chunk_json("entity/slots")?;
-        Ok(Some(map))
+        self.contents().entity_slots()
     }
 
     /// Returns the effective capabilities of this scene package.

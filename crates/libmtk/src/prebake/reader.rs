@@ -14,6 +14,13 @@ use mtk_texture::AtlasAddressMap;
 
 use crate::MtkError;
 
+/// Error for a payload the caller requires but the package does not carry.
+fn missing(chunk_id: &str) -> MtkError {
+    MtkError::Package(mtk_package::PackageError::ChunkNotFound(
+        chunk_id.to_string(),
+    ))
+}
+
 /// Format version for compiled cache compatibility checking.
 ///
 /// v10: chest up/down faces carry the corrected v orientation (upper plane v-descending, lower
@@ -118,24 +125,30 @@ impl AssetCacheReader {
         Ok(manifest)
     }
 
+    /// Typed access to the payloads shared with the scene package.
+    pub fn contents(&self) -> crate::PackageContents<'_> {
+        crate::PackageContents::new(&self.reader)
+    }
+
     /// Loads baked model database directly from package.
     pub fn load_models(&self) -> Result<BakedModelDatabase, MtkError> {
-        let raw = self.reader.read_chunk_decompressed("models/database")?;
-        let db = BakedModelDatabase::from_binary(&raw)?;
-        Ok(db)
+        self.contents()
+            .models()?
+            .ok_or_else(|| missing(crate::chunks::MODELS_DATABASE))
     }
 
     /// Loads atlas address mapping directly from package.
     pub fn load_atlas_mapping(&self) -> Result<AtlasAddressMap, MtkError> {
-        let json_str = self.load_atlas_mapping_json()?;
-        let map = AtlasAddressMap::from_json(&json_str)?;
-        Ok(map)
+        self.contents()
+            .atlas_mapping()?
+            .ok_or_else(|| missing(crate::chunks::ATLAS_MAPPING))
     }
 
     /// Loads raw atlas mapping JSON string directly from package.
     pub fn load_atlas_mapping_json(&self) -> Result<String, MtkError> {
-        let json_str = self.reader.read_chunk_str("atlas/mapping")?;
-        Ok(json_str)
+        self.contents()
+            .atlas_mapping_json()?
+            .ok_or_else(|| missing(crate::chunks::ATLAS_MAPPING))
     }
 
     /// Reads and decodes a texture chunk (PNG) directly into an RgbaBuffer in memory.
@@ -149,12 +162,7 @@ impl AssetCacheReader {
         chunk_id: &str,
         flip_v: bool,
     ) -> Result<mtk_texture::RgbaBuffer, MtkError> {
-        let png_bytes = self.reader.read_chunk_decompressed(chunk_id)?;
-        let mut buf = mtk_texture::RgbaBuffer::from_png_bytes(&png_bytes)?;
-        if flip_v {
-            buf.flip_v();
-        }
-        Ok(buf)
+        self.contents().texture_rgba(chunk_id, flip_v)
     }
 
     /// Reads and decodes a texture chunk (PNG) directly into normalized [0.0, 1.0] float32 pixels with optional vertical flipping.
@@ -163,11 +171,7 @@ impl AssetCacheReader {
         chunk_id: &str,
         flip_v: bool,
     ) -> Result<(u32, u32, Vec<f32>), MtkError> {
-        let png_bytes = self.reader.read_chunk_decompressed(chunk_id)?;
-        let buf = mtk_texture::RgbaBuffer::from_png_bytes(&png_bytes)?;
-        let (w, h) = (buf.width, buf.height);
-        let f32_pixels = buf.to_f32_buffer(flip_v);
-        Ok((w, h, f32_pixels))
+        self.contents().texture_f32(chunk_id, flip_v)
     }
 
     /// Reads raw decompressed bytes for any chunk in package.
@@ -178,19 +182,14 @@ impl AssetCacheReader {
 
     /// Loads biome resolver directly from package.
     pub fn load_biome_resolver(&self) -> Result<BiomeResolver, MtkError> {
-        let json_str = self.reader.read_chunk_str("biome/mapping")?;
-        let resolver = BiomeResolver::from_json(&json_str)?;
-        Ok(resolver)
+        self.contents()
+            .biome_resolver()?
+            .ok_or_else(|| missing(crate::chunks::BIOME_MAPPING))
     }
 
     /// Loads cached CTM rules if present in the package.
     pub fn load_ctm_rules(&self) -> Result<Option<Vec<mtk_resource::CtmRule>>, MtkError> {
-        if !self.reader.has_chunk("ctm/rules") {
-            return Ok(None);
-        }
-        let json_str = self.reader.read_chunk_str("ctm/rules")?;
-        let rules: Vec<mtk_resource::CtmRule> = serde_json::from_str(&json_str)?;
-        Ok(Some(rules))
+        self.contents().ctm_rules()
     }
 
     /// Loads cached indexed CTM solver directly from the package if present.
@@ -314,31 +313,7 @@ impl AssetCacheReader {
 
     /// Loads resident colormaps carried by this asset cache without global side effects.
     pub fn load_colormaps(&self) -> Result<Option<Arc<mtk_material::VanillaColormaps>>, MtkError> {
-        let read = |name: &str| -> Result<Option<Vec<u8>>, MtkError> {
-            let chunk_id = format!("biome/colormap/{name}");
-            if self.reader.has_chunk(&chunk_id) {
-                let bytes = self.reader.read_chunk_decompressed(&chunk_id)?;
-                Ok(Some(bytes))
-            } else {
-                Ok(None)
-            }
-        };
-        let grass = read("grass")?;
-        let foliage = read("foliage")?;
-        let dry_foliage = read("dry_foliage")?;
-
-        if grass.is_none() && foliage.is_none() && dry_foliage.is_none() {
-            return Ok(None);
-        }
-
-        let colormaps = mtk_material::VanillaColormaps::with_overrides(
-            grass.as_deref(),
-            foliage.as_deref(),
-            dry_foliage.as_deref(),
-        )
-        .map_err(|e| MtkError::Texture(mtk_texture::TextureError::Baking(e)))?;
-
-        Ok(Some(Arc::new(colormaps)))
+        self.contents().colormaps()
     }
 
     /// Raw package reader accessor.
