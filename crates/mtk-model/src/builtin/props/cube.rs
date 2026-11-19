@@ -42,9 +42,17 @@ impl CubeSpec {
 
     /// UV rectangle for `face` in the block-model space (y up), in texels.
     ///
-    /// `ModelPart.Cube` unwraps in y-down space, where the client's "up" panel is the block model's
-    /// "down" face. Flipping a box onto y up therefore swaps the up/down panels and, because the
-    /// depth axis is also mirrored, the north/south ones; east/west are unaffected.
+    /// Two conversions are needed against `ModelPart.Cube`:
+    ///
+    /// 1. **Panel choice.** The client's `up` panel belongs to the block model's `down` face (and
+    ///    vice versa) because the box is expressed on a y-up grid, and mirroring depth move the
+    ///    north/south panels to the opposite faces. East/west are unaffected.
+    /// 2. **V orientation on up/down.** The client's polygon assigns UVs as
+    ///    `v0←(u_end, v_start)`, `v1←(u_start, v_start)`, `v2←(u_start, v_end)`, `v3←(u_end, v_end)`,
+    ///    while [`crate::baker`] assigns `v0←(min_u, min_v)`, `v1←(min_u, max_v)`,
+    ///    `v2←(max_u, max_v)`, `v3←(max_u, min_v)`. For up/down the client's vertex order is our
+    ///    `v0 <-> v2`, so the rectangle has to be handed over with v descending; otherwise the
+    ///    top/bottom texture reads upside down (visible on the chest lid).
     pub fn model_face_uvs(&self, face: Direction) -> [f32; 4] {
         let rect = match face {
             Direction::Up => self.face_uvs(Direction::Down),
@@ -53,14 +61,14 @@ impl CubeSpec {
             Direction::South => self.face_uvs(Direction::North),
             Direction::East | Direction::West => self.face_uvs(face),
         };
-        // Some of the client's rectangles come out with v descending; the block model stores
-        // rectangles in ascending corner order and the baker derives the orientation from the face.
-        [
-            rect[0].min(rect[2]),
-            rect[1].min(rect[3]),
-            rect[0].max(rect[2]),
-            rect[1].max(rect[3]),
-        ]
+        let (u0, u1) = (rect[0].min(rect[2]), rect[0].max(rect[2]));
+        let (v0, v1) = (rect[1].min(rect[3]), rect[1].max(rect[3]));
+        match face {
+            // `[min_u, max_v, max_u, min_v]`: the baker reads element 0/2 as u and 1/3 as v, so a
+            // descending v reverses the vertical texture direction on these two faces.
+            Direction::Up | Direction::Down => [u0, v1, u1, v0],
+            _ => [u0, v0, u1, v1],
+        }
     }
 
     /// UV rectangle for `face`, in texels, as `ModelPart.Cube` computes it (y-down space).

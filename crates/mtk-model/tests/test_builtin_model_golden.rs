@@ -2,9 +2,14 @@
 //! definition interpreter.
 //!
 //! The plan is to replace that interpreter with native generators (see
-//! `docs/review/MIEX_REMOVAL_PLAN.md`). The interpreter's output is the visual reference: it is
-//! what the client renders today after the y-down -> y-up conversion, so a native generator must
-//! reproduce it exactly. This test therefore compares *every* state, migrated or not.
+//! `docs/review/MIEX_REMOVAL_PLAN.md`). The snapshot is the visual reference: for every family that
+//! has not been migrated yet it records the interpreter's output verbatim, and a native generator
+//! must reproduce it exactly.
+//!
+//! Chest entries were updated once, on purpose: the interpreter handed the baker the client's
+//! top/bottom rectangles in the client's own v order, which renders those faces upside down (the
+//! chest lid needed a manual Y flip in the UV editor). The native generator flips v on up/down, so
+//! the recorded chest states are the corrected output; the interpreter's version is in git history.
 
 use mtk_model::{BlockModelJson, BlockState, BuiltinModelRegistry};
 
