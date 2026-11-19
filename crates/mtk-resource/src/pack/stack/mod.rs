@@ -8,6 +8,8 @@ use crate::error::ResourceError;
 use crate::identifier::ResourceLocation;
 use crate::pack::source::ResourcePack;
 use std::collections::HashSet;
+use std::path::Path;
+use xxhash_rust::xxh64::Xxh64;
 
 /// Ordered hierarchy of resource packs evaluated from top (highest priority) to bottom (vanilla fallback).
 pub struct ResourcePackStack {
@@ -191,24 +193,122 @@ impl ResourcePackStack {
         None
     }
 
-    /// Computes a deterministic fingerprint string for the active resource pack stack configuration.
+    /// Computes the stack fingerprint that keys the asset cache.
     ///
-    /// Changes if packs are reordered, added, or removed.
+    /// The fingerprint covers each pack's identity *and its content*: a repainted texture, an
+    /// added model or a repacked jar must all invalidate the cache. Hashing pack names alone let
+    /// an edited pack reuse the previous cache forever.
     pub fn compute_stack_fingerprint(&self) -> String {
-        Self::compute_fingerprint_from_names(self.packs.iter().map(|p| p.name()))
+        let mut hasher = Xxh64::new(0);
+        hasher.update(FINGERPRINT_DOMAIN.as_bytes());
+        hasher.update(&(self.packs.len() as u64).to_le_bytes());
+        for pack in &self.packs {
+            let label = pack.source_label();
+            hasher.update(&(label.len() as u64).to_le_bytes());
+            hasher.update(label.as_bytes());
+            let mut entries = pack.content_entries();
+            entries.sort_by(|a, b| a.path.cmp(&b.path));
+            hasher.update(&(entries.len() as u64).to_le_bytes());
+            for entry in entries {
+                hasher.update(&(entry.path.len() as u64).to_le_bytes());
+                hasher.update(entry.path.as_bytes());
+                hasher.update(&entry.size.to_le_bytes());
+                hasher.update(&entry.modified_secs.to_le_bytes());
+            }
+        }
+        format!("mtk_fp_{:016x}", hasher.digest())
     }
 
-    /// Computes the stack fingerprint directly from an iterator of pack names/descriptors
-    /// without instantiating or decompressing any resource packs.
-    pub fn compute_fingerprint_from_names<'a>(names: impl IntoIterator<Item = &'a str>) -> String {
-        use std::hash::{Hash, Hasher};
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        let names_vec: Vec<&'a str> = names.into_iter().collect();
-        names_vec.len().hash(&mut hasher);
-        for (idx, name) in names_vec.iter().enumerate() {
-            idx.hash(&mut hasher);
-            name.hash(&mut hasher);
+    /// Computes the same fingerprint from pack paths, without building a stack.
+    ///
+    /// Hosts call this on the UI thread to decide READY/STALE before loading any archive, so it
+    /// must agree exactly with [`Self::compute_stack_fingerprint`] for the equivalent stack.
+    /// Directories are walked (one stat per file); archives contribute their own size and mtime.
+    pub fn compute_fingerprint_from_paths<'a>(paths: impl IntoIterator<Item = &'a str>) -> String {
+        let paths: Vec<&str> = paths.into_iter().collect();
+        let mut hasher = Xxh64::new(0);
+        hasher.update(FINGERPRINT_DOMAIN.as_bytes());
+        hasher.update(&(paths.len() as u64).to_le_bytes());
+        for path in paths {
+            let resolved = Path::new(path);
+            let canonical =
+                std::fs::canonicalize(resolved).unwrap_or_else(|_| resolved.to_path_buf());
+            let label = canonical.display().to_string();
+            hasher.update(&(label.len() as u64).to_le_bytes());
+            hasher.update(label.as_bytes());
+            let mut entries = content_entries_from_path(&canonical);
+            entries.sort_by(|a, b| a.path.cmp(&b.path));
+            hasher.update(&(entries.len() as u64).to_le_bytes());
+            for entry in entries {
+                hasher.update(&(entry.path.len() as u64).to_le_bytes());
+                hasher.update(entry.path.as_bytes());
+                hasher.update(&entry.size.to_le_bytes());
+                hasher.update(&entry.modified_secs.to_le_bytes());
+            }
         }
-        format!("mtk_fp_{:016x}", hasher.finish())
+        format!("mtk_fp_{:016x}", hasher.digest())
     }
+}
+
+/// Domain separator: bump when the fingerprint's meaning changes, so old caches stop matching.
+const FINGERPRINT_DOMAIN: &str = "mtk_pack_fp_v2";
+
+/// Describes a pack path without reading any file bytes.
+///
+/// Must mirror [`ResourcePack::content_entries`] for the pack type the path would produce:
+/// a directory is walked, a file contributes its own size and mtime.
+fn content_entries_from_path(path: &Path) -> Vec<crate::pack::source::PackContentEntry> {
+    use crate::pack::source::PackContentEntry;
+
+    let Ok(meta) = std::fs::metadata(path) else {
+        return Vec::new();
+    };
+    if meta.is_file() {
+        return vec![PackContentEntry {
+            path: String::new(),
+            size: meta.len(),
+            modified_secs: modified_secs(&meta),
+        }];
+    }
+    if !meta.is_dir() {
+        return Vec::new();
+    }
+
+    fn walk(root: &Path, current: &Path, out: &mut Vec<PackContentEntry>) {
+        let Ok(entries) = std::fs::read_dir(current) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(meta) = entry.metadata() else { continue };
+            if meta.is_dir() {
+                walk(root, &path, out);
+                continue;
+            }
+            if !meta.is_file() {
+                continue;
+            }
+            let Ok(rel) = path.strip_prefix(root) else {
+                continue;
+            };
+            out.push(PackContentEntry {
+                path: rel.to_string_lossy().replace('\\', "/"),
+                size: meta.len(),
+                modified_secs: modified_secs(&meta),
+            });
+        }
+    }
+
+    let mut out = Vec::new();
+    walk(path, path, &mut out);
+    out
+}
+
+/// Modification time in whole seconds since the Unix epoch (0 when unavailable).
+fn modified_secs(meta: &std::fs::Metadata) -> i64 {
+    meta.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
 }

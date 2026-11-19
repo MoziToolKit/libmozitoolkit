@@ -14,6 +14,7 @@ mtk-cull = { workspace = true }
 mtk-model = { workspace = true }
 mtk-voxel = { workspace = true }
 mtk-resource = { workspace = true }
+xxhash-rust = { workspace = true }
 mtk-texture = { workspace = true }
 mtk-material = { workspace = true }
 mtk-package = { workspace = true }

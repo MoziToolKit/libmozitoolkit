@@ -366,12 +366,21 @@ pub fn precompile_all_assets<'py>(
     })
 }
 
-/// Computes the stack fingerprint directly from a list of pack names or paths
-/// without instantiating or decompressing any resource packs.
+/// Computes the stack fingerprint from pack paths without loading any archive.
+///
+/// Stats each path (directories are walked, archives contribute their size and mtime), so an
+/// in-place edit invalidates the cache. Must be called with the same strings the stack is built
+/// from; `ResourcePackStack::compute_stack_fingerprint` is the loaded-stack equivalent.
 #[pyfunction]
-pub fn compute_stack_fingerprint_from_names(names: Vec<String>) -> String {
-    let name_refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
-    ResourcePackStack::compute_fingerprint_from_names(name_refs)
+pub fn compute_stack_fingerprint_from_paths(paths: Vec<String>) -> String {
+    let path_refs: Vec<&str> = paths.iter().map(|s| s.as_str()).collect();
+    ResourcePackStack::compute_fingerprint_from_paths(path_refs)
+}
+
+/// Returns the newest `.mtkcache` in a cache directory, for panel introspection only.
+#[pyfunction]
+pub fn newest_cache_package(cache_dir: &str) -> Option<String> {
+    libmtk::newest_cache_package(cache_dir).map(|path| path.display().to_string())
 }
 
 /// Resolve the active `.mtkcache` package for a cache directory + optional stack fingerprint.

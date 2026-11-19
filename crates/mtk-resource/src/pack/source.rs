@@ -59,6 +59,51 @@ pub trait ResourcePack: Send + Sync {
     fn has_file(&self, relative_path: &str) -> bool {
         self.open(relative_path).is_some()
     }
+
+    /// Cheap, deterministic identity of the pack's *content*.
+    ///
+    /// The stack fingerprint feeds cache invalidation, so it must change when a pack is edited in
+    /// place. Renaming or reordering packs is not enough: a user who repaints a texture and keeps
+    /// the same file name must get a rebuilt cache. Implementations therefore report per-entry
+    /// `(path, size, modified_secs)`, never the file bytes.
+    fn content_entries(&self) -> Vec<PackContentEntry> {
+        self.list_files("")
+            .into_iter()
+            .map(|path| PackContentEntry {
+                path,
+                size: 0,
+                modified_secs: 0,
+            })
+            .collect()
+    }
+
+    /// Absolute location of this pack on disk, when it has one.
+    ///
+    /// Part of the fingerprint so two different packs that happen to share a display name do not
+    /// share a cache.
+    fn source_label(&self) -> String {
+        self.name().to_string()
+    }
+}
+
+/// Modification time of a file in whole seconds since the Unix epoch (0 when unavailable).
+fn modified_secs(meta: &fs::Metadata) -> i64 {
+    meta.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// One file inside a pack, described without reading its bytes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackContentEntry {
+    /// Path relative to the pack root, using `/` separators.
+    pub path: String,
+    /// File size in bytes.
+    pub size: u64,
+    /// Modification time in seconds since the Unix epoch (0 when unknown).
+    pub modified_secs: i64,
 }
 
 /// A resource pack backed by an unzipped directory on the local filesystem.
@@ -84,6 +129,46 @@ impl DirectoryPack {
 impl ResourcePack for DirectoryPack {
     fn name(&self) -> &str {
         &self.name
+    }
+
+    fn source_label(&self) -> String {
+        // Canonicalize so the host's path-only fingerprint (`Path.resolve()` on its side) agrees
+        // with the loaded stack; on macOS `/var` and `/private/var` are the same pack.
+        std::fs::canonicalize(&self.root_dir)
+            .unwrap_or_else(|_| self.root_dir.clone())
+            .display()
+            .to_string()
+    }
+
+    fn content_entries(&self) -> Vec<PackContentEntry> {
+        fn walk(root: &Path, current: &Path, out: &mut Vec<PackContentEntry>) {
+            let Ok(entries) = fs::read_dir(current) else {
+                return;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let Ok(meta) = entry.metadata() else { continue };
+                if meta.is_dir() {
+                    walk(root, &path, out);
+                    continue;
+                }
+                if !meta.is_file() {
+                    continue;
+                }
+                let Ok(rel) = path.strip_prefix(root) else {
+                    continue;
+                };
+                out.push(PackContentEntry {
+                    path: rel.to_string_lossy().replace('\\', "/"),
+                    size: meta.len(),
+                    modified_secs: modified_secs(&meta),
+                });
+            }
+        }
+
+        let mut out = Vec::new();
+        walk(&self.root_dir, &self.root_dir, &mut out);
+        out
     }
 
     fn open(&self, relative_path: &str) -> Option<Vec<u8>> {
@@ -154,6 +239,20 @@ impl ResourcePack for MemoryPack {
         &self.name
     }
 
+    fn content_entries(&self) -> Vec<PackContentEntry> {
+        let mut out: Vec<PackContentEntry> = self
+            .files
+            .iter()
+            .map(|(path, bytes)| PackContentEntry {
+                path: path.clone(),
+                size: bytes.len() as u64,
+                modified_secs: 0,
+            })
+            .collect();
+        out.sort_by(|a, b| a.path.cmp(&b.path));
+        out
+    }
+
     fn open(&self, relative_path: &str) -> Option<Vec<u8>> {
         let clean = relative_path.replace('\\', "/");
         self.files.get(&clean).cloned()
@@ -175,6 +274,10 @@ impl ResourcePack for MemoryPack {
 pub struct ZipPack {
     name: String,
     file_map: HashMap<String, Vec<u8>>,
+    /// Size and mtime of the source archive, when it was loaded from disk.
+    archive_meta: Option<(u64, i64)>,
+    /// Absolute archive path, when it was loaded from disk.
+    source_label: Option<String>,
 }
 
 #[cfg(feature = "zip")]
@@ -187,13 +290,23 @@ impl ZipPack {
         name: impl Into<String>,
         path: impl AsRef<Path>,
     ) -> Result<Self, ResourceError> {
+        let path = path.as_ref();
+        let archive_meta = fs::metadata(path)
+            .ok()
+            .map(|meta| (meta.len(), modified_secs(&meta)));
         let file = fs::File::open(path)?;
         let mut archive = zip::ZipArchive::new(file)?;
         let file_map = Self::load_archive(&mut archive)?;
+        let label = std::fs::canonicalize(path)
+            .unwrap_or_else(|_| path.to_path_buf())
+            .display()
+            .to_string();
 
         Ok(Self {
             name: name.into(),
             file_map,
+            archive_meta,
+            source_label: Some(label),
         })
     }
 
@@ -206,6 +319,8 @@ impl ZipPack {
         Ok(Self {
             name: name.into(),
             file_map,
+            archive_meta: None,
+            source_label: None,
         })
     }
 
@@ -255,6 +370,36 @@ impl ZipPack {
 impl ResourcePack for ZipPack {
     fn name(&self) -> &str {
         &self.name
+    }
+
+    fn source_label(&self) -> String {
+        self.source_label
+            .clone()
+            .unwrap_or_else(|| self.name.clone())
+    }
+
+    fn content_entries(&self) -> Vec<PackContentEntry> {
+        // A file-backed archive is identified by the archive's own size and mtime: one stat
+        // invalidates the cache for any repack, and the extracted entry list stays irrelevant.
+        if let Some((size, modified_secs)) = self.archive_meta {
+            return vec![PackContentEntry {
+                path: String::new(),
+                size,
+                modified_secs,
+            }];
+        }
+        // In-memory archives have no stat, so fall back to the entry table.
+        let mut out: Vec<PackContentEntry> = self
+            .file_map
+            .iter()
+            .map(|(path, bytes)| PackContentEntry {
+                path: path.clone(),
+                size: bytes.len() as u64,
+                modified_secs: 0,
+            })
+            .collect();
+        out.sort_by(|a, b| a.path.cmp(&b.path));
+        out
     }
 
     fn open(&self, relative_path: &str) -> Option<Vec<u8>> {

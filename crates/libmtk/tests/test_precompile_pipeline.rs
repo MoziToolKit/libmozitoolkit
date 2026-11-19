@@ -125,3 +125,89 @@ fn test_precompile_all_assets_end_to_end() {
     // Clean up
     let _ = fs::remove_dir_all(&temp_cache_dir);
 }
+
+/// A manifest from an older asset-cache format must be rejected even when the fingerprint matches,
+/// otherwise a cache written before a baking change is served as if it were current.
+#[test]
+fn cache_manifest_validation_checks_the_format_version() {
+    let fp = "mtk_fp_0123456789abcdef";
+    let current = libmtk::CacheManifest {
+        format_version: ASSET_CACHE_FORMAT_VERSION,
+        fingerprint: fp.to_string(),
+        pack_count: 1,
+        atlas_chunks: 1,
+        baked_models: 1,
+        created_at_epoch_secs: 0,
+    };
+    assert!(current.is_valid_for(fp));
+
+    let stale = libmtk::CacheManifest {
+        format_version: ASSET_CACHE_FORMAT_VERSION - 1,
+        ..current.clone()
+    };
+    assert!(!stale.is_valid_for(fp));
+}
+
+#[test]
+fn fingerprint_truncation_never_collides() {
+    let shared_prefix = "mtk_fp_0123456789abcdef";
+    let a = format!("{shared_prefix}_alpha");
+    let b = format!("{shared_prefix}_beta");
+    assert_ne!(
+        libmtk::fingerprint_str_to_bytes16(&a),
+        libmtk::fingerprint_str_to_bytes16(&b),
+        "16-byte truncation makes two distinct fingerprints share one cache key"
+    );
+}
+
+/// The resolver validates caches from the 64-byte header alone. A package written by an older
+/// asset-cache build can carry the same header fingerprint, so the manifest format version has to
+/// be consulted too; otherwise the stale cache is accepted and the host renders old geometry.
+#[test]
+fn cache_header_validation_rejects_a_stale_manifest_format_version() {
+    use mtk_package::{ChunkWriteOptions, MtkPackageFileWriter, PackageProfile};
+
+    let fingerprint = "mtk_fp_0011223344556677";
+    let fp_bytes = libmtk::fingerprint_str_to_bytes16(fingerprint);
+
+    let dir = std::env::temp_dir().join(format!("mtk_cache_fmt_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+
+    let write_cache = |name: &str, format_version: u32| -> std::path::PathBuf {
+        let path = dir.join(name);
+        let mut writer = MtkPackageFileWriter::create(&path, PackageProfile::AssetCache, fp_bytes)
+            .expect("create package");
+        writer
+            .add_json_chunk(
+                *b"META",
+                "manifest",
+                &libmtk::CacheManifest {
+                    format_version,
+                    fingerprint: fingerprint.to_string(),
+                    pack_count: 1,
+                    atlas_chunks: 1,
+                    baked_models: 1,
+                    created_at_epoch_secs: 0,
+                },
+                &ChunkWriteOptions::zstd_fast(),
+            )
+            .expect("write manifest");
+        writer.finish().expect("finish package");
+        path
+    };
+
+    let current = write_cache("current.mtkcache", ASSET_CACHE_FORMAT_VERSION);
+    let stale = write_cache("stale.mtkcache", ASSET_CACHE_FORMAT_VERSION - 1);
+
+    assert!(
+        AssetCacheReader::is_valid_cache_file(&current, fingerprint),
+        "a cache in the current format must be accepted"
+    );
+    assert!(
+        !AssetCacheReader::is_valid_cache_file(&stale, fingerprint),
+        "a cache from an older asset-cache format must be rejected, not silently served"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}

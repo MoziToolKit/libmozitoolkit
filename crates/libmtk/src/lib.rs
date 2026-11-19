@@ -18,9 +18,10 @@ mod prebake;
 mod scene;
 
 pub use prebake::{
-    evaluate_cache_status, fingerprint_str_to_bytes16, prebake_all_models, precompile_all_assets,
-    precompile_all_assets_with_progress, resolve_active_cache_package, AssetCacheReader,
-    CacheManifest, PrecompileConfig, PrecompileResult, ASSET_CACHE_FORMAT_VERSION,
+    evaluate_cache_status, fingerprint_str_to_bytes16, newest_cache_package, prebake_all_models,
+    precompile_all_assets, precompile_all_assets_with_progress, resolve_active_cache_package,
+    AssetCacheReader, CacheManifest, PrecompileConfig, PrecompileResult,
+    ASSET_CACHE_FORMAT_VERSION,
 };
 pub use scene::{
     export_scene_package, CtmMode, SceneAtlasSource, SceneBundle, SceneCapabilities,

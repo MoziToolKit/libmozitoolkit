@@ -65,6 +65,25 @@ pub fn resolve_active_cache_package(
     newest(all)
 }
 
+/// Returns the newest `.mtkcache` in `cache_dir` *for introspection only*.
+///
+/// The panel shows "which cache is on disk" (fingerprint, build time) so the user can see that the
+/// configured packs no longer match it. This never selects a cache for rendering: that path goes
+/// through [`resolve_active_cache_package`], which validates the fingerprint.
+pub fn newest_cache_package(cache_dir: impl AsRef<Path>) -> Option<PathBuf> {
+    let dir = cache_dir.as_ref();
+    if !dir.is_dir() {
+        return None;
+    }
+    let all: Vec<PathBuf> = std::fs::read_dir(dir)
+        .ok()?
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .filter(|path| path.extension().is_some_and(|ext| ext == "mtkcache"))
+        .filter(|path| path.is_file())
+        .collect();
+    newest(all)
+}
+
 /// Evaluates the readiness/freshness status of precompiled caches against an active stack and cache directory.
 /// Returns one of: "READY", "MISSING", "STALE", "NO_PACKS", "NO_VANILLA".
 pub fn evaluate_cache_status(

@@ -27,18 +27,16 @@ use crate::MtkError;
 ///     `_orm` (AO/roughness/metallic/emission) and `_aux` (IOR/porosity/SSS/transmission).
 pub const ASSET_CACHE_FORMAT_VERSION: u32 = 8;
 
-/// Converts a string fingerprint (e.g. `"mtk_fp_1234abcd5678ef00"`) to a 16-byte array.
+/// Derives the 16-byte package-header fingerprint from a fingerprint string.
+///
+/// The whole string is hashed with two independent seeds. Parsing `mtk_fp_<hex>` as a `u64` (the
+/// previous behaviour) ignored everything after the first 16 hex digits, and the fallback path
+/// truncated to 16 bytes, so two distinct fingerprints could map to one cache key.
 pub fn fingerprint_str_to_bytes16(fp: &str) -> [u8; 16] {
-    let mut out = [0u8; 16];
     let bytes = fp.as_bytes();
-    if let Some(hex_part) = fp.strip_prefix("mtk_fp_") {
-        if let Ok(val) = u64::from_str_radix(hex_part, 16) {
-            out[..8].copy_from_slice(&val.to_le_bytes());
-            return out;
-        }
-    }
-    let copy_len = bytes.len().min(16);
-    out[..copy_len].copy_from_slice(&bytes[..copy_len]);
+    let mut out = [0u8; 16];
+    out[..8].copy_from_slice(&xxhash_rust::xxh64::xxh64(bytes, 0).to_le_bytes());
+    out[8..].copy_from_slice(&xxhash_rust::xxh64::xxh64(bytes, 1).to_le_bytes());
     out
 }
 
@@ -78,18 +76,26 @@ impl AssetCacheReader {
         Ok(Self { reader })
     }
 
-    /// Checks if a package at `path` is valid for the given fingerprint using only the 64-byte header.
+    /// Checks whether `path` is a cache package this build can serve for `fingerprint`.
+    ///
+    /// The 64-byte header is only a first filter: it carries the fingerprint and the *package*
+    /// format version, not the asset-cache format version. Caches written before a baking change
+    /// keep a matching header, so the manifest is consulted as well; otherwise an old cache is
+    /// served as if it were current and the host renders stale geometry.
     pub fn is_valid_cache_file(path: impl AsRef<Path>, fingerprint: &str) -> bool {
         let p = path.as_ref();
         if !p.exists() || !p.is_file() {
             return false;
         }
-        if let Ok(hdr) = MtkPackageReader::read_header_only(p) {
-            let fp_bytes = fingerprint_str_to_bytes16(fingerprint);
-            hdr.fingerprint == fp_bytes && hdr.version_major == CURRENT_VERSION_MAJOR
-        } else {
-            false
+        let Ok(hdr) = MtkPackageReader::read_header_only(p) else {
+            return false;
+        };
+        let fp_bytes = fingerprint_str_to_bytes16(fingerprint);
+        if hdr.fingerprint != fp_bytes || hdr.version_major != CURRENT_VERSION_MAJOR {
+            return false;
         }
+        CacheManifest::read_from_package(p)
+            .is_some_and(|manifest| manifest.is_valid_for(fingerprint))
     }
 
     /// Returns package header reference.
