@@ -90,3 +90,56 @@ fn test_legacy_dimension_folders_are_ignored() {
 
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+/// Regions are decoded in parallel, so the same selection must produce byte-identical storage
+/// regardless of how many worker threads rayon happens to use.
+#[test]
+fn parallel_region_decoding_is_scheduling_independent() {
+    let Some(test_save_path) = save_world() else {
+        mtk_testkit::skip("no Minecraft save world available (set MTK_TEST_SAVE)");
+        return;
+    };
+
+    let load = |threads: usize| {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .expect("thread pool");
+        pool.install(|| {
+            let mut storage = VoxelStorage::new();
+            let loaded = SaveLoader::load_box_into_storage(
+                &test_save_path,
+                "overworld",
+                IVec3::new(-32, -64, -32),
+                IVec3::new(31, 127, 31),
+                &mut storage,
+            )
+            .expect("save import must succeed");
+            (loaded, storage)
+        })
+    };
+
+    let (loaded_single, single) = load(1);
+    let (loaded_multi, multi) = load(8);
+
+    assert_eq!(loaded_single, loaded_multi, "loaded section count differs");
+    assert_eq!(single.sections.len(), multi.sections.len());
+    assert_eq!(single.get_bounds(), multi.get_bounds());
+    assert_eq!(single.primary_biome, multi.primary_biome);
+    assert_eq!(
+        single.biome_column_map, multi.biome_column_map,
+        "derived biome columns depend on thread scheduling"
+    );
+
+    for x in (-32..32).step_by(7) {
+        for z in (-32..32).step_by(7) {
+            for y in (-64..128).step_by(11) {
+                assert_eq!(
+                    single.get_block(x, y, z),
+                    multi.get_block(x, y, z),
+                    "block mismatch at {x},{y},{z}"
+                );
+            }
+        }
+    }
+}

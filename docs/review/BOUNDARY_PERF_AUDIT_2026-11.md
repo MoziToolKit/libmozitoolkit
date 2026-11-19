@@ -4,7 +4,8 @@
 配套：`CODE_REVIEW_2026-11.md`、`FIX_BACKLOG.md`（已按 §4 的三分法重写）
 
 **进度**：B0（清单重划 + 资产发现/跳过门禁）、B1（删 `mtk-bench`、`mtk-cli bench world`、
-宿主场景基准、面板双指标）与 B2（外围性能）已落地；B2 的前后实测见 §9。
+宿主场景基准、面板双指标）、B2（外围性能）与 B2b（存档解码 / biome 元数据 / 重复注入）已落地；
+前后实测见 §9、§10。
 
 本轮不改代码，只做三件事：
 
@@ -553,3 +554,77 @@ blender --background --factory-startup --python tools/blender/scenario_bench.py 
 | `ctm::solver::tests::applies_to_state_*` | CTM 预判按 block 名 / base tile 两种键精确匹配 |
 | `test_ctm_meshing::unrelated_ctm_rules_leave_the_mesh_unchanged` | 跳过无关 CTM 不改变任何网格字节 |
 | `mtk-cli bench::tests::bounds_*` | 真实场景基准的输入校验 |
+
+---
+
+## 10. B2b 落地实测（2026-11-20）
+
+B2 之后端到端还停在 178 ms，其中约 97 ms 在 mesher 之外。本轮先量后改：
+
+### 10.1 定位（改之前的实测）
+
+`load_region_chunks` 116 ms，在 `loader.rs` 里打点拆开：
+
+| 子阶段 | 时间 |
+|---|---:|
+| `read_chunk_decompressed`（seek + read + inflate） | 64.3 ms |
+| `ChunkParser::parse_chunk` | 10.9 ms |
+| chunk 循环其它（`set_section` / 方块实体过滤） | ~3 ms |
+| **`finalize_biome_metadata`** | **38.1 ms** |
+
+`blender_mesh_injection` 35–45 ms，逐调用计时：
+
+| 调用 | 时间 |
+|---|---:|
+| `inject_topology_dna`（`clear_geometry` + 3×`add()` + 直写） | 20.4 ms |
+| `mesh.update(calc_edges=True)` | 7.6 ms |
+| `inject_uvs_dna` | 2.7 ms |
+| `inject_custom_attributes`（**全部 10 个属性**） | **2.2 ms** |
+| `inject_color_attributes_dna` / `inject_face_materials_dna` | 0.9 ms |
+
+**修正上一轮的错误判断**：per-face 属性瘦身没有价值——全部自定义属性加起来只有 2.2 ms
+（DNA 直写本来就是 memcpy）。真正的成本是 Blender 的几何分配与 edge 重建。
+
+### 10.2 三项改动
+
+1. **`finalize_biome_metadata` 单遍化**（37.9 → ~8 ms；其中 7.5 ms 是最终 `column_map` 的
+   33 万次插入，无法避免）。旧实现为每列从最高层向下扫 section（576×576 列 × 24 层 ≈ 800 万次
+   HashMap 查询）；新实现每个 section 只贡献自己 16 列的 `qy=3` 生物群系，按 `sec_y` 高者胜出，
+   临时数组 6 B/列（576×576 选区 ≈ 2 MB，且被既有的 `String` 值 map 掩盖）。
+   `biome_meta.rs::tests` 保留旧算法作为 oracle，对"混合高度/缺段/边界裁剪/无 bounds"逐列比对。
+
+2. **Anvil 并行解码**（读+解析 75 → ~15 ms；`load_region_chunks` 116 → 59.7 ms）。
+   以 region 文件为任务单位 `par_iter`：每个任务自己 `RegionFile::open`（头表已在 open 时读入），
+   解压 + NBT 解析 + 方块实体裁剪全部在 worker 内完成，结果按 plan 顺序收集后**顺序**合入
+   storage（坐标互斥，结果与顺序无关）。进度节流器保持原子计数。
+   `parallel_region_decoding_is_scheduling_independent` 用 1 线程 / 8 线程两个 pool 各加载一次，
+   断言 section 数、bounds、`biome_column_map`、`primary_biome` 与抽样方块完全一致。
+
+3. **重复注入复用拓扑**（35–38 → 27 ms；其中几何分配部分 20.4 → 0）。
+   `inject_mesh_data` 现在先比较 `(vertices, loops, polygons)` 三个计数；一致且走 DNA 时，
+   `inject_topology_dna(reuse_existing=True)` 跳过 `clear_geometry` + 三次 `add()`，直接重写
+   顶点/corner-vert/loop-start 缓冲；同时 edge 列表不变，`update(calc_edges=True)` 也一并跳过。
+   计数不一致（拓扑真变了）走原路径。`tests/test_mesh_injection_reuse.py` 用
+   `clean_zombie_attributes` 调用次数分别钉住"复用"与"重分配"两条分支。
+   首次导入仍需 20 ms 分配（Blender 地板），这部分不省。
+
+### 10.3 结果
+
+| 阶段 | B2 后 | B2b 后 |
+|---|---:|---:|
+| `load_region_chunks`（端到端测量） | ~59 ms | **~22.6 ms** |
+| `blender_mesh_injection`（重复） | ~38 ms | **~27 ms** |
+| `mesh_voxel_world` | ~44 ms | ~42 ms |
+| `blender_material_binding`（热） | ~20.5 ms | ~21.5 ms |
+| **端到端 best** | **178 ms** | **131.2 ms**（2.57M quads/s） |
+
+冷启动单列：首次导入的 `blender_mesh_injection` 361 ms（拓扑分配 + edge + 首次属性层创建），
+之后稳定在 27–29 ms；材质绑定冷启动 279 ms、热 21 ms。这两项属"首次导入"，与稳态无关。
+
+### 10.4 没做 / 不做的
+
+- **P4「延后 edge 构建」**：复用路径已经天然跳过；首次导入保留 `calc_edges=True`，
+  因为硬边分析（`analyze_mesh_hard_edges`）会读 `mesh.edges`，延后只是把 7.6 ms 挪个位置。
+- **属性瘦身**：实测总收益 2.2 ms，不做（见 10.1 的修正）。
+- **材质冷启动 3.2 s → 279 ms 观察到的差异**来自缓存命中（图集 PNG 已在 Blender 里），
+  不是代码路径变化；真正的首次成本仍未优化，需要图集纹理懒加载/跨会话复用。

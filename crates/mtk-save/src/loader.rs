@@ -1,6 +1,6 @@
 use glam::IVec3;
 use mtk_core::{ProgressCallback, ProgressReport, ProgressThrottler};
-use mtk_voxel::{VoxelStorage, VoxelWriter};
+use mtk_voxel::{SectionStorage, VoxelStorage, VoxelWriter};
 use std::path::{Path, PathBuf};
 
 use crate::chunk::ChunkParser;
@@ -223,95 +223,43 @@ impl SaveLoader {
         let throttler = ProgressThrottler::new("load_chunks", total_chunks, progress)
             .with_prefix("Loading chunk");
 
-        let mut loaded_sections = 0usize;
-
-        // 2. Iterate only over regions that overlap the bounding box
+        // 2. Plan every region that overlaps the box, with the exact chunk range to read.
+        //    Only the files actually present are queued; missing regions count as skipped.
+        let mut plans: Vec<RegionPlan> = Vec::new();
         for rx in min_reg_x..=max_reg_x {
             for rz in min_reg_z..=max_reg_z {
                 let mca_path = region_dir.join(format!("r.{}.{}.mca", rx, rz));
+                let xs = (rx * 32).max(min_sec_x)..=(rx * 32 + 31).min(max_sec_x);
+                let zs = (rz * 32).max(min_sec_z)..=(rz * 32 + 31).min(max_sec_z);
                 if !mca_path.exists() {
-                    let chunk_start_x = (rx * 32).max(min_sec_x);
-                    let chunk_end_x = (rx * 32 + 31).min(max_sec_x);
-                    let chunk_start_z = (rz * 32).max(min_sec_z);
-                    let chunk_end_z = (rz * 32 + 31).min(max_sec_z);
-                    let skipped = ((chunk_end_x - chunk_start_x + 1).max(0)
-                        * (chunk_end_z - chunk_start_z + 1).max(0))
-                        as usize;
-                    throttler.inc_by(skipped);
+                    throttler.inc_by(chunk_count(&xs, &zs));
                     continue;
                 }
+                plans.push(RegionPlan {
+                    path: mca_path,
+                    xs,
+                    zs,
+                });
+            }
+        }
 
-                let mut region_file = match RegionFile::open(&mca_path) {
-                    Ok(rf) => rf,
-                    Err(_) => {
-                        let chunk_start_x = (rx * 32).max(min_sec_x);
-                        let chunk_end_x = (rx * 32 + 31).min(max_sec_x);
-                        let chunk_start_z = (rz * 32).max(min_sec_z);
-                        let chunk_end_z = (rz * 32 + 31).min(max_sec_z);
-                        let skipped = ((chunk_end_x - chunk_start_x + 1).max(0)
-                            * (chunk_end_z - chunk_start_z + 1).max(0))
-                            as usize;
-                        throttler.inc_by(skipped);
-                        continue;
-                    }
-                };
+        // 3. Decode + parse regions in parallel; merging into the storage stays sequential and
+        //    order-independent (chunk sections occupy disjoint coordinates).
+        let decoded: Result<Vec<Vec<(IVec3, SectionStorage)>>, SaveError> = {
+            use rayon::prelude::*;
+            plans
+                .par_iter()
+                .map(|plan| {
+                    decode_region(plan, min_sec_y, max_sec_y, true_min, true_max, &throttler)
+                })
+                .collect()
+        };
 
-                let chunk_start_x = (rx * 32).max(min_sec_x);
-                let chunk_end_x = (rx * 32 + 31).min(max_sec_x);
-                let chunk_start_z = (rz * 32).max(min_sec_z);
-                let chunk_end_z = (rz * 32 + 31).min(max_sec_z);
-
-                for cx in chunk_start_x..=chunk_end_x {
-                    for cz in chunk_start_z..=chunk_end_z {
-                        if !region_file.has_chunk(cx, cz) {
-                            throttler.inc();
-                            continue;
-                        }
-
-                        let decompressed = match region_file.read_chunk_decompressed(cx, cz)? {
-                            Some(d) => d,
-                            None => {
-                                throttler.inc();
-                                continue;
-                            }
-                        };
-
-                        let sections =
-                            ChunkParser::parse_chunk(&decompressed, min_sec_y, max_sec_y)?;
-
-                        for mut section in sections {
-                            let sec_x = section.coord.x;
-                            let sec_y = section.coord.y;
-                            let sec_z = section.coord.z;
-
-                            // Filter block entities strictly within [true_min, true_max] bounding box
-                            if !section.block_entities.is_empty() {
-                                let sec_base_x = sec_x * 16;
-                                let sec_base_y = sec_y * 16;
-                                let sec_base_z = sec_z * 16;
-                                section.block_entities.retain(|&local_idx, _| {
-                                    let lx = ((local_idx >> 8) & 15) as i32;
-                                    let ly = ((local_idx >> 4) & 15) as i32;
-                                    let lz = (local_idx & 15) as i32;
-                                    let wx = sec_base_x + lx;
-                                    let wy = sec_base_y + ly;
-                                    let wz = sec_base_z + lz;
-                                    wx >= true_min.x
-                                        && wx <= true_max.x
-                                        && wy >= true_min.y
-                                        && wy <= true_max.y
-                                        && wz >= true_min.z
-                                        && wz <= true_max.z
-                                });
-                            }
-
-                            storage.set_section(sec_x, sec_y, sec_z, section);
-                            loaded_sections += 1;
-                        }
-
-                        throttler.inc();
-                    }
-                }
+        let mut loaded_sections = 0usize;
+        for sections in decoded? {
+            for (coord, section) in sections {
+                storage.set_section(coord.x, coord.y, coord.z, section);
+                loaded_sections += 1;
             }
         }
 
@@ -335,4 +283,99 @@ impl SaveLoader {
 
         Ok(loaded_sections)
     }
+}
+
+/// One `.mca` file plus the chunk range of the selection that falls inside it.
+struct RegionPlan {
+    path: std::path::PathBuf,
+    xs: std::ops::RangeInclusive<i32>,
+    zs: std::ops::RangeInclusive<i32>,
+}
+
+impl RegionPlan {
+    fn chunk_count(&self) -> usize {
+        chunk_count(&self.xs, &self.zs)
+    }
+}
+
+fn chunk_count(xs: &std::ops::RangeInclusive<i32>, zs: &std::ops::RangeInclusive<i32>) -> usize {
+    let bounds = |range: &std::ops::RangeInclusive<i32>| {
+        range
+            .end()
+            .saturating_sub(*range.start())
+            .saturating_add(1)
+            .max(0) as usize
+    };
+    bounds(xs).saturating_mul(bounds(zs))
+}
+
+/// Reads, decompresses and parses every chunk of one region that the selection covers.
+///
+/// Regions are independent files, so this is the parallel unit: opening one `RegionFile` per task
+/// keeps the sector seeks local while letting the CPU-bound inflate + NBT parse run on all cores.
+fn decode_region(
+    plan: &RegionPlan,
+    min_sec_y: i32,
+    max_sec_y: i32,
+    true_min: IVec3,
+    true_max: IVec3,
+    throttler: &ProgressThrottler<'_>,
+) -> Result<Vec<(IVec3, SectionStorage)>, SaveError> {
+    let mut out: Vec<(IVec3, SectionStorage)> = Vec::new();
+    let mut region_file = match RegionFile::open(&plan.path) {
+        Ok(region_file) => region_file,
+        Err(_) => {
+            // Matches the previous behaviour: an unreadable region is skipped, not fatal.
+            throttler.inc_by(plan.chunk_count());
+            return Ok(out);
+        }
+    };
+
+    for cx in plan.xs.clone() {
+        for cz in plan.zs.clone() {
+            if !region_file.has_chunk(cx, cz) {
+                throttler.inc();
+                continue;
+            }
+
+            let decompressed = match region_file.read_chunk_decompressed(cx, cz)? {
+                Some(bytes) => bytes,
+                None => {
+                    throttler.inc();
+                    continue;
+                }
+            };
+
+            let sections = ChunkParser::parse_chunk(&decompressed, min_sec_y, max_sec_y)?;
+
+            for mut section in sections {
+                // Filter block entities strictly within [true_min, true_max] bounding box
+                if !section.block_entities.is_empty() {
+                    let sec_base_x = section.coord.x * 16;
+                    let sec_base_y = section.coord.y * 16;
+                    let sec_base_z = section.coord.z * 16;
+                    section.block_entities.retain(|&local_idx, _| {
+                        let lx = ((local_idx >> 8) & 15) as i32;
+                        let ly = ((local_idx >> 4) & 15) as i32;
+                        let lz = (local_idx & 15) as i32;
+                        let wx = sec_base_x + lx;
+                        let wy = sec_base_y + ly;
+                        let wz = sec_base_z + lz;
+                        wx >= true_min.x
+                            && wx <= true_max.x
+                            && wy >= true_min.y
+                            && wy <= true_max.y
+                            && wz >= true_min.z
+                            && wz <= true_max.z
+                    });
+                }
+
+                out.push((section.coord, section));
+            }
+
+            throttler.inc();
+        }
+    }
+
+    Ok(out)
 }
