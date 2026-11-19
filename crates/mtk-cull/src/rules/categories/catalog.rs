@@ -3,14 +3,27 @@
 //! Provides static arrays and classification predicates for vanilla block categories.
 
 /// Canonical vanilla technical / invisible blocks that never emit static solid polygon models.
+const NON_MESH_PLACEHOLDER_BLOCKS: &[&str] = &[
+    "air",
+    "cave_air",
+    "void_air",
+    "structure_void",
+    "light",
+    "barrier",
+    "bubble_column",
+];
+
+/// Whether `name` (blockstate string, namespace and properties optional) is a technical block
+/// that never emits static solid polygons.
+///
+/// Allocation-free: the mesher calls this once per voxel, so the previous
+/// `to_ascii_lowercase()` allocated a `String` up to 8192 times per Section.
 pub fn is_non_mesh_placeholder_block(name: &str) -> bool {
     let clean = name.strip_prefix("minecraft:").unwrap_or(name);
     let base = clean.find('[').map_or(clean, |idx| &clean[..idx]);
-    let lower = base.to_ascii_lowercase();
-    matches!(
-        lower.as_str(),
-        "air" | "cave_air" | "void_air" | "structure_void" | "light" | "barrier" | "bubble_column"
-    )
+    NON_MESH_PLACEHOLDER_BLOCKS
+        .iter()
+        .any(|candidate| base.eq_ignore_ascii_case(candidate))
 }
 
 /// Known block names for air categories.

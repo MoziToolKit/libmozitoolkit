@@ -4,7 +4,7 @@ use mtk_cull::FaceCuller;
 
 use crate::mesher::shading::ModelSource;
 use crate::mesher::SectionMesher;
-use crate::storage::VoxelStorage;
+use crate::storage::{PaddedVoxelArray, VoxelStorage};
 use crate::types::MesherConfig;
 
 /// Incrementally rebuilds meshes only for dirty sections in a `VoxelStorage`.
@@ -26,13 +26,30 @@ impl DeltaMesher {
             return Vec::new();
         }
 
-        let mut results = Vec::with_capacity(dirty_coords.len());
+        // One edit touches up to 8 sections that share almost every blockstate, so resolve the
+        // palette once for the whole dirty set instead of once per section.
+        let padded_sections: Vec<PaddedVoxelArray> = dirty_coords
+            .iter()
+            .map(|&coord| world.get_section_padded_array(coord))
+            .collect();
+        let palette_cache = super::batch::build_palette_cache_sequential(
+            &padded_sections,
+            &mut model_provider,
+            culler,
+            config,
+        );
 
-        for coord in dirty_coords {
-            let padded = world.get_section_padded_array(coord);
+        let mut results = Vec::with_capacity(padded_sections.len());
+
+        for (&coord, padded) in dirty_coords.iter().zip(&padded_sections) {
             if !padded.is_empty {
-                let mesh =
-                    SectionMesher::mesh_section(&padded, culler, &mut model_provider, config);
+                let mesh = SectionMesher::mesh_section_with_cache(
+                    padded,
+                    culler,
+                    &mut model_provider,
+                    config,
+                    Some(&palette_cache),
+                );
                 results.push((coord, mesh));
             } else {
                 results.push((coord, MeshData::new()));

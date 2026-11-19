@@ -121,6 +121,8 @@ impl PyVoxelWorld {
             profile,
             dynamic_entity_atlases,
             dynamic_entity_slots,
+            materials_are_slots: true,
+
             views: Default::default(),
         })
     }
@@ -155,6 +157,8 @@ impl PyVoxelWorld {
             profile,
             dynamic_entity_atlases,
             dynamic_entity_slots,
+            materials_are_slots: true,
+
             views: Default::default(),
         }
     }

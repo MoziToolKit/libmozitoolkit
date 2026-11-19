@@ -3,8 +3,8 @@
 日期：2026-11-20 · 基线：`libmozitoolkit 3843e15` / `MoziToolKit de8a080`
 配套：`CODE_REVIEW_2026-11.md`、`FIX_BACKLOG.md`（已按 §4 的三分法重写）
 
-**进度**：B0（清单重划 + 资产发现/跳过门禁）与 B1（删 `mtk-bench`、`mtk-cli bench world`、
-宿主场景基准、面板双指标）已落地；§8 其余批次仍待做。
+**进度**：B0（清单重划 + 资产发现/跳过门禁）、B1（删 `mtk-bench`、`mtk-cli bench world`、
+宿主场景基准、面板双指标）与 B2（外围性能）已落地；B2 的前后实测见 §9。
 
 本轮不改代码，只做三件事：
 
@@ -460,14 +460,15 @@ blockstate/model 读取，`commands/{bench,export,model}.rs` 全走它。问题�
 - Blender 面板改为显示"原生 / 端到端"两列，或直接调场景基准；
 - 验收：同一存档连续两次输出稳定的阶段表。
 
-**B2 · 外围性能（2 天，按收益排序）**
-- biome 列预计算（`padded.rs` + `biome/color.rs`）→ 目标 `extract_padded` < 5 ms；
-- `rebuild_all` 改用 seam-filtered weld → `assemble` −6 ms；
-- `is_non_mesh_placeholder_block` 去分配 + 进 `ResolvedPaletteEntry`；
-- `DeltaMesher` 复用 palette cache；
-- Blender `ensure_world_materials` 只在槽位变化时写 `material_index`；
-- `get_world_pipeline_assets` 失败显式报错 + memo 不绑指纹；
-- 验收：§1 的端到端 226 ms → 目标 ≤ 130 ms（2.6M quads/s）。
+**B2 · 外围性能（已完成，见 §9）**
+- biome 列预采样网格（`padded.rs` + `biome/color.rs`）→ `extract_padded` 24.3 → 6.5 ms
+- `rebuild_all` 统一 seam-filtered weld → `assemble` 17.9 → 14.0 ms
+- `is_non_mesh_placeholder_block` 去分配 + 进 `ResolvedPaletteEntry`；CTM 按 blockstate 预判
+- `DeltaMesher` 复用 palette cache
+- Blender `ensure_world_materials` 增加"注入即最终槽位"快路径
+- `get_world_pipeline_assets` 改为廉价签名 memo + 缺资产告警
+- 结算：内核（mesh+assemble）70.5 → 42.0 ms（8.03M quads/s，+68%）；端到端 226 → 178 ms。
+  未达 ≤130 ms 的原因是 save I/O（~60 ms）与 Blender 注入（~38 ms）本就不在 mesher 内，见 §9.3。
 
 **B3 · 边界（2 天）**
 - `mtk-voxel` 去实体化（trait 注入，见 §5.1-A），顺带收敛 `A-04`；
@@ -493,3 +494,62 @@ blockstate/model 读取，`commands/{bench,export,model}.rs` 全走它。问题�
 
 - `tools/blender/scenario_bench.py`：真实资产 + 真实存档的场景基准（§1 数据来源）。
 - 本文件。
+
+---
+
+## 9. B2 落地实测（2026-11-20）
+
+基准命令（同一份缓存 + 同一份存档 + 同一 bounds）：
+
+```
+mtk bench world --cache ../MoziToolKit/.ci-cache/mtk_fp_58d0c7fee81ad3bf.mtkcache \
+    --save ../mtk-save-world --bounds -64,-64,-64,512,320,512 --iterations 9 --threads 8
+
+blender --background --factory-startup --python tools/blender/scenario_bench.py -- \
+    --assets ../Minecraft_Source --cache <同上> --save ../mtk-save-world \
+    --bounds -64,-64,-64,512,320,512 --iterations 5 --inject
+```
+
+### 9.1 内核（624 sections / 336,741 quads，8 线程，best of 9）
+
+| 阶段 | 之前 | 之后 | 变化 |
+|---|---:|---:|---:|
+| `extract_padded` | 24.3 ms | **6.5 ms** | −73% |
+| `parallel_meshing` | 27.1 ms | **20.8 ms** | −23% |
+| `assemble` | 17.9 ms | **14.0 ms** | −22% |
+| 合计 | 70.5 ms | **42.0 ms** | **−40%（4.77M → 8.03M quads/s）** |
+
+### 9.2 端到端（含 save 读取、Blender 注入、材质绑定，best of 5）
+
+| 阶段 | 之前 | 之后 | 变化 |
+|---|---:|---:|---:|
+| `load_region_chunks` | ~60 ms | ~59 ms | I/O，未动 |
+| `mesh_voxel_world` | ~70 ms | **~44 ms** | −37% |
+| `blender_mesh_injection` | ~35 ms | ~38 ms | 未动 |
+| `blender_material_binding`（热） | **45.6 ms** | **20.5 ms** | −55% |
+| 端到端 | **226 ms** | **178 ms** | **−21%（1.49M → 1.89M quads/s）** |
+| 材质绑定（冷启动） | 3.2 s | 3.2 s | 未动（建 shader + 载图集） |
+
+### 9.3 为什么没有到 ≤130 ms
+
+剩余 178 ms 的构成：save I/O ~59、网格 ~44、注入 ~38、材质 ~21、桥接/配置 ~16。
+其中 **97 ms 不在 mesher 里**：
+
+1. `load_region_chunks` 读的是外置卷上的真实存档，`mtk-save` 的逐块直读已在此前的批次优化过；
+   再往下要动 Anvil 并行解压（独立批次）。
+2. `blender_mesh_injection` 是把 ~70 MB 顶点/属性写进 Blender DNA 通道的固有成本；
+   要动得先削减 per-face 属性（`biome_tint_color` 64 B/face、`anim_*` 24 B/face）。
+3. `blender_material_binding` 的 20.5 ms 是热路径；3.2 s 的冷启动是建材质 + 载 18 张图集，
+   属"首次导入"体验，需要单独的懒加载/共享材质方案。
+
+### 9.4 本批新增的回归测试
+
+| 测试 | 守住什么 |
+|---|---|
+| `biome::color::tests::kernel_is_a_uniform_5x5_box` | 预采样网格只在 5×5 均匀核下有效 |
+| `biome::color::tests::grid_path_matches_the_closure_path` | 网格路径与逐点路径逐位一致 |
+| `mtk-voxel/tests/test_biome_columns.rs` | 2D / 3D section 的 `biome_data` 与参考实现完全一致，含跨段边界 clamp |
+| `world::assembly::tests::seam_only_weld_matches_a_full_weld` | 只焊接缝 == 全量 weld（位置/法线/索引/材质） |
+| `ctm::solver::tests::applies_to_state_*` | CTM 预判按 block 名 / base tile 两种键精确匹配 |
+| `test_ctm_meshing::unrelated_ctm_rules_leave_the_mesh_unchanged` | 跳过无关 CTM 不改变任何网格字节 |
+| `mtk-cli bench::tests::bounds_*` | 真实场景基准的输入校验 |

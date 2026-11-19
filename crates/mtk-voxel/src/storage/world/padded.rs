@@ -119,54 +119,90 @@ impl VoxelStorage {
 
             let is_3d = sec.biomes.as_ref().is_some_and(|b| b.varies_vertically());
 
+            // Column order is the wire order the mesher expects: (qy ->) lx -> lz.
+            // Each entry carries the y that column samples, so columns sharing a y share one
+            // 20x20 pre-sampled neighborhood instead of re-running the 5x5 kernel through
+            // `get_biome` 25 times each.
+            let mut columns: Vec<(usize, usize, i32)> = Vec::with_capacity(1024);
             if is_3d {
-                let mut biome_cols = Vec::with_capacity(1024);
                 for qy in 0..4 {
                     let sample_y = sec_wy + (qy * 4) + 2;
                     for lx in 0..16 {
-                        let wx = sec_wx + lx;
                         for lz in 0..16 {
-                            let wz = sec_wz + lz;
-                            let col = crate::biome::get_smoothed_column_biome(
-                                |bx, y, bz| self.get_biome(clamp_x(bx), y, clamp_z(bz)),
-                                wx,
-                                sample_y,
-                                wz,
-                            );
-                            biome_cols.push(col);
+                            columns.push((lx, lz, sample_y));
                         }
                     }
                 }
-                padded.biome_data = Some(biome_cols);
             } else {
-                let mut biome_cols = Vec::with_capacity(256);
                 let mid_y = sec_wy + 8;
                 for lx in 0..16 {
-                    let wx = sec_wx + lx;
                     for lz in 0..16 {
-                        let wz = sec_wz + lz;
-
-                        // Prefer block height in this column if non-air block exists, else default to mid_y
+                        // Prefer block height in this column if non-air block exists, else mid_y
                         let mut sample_y = mid_y;
                         for ly in (0..16).rev() {
-                            let state = sec.get_local_state(lx as usize, ly as usize, lz as usize);
+                            let state = sec.get_local_state(lx, ly, lz);
                             if state != "minecraft:air" && !state.starts_with("minecraft:air") {
-                                sample_y = sec_wy + ly;
+                                sample_y = sec_wy + ly as i32;
                                 break;
                             }
                         }
-
-                        let col = crate::biome::get_smoothed_column_biome(
-                            |bx, y, bz| self.get_biome(clamp_x(bx), y, clamp_z(bz)),
-                            wx,
-                            sample_y,
-                            wz,
-                        );
-                        biome_cols.push(col);
+                        columns.push((lx, lz, sample_y));
                     }
                 }
-                padded.biome_data = Some(biome_cols);
             }
+
+            let mut biome_cols: Vec<crate::biome::SmoothedBiomeColumn> =
+                vec![crate::biome::SmoothedBiomeColumn::default(); columns.len()];
+
+            // Group by sample y (stable order keeps behaviour identical for ties).
+            let mut by_y: Vec<usize> = (0..columns.len()).collect();
+            by_y.sort_by_key(|&index| columns[index].2);
+
+            // Kernel radius 2 means a 16-column section needs a 20x20 neighborhood.
+            const GRID: usize = 16 + 2 * 2;
+            let mut grid: Vec<&str> = Vec::with_capacity(GRID * GRID);
+            let mut scratch = crate::biome::BiomeTintScratch::new();
+
+            let mut group_start = 0;
+            while group_start < by_y.len() {
+                let sample_y = columns[by_y[group_start]].2;
+                let mut group_end = group_start;
+                while group_end < by_y.len() && columns[by_y[group_end]].2 == sample_y {
+                    group_end += 1;
+                }
+
+                grid.clear();
+                for gz in 0..GRID {
+                    let wz = sec_wz - 2 + gz as i32;
+                    let cz = clamp_z(wz);
+                    for gx in 0..GRID {
+                        let wx = sec_wx - 2 + gx as i32;
+                        grid.push(self.get_biome(clamp_x(wx), sample_y, cz));
+                    }
+                }
+                scratch.clear();
+
+                for &index in &by_y[group_start..group_end] {
+                    let (lx, lz, _) = columns[index];
+                    let mut sums = crate::biome::BiomeColumnSums::default();
+                    for &(dx, dz, weight) in crate::biome::BIOME_KERNEL_R2 {
+                        let gx = (lx as i32 + dx + 2) as usize;
+                        let gz = (lz as i32 + dz + 2) as usize;
+                        sums.accumulate(
+                            &mut scratch,
+                            grid[gz * GRID + gx],
+                            sec_wx + lx as i32 + dx,
+                            sec_wz + lz as i32 + dz,
+                            weight,
+                        );
+                    }
+                    biome_cols[index] = sums.finish();
+                }
+
+                group_start = group_end;
+            }
+
+            padded.biome_data = Some(biome_cols);
         }
 
         padded

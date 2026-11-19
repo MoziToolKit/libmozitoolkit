@@ -169,3 +169,45 @@ tiles=0-3
         keys
     );
 }
+
+/// The mesher now decides per blockstate whether any CTM rule can possibly match, so unrelated
+/// rules cost nothing. That shortcut must be exact: an unrelated solver has to produce a mesh
+/// identical to no solver at all.
+#[test]
+fn unrelated_ctm_rules_leave_the_mesh_unchanged() {
+    let mut world = VoxelStorage::new();
+    world.set_bounds(0, 0, 0, 16, 16, 16);
+    for x in 0..4 {
+        for z in 0..4 {
+            world.set_block(x, 1, z, "minecraft:stone", None);
+            world.set_block(x, 2, z, "minecraft:glass", None);
+        }
+    }
+
+    let padded = world.get_section_padded_array(IVec3::new(0, 0, 0));
+    let culler = FaceCuller::default();
+
+    let rule = CtmRule::parse_properties(
+        "optifine/ctm/bookshelf.properties",
+        "minecraft",
+        "matchBlocks=minecraft:bookshelf\nmethod=horizontal\ntiles=0-3\n",
+    )
+    .unwrap();
+    let config_with_ctm = MesherConfig {
+        ctm_solver: Some(Arc::new(CtmSolver::new(vec![rule]))),
+        ..Default::default()
+    };
+    let config_without_ctm = MesherConfig::default();
+
+    let with_ctm =
+        SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config_with_ctm);
+    let without_ctm =
+        SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config_without_ctm);
+
+    assert_eq!(with_ctm.positions, without_ctm.positions);
+    assert_eq!(with_ctm.normals, without_ctm.normals);
+    assert_eq!(with_ctm.uvs, without_ctm.uvs);
+    assert_eq!(with_ctm.indices, without_ctm.indices);
+    assert_eq!(with_ctm.face_materials, without_ctm.face_materials);
+    assert_eq!(with_ctm.face_tint_indices, without_ctm.face_tint_indices);
+}

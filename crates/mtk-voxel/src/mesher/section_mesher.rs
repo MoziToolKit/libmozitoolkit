@@ -4,7 +4,7 @@ use glam::IVec3;
 use mtk_core::Direction;
 use mtk_core::MeshData;
 use mtk_core::{get_block_offset, OffsetType};
-use mtk_cull::{is_non_mesh_placeholder_block, FaceCuller};
+use mtk_cull::FaceCuller;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -130,7 +130,7 @@ impl SectionMesher {
                     let state_str = &padded.palette[pal_idx];
                     if !entry.has_model
                         && !has_entity
-                        && is_non_mesh_placeholder_block(state_str)
+                        && entry.is_placeholder
                         && !meta.is_waterlogged
                     {
                         continue;
@@ -167,10 +167,7 @@ impl SectionMesher {
                     };
 
                     // Skip static solid geometry for invisible technical / placeholder blocks without explicit model or entity data
-                    if !entry.has_model
-                        && entity_data.is_none()
-                        && is_non_mesh_placeholder_block(state_str)
-                    {
+                    if !entry.has_model && entity_data.is_none() && entry.is_placeholder {
                         continue;
                     }
 
@@ -265,6 +262,7 @@ impl SectionMesher {
                                 state_str,
                                 block_pos,
                                 config,
+                                entry.ctm_active,
                                 get_padded_neighbor_state,
                             );
 
@@ -399,6 +397,7 @@ impl SectionMesher {
                                 state_str,
                                 block_pos,
                                 config,
+                                entry.ctm_active,
                                 get_padded_neighbor_state,
                             );
 

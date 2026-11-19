@@ -15,6 +15,7 @@ pub fn resolve_model_face_shading<'a, 'b, F>(
     state_str: &str,
     block_pos: IVec3,
     config: &MesherConfig,
+    ctm_active: bool,
     get_neighbor_state: F,
 ) -> ResolvedFaceShading<'a>
 where
@@ -24,7 +25,7 @@ where
     let pre_face = &mf.pre;
     let face_dir = face.direction;
 
-    if let Some(solver) = &config.ctm_solver {
+    if let Some(solver) = config.ctm_solver.as_ref().filter(|_| ctm_active) {
         let base_loc = if !face.texture.is_empty() {
             mtk_resource::ResourceLocation::parse(&face.texture).ok()
         } else {
@@ -148,12 +149,13 @@ pub fn resolve_unit_cube_face_shading<'a, 'b, F>(
     state_str: &str,
     block_pos: IVec3,
     config: &MesherConfig,
+    ctm_active: bool,
     get_neighbor_state: F,
 ) -> ResolvedFaceShading<'a>
 where
     F: Fn(IVec3) -> Option<&'b str>,
 {
-    if let Some(solver) = &config.ctm_solver {
+    if let Some(solver) = config.ctm_solver.as_ref().filter(|_| ctm_active) {
         let block_name = mtk_resource::extract_block_name(state_str);
         let clean_block = block_name.strip_prefix("minecraft:").unwrap_or(block_name);
         let mut path = String::with_capacity(6 + clean_block.len());

@@ -102,10 +102,10 @@ Commands:
 | 子命令 | 参数 | 说明 |
 | :--- | :--- | :--- |
 | `model` | `-j, --jar <JAR>` (原版 JAR 文件) | 扫描并对全量原版 BlockState 进行多线程并发模型烘焙压测，测算 TPS 与耗时 |
-| `world` | `--cache <MTKCACHE>`<br>`--save <DIR>`<br>`--dimension <ID>` (默认 `overworld`)<br>`--bounds <MIN_MAX>` (默认 `-64,-64,-64,512,320,512`)<br>`--iterations <N>` (默认 3)<br>`--threads <N>`<br>`--no-ctm`<br>`--json` | **真实场景基准**：打开真实 `.mtkcache`，从真实存档加载选区，跑完整管线（`extract_padded` → 模型/图集/CTM/biome 网格化 → weld 合并），逐阶段输出毫秒与 quads/s |
+| `world` | `--cache <MTKCACHE>`<br>`--save <DIR>`<br>`--dimension <ID>` (默认 `overworld`)<br>`--bounds <MIN_MAX>` (默认 `-64,-64,-64,512,320,512`)<br>`--iterations <N>` (默认 3)<br>`--threads <N>`<br>`--no-ctm`<br>`--no-weld`<br>`--json` | **真实场景基准**：打开真实 `.mtkcache`，从真实存档加载选区，跑完整管线（`extract_padded` → 模型/图集/CTM/biome 网格化 → weld 合并），逐阶段输出毫秒与 quads/s |
 
 `bench world` 拒绝在"没有模型库"的缓存上运行（那测的是回退立方体路径，不是用户看到的世界）。
-同一份缓存 + 存档 + bounds 才能比较两次结果；`--no-ctm` 用于把 CTM 的逐面成本单独量出来。
+同一份缓存 + 存档 + bounds 才能比较两次结果；`--no-ctm` / `--no-weld` 用于把 CTM 与焊接的逐阶段成本单独量出来。
 宿主侧（Blender 注入 + 材质绑定）用 `tools/blender/scenario_bench.py`。
 
 ---

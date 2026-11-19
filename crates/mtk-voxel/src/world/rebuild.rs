@@ -130,7 +130,7 @@ impl VoxelWorld {
         }
 
         profiler.measure("assemble", "mesh", |p| {
-            self.assemble_world_mesh(true, Some(p));
+            self.assemble_world_mesh(Some(p));
         });
         self.storage.clear_dirty_sections();
 
@@ -183,7 +183,7 @@ impl VoxelWorld {
         });
 
         profiler.measure("assemble", "mesh", |p| {
-            self.assemble_world_mesh(false, Some(p));
+            self.assemble_world_mesh(Some(p));
         });
 
         self.last_profile = Some(profiler.finish());
@@ -231,7 +231,7 @@ impl VoxelWorld {
         });
 
         profiler.measure("assemble", "mesh", |p| {
-            self.assemble_world_mesh(false, Some(p));
+            self.assemble_world_mesh(Some(p));
         });
 
         self.last_profile = Some(profiler.finish());

@@ -4,6 +4,7 @@ use glam::IVec3;
 use mtk_core::MeshData;
 use mtk_core::{ProgressCallback, ProgressThrottler};
 use mtk_cull::FaceCuller;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::mesher::palette_entry::ResolvedPaletteEntry;
@@ -24,40 +25,8 @@ impl SectionMesher {
     where
         F: Fn(&str) -> ModelSource<'a> + Sync + Send,
     {
-        // 1. Collect all distinct blockstates across all sections
-        let mut unique_states: std::collections::HashSet<&str> = std::collections::HashSet::new();
-        for sec in sections {
-            if !sec.is_empty {
-                for st in &sec.palette {
-                    unique_states.insert(st.as_str());
-                }
-            }
-        }
-
-        // 2. Pre-resolve PaletteMeshingData once per unique blockstate across the thread pool
-        #[cfg(feature = "parallel")]
-        let palette_cache: std::collections::HashMap<&str, Arc<ResolvedPaletteEntry>> = {
-            use rayon::prelude::*;
-            unique_states
-                .par_iter()
-                .map(|&st| {
-                    let source = model_provider(st);
-                    let entry = ResolvedPaletteEntry::resolve(st, &source, culler, config);
-                    (st, Arc::new(entry))
-                })
-                .collect()
-        };
-
-        #[cfg(not(feature = "parallel"))]
-        let palette_cache: std::collections::HashMap<&str, Arc<ResolvedPaletteEntry>> =
-            unique_states
-                .iter()
-                .map(|&st| {
-                    let source = model_provider(st);
-                    let entry = ResolvedPaletteEntry::resolve(st, &source, culler, config);
-                    (st, Arc::new(entry))
-                })
-                .collect();
+        // Pre-resolve PaletteMeshingData once per unique blockstate across the thread pool.
+        let palette_cache = build_palette_cache(sections, &model_provider, culler, config);
 
         let throttler = ProgressThrottler::new("meshing_sections", sections.len(), progress)
             .with_prefix("Meshing chunk");
@@ -127,4 +96,81 @@ impl SectionMesher {
         })
         .map_err(VoxelError::ThreadPoolError)?
     }
+}
+
+/// Distinct blockstates carried by the non-empty `sections`.
+fn collect_unique_states<'s>(
+    sections: &'s [PaddedVoxelArray],
+) -> std::collections::HashSet<&'s str> {
+    let mut unique_states: std::collections::HashSet<&'s str> = std::collections::HashSet::new();
+    for sec in sections {
+        if !sec.is_empty {
+            for st in &sec.palette {
+                unique_states.insert(st.as_str());
+            }
+        }
+    }
+    unique_states
+}
+
+/// Resolves every distinct blockstate of `sections` once, across the thread pool.
+///
+/// Shared by the batch mesher: resolving a palette entry walks texture candidates and material
+/// aliases, so a per-section resolution made an N-section pass pay N times for the same
+/// blockstates.
+pub(crate) fn build_palette_cache<'s, 'm, F>(
+    sections: &'s [PaddedVoxelArray],
+    model_provider: &F,
+    culler: &FaceCuller,
+    config: &MesherConfig,
+) -> HashMap<&'s str, Arc<ResolvedPaletteEntry>>
+where
+    F: Fn(&str) -> ModelSource<'m> + Sync + Send,
+{
+    let unique_states = collect_unique_states(sections);
+
+    #[cfg(feature = "parallel")]
+    {
+        use rayon::prelude::*;
+        unique_states
+            .par_iter()
+            .map(|&st| {
+                let source = model_provider(st);
+                let entry = ResolvedPaletteEntry::resolve(st, &source, culler, config);
+                (st, Arc::new(entry))
+            })
+            .collect()
+    }
+
+    #[cfg(not(feature = "parallel"))]
+    {
+        unique_states
+            .iter()
+            .map(|&st| {
+                let source = model_provider(st);
+                let entry = ResolvedPaletteEntry::resolve(st, &source, culler, config);
+                (st, Arc::new(entry))
+            })
+            .collect()
+    }
+}
+
+/// Sequential variant for callers whose model lookup is `FnMut` (the delta mesher).
+pub(crate) fn build_palette_cache_sequential<'s, 'm, F>(
+    sections: &'s [PaddedVoxelArray],
+    model_provider: &mut F,
+    culler: &FaceCuller,
+    config: &MesherConfig,
+) -> HashMap<&'s str, Arc<ResolvedPaletteEntry>>
+where
+    F: FnMut(&str) -> ModelSource<'m>,
+{
+    collect_unique_states(sections)
+        .into_iter()
+        .map(|st| {
+            let source = model_provider(st);
+            let entry = ResolvedPaletteEntry::resolve(st, &source, culler, config);
+            (st, Arc::new(entry))
+        })
+        .collect()
 }

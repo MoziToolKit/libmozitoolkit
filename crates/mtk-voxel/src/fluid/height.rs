@@ -105,7 +105,7 @@ pub(crate) fn get_fluid_base_height(state_str: &str) -> f32 {
 /// - Returns own height in `(0..1)` if same fluid or waterlogged.
 /// - Returns `-1.0` if solid opaque block (JMC2OBJ boundary preservation, excluded from averaging).
 /// - Returns `0.0` if air or non-solid / non-fluid block.
-pub(crate) fn sample_fluid_height<F>(
+pub(crate) fn sample_fluid_height<'a, F>(
     mut get_state: F,
     x: i32,
     y: i32,
@@ -113,21 +113,21 @@ pub(crate) fn sample_fluid_height<F>(
     fluid_type: FluidType,
 ) -> f32
 where
-    F: FnMut(i32, i32, i32) -> String,
+    F: FnMut(i32, i32, i32) -> &'a str,
 {
     let state_str = get_state(x, y, z);
     if state_str.is_empty() || state_str == "minecraft:air" || state_str == "air" {
         return 0.0;
     }
 
-    let (f_type, is_waterlogged, level) = parse_fluid_info(&state_str);
+    let (f_type, is_waterlogged, level) = parse_fluid_info(state_str);
     let is_fluid_match = f_type == Some(fluid_type);
 
     if is_fluid_match {
         // Check if block directly above is also the same fluid / waterlogged
         let above_state = get_state(x, y + 1, z);
         if !above_state.is_empty() && above_state != "minecraft:air" {
-            let (a_type, _, _) = parse_fluid_info(&above_state);
+            let (a_type, _, _) = parse_fluid_info(above_state);
             if a_type == Some(fluid_type) {
                 return 1.0;
             }
@@ -149,7 +149,7 @@ where
             return 0.0;
         }
 
-        let clean = state_str.strip_prefix("minecraft:").unwrap_or(&state_str);
+        let clean = state_str.strip_prefix("minecraft:").unwrap_or(state_str);
         let name = match clean.find('[') {
             Some(idx) => &clean[..idx],
             None => clean,
@@ -249,7 +249,7 @@ pub(crate) fn calculate_corner_average(
 
 /// Computes 4 corner heights `(c_NW, c_NE, c_SE, c_SW)` in `[0..1]` for the fluid block at `(x, y, z)`.
 /// North is -Z, South is +Z, West is -X, East is +X.
-pub(crate) fn calculate_fluid_corner_heights<F>(
+pub(crate) fn calculate_fluid_corner_heights<'a, F>(
     mut get_state: F,
     x: i32,
     y: i32,
@@ -257,19 +257,19 @@ pub(crate) fn calculate_fluid_corner_heights<F>(
     fluid_type: FluidType,
 ) -> (f32, f32, f32, f32)
 where
-    F: FnMut(i32, i32, i32) -> String,
+    F: FnMut(i32, i32, i32) -> &'a str,
 {
     // Submerged check
     let above_state = get_state(x, y + 1, z);
     if !above_state.is_empty() && above_state != "minecraft:air" {
-        let (a_type, _, _) = parse_fluid_info(&above_state);
+        let (a_type, _, _) = parse_fluid_info(above_state);
         if a_type == Some(fluid_type) {
             return (1.0, 1.0, 1.0, 1.0);
         }
     }
 
     let state_str = get_state(x, y, z);
-    let (_, is_waterlogged, level) = parse_fluid_info(&state_str);
+    let (_, is_waterlogged, level) = parse_fluid_info(state_str);
     let is_source = is_waterlogged || (!state_str.contains("flowing_") && level == 0);
 
     let h_center = sample_fluid_height(&mut get_state, x, y, z, fluid_type);
@@ -292,7 +292,7 @@ where
 }
 
 /// Calculates horizontal flow direction vector `(vx, vz)` and UV rotation angle in radians.
-pub(crate) fn calculate_fluid_flow_vector<F>(
+pub(crate) fn calculate_fluid_flow_vector<'a, F>(
     mut get_state: F,
     x: i32,
     y: i32,
@@ -301,7 +301,7 @@ pub(crate) fn calculate_fluid_flow_vector<F>(
     own_height: f32,
 ) -> (f32, f32, f32)
 where
-    F: FnMut(i32, i32, i32) -> String,
+    F: FnMut(i32, i32, i32) -> &'a str,
 {
     let mut vx = 0.0f32;
     let mut vz = 0.0f32;
@@ -315,7 +315,7 @@ where
             // Check block below
             let below_state = get_state(nx, y - 1, nz);
             if !below_state.is_empty() && below_state != "minecraft:air" {
-                let (b_name, b_props) = parse_block_name_and_props(&below_state);
+                let (b_name, b_props) = parse_block_name_and_props(below_state);
                 let b_clean = b_name.strip_prefix("minecraft:").unwrap_or(&b_name);
                 let b_waterlogged = b_props.get("waterlogged").map(|v| v.as_str()) == Some("true");
                 let b_clean = b_clean.strip_prefix("flowing_").unwrap_or(b_clean);
@@ -323,14 +323,14 @@ where
                 if (b_clean == fluid_type.name_str())
                     || (fluid_type == FluidType::Water && b_waterlogged)
                 {
-                    let b_h = get_fluid_base_height(&below_state);
+                    let b_h = get_fluid_base_height(below_state);
                     let diff = own_height - (b_h - MAX_FLUID_HEIGHT);
                     vx += dx as f32 * diff;
                     vz += dz as f32 * diff;
                 }
             }
         } else {
-            let (n_name, n_props) = parse_block_name_and_props(&n_state);
+            let (n_name, n_props) = parse_block_name_and_props(n_state);
             let n_clean = n_name.strip_prefix("minecraft:").unwrap_or(&n_name);
             let n_waterlogged = n_props.get("waterlogged").map(|v| v.as_str()) == Some("true");
             let n_clean = n_clean.strip_prefix("flowing_").unwrap_or(n_clean);
@@ -338,7 +338,7 @@ where
             if (n_clean == fluid_type.name_str())
                 || (fluid_type == FluidType::Water && n_waterlogged)
             {
-                let n_h = get_fluid_base_height(&n_state);
+                let n_h = get_fluid_base_height(n_state);
                 let diff = own_height - n_h;
                 if diff.abs() > 1e-4 {
                     vx += dx as f32 * diff;
@@ -391,11 +391,11 @@ mod tests {
 
     #[test]
     fn test_fluid_corner_height_calculation() {
-        let get_state = |x: i32, y: i32, z: i32| -> String {
+        let get_state = |x: i32, y: i32, z: i32| -> &'static str {
             if x == 0 && y == 64 && z == 0 {
-                "minecraft:water".to_string()
+                "minecraft:water"
             } else {
-                "minecraft:air".to_string()
+                "minecraft:air"
             }
         };
 

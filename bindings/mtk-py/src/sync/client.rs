@@ -61,6 +61,8 @@ impl PyLiveSyncSession {
             profile,
             dynamic_entity_atlases,
             dynamic_entity_slots,
+            materials_are_slots: true,
+
             views: Default::default(),
         }
     }
@@ -229,6 +231,8 @@ impl PyLiveSyncSession {
                         profile,
                         dynamic_entity_atlases: dyn_atlases,
                         dynamic_entity_slots: dyn_slots,
+                        materials_are_slots: true,
+
                         views: Default::default(),
                     };
                     dict.set_item("mesh", py_mesh)?;

@@ -157,6 +157,35 @@ impl CtmSolver {
         }
     }
 
+    /// Whether any rule can match `state`, by block name or by the base tile the mesher derives
+    /// from it.
+    ///
+    /// Exact by construction: [`Self::resolve_face`] only looks up these two keys, so `false`
+    /// means it would return `None` and the caller's pre-resolved fallback would be used
+    /// unchanged. The voxel mesher resolves this once per blockstate instead of paying a
+    /// `ResourceLocation` + `String` allocation on every one of millions of faces.
+    pub fn applies_to_state(&self, state: &str) -> bool {
+        if self.rules.is_empty() {
+            return false;
+        }
+        let block_name = extract_block_name(state);
+        if block_name.contains(':') {
+            if self.rules_by_block.contains_key(block_name) {
+                return true;
+            }
+        } else {
+            let canonical = format!("{}:{}", DEFAULT_NAMESPACE, block_name);
+            if self.rules_by_block.contains_key(&canonical) {
+                return true;
+            }
+        }
+
+        // Mirror the base tile the mesher builds in `resolve_unit_cube_face_shading`.
+        let clean_block = block_name.strip_prefix("minecraft:").unwrap_or(block_name);
+        let base_tile = ResourceLocation::new("minecraft", format!("block/{clean_block}"));
+        self.rules_by_tile.contains_key(&base_tile)
+    }
+
     /// Resolves the final CTM tile for a block face given its state, orientation, position, and neighbor query closure.
     /// Uses canonical face tangents.
     pub fn resolve_face<F, S>(
@@ -251,5 +280,44 @@ impl CtmSolver {
     pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
         let rules: Vec<CtmRule> = serde_json::from_str(json)?;
         Ok(Self::new(rules))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn solver(properties: &str) -> CtmSolver {
+        let rule =
+            CtmRule::parse_properties("optifine/ctm/test.properties", "minecraft", properties)
+                .expect("rule must parse");
+        CtmSolver::new(vec![rule])
+    }
+
+    #[test]
+    fn applies_to_state_matches_block_rules_with_and_without_properties() {
+        let solver = solver("matchBlocks=minecraft:bookshelf\nmethod=horizontal\ntiles=0-3\n");
+        assert!(solver.applies_to_state("minecraft:bookshelf"));
+        assert!(solver.applies_to_state("minecraft:bookshelf[waterlogged=false]"));
+        // Un-namespaced states canonicalize exactly like `resolve_face` does.
+        assert!(solver.applies_to_state("bookshelf"));
+        assert!(!solver.applies_to_state("minecraft:stone"));
+        assert!(!solver.applies_to_state("minecraft:oak_bookshelf"));
+    }
+
+    #[test]
+    fn applies_to_state_matches_tile_rules_through_the_mesher_base_tile() {
+        let solver = solver("matchTiles=glass\nmethod=full\ntiles=0-46\n");
+        assert!(solver.applies_to_state("minecraft:glass"));
+        assert!(!solver.applies_to_state("minecraft:black_stained_glass"));
+        // The mesher derives `block/<clean block id>`, not the real texture of every model, so a
+        // rule keyed on a model's own texture must not be reported as matching here...
+        assert!(!solver.applies_to_state("minecraft:oak_door"));
+    }
+
+    #[test]
+    fn empty_solver_never_applies() {
+        let solver = CtmSolver::new(Vec::new());
+        assert!(!solver.applies_to_state("minecraft:glass"));
     }
 }

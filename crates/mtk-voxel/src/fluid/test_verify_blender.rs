@@ -113,12 +113,12 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
             tc.own_height
         );
 
-        let get_state = |x: i32, y: i32, z: i32| -> String {
+        let get_state = |x: i32, y: i32, z: i32| -> &str {
             let key = format!("{},{},{}", x, y, z);
             tc.block_map
                 .get(&key)
-                .cloned()
-                .unwrap_or_else(|| "minecraft:air".to_string())
+                .map(|s| s.as_str())
+                .unwrap_or("minecraft:air")
         };
 
         let (c_nw, c_ne, c_se, c_sw) =

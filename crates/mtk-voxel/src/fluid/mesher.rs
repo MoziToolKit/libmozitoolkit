@@ -12,7 +12,7 @@ use crate::types::MesherConfig;
 pub(crate) use super::height::*;
 
 /// Emits complete fluid geometry (top, bottom, and 4 sides) for a block into `MeshData`.
-pub(crate) fn emit_fluid_geometry<F>(
+pub(crate) fn emit_fluid_geometry<'a, F>(
     mesh: &mut MeshData,
     x: i32,
     y: i32,
@@ -29,7 +29,7 @@ pub(crate) fn emit_fluid_geometry<F>(
     tint_color: Option<[f32; 4]>,
 ) -> usize
 where
-    F: FnMut(i32, i32, i32) -> String,
+    F: FnMut(i32, i32, i32) -> &'a str,
 {
     let (_, props) = parse_block_name_and_props(state_str);
     let is_waterlogged = props.get("waterlogged").map(|v| v.as_str()) == Some("true");
@@ -294,7 +294,7 @@ where
     // 1. TOP FACE (UP)
     let up_state = get_state(x, y + 1, z);
     let up_meta = if !up_state.is_empty() && up_state != "minecraft:air" {
-        Some(culler.get_meta(&up_state, None, None))
+        Some(culler.get_meta(up_state, None, None))
     } else {
         None
     };
@@ -318,7 +318,7 @@ where
     // 2. BOTTOM FACE (DOWN)
     let down_state = get_state(x, y - 1, z);
     let down_meta = if !down_state.is_empty() && down_state != "minecraft:air" {
-        Some(culler.get_meta(&down_state, None, None))
+        Some(culler.get_meta(down_state, None, None))
     } else {
         None
     };
@@ -343,7 +343,7 @@ where
     // North (-Z)
     let n_state = get_state(x, y, z - 1);
     let n_meta = if !n_state.is_empty() && n_state != "minecraft:air" {
-        Some(culler.get_meta(&n_state, None, None))
+        Some(culler.get_meta(n_state, None, None))
     } else {
         None
     };
@@ -370,7 +370,7 @@ where
     // South (+Z)
     let s_state = get_state(x, y, z + 1);
     let s_meta = if !s_state.is_empty() && s_state != "minecraft:air" {
-        Some(culler.get_meta(&s_state, None, None))
+        Some(culler.get_meta(s_state, None, None))
     } else {
         None
     };
@@ -392,7 +392,7 @@ where
     // West (-X)
     let w_state = get_state(x - 1, y, z);
     let w_meta = if !w_state.is_empty() && w_state != "minecraft:air" {
-        Some(culler.get_meta(&w_state, None, None))
+        Some(culler.get_meta(w_state, None, None))
     } else {
         None
     };
@@ -419,7 +419,7 @@ where
     // East (+X)
     let e_state = get_state(x + 1, y, z);
     let e_meta = if !e_state.is_empty() && e_state != "minecraft:air" {
-        Some(culler.get_meta(&e_state, None, None))
+        Some(culler.get_meta(e_state, None, None))
     } else {
         None
     };

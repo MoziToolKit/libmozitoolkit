@@ -17,34 +17,38 @@ impl VoxelWorld {
     pub(crate) fn section_seam_predicate(&self, tolerance: f32) -> impl Fn([i32; 3]) -> bool + '_ {
         const SECTION_STRIDE: f32 = mtk_core::constants::voxel::SECTION_SIZE as f32;
         let inv = 1.0 / tolerance;
-        let stride = (SECTION_STRIDE * inv).round() as i64;
+        // 32-bit on purpose: this runs once per vertex of the whole world and 64-bit `idiv` is
+        // ~2-3x slower. Positions are world block coordinates, so the quantized key always fits.
+        let stride = (SECTION_STRIDE * inv).round() as i32;
         // `transform_position` is `R(pos) + offset`; because `R` only permutes axes, Section
         // boundary planes (world coordinate multiples of 16) land on `offset` modulo 16.
         let offset = self.config.transform_position(glam::Vec3::ZERO);
         let phases = [
-            (offset.x * inv).round() as i64,
-            (offset.y * inv).round() as i64,
-            (offset.z * inv).round() as i64,
+            (offset.x * inv).round() as i32,
+            (offset.y * inv).round() as i32,
+            (offset.z * inv).round() as i32,
         ];
         move |key: [i32; 3]| {
             if stride < 4 {
                 return true;
             }
             key.iter().zip(phases.iter()).any(|(&k, &phase)| {
-                let delta = (k as i64 - phase).rem_euclid(stride);
+                let delta = (k.wrapping_sub(phase)).rem_euclid(stride);
                 delta <= 1 || stride - delta <= 1
             })
         }
     }
 
     /// Re-assembles and welds the unified world mesh from the current section cache without cloning.
-    /// Incremental mode (`full_weld = false`) keeps the fast path by welding only Section seam
-    /// vertices, since each Section mesh is already internally welded by `SectionMesher`. Global
-    /// rebuilds (`rebuild_all`) perform a full spatial weld. Stage timings are recorded when a
-    /// profiler is supplied.
+    ///
+    /// Only Section seam vertices are hashed: `SectionMesher` already welds every Section
+    /// internally (grid pool for unit cubes, `weld_vertices` for model geometry), so the only
+    /// vertices that can coincide across Sections are the ones lying on a Section boundary plane.
+    /// A full spatial weld produced the same output for strictly more work, and is what made a
+    /// cold `rebuild_all` spend ~20% of its time in assembly.
+    /// Stage timings are recorded when a profiler is supplied.
     pub(crate) fn assemble_world_mesh(
         &mut self,
-        full_weld: bool,
         mut profiler: Option<&mut mtk_core::ExecutionProfiler>,
     ) {
         let meshes: Vec<&MeshData> = match profiler.as_deref_mut() {
@@ -61,8 +65,6 @@ impl VoxelWorld {
         let merge = || {
             if !weld {
                 MeshData::merge_all_refs(&meshes)
-            } else if full_weld {
-                MeshData::merge_welded_sections(&meshes, 1e-4)
             } else {
                 let seam = self.section_seam_predicate(1e-4);
                 MeshData::merge_welded_sections_filtered(&meshes, 1e-4, seam)
@@ -148,6 +150,66 @@ mod tests {
         prune_static_animation_attributes(&mut merged);
         assert!(merged.get_custom_attribute(ATTR_ANIM_TIMING).is_some());
         assert!(merged.get_custom_attribute(ATTR_ANIM_FRAME_SIZE).is_some());
+    }
+
+    /// The incremental path only welds Section seam vertices. `rebuild_all` used to do a full
+    /// spatial weld of the whole world; this proves the cheap path produces the same mesh, which
+    /// is what lets both paths share one implementation.
+    #[test]
+    fn seam_only_weld_matches_a_full_weld() {
+        use crate::mesher::SectionMesher;
+        use crate::storage::VoxelStorage;
+        use crate::types::MesherConfig;
+        use mtk_cull::FaceCuller;
+
+        let mut storage = VoxelStorage::new();
+        storage.set_bounds(0, 0, 0, 32, 16, 16);
+        for x in 0..32 {
+            for y in 0..16 {
+                for z in 0..16 {
+                    // Stone meets glass at x = 16: neither side culls the shared plane, so both
+                    // Sections emit coincident vertices there and the weld must merge them.
+                    let state = if x < 16 {
+                        "minecraft:stone"
+                    } else {
+                        "minecraft:glass"
+                    };
+                    storage.set_block(x, y, z, state, None);
+                }
+            }
+        }
+
+        let config = MesherConfig::default();
+        let culler = FaceCuller::default();
+        let sections: Vec<mtk_core::MeshData> = storage
+            .get_all_non_empty_sections()
+            .into_iter()
+            .map(|coord| {
+                let padded = storage.get_section_padded_array(coord);
+                SectionMesher::mesh_section(
+                    &padded,
+                    &culler,
+                    |_| crate::mesher::ModelSource::None,
+                    &config,
+                )
+            })
+            .collect();
+        assert!(sections.len() >= 2, "need two meshed sections");
+        let refs: Vec<&mtk_core::MeshData> = sections.iter().collect();
+
+        let world = VoxelWorld::from_storage(storage, Some(config), None, None);
+        let seam = world.section_seam_predicate(1e-4);
+        let full = mtk_core::MeshData::merge_welded_sections(&refs, 1e-4);
+        let filtered = mtk_core::MeshData::merge_welded_sections_filtered(&refs, 1e-4, seam);
+
+        assert!(
+            full.positions.len() < refs.iter().map(|m| m.positions.len()).sum(),
+            "the seam must actually weld something for this test to mean anything"
+        );
+        assert_eq!(full.positions, filtered.positions);
+        assert_eq!(full.normals, filtered.normals);
+        assert_eq!(full.indices, filtered.indices);
+        assert_eq!(full.face_materials, filtered.face_materials);
     }
 
     #[test]

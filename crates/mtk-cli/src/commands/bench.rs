@@ -62,6 +62,10 @@ pub struct BenchWorldArgs {
     #[arg(long)]
     pub no_ctm: bool,
 
+    /// Disable vertex welding (section pool + seam merge), to attribute its cost
+    #[arg(long)]
+    pub no_weld: bool,
+
     /// Emit machine-readable JSON instead of the table
     #[arg(long)]
     pub json: bool,
@@ -395,7 +399,7 @@ fn run_bench_world(args: BenchWorldArgs) -> Result<(), Box<dyn std::error::Error
     let mut config = MesherConfig {
         enable_ao: true,
         mesh_fluids: true,
-        weld_vertices: true,
+        weld_vertices: !args.no_weld,
         origin_centered: true,
         ctm_solver: ctm_solver.map(Arc::new),
         atlas_address_map: atlas.map(Arc::new),
@@ -477,7 +481,12 @@ fn run_bench_world(args: BenchWorldArgs) -> Result<(), Box<dyn std::error::Error
         " best       : {:.1} ms -> {:.0} quads/s ({})",
         best_ms,
         best_quads as f64 / (best_ms / 1000.0),
-        if args.no_ctm { "no CTM" } else { "CTM on" }
+        match (args.no_ctm, args.no_weld) {
+            (true, true) => "no CTM, no weld",
+            (true, false) => "no CTM",
+            (false, true) => "no weld",
+            (false, false) => "CTM on",
+        }
     );
     println!(
         " note       : 'best' excludes save I/O ({:.1} ms) and host injection.",

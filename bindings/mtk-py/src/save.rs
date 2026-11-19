@@ -275,6 +275,8 @@ pub fn load_and_mesh_minecraft_save(
             profile: Some(final_profile),
             dynamic_entity_atlases,
             dynamic_entity_slots,
+            materials_are_slots: true,
+
             views: Default::default(),
         },
         PyLevelData {

@@ -1,8 +1,9 @@
 //! Pre-resolved entry bundling all per-blockstate meshing metadata, model sources, and culling data.
 
 use mtk_core::{determine_block_offset_type, OffsetType};
-use mtk_cull::{BlockCullMeta, FaceCuller};
+use mtk_cull::{is_non_mesh_placeholder_block, BlockCullMeta, FaceCuller};
 use mtk_model::{is_block_emissive, BlockState};
+use mtk_resource::{CtmSolver, ResourceLocation};
 use std::sync::Arc;
 
 use crate::mesher::shading::types::ModelFaceBuckets;
@@ -78,14 +79,16 @@ pub(crate) fn emit_fluid_at(
     config: &MesherConfig,
     collector: &mut super::collector::FaceAttributesCollector,
 ) {
-    let get_state = |nx: i32, ny: i32, nz: i32| -> String {
+    // Borrowed, not owned: this runs for every neighbor probe of every fluid face, and the
+    // owned version allocated a `String` per probe.
+    let get_state = |nx: i32, ny: i32, nz: i32| -> &str {
         let n_px = (nx - block_pos.x + px as i32) as usize;
         let n_py = (ny - block_pos.y + py as i32) as usize;
         let n_pz = (nz - block_pos.z + pz as i32) as usize;
         if n_px < 18 && n_py < 18 && n_pz < 18 {
-            padded.get_padded_state(n_px, n_py, n_pz).to_string()
+            padded.get_padded_state(n_px, n_py, n_pz)
         } else {
-            "minecraft:air".to_string()
+            "minecraft:air"
         }
     };
 
@@ -127,10 +130,55 @@ pub(crate) fn emit_fluid_at(
 #[derive(Clone)]
 pub(crate) struct ResolvedPaletteEntry {
     pub has_model: bool,
+    /// Technical block that never emits solid static geometry (air, light, barrier, ...).
+    /// Precomputed because the mesher asked twice per voxel.
+    pub is_placeholder: bool,
+    /// Whether any CTM rule can match this blockstate. Precomputed because the per-face CTM
+    /// probe allocated a `ResourceLocation` and two `String`s for every face in the world.
+    pub ctm_active: bool,
     pub meta: Arc<BlockCullMeta>,
     pub is_emissive: bool,
     pub offset_type: OffsetType,
     pub meshing_data: Arc<PaletteMeshingData>,
+}
+
+/// Whether any CTM rule can match this blockstate, for either the unit-cube or the model path.
+///
+/// Exact by construction (see `CtmSolver::applies_to_state`): the unit-cube path looks up
+/// `block/<name>`, while a model face is resolved against its own texture, which need not be
+/// derived from the block id (`oak_door` uses `block/oak_door_top`). Returning `false` therefore
+/// only happens when `resolve_*_face_shading` would have fallen back to the pre-resolved face.
+fn ctm_active_for_entry(
+    solver: &CtmSolver,
+    state: &str,
+    meshing_data: &PaletteMeshingData,
+) -> bool {
+    if solver.applies_to_state(state) {
+        return true;
+    }
+    let tile_matches = |texture: &str| -> bool {
+        ResourceLocation::parse(texture)
+            .ok()
+            .is_some_and(|loc| solver.rules_by_tile.contains_key(&loc))
+    };
+    let bucket_matches =
+        |culled: &[Vec<PreResolvedModelFace>; 6], unculled: &Vec<PreResolvedModelFace>| -> bool {
+            culled
+                .iter()
+                .flatten()
+                .any(|mf| tile_matches(&mf.face.texture))
+                || unculled.iter().any(|mf| tile_matches(&mf.face.texture))
+        };
+    match meshing_data {
+        PaletteMeshingData::Model {
+            culled_faces,
+            unculled_faces,
+        } => bucket_matches(culled_faces, unculled_faces),
+        PaletteMeshingData::VariantModel { variants, .. } => variants
+            .iter()
+            .any(|b| bucket_matches(&b.culled_faces, &b.unculled_faces)),
+        PaletteMeshingData::UnitCube { .. } | PaletteMeshingData::Empty => false,
+    }
 }
 
 impl ResolvedPaletteEntry {
@@ -172,6 +220,11 @@ impl ResolvedPaletteEntry {
 
         Self {
             has_model: !source.is_none(),
+            is_placeholder: is_non_mesh_placeholder_block(st),
+            ctm_active: config
+                .ctm_solver
+                .as_ref()
+                .is_some_and(|solver| ctm_active_for_entry(solver, st, &meshing_data)),
             meta,
             is_emissive,
             offset_type,
