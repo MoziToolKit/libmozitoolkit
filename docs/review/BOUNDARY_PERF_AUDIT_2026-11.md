@@ -628,3 +628,41 @@ B2 之后端到端还停在 178 ms，其中约 97 ms 在 mesher 之外。本轮�
 - **属性瘦身**：实测总收益 2.2 ms，不做（见 10.1 的修正）。
 - **材质冷启动 3.2 s → 279 ms 观察到的差异**来自缓存命中（图集 PNG 已在 Blender 里），
   不是代码路径变化；真正的首次成本仍未优化，需要图集纹理懒加载/跨会话复用。
+
+### 10.5 回归：并行加载把真实宿主卡死（GIL 死锁）
+
+**现象**：B2b 提交后，在真实 Blender 里导入存档立即整体卡死（不是变慢，是进程无响应、无输出）。
+
+**根因**（与多线程本身无关）：
+
+```
+Python 后台线程（AsyncTask）
+  └─ mtk.load_and_mesh_minecraft_save(...)        ← 持有 GIL，未 detach
+       └─ rayon par_iter（P2 新增）
+            └─ ProgressThrottler::inc()
+                 └─ 进度回调 → Python::attach()   ← 在 rayon worker 上申请 GIL
+```
+
+`bindings/mtk-py/src/save.rs` 在加载阶段**没有** `py.detach`（网格阶段有）。改动前加载是单线程，
+回调在同一条线程上重入 GIL 是允许的；改成 rayon 并行后，worker 申请 GIL，而持有 GIL 的宿主线程
+正阻塞在 `par_iter().collect()` 里等 worker —— 互等，整进程冻结。
+
+**为什么测试没抓到**：`test_save_bridge.py::test_bounded_mesh_save_with_progress` 用的是
+2×2 chunk 的小选区，rayon 会直接在调用线程上跑完，不会真正派发到线程池；只有真实导入
+（1296 chunk）才会踩到。
+
+**修法**：
+
+1. `save.rs` 的 `load_region_chunks` 包进 `py.detach`（与网格阶段一致）。
+2. 新加载器**不再从 worker 调用宿主回调**：进度在合并完成后由调用线程 `inc_by(total_chunks)`
+   报一次（该阶段现在 ~20 ms，一次 100% 是诚实的）。网格阶段仍由 worker 报进度，但它在
+   `py.detach` 内，且宿主的回调本身就是线程安全的队列投递。
+3. 守卫测试 `progress_callback_runs_on_the_calling_thread`：用 576×384×576 的选区（足以
+   迫使 rayon 真正并行）断言回调的 `ThreadId` 始终等于调用线程。**已验证它在旧实现上失败**
+   （108 次 off-thread 回调），在新实现上通过。
+
+**验证**：模拟宿主的后台线程 + 回调导入同一存档——修复前进程 120 s 无输出被强杀（exit 124），
+修复后 ~95 ms 返回、107 次进度事件。
+
+**教训**：任何"宿主回调 + 原生线程池"的组合都必须在**足够大的负载**下测试线程亲和性，
+小样本会被 rayon 的调用线程执行优化掩盖。

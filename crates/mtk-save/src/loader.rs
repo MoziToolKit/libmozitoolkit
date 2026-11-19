@@ -232,7 +232,6 @@ impl SaveLoader {
                 let xs = (rx * 32).max(min_sec_x)..=(rx * 32 + 31).min(max_sec_x);
                 let zs = (rz * 32).max(min_sec_z)..=(rz * 32 + 31).min(max_sec_z);
                 if !mca_path.exists() {
-                    throttler.inc_by(chunk_count(&xs, &zs));
                     continue;
                 }
                 plans.push(RegionPlan {
@@ -249,9 +248,7 @@ impl SaveLoader {
             use rayon::prelude::*;
             plans
                 .par_iter()
-                .map(|plan| {
-                    decode_region(plan, min_sec_y, max_sec_y, true_min, true_max, &throttler)
-                })
+                .map(|plan| decode_region(plan, min_sec_y, max_sec_y, true_min, true_max))
                 .collect()
         };
 
@@ -262,6 +259,11 @@ impl SaveLoader {
                 loaded_sections += 1;
             }
         }
+
+        // Reported from the calling thread, never from a rayon worker: hosts re-enter their own
+        // runtime (Python's GIL, Blender's main thread) from a progress callback, which must not
+        // happen on a pool thread. The stage is short enough that one final tick is honest.
+        throttler.inc_by(total_chunks);
 
         // 4. Set the active world bounds on VoxelStorage
         let size_x = (true_max.x - true_min.x + 1).max(1);
@@ -292,23 +294,6 @@ struct RegionPlan {
     zs: std::ops::RangeInclusive<i32>,
 }
 
-impl RegionPlan {
-    fn chunk_count(&self) -> usize {
-        chunk_count(&self.xs, &self.zs)
-    }
-}
-
-fn chunk_count(xs: &std::ops::RangeInclusive<i32>, zs: &std::ops::RangeInclusive<i32>) -> usize {
-    let bounds = |range: &std::ops::RangeInclusive<i32>| {
-        range
-            .end()
-            .saturating_sub(*range.start())
-            .saturating_add(1)
-            .max(0) as usize
-    };
-    bounds(xs).saturating_mul(bounds(zs))
-}
-
 /// Reads, decompresses and parses every chunk of one region that the selection covers.
 ///
 /// Regions are independent files, so this is the parallel unit: opening one `RegionFile` per task
@@ -319,14 +304,12 @@ fn decode_region(
     max_sec_y: i32,
     true_min: IVec3,
     true_max: IVec3,
-    throttler: &ProgressThrottler<'_>,
 ) -> Result<Vec<(IVec3, SectionStorage)>, SaveError> {
     let mut out: Vec<(IVec3, SectionStorage)> = Vec::new();
     let mut region_file = match RegionFile::open(&plan.path) {
         Ok(region_file) => region_file,
         Err(_) => {
             // Matches the previous behaviour: an unreadable region is skipped, not fatal.
-            throttler.inc_by(plan.chunk_count());
             return Ok(out);
         }
     };
@@ -334,16 +317,12 @@ fn decode_region(
     for cx in plan.xs.clone() {
         for cz in plan.zs.clone() {
             if !region_file.has_chunk(cx, cz) {
-                throttler.inc();
                 continue;
             }
 
             let decompressed = match region_file.read_chunk_decompressed(cx, cz)? {
                 Some(bytes) => bytes,
-                None => {
-                    throttler.inc();
-                    continue;
-                }
+                None => continue,
             };
 
             let sections = ChunkParser::parse_chunk(&decompressed, min_sec_y, max_sec_y)?;
@@ -372,8 +351,6 @@ fn decode_region(
 
                 out.push((section.coord, section));
             }
-
-            throttler.inc();
         }
     }
 

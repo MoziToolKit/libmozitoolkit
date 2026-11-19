@@ -181,16 +181,21 @@ pub fn load_and_mesh_minecraft_save(
         .map(|f| f as &(dyn Fn(mtk_core::ProgressReport) + Send + Sync));
 
     let mut storage = VoxelStorage::new();
+    // Must detach: the loader decodes regions on rayon workers, and any progress callback
+    // re-attaches to Python. Holding the GIL here deadlocks the process the moment the first
+    // progress tick fires from a worker (observed as "import save freezes Blender").
     let _loaded_sections = profiler.measure("load_region_chunks", "io", |_| {
-        SaveLoader::load_box_into_storage_with_progress(
-            path,
-            dimension,
-            min_coord,
-            max_coord,
-            &mut storage,
-            progress_ref,
-        )
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+        py.detach(|| {
+            SaveLoader::load_box_into_storage_with_progress(
+                path,
+                dimension,
+                min_coord,
+                max_coord,
+                &mut storage,
+                progress_ref,
+            )
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+        })
     })?;
 
     // Asset cache input gate: valid model database and atlas mapping are strictly required

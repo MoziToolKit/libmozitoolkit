@@ -143,3 +143,52 @@ fn parallel_region_decoding_is_scheduling_independent() {
         }
     }
 }
+
+/// Regions are decoded on rayon workers, but a progress callback is host code: Python re-enters
+/// its interpreter (GIL) and Blender re-enters the main thread from it. Invoking it on a pool
+/// thread deadlocked the real host ("import save freezes"). The loader must therefore report only
+/// from the thread the caller is on.
+#[test]
+fn progress_callback_runs_on_the_calling_thread() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let Some(test_save_path) = save_world() else {
+        mtk_testkit::skip("no Minecraft save world available (set MTK_TEST_SAVE)");
+        return;
+    };
+
+    let caller_thread = std::thread::current().id();
+    let events = AtomicUsize::new(0);
+    let off_thread = AtomicUsize::new(0);
+    let callback = |_report: mtk_core::ProgressReport| {
+        events.fetch_add(1, Ordering::Relaxed);
+        if std::thread::current().id() != caller_thread {
+            off_thread.fetch_add(1, Ordering::Relaxed);
+        }
+    };
+    let progress: mtk_core::ProgressCallback<'_> = &callback;
+
+    // A selection this large is what makes rayon actually hand chunks to pool threads; a tiny
+    // box can run entirely on the calling thread and hide the regression.
+    let mut storage = VoxelStorage::new();
+    let loaded = SaveLoader::load_box_into_storage_with_progress(
+        &test_save_path,
+        "overworld",
+        IVec3::new(-64, -64, -64),
+        IVec3::new(511, 319, 511),
+        &mut storage,
+        Some(progress),
+    )
+    .expect("save import must succeed");
+
+    assert!(loaded > 0, "the test save must yield sections");
+    assert!(
+        events.load(Ordering::Relaxed) > 0,
+        "the loader must report progress at least once"
+    );
+    assert_eq!(
+        off_thread.load(Ordering::Relaxed),
+        0,
+        "progress callback ran on a rayon worker; hosts re-enter the GIL / main thread there"
+    );
+}
