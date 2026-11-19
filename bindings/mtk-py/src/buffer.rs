@@ -25,6 +25,9 @@ static DUMMY_ALIGNED: [u64; 2] = [0; 2];
 /// memory either borrowed from a parent Python object or held in typed Rust vectors.
 #[pyclass]
 pub struct PyBufferOwner {
+    /// Shared with the exporting pyclass: counts live buffer views so mutators can refuse to
+    /// reallocate memory a view still points at.
+    live_views: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     ptr: usize,
     total_bytes: usize,
     itemsize: usize,
@@ -60,6 +63,8 @@ impl PyBufferOwner {
         (*view).obj = ffi::Py_NewRef(slf.as_ptr());
         (*view).len = this.total_bytes as ffi::Py_ssize_t;
         (*view).readonly = if this.readonly { 1 } else { 0 };
+        this.live_views
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         (*view).ndim = 1;
         (*view).suboffsets = std::ptr::null_mut();
         (*view).internal = std::ptr::null_mut();
@@ -97,6 +102,8 @@ impl PyBufferOwner {
     }
 
     unsafe fn __releasebuffer__(&self, _view: *mut ffi::Py_buffer) {
+        self.live_views
+            .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
         // Python buffer protocol decrements view->obj automatically.
     }
 }
@@ -110,6 +117,7 @@ pub fn create_zerocopy_typed_memoryview<'py>(
     itemsize: usize,
     format: &'static [u8],
     parent: &Bound<'py, PyAny>,
+    live_views: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
 ) -> PyResult<Bound<'py, PyMemoryView>> {
     let total_bytes = item_count * itemsize;
     let safe_ptr = if item_count == 0 || ptr.is_null() {
@@ -121,6 +129,7 @@ pub fn create_zerocopy_typed_memoryview<'py>(
     let owner = Bound::new(
         py,
         PyBufferOwner {
+            live_views: live_views.clone(),
             ptr: safe_ptr,
             total_bytes,
             itemsize,
@@ -148,6 +157,7 @@ pub fn create_zerocopy_f32_memoryview<'py>(
     ptr: *const f32,
     count: usize,
     parent: &Bound<'py, PyAny>,
+    live_views: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
 ) -> PyResult<Bound<'py, PyMemoryView>> {
     create_zerocopy_typed_memoryview(
         py,
@@ -156,6 +166,7 @@ pub fn create_zerocopy_f32_memoryview<'py>(
         std::mem::size_of::<f32>(),
         b"f\0",
         parent,
+        live_views,
     )
 }
 
@@ -165,6 +176,7 @@ pub fn create_zerocopy_u32_memoryview<'py>(
     ptr: *const u32,
     count: usize,
     parent: &Bound<'py, PyAny>,
+    live_views: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
 ) -> PyResult<Bound<'py, PyMemoryView>> {
     create_zerocopy_typed_memoryview(
         py,
@@ -173,6 +185,7 @@ pub fn create_zerocopy_u32_memoryview<'py>(
         std::mem::size_of::<u32>(),
         b"I\0",
         parent,
+        live_views,
     )
 }
 
@@ -182,6 +195,7 @@ pub fn create_zerocopy_i32_memoryview<'py>(
     ptr: *const i32,
     count: usize,
     parent: &Bound<'py, PyAny>,
+    live_views: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
 ) -> PyResult<Bound<'py, PyMemoryView>> {
     create_zerocopy_typed_memoryview(
         py,
@@ -190,6 +204,7 @@ pub fn create_zerocopy_i32_memoryview<'py>(
         std::mem::size_of::<i32>(),
         b"i\0",
         parent,
+        live_views,
     )
 }
 
@@ -199,6 +214,7 @@ pub fn create_zerocopy_u16_memoryview<'py>(
     ptr: *const u16,
     count: usize,
     parent: &Bound<'py, PyAny>,
+    live_views: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
 ) -> PyResult<Bound<'py, PyMemoryView>> {
     create_zerocopy_typed_memoryview(
         py,
@@ -207,6 +223,7 @@ pub fn create_zerocopy_u16_memoryview<'py>(
         std::mem::size_of::<u16>(),
         b"H\0",
         parent,
+        live_views,
     )
 }
 
@@ -216,6 +233,7 @@ pub fn create_zerocopy_i16_memoryview<'py>(
     ptr: *const i16,
     count: usize,
     parent: &Bound<'py, PyAny>,
+    live_views: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
 ) -> PyResult<Bound<'py, PyMemoryView>> {
     create_zerocopy_typed_memoryview(
         py,
@@ -224,6 +242,7 @@ pub fn create_zerocopy_i16_memoryview<'py>(
         std::mem::size_of::<i16>(),
         b"h\0",
         parent,
+        live_views,
     )
 }
 
@@ -233,6 +252,7 @@ pub fn create_zerocopy_i8_memoryview<'py>(
     ptr: *const i8,
     count: usize,
     parent: &Bound<'py, PyAny>,
+    live_views: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
 ) -> PyResult<Bound<'py, PyMemoryView>> {
     create_zerocopy_typed_memoryview(
         py,
@@ -241,6 +261,7 @@ pub fn create_zerocopy_i8_memoryview<'py>(
         std::mem::size_of::<i8>(),
         b"b\0",
         parent,
+        live_views,
     )
 }
 
@@ -250,8 +271,17 @@ pub fn create_zerocopy_u8_memoryview<'py>(
     ptr: *const u8,
     count: usize,
     parent: &Bound<'py, PyAny>,
+    live_views: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
 ) -> PyResult<Bound<'py, PyMemoryView>> {
-    create_zerocopy_typed_memoryview(py, ptr, count, std::mem::size_of::<u8>(), b"B\0", parent)
+    create_zerocopy_typed_memoryview(
+        py,
+        ptr,
+        count,
+        std::mem::size_of::<u8>(),
+        b"B\0",
+        parent,
+        live_views,
+    )
 }
 
 /// Creates a memoryview directly over an owned `Vec<f32>` without reallocating or unsafe alignment casting.
@@ -270,6 +300,7 @@ pub fn create_owned_f32_memoryview<'py>(
     let owner = Bound::new(
         py,
         PyBufferOwner {
+            live_views: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             ptr,
             total_bytes,
             itemsize,
@@ -307,6 +338,7 @@ pub fn create_owned_u32_memoryview<'py>(
     let owner = Bound::new(
         py,
         PyBufferOwner {
+            live_views: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             ptr,
             total_bytes,
             itemsize,
@@ -344,6 +376,7 @@ pub fn create_owned_i32_memoryview<'py>(
     let owner = Bound::new(
         py,
         PyBufferOwner {
+            live_views: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             ptr,
             total_bytes,
             itemsize,

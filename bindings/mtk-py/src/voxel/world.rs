@@ -121,6 +121,7 @@ impl PyVoxelWorld {
             profile,
             dynamic_entity_atlases,
             dynamic_entity_slots,
+            views: Default::default(),
         })
     }
 
@@ -154,6 +155,7 @@ impl PyVoxelWorld {
             profile,
             dynamic_entity_atlases,
             dynamic_entity_slots,
+            views: Default::default(),
         }
     }
 
@@ -168,6 +170,7 @@ impl PyVoxelWorld {
     pub fn to_point_cloud(&self) -> crate::point_cloud::PyVoxelPointCloud {
         crate::point_cloud::PyVoxelPointCloud {
             inner: self.inner.to_point_cloud(),
+            views: Default::default(),
         }
     }
 

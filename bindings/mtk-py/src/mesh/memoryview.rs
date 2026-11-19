@@ -19,7 +19,7 @@ pub fn positions_memoryview<'py>(
     let inner = &mesh.borrow().inner;
     let ptr = inner.positions.as_ptr() as *const f32;
     let count = inner.positions.len() * 3;
-    create_zerocopy_f32_memoryview(py, ptr, count, mesh.as_any())
+    create_zerocopy_f32_memoryview(py, ptr, count, mesh.as_any(), &mesh.borrow().views)
 }
 
 /// Read-only memoryview of vertex normals (`float32 * 3` per vertex).
@@ -30,7 +30,7 @@ pub fn normals_memoryview<'py>(
     let inner = &mesh.borrow().inner;
     let ptr = inner.normals.as_ptr() as *const f32;
     let count = inner.normals.len() * 3;
-    create_zerocopy_f32_memoryview(py, ptr, count, mesh.as_any())
+    create_zerocopy_f32_memoryview(py, ptr, count, mesh.as_any(), &mesh.borrow().views)
 }
 
 /// Read-only memoryview of vertex UV coordinates (`float32 * 2` per vertex).
@@ -39,7 +39,7 @@ pub fn uvs_memoryview<'py>(mesh: &Bound<'py, PyMeshData>) -> PyResult<Bound<'py,
     let inner = &mesh.borrow().inner;
     let ptr = inner.uvs.as_ptr() as *const f32;
     let count = inner.uvs.len() * 2;
-    create_zerocopy_f32_memoryview(py, ptr, count, mesh.as_any())
+    create_zerocopy_f32_memoryview(py, ptr, count, mesh.as_any(), &mesh.borrow().views)
 }
 
 /// Read-only memoryview of triangle indices (`uint32` per index).
@@ -50,7 +50,7 @@ pub fn indices_memoryview<'py>(
     let inner = &mesh.borrow().inner;
     let ptr = inner.indices.as_ptr();
     let count = inner.indices.len();
-    create_zerocopy_u32_memoryview(py, ptr, count, mesh.as_any())
+    create_zerocopy_u32_memoryview(py, ptr, count, mesh.as_any(), &mesh.borrow().views)
 }
 
 /// Read-only memoryview of quad indices (`uint32` per index) if quads are recorded.
@@ -70,6 +70,7 @@ pub fn quad_indices_memoryview<'py>(
             ptr,
             count,
             mesh.as_any(),
+            &mesh.borrow().views,
         )?))
     } else if inner.is_quad_topology() {
         let quads = inner.reconstruct_quad_indices();
@@ -92,14 +93,20 @@ pub fn loop_uvs_memoryview<'py>(
     let inner = &mesh.borrow().inner;
 
     if inner.loop_count() == 0 {
-        return create_zerocopy_f32_memoryview(py, std::ptr::null(), 0, mesh.as_any());
+        return create_zerocopy_f32_memoryview(
+            py,
+            std::ptr::null(),
+            0,
+            mesh.as_any(),
+            &mesh.borrow().views,
+        );
     }
 
     if inner.uv_layout == UvLayout::PerLoop {
         let uvs_flat = inner.uvs_flat();
         let ptr = uvs_flat.as_ptr();
         let count = uvs_flat.len();
-        return create_zerocopy_f32_memoryview(py, ptr, count, mesh.as_any());
+        return create_zerocopy_f32_memoryview(py, ptr, count, mesh.as_any(), &mesh.borrow().views);
     }
 
     let loop_uvs = py.detach(|| inner.loop_uvs_expanded());
@@ -139,7 +146,7 @@ pub fn face_materials_memoryview<'py>(
     let inner = &mesh.borrow().inner;
     let ptr = inner.face_materials.as_ptr();
     let count = inner.face_materials.len();
-    create_zerocopy_u16_memoryview(py, ptr, count, mesh.as_any())
+    create_zerocopy_u16_memoryview(py, ptr, count, mesh.as_any(), &mesh.borrow().views)
 }
 
 /// Read-only memoryview of vertex RGBA colors (`float32 * 4` per vertex) if present.
@@ -159,6 +166,7 @@ pub fn colors_memoryview<'py>(
             ptr,
             count,
             mesh.as_any(),
+            &mesh.borrow().views,
         )?))
     } else {
         Ok(None)

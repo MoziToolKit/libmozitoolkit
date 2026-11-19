@@ -162,6 +162,7 @@ impl PyVoxelStorage {
         let mesher_cfg = config.map(|c| c.inner.clone()).unwrap_or_default();
         crate::point_cloud::PyVoxelPointCloud {
             inner: self.inner.to_point_cloud(&mesher_cfg),
+            views: Default::default(),
         }
     }
 

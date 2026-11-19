@@ -69,7 +69,13 @@ impl PyScenePackageReader {
             ..Default::default()
         };
         let cloud = bundle.sparse_voxels.to_point_cloud(Some(&config));
-        dict.set_item("point_cloud", PyVoxelPointCloud { inner: cloud })?;
+        dict.set_item(
+            "point_cloud",
+            PyVoxelPointCloud {
+                inner: cloud,
+                views: Default::default(),
+            },
+        )?;
 
         let models_val: Option<PyBakedModelDatabase> =
             bundle.models.map(|d| PyBakedModelDatabase {

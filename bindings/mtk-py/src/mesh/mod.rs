@@ -20,6 +20,9 @@ use mtk_core::MeshData;
 #[derive(Debug, Clone, Default)]
 pub struct PyMeshData {
     pub inner: MeshData,
+    /// Live zero-copy buffer views over `inner`. Mutators refuse to run while non-zero: the views
+    /// hold raw pointers into these vectors, so reallocating them would dangle the view.
+    pub views: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     pub profile: Option<mtk_core::ExecutionProfile>,
     /// Dynamic entity atlas chunks keyed by chunk id (`{0xFFF0: RGBA bytes, ...}`).
     pub dynamic_entity_atlases: Option<std::collections::HashMap<u16, Vec<u8>>>,
@@ -31,6 +34,7 @@ impl From<MeshData> for PyMeshData {
     fn from(inner: MeshData) -> Self {
         Self {
             inner,
+            views: Default::default(),
             profile: None,
             dynamic_entity_atlases: None,
             dynamic_entity_slots: None,
@@ -39,10 +43,31 @@ impl From<MeshData> for PyMeshData {
 }
 
 impl PyMeshData {
+    /// Shared counter of live zero-copy views over this mesh's vectors.
+    pub fn view_guard(&self) -> std::sync::Arc<std::sync::atomic::AtomicUsize> {
+        self.views.clone()
+    }
+
+    /// Rejects mutation while a zero-copy memoryview is alive.
+    ///
+    /// A view holds a raw pointer into `inner`, so `clear()`/rebuild would free memory the view
+    /// still references (a use-after-free the GIL does not prevent). Failing loudly keeps the
+    /// zero-copy fast path and turns a memory-safety bug into an actionable error.
+    pub fn ensure_mutable(&self) -> PyResult<()> {
+        let live = self.views.load(std::sync::atomic::Ordering::SeqCst);
+        if live > 0 {
+            return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+                "MeshData has {live} live memoryview(s); release them before mutating the mesh"
+            )));
+        }
+        Ok(())
+    }
+
     /// Wraps raw MeshData with no profile.
     pub fn from_mesh(inner: MeshData) -> Self {
         Self {
             inner,
+            views: Default::default(),
             profile: None,
             dynamic_entity_atlases: None,
             dynamic_entity_slots: None,
@@ -54,9 +79,13 @@ impl PyMeshData {
         &self.inner
     }
 
-    /// Direct mutable reference to underlying MeshData.
-    pub fn inner_mut(&mut self) -> &mut MeshData {
-        &mut self.inner
+    /// Mutable reference to the underlying `MeshData`, guarded against live views.
+    ///
+    /// Every in-place mutation must go through this so a zero-copy memoryview cannot outlive the
+    /// memory it points at.
+    pub fn inner_mut(&mut self) -> PyResult<&mut MeshData> {
+        self.ensure_mutable()?;
+        Ok(&mut self.inner)
     }
 
     /// Constructs a `PyMeshData` with an execution profile.
@@ -72,6 +101,7 @@ impl PyMeshData {
     pub fn new() -> Self {
         Self {
             inner: MeshData::new(),
+            views: Default::default(),
             profile: None,
             dynamic_entity_atlases: None,
             dynamic_entity_slots: None,
@@ -107,8 +137,10 @@ impl PyMeshData {
     pub fn set_dynamic_entity_slots(
         &mut self,
         slots: Option<std::collections::HashMap<String, (u16, u16)>>,
-    ) {
+    ) -> PyResult<()> {
+        self.ensure_mutable()?;
         self.dynamic_entity_slots = slots;
+        Ok(())
     }
 
     /// Number of vertices in the mesh buffer.
@@ -135,8 +167,13 @@ impl PyMeshData {
     }
 
     /// Clears all geometry in the mesh.
-    pub fn clear(&mut self) {
+    ///
+    /// Fails while a zero-copy memoryview over this mesh is alive: the view points into the
+    /// vectors this call would free.
+    pub fn clear(&mut self) -> PyResult<()> {
+        self.ensure_mutable()?;
         self.inner.clear();
+        Ok(())
     }
 
     /// Constructs a shared-vertex polygon `MeshData` with per-loop UVs.
@@ -341,6 +378,7 @@ impl PyMeshData {
         dtype: &str,
         buffer: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
+        self.ensure_mutable()?;
         attributes::add_attribute_from_buffer(self, name, domain, dtype, buffer)
     }
 
@@ -351,6 +389,7 @@ impl PyMeshData {
         domain: &str,
         values: Vec<String>,
     ) -> PyResult<()> {
+        self.ensure_mutable()?;
         attributes::add_string_attribute(self, name, domain, values)
     }
 

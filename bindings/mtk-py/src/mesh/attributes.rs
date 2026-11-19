@@ -19,66 +19,77 @@ pub fn attribute_memoryview<'py>(
                 v.as_ptr(),
                 v.len(),
                 mesh.as_any(),
+                &mesh.borrow().views,
             )?,
             mtk_core::AttributeData::Float2(v) => crate::buffer::create_zerocopy_f32_memoryview(
                 py,
                 v.as_ptr() as *const f32,
                 v.len() * 2,
                 mesh.as_any(),
+                &mesh.borrow().views,
             )?,
             mtk_core::AttributeData::Float3(v) => crate::buffer::create_zerocopy_f32_memoryview(
                 py,
                 v.as_ptr() as *const f32,
                 v.len() * 3,
                 mesh.as_any(),
+                &mesh.borrow().views,
             )?,
             mtk_core::AttributeData::Float4(v) => crate::buffer::create_zerocopy_f32_memoryview(
                 py,
                 v.as_ptr() as *const f32,
                 v.len() * 4,
                 mesh.as_any(),
+                &mesh.borrow().views,
             )?,
             mtk_core::AttributeData::Int8(v) => crate::buffer::create_zerocopy_i8_memoryview(
                 py,
                 v.as_ptr(),
                 v.len(),
                 mesh.as_any(),
+                &mesh.borrow().views,
             )?,
             mtk_core::AttributeData::Int16(v) => crate::buffer::create_zerocopy_i16_memoryview(
                 py,
                 v.as_ptr(),
                 v.len(),
                 mesh.as_any(),
+                &mesh.borrow().views,
             )?,
             mtk_core::AttributeData::Int32(v) => crate::buffer::create_zerocopy_i32_memoryview(
                 py,
                 v.as_ptr(),
                 v.len(),
                 mesh.as_any(),
+                &mesh.borrow().views,
             )?,
             mtk_core::AttributeData::UInt8(v) => crate::buffer::create_zerocopy_u8_memoryview(
                 py,
                 v.as_ptr(),
                 v.len(),
                 mesh.as_any(),
+                &mesh.borrow().views,
             )?,
             mtk_core::AttributeData::UInt16(v) => crate::buffer::create_zerocopy_u16_memoryview(
                 py,
                 v.as_ptr(),
                 v.len(),
                 mesh.as_any(),
+                &mesh.borrow().views,
             )?,
             mtk_core::AttributeData::UInt32(v) => crate::buffer::create_zerocopy_u32_memoryview(
                 py,
                 v.as_ptr(),
                 v.len(),
                 mesh.as_any(),
+                &mesh.borrow().views,
             )?,
             mtk_core::AttributeData::Bool(v) => crate::buffer::create_zerocopy_u8_memoryview(
                 py,
                 v.as_ptr() as *const u8,
                 v.len(),
                 mesh.as_any(),
+                &mesh.borrow().views,
             )?,
             mtk_core::AttributeData::String(_) => return Ok(None),
         };
@@ -104,21 +115,64 @@ pub fn add_attribute_from_buffer(
     buffer: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
     let domain_enum = crate::attributes::parse_domain_str(domain)?;
+    let spec = crate::attributes::dtype_spec(dtype).ok_or_else(|| {
+        pyo3::exceptions::PyValueError::new_err(format!("Unknown attribute dtype '{dtype}'"))
+    })?;
+    let expected_itemsize = spec.component_size;
+    let expects_float = spec.is_float;
 
     let mut raw_buf = std::mem::MaybeUninit::<pyo3::ffi::Py_buffer>::uninit();
+    // C-contiguous + FORMAT so a strided view or a different element size is visible instead of
+    // being reinterpreted as tightly packed bytes of the requested dtype.
     let ret = unsafe {
         pyo3::ffi::PyObject_GetBuffer(
             buffer.as_ptr(),
             raw_buf.as_mut_ptr(),
-            pyo3::ffi::PyBUF_SIMPLE,
+            pyo3::ffi::PyBUF_FORMAT | pyo3::ffi::PyBUF_C_CONTIGUOUS,
         )
     };
     if ret != 0 {
         return Err(PyErr::fetch(buffer.py()));
     }
     let managed = RawPyBuffer(unsafe { raw_buf.assume_init() });
-    let raw_bytes: &[u8] =
-        unsafe { std::slice::from_raw_parts(managed.0.buf as *const u8, managed.0.len as usize) };
+
+    let actual_itemsize = managed.0.itemsize.max(0) as usize;
+    let format = if managed.0.format.is_null() {
+        String::new()
+    } else {
+        unsafe { std::ffi::CStr::from_ptr(managed.0.format) }
+            .to_string_lossy()
+            .into_owned()
+    };
+    if actual_itemsize != expected_itemsize {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "Attribute buffer itemsize mismatch for dtype '{dtype}': expected {expected_itemsize} \
+             bytes per component, buffer reports {actual_itemsize} (format '{format}')"
+        )));
+    }
+    // Category check: an integer buffer must not be decoded as float and vice versa.
+    let buffer_is_float = format.starts_with('f') || format.starts_with('d');
+    let buffer_is_int = format
+        .chars()
+        .next()
+        .is_some_and(|c| "iIhHbBlLqQ?".contains(c));
+    if !format.is_empty()
+        && ((expects_float && !buffer_is_float) || (!expects_float && !buffer_is_int))
+    {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "Attribute buffer format '{format}' is incompatible with dtype '{dtype}'"
+        )));
+    }
+
+    let raw_bytes: &[u8] = if managed.0.len <= 0 {
+        &[]
+    } else if managed.0.buf.is_null() {
+        return Err(pyo3::exceptions::PyBufferError::new_err(
+            "Attribute buffer reported a null pointer with a non-zero length",
+        ));
+    } else {
+        unsafe { std::slice::from_raw_parts(managed.0.buf as *const u8, managed.0.len as usize) }
+    };
 
     let attr_data = crate::attributes::parse_attribute_buffer(dtype, raw_bytes)?;
 

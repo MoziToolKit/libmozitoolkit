@@ -44,6 +44,34 @@ fn copy_pod_vec<T: Copy>(raw_bytes: &[u8], type_name: &str) -> PyResult<Vec<T>> 
     Ok(vec)
 }
 
+/// Component layout a dtype string expects from a buffer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DtypeSpec {
+    /// Bytes per component (`float4` arrives as a flat `float32` array, so this is 4).
+    pub component_size: usize,
+    /// Whether the buffer must hold floating point values (vs integer/boolean).
+    pub is_float: bool,
+}
+
+/// Resolves the buffer layout a dtype string expects.
+///
+/// A float64 array handed to `float` fails here instead of being reinterpreted as two garbage
+/// floats per element.
+pub fn dtype_spec(dtype: &str) -> Option<DtypeSpec> {
+    let (component_size, is_float) = match dtype.trim().to_lowercase().as_str() {
+        "float" | "float32" | "f32" => (4, true),
+        "float2" | "float3" | "float4" | "vec2" | "vec3" | "vec4" | "color" => (4, true),
+        "int8" | "i8" | "uint8" | "u8" | "byte" => (1, false),
+        "int16" | "i16" | "uint16" | "u16" => (2, false),
+        "int32" | "int" | "i32" | "uint32" | "u32" | "bool" | "boolean" => (4, false),
+        _ => return None,
+    };
+    Some(DtypeSpec {
+        component_size,
+        is_float,
+    })
+}
+
 /// Parses raw bytes into typed `AttributeData` based on the given dtype specifier.
 pub fn parse_attribute_buffer(dtype: &str, raw_bytes: &[u8]) -> PyResult<AttributeData> {
     match dtype.trim().to_lowercase().as_str() {

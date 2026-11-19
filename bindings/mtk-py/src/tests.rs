@@ -57,7 +57,12 @@ fn test_python_mesh_data_inner() {
             "I"
         );
 
-        mesh.borrow_mut().clear();
+        // A zero-copy view points into the mesh's vectors: release it before mutating.
+        drop(indices_mem);
+        drop(memview);
+        mesh.borrow_mut()
+            .clear()
+            .expect("clear after releasing views");
         assert_eq!(mesh.borrow().vertex_count(), 0);
         assert!(mesh.borrow().is_empty());
     });
@@ -447,5 +452,75 @@ fn test_python_repair_mesh_fluid_uv_inplace() {
         assert!(err_overlap.is_err(), "Overlapping memory must be rejected");
         let err_msg = err_overlap.unwrap_err().to_string();
         assert!(err_msg.contains("must not overlap in memory"));
+    });
+}
+
+/// A buffer's declared dtype must match the bytes it actually holds.
+///
+/// `add_attribute_from_buffer` used `PyBUF_SIMPLE` and trusted the caller's `dtype` string, so a
+/// float64 numpy array handed to `dtype="float"` was read as f32: half of it became garbage
+/// floats and the element count silently doubled.
+#[test]
+fn attribute_buffer_rejects_a_mismatched_itemsize() {
+    Python::initialize();
+    Python::attach(|py| {
+        let mut builder = PyMeshData::new();
+        // One float64 element: 8 bytes. `dtype="float"` expects 4.
+        let double = py
+            .eval(
+                pyo3::ffi::c_str!("__import__('array').array('d', [1.5, 2.5])"),
+                None,
+                None,
+            )
+            .unwrap();
+        let err = builder
+            .add_attribute_from_buffer("probe", "point", "float", &double)
+            .expect_err("a float64 buffer must not be decoded as float32");
+        let message = err.to_string();
+        assert!(
+            message.contains("itemsize")
+                || message.contains("float64")
+                || message.contains("format"),
+            "error must explain the dtype mismatch, got: {message}"
+        );
+    });
+}
+
+/// Zero-copy memoryviews pin the parent object, but the parent's vectors are reallocated by
+/// mutators. A view that outlives its buffer must be refused rather than handed a dangling pointer.
+#[test]
+fn mutation_is_rejected_while_a_zero_copy_view_is_alive() {
+    Python::initialize();
+    Python::attach(|py| {
+        let mesh_data = PyMeshData::from_flat_polygons(
+            pyo3::types::PyList::new(py, [0.0f32, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0])
+                .unwrap()
+                .as_any(),
+            pyo3::types::PyList::new(py, [0u32, 1, 2]).unwrap().as_any(),
+            pyo3::types::PyList::new(py, [0.0f32, 0.0, 1.0, 0.0, 1.0, 1.0])
+                .unwrap()
+                .as_any(),
+            Some(pyo3::types::PyList::new(py, [0u32]).unwrap().as_any()),
+            Some(pyo3::types::PyList::new(py, [3u32]).unwrap().as_any()),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let mesh = Bound::new(py, mesh_data).unwrap();
+
+        let view = PyMeshData::positions_memoryview(&mesh).unwrap();
+        assert_eq!(view.len().unwrap(), 9);
+
+        let err = mesh
+            .borrow_mut()
+            .clear()
+            .expect_err("clear() while a view is alive would dangle the view");
+        assert!(err.to_string().contains("memoryview"), "{err}");
+
+        drop(view);
+        mesh.borrow_mut()
+            .clear()
+            .expect("clear() works once the view is released");
     });
 }

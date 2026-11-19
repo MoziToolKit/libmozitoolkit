@@ -15,6 +15,9 @@ use crate::voxel::PyVoxelStorage;
 #[derive(Debug, Clone, Default)]
 pub struct PyVoxelPointCloud {
     pub(crate) inner: VoxelPointCloud,
+    /// Live zero-copy buffer views over `inner`. Mutators refuse to run while non-zero: the views
+    /// hold raw pointers into these vectors, so reallocating them would dangle the view.
+    pub(crate) views: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 
 enum BorrowedF32Buffer {
@@ -71,10 +74,22 @@ impl BorrowedI32Buffer {
 
 #[pymethods]
 impl PyVoxelPointCloud {
+    /// Rejects mutation while a zero-copy memoryview over this cloud is alive.
+    pub(crate) fn ensure_mutable(&self) -> PyResult<()> {
+        let live = self.views.load(std::sync::atomic::Ordering::SeqCst);
+        if live > 0 {
+            return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+                "VoxelPointCloud has {live} live memoryview(s); release them before mutating the cloud"
+            )));
+        }
+        Ok(())
+    }
+
     #[new]
     pub fn new() -> Self {
         Self {
             inner: VoxelPointCloud::new(),
+            views: Default::default(),
         }
     }
 
@@ -97,7 +112,8 @@ impl PyVoxelPointCloud {
         biome: Option<String>,
         light: Option<u8>,
         entity: Option<String>,
-    ) {
+    ) -> PyResult<()> {
+        self.ensure_mutable()?;
         self.inner.push_with_entity(
             pos,
             block_pos,
@@ -106,6 +122,7 @@ impl PyVoxelPointCloud {
             light.unwrap_or(0),
             entity.as_deref(),
         );
+        Ok(())
     }
 
     /// Reconstructs a `VoxelStorage` from this point cloud.
@@ -122,8 +139,10 @@ impl PyVoxelPointCloud {
     }
 
     #[setter]
-    pub fn set_bounds(&mut self, bounds: Option<[i32; 6]>) {
+    pub fn set_bounds(&mut self, bounds: Option<[i32; 6]>) -> PyResult<()> {
+        self.ensure_mutable()?;
         self.inner.bounds = bounds;
+        Ok(())
     }
 
     /// High-performance batch constructor from palette indices using buffer protocol / memoryview.
@@ -183,7 +202,10 @@ impl PyVoxelPointCloud {
         )
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
-        Ok(Self { inner: cloud })
+        Ok(Self {
+            inner: cloud,
+            views: Default::default(),
+        })
     }
 
     /// Read-only memoryview of 3D vertex positions (`float32 * 3` per point).
@@ -195,6 +217,7 @@ impl PyVoxelPointCloud {
             inner.positions.as_ptr(),
             inner.positions.len(),
             slf.as_any(),
+            &slf.borrow().views,
         )
     }
 
@@ -207,6 +230,7 @@ impl PyVoxelPointCloud {
             inner.block_x.as_ptr(),
             inner.block_x.len(),
             slf.as_any(),
+            &slf.borrow().views,
         )
     }
 
@@ -219,6 +243,7 @@ impl PyVoxelPointCloud {
             inner.block_y.as_ptr(),
             inner.block_y.len(),
             slf.as_any(),
+            &slf.borrow().views,
         )
     }
 
@@ -231,6 +256,7 @@ impl PyVoxelPointCloud {
             inner.block_z.as_ptr(),
             inner.block_z.len(),
             slf.as_any(),
+            &slf.borrow().views,
         )
     }
 
@@ -265,6 +291,7 @@ impl PyVoxelPointCloud {
             inner.entity_indices.as_ptr(),
             inner.entity_indices.len(),
             slf.as_any(),
+            &slf.borrow().views,
         )
     }
 
@@ -279,6 +306,7 @@ impl PyVoxelPointCloud {
             inner.light_levels.as_ptr(),
             inner.light_levels.len(),
             slf.as_any(),
+            &slf.borrow().views,
         )
     }
 
@@ -293,6 +321,7 @@ impl PyVoxelPointCloud {
             inner.state_indices.as_ptr(),
             inner.state_indices.len(),
             slf.as_any(),
+            &slf.borrow().views,
         )
     }
 
@@ -307,6 +336,7 @@ impl PyVoxelPointCloud {
             inner.biome_indices.as_ptr(),
             inner.biome_indices.len(),
             slf.as_any(),
+            &slf.borrow().views,
         )
     }
 
