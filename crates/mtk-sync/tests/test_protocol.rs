@@ -230,7 +230,11 @@ fn test_negative_coordinates_roundtrip_entities_and_deltas() {
         };
         let encoded = encode_packet(&delta).expect("encode packet");
         let decoded = decode_packet(&encoded).expect("DeltaBlockEntity decode failed");
-        assert_eq!(decoded, delta, "DeltaBlockEntity mismatch for coord {:?}", pos);
+        assert_eq!(
+            decoded, delta,
+            "DeltaBlockEntity mismatch for coord {:?}",
+            pos
+        );
 
         let delta_none = Packet::DeltaBlockEntity {
             epoch: 42,
@@ -239,7 +243,8 @@ fn test_negative_coordinates_roundtrip_entities_and_deltas() {
             entity: None,
         };
         let encoded_none = encode_packet(&delta_none).expect("encode packet");
-        let decoded_none = decode_packet(&encoded_none).expect("DeltaBlockEntity None decode failed");
+        let decoded_none =
+            decode_packet(&encoded_none).expect("DeltaBlockEntity None decode failed");
         assert_eq!(
             decoded_none, delta_none,
             "DeltaBlockEntity None mismatch for coord {:?}",

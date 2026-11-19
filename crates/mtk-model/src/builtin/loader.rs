@@ -186,7 +186,8 @@ impl MiExModelLoader {
             prof.texture_identifier()
         } else {
             let effective_kind =
-                crate::block_entity::skull::SkullKind::from_block_name(&blockstate.name).unwrap_or(kind);
+                crate::block_entity::skull::SkullKind::from_block_name(&blockstate.name)
+                    .unwrap_or(kind);
             effective_kind.default_texture_path().to_string()
         };
         vars_str.insert("entity_texture".to_string(), tex.clone());

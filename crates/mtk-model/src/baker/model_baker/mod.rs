@@ -107,8 +107,7 @@ impl ModelBaker {
             }
         }
 
-        if let Some(baked) =
-            BuiltinModelRegistry::get_baked_block_entity_model(&blockstate, entity)
+        if let Some(baked) = BuiltinModelRegistry::get_baked_block_entity_model(&blockstate, entity)
         {
             self.bake_cache.insert(cache_key, baked.clone());
             return Ok(baked);
@@ -152,9 +151,7 @@ impl ModelBaker {
             return Ok(cached.clone());
         }
 
-        if let Some(baked) =
-            BuiltinModelRegistry::get_baked_block_entity_model(&blockstate, None)
-        {
+        if let Some(baked) = BuiltinModelRegistry::get_baked_block_entity_model(&blockstate, None) {
             let group = BakedVariantGroup::new(canonical_str.clone(), vec![baked.clone()], vec![1]);
             self.variant_cache
                 .insert(canonical_str.clone(), group.clone());

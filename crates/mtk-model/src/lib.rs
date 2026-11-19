@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
 mod baker;
-mod builtin;
 mod block_entity;
+mod builtin;
 mod error;
 mod item;
 mod parser;
@@ -12,10 +12,10 @@ pub use baker::{
     is_block_emissive, is_known_non_cube, is_opaque_block, BakedElement, BakedFace, BakedModel,
     BakedModelDatabase, BakedVariantGroup, ModelBakeFailure, ModelBaker,
 };
-pub use builtin::BuiltinModelRegistry;
 pub use block_entity::{
     banner, skull, BannerPatternLayer, BlockEntityData, PlayerProfileData, SkullKind,
 };
+pub use builtin::BuiltinModelRegistry;
 pub use error::ModelError;
 pub use item::{bake_item_from_png_bytes, bake_item_generated_model, ItemMeshOptions};
 pub use parser::{

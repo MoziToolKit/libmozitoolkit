@@ -138,7 +138,9 @@ pub fn get_builtin_baked_block_entity_model(
         .unwrap_or(&blockstate.name);
 
     if clean == "copper_golem_statue" || clean.ends_with("_copper_golem_statue") {
-        return Some(crate::block_entity::copper_statue::create_copper_statue_baked_model(blockstate));
+        return Some(
+            crate::builtin::props::copper_statue::create_copper_statue_baked_model(blockstate),
+        );
     }
 
     if clean == "decorated_pot" {

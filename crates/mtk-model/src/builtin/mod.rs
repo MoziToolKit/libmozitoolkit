@@ -1,12 +1,16 @@
-//! Built-in fallback BlockStates and Models for standard vanilla entity blocks.
+//! Built-in geometry for block kinds whose vanilla renderer is not a plain block model.
 //!
-//! Provides clean, Blockbench-compatible standard Minecraft BlockModel JSONs and
-//! BlockState definitions for blocks lacking static models in vanilla Java JARs
-//! (Chests, Beds, Shulker Boxes, Signs, Bells, Skulls, etc.).
+//! Two sources live here:
+//! - Blockbench-compatible BlockModel JSON and blockstate fallbacks for blocks that ship no
+//!   static JSON in the vanilla JAR (chests, beds, shulker boxes, signs, bells, skulls).
+//! - `props`: procedural generators for block kinds whose geometry is a function of their
+//!   blockstate alone (the copper golem statue). They stay in core on purpose: the statue is a
+//!   block, so no continuous-entity pack is involved.
 
 pub(crate) mod evaluator;
 pub(crate) mod loader;
 pub(crate) mod patch;
+pub(crate) mod props;
 pub(crate) mod vanilla;
 
 use loader::MiExModelLoader;

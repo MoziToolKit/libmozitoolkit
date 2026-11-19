@@ -217,7 +217,12 @@ pub(crate) fn decode_baseline_entities(
         let ry = read_i32_le(buf, offset, "BaselineBlockEntities ry")?;
         let rz = read_i32_le(buf, offset, "BaselineBlockEntities rz")?;
         let payload_len = read_u32_le(buf, offset, "BaselineBlockEntities payload_len")? as usize;
-        let payload_slice = read_slice(buf, offset, payload_len, "BaselineBlockEntities entry payload")?;
+        let payload_slice = read_slice(
+            buf,
+            offset,
+            payload_len,
+            "BaselineBlockEntities entry payload",
+        )?;
 
         if let Some(ed) = decode_entity_payload(payload_slice)? {
             entities.push((IVec3::new(rx, ry, rz), ed));

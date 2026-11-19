@@ -126,10 +126,14 @@ pub fn create_builtin_decorated_pot_model(
     if let Some(crate::block_entity::BlockEntityData::DecoratedPot { sherds }) = entity {
         if let Some(ref mut textures) = model.textures {
             // [back, left, right, front]
-            let back_tex = crate::block_entity::BlockEntityData::sherd_texture_ref(sherds[0].as_deref());
-            let left_tex = crate::block_entity::BlockEntityData::sherd_texture_ref(sherds[1].as_deref());
-            let right_tex = crate::block_entity::BlockEntityData::sherd_texture_ref(sherds[2].as_deref());
-            let front_tex = crate::block_entity::BlockEntityData::sherd_texture_ref(sherds[3].as_deref());
+            let back_tex =
+                crate::block_entity::BlockEntityData::sherd_texture_ref(sherds[0].as_deref());
+            let left_tex =
+                crate::block_entity::BlockEntityData::sherd_texture_ref(sherds[1].as_deref());
+            let right_tex =
+                crate::block_entity::BlockEntityData::sherd_texture_ref(sherds[2].as_deref());
+            let front_tex =
+                crate::block_entity::BlockEntityData::sherd_texture_ref(sherds[3].as_deref());
             textures.insert("back".to_string(), TextureValue::Path(back_tex.to_string()));
             textures.insert("left".to_string(), TextureValue::Path(left_tex.to_string()));
             textures.insert(

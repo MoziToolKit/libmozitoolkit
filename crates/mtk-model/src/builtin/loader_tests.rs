@@ -191,9 +191,8 @@ fn test_unprofiled_skull_direct_atlas_textures() {
         rotation: Some(0),
         profile: None,
     };
-    let model_zombie =
-        MiExModelLoader::load_for_block_entity(&bs_zombie, Some(&entity_zombie))
-            .expect("Zombie head should load");
+    let model_zombie = MiExModelLoader::load_for_block_entity(&bs_zombie, Some(&entity_zombie))
+        .expect("Zombie head should load");
     let tex_zombie = model_zombie.textures.unwrap();
     assert_eq!(
         tex_zombie.get("texture").unwrap().as_str(),
@@ -207,9 +206,8 @@ fn test_unprofiled_skull_direct_atlas_textures() {
         rotation: None,
         profile: None,
     };
-    let model_creeper =
-        MiExModelLoader::load_for_block_entity(&bs_creeper, Some(&entity_creeper))
-            .expect("Creeper head should load");
+    let model_creeper = MiExModelLoader::load_for_block_entity(&bs_creeper, Some(&entity_creeper))
+        .expect("Creeper head should load");
     let tex_creeper = model_creeper.textures.unwrap();
     assert_eq!(
         tex_creeper.get("texture").unwrap().as_str(),
@@ -223,9 +221,8 @@ fn test_unprofiled_skull_direct_atlas_textures() {
         rotation: Some(4),
         profile: None,
     };
-    let model_player =
-        MiExModelLoader::load_for_block_entity(&bs_player, Some(&entity_player))
-            .expect("Player head without profile should load");
+    let model_player = MiExModelLoader::load_for_block_entity(&bs_player, Some(&entity_player))
+        .expect("Player head without profile should load");
     let tex_player = model_player.textures.unwrap();
     assert_eq!(
         tex_player.get("texture").unwrap().as_str(),
