@@ -2,7 +2,11 @@ use super::helpers::make_simple_faces;
 use crate::parser::model_json::{BlockModelJson, ElementJson, FaceJson, TextureValue};
 use std::collections::HashMap;
 
-/// Synthesizes the vanilla bell frame (it ships no block model) plus its body.
+/// Bell frame **and** body.
+///
+/// The jar's `bell_floor`/`bell_ceiling`/`bell_wall`/`bell_between_walls` models only carry the
+/// frame; the bell itself is drawn by `BellRenderer` from `bell/bell_body`, which a block model
+/// cannot express. This generator supplies both so the block bakes as one mesh.
 pub fn create_builtin_bell_model(stem: &str) -> Option<BlockModelJson> {
     let mut textures = HashMap::new();
     textures.insert(

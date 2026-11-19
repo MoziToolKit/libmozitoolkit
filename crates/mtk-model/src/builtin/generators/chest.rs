@@ -17,7 +17,7 @@
 
 use std::collections::HashMap;
 
-use crate::builtin::props::cube::{visible_faces_except, CubeSpec};
+use crate::builtin::generators::cube::{visible_faces_except, CubeSpec};
 use crate::parser::blockstate::BlockState;
 use crate::parser::model_json::{
     BlockModelJson, BuiltinTransform, ElementJson, FaceJson, TextureValue,
@@ -232,7 +232,7 @@ pub(crate) fn build_chest_model(blockstate: &BlockState) -> Option<BlockModelJso
                     },
                 );
             }
-            let (from, to) = crate::builtin::props::cube::model_corners(spec.min, spec.max);
+            let (from, to) = crate::builtin::generators::cube::model_corners(spec.min, spec.max);
             ElementJson {
                 from,
                 to,

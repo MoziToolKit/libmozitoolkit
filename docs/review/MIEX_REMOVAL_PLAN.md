@@ -77,8 +77,12 @@
 - `builtin/props/cube.rs`（已落地）：`CubeSpec { origin, dimensions, tex_offs, mirror }`，
   `face_uvs`（原版 y-down 公式）、`model_face_uvs`（y-up 置换 + 矩形升序）、`model_corners`
   （`from`/`to` 顺序）、`visible_faces_except`。所有族共用。
-- `builtin/props/<family>.rs`：每族一个生成器，输入 `BlockState` + 可选 `BlockEntityData`，
+- `builtin/generators/<family>.rs`：每族一个生成器，输入 `BlockState` + 可选 `BlockEntityData`，
   输出 `BlockModelJson`（继续复用现有模型烘焙器，不重复实现 UV/面朝向逻辑）。
+- `builtin/json/`：只放内嵌的**普通 Minecraft JSON**（conduit、end gateway），它们是标准格式，
+  不是方言；纯数据不参与任何解释。
+
+目录按"机制"划分，不按历史：能算的进 `generators/`，只能是数据的进 `json/`。
 
 ## 批次
 

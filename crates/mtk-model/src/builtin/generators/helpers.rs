@@ -35,7 +35,7 @@ pub fn make_box_faces(
     map
 }
 
-/// Helper to create simple faces for a cuboid element with given texture variable.
+/// Faces with no explicit UV: the baker derives them from the element's own bounds.
 pub fn make_simple_faces(tex: &str) -> HashMap<String, FaceJson> {
     let mut map = HashMap::new();
     for dir in &["north", "south", "east", "west", "up", "down"] {

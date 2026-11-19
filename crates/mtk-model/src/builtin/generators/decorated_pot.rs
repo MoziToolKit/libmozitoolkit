@@ -1,6 +1,10 @@
 use crate::parser::model_json::{BlockModelJson, TextureValue};
 use crate::{BakedModel, ModelBaker};
 
+/// Plain block-model JSON for the pot shell.
+///
+/// The shell is data (a handful of boxes), not logic: only the four side faces are swapped per
+/// sherd, which is what this module does on top of the template.
 pub const MODEL_DECORATED_POT: &str =
     include_str!("../../../assets/builtins/models/decorated_pot.json");
 

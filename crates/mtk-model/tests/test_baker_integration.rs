@@ -100,7 +100,7 @@ fn test_stairs_blockstate_baking_and_culling() {
 }
 
 #[test]
-fn test_builtin_chest_and_bell_fallback() {
+fn test_builtin_chest_fallback_and_uvs() {
     let mut baker = mtk_model::ModelBaker::new();
 
     // Chest with no model elements in loader -> should fallback to builtin chest model
@@ -136,49 +136,6 @@ fn test_builtin_chest_and_bell_fallback() {
             .iter()
             .any(|e| { e.faces.values().any(|f| f.texture.contains("normal_left")) }),
         "Left chest must resolve to normal_left texture"
-    );
-
-    // Bell with vanilla-like frame-only elements (missing bell_body texture/elements)
-    // should trigger fallback to builtin bell model and include the golden bell body
-    let vanilla_bell_loader = |id: &str| {
-        if id.contains("bell") {
-            let json = r#"{
-                "ambientocclusion": true,
-                "textures": {
-                    "particle": "minecraft:block/bell_bottom",
-                    "bar": "minecraft:block/dark_oak_planks",
-                    "post": "minecraft:block/stone"
-                },
-                "elements": [
-                    {
-                        "from": [2.0, 13.0, 7.0],
-                        "to": [14.0, 15.0, 9.0],
-                        "faces": {}
-                    }
-                ]
-            }"#;
-            serde_json::from_str::<BlockModelJson>(json).ok()
-        } else {
-            None
-        }
-    };
-    let bell_model = baker
-        .bake_blockstate(
-            "minecraft:bell[attachment=floor,facing=north]",
-            None,
-            vanilla_bell_loader,
-        )
-        .expect("Should bake bell with body fallback");
-
-    assert_eq!(
-        bell_model.elements.len(),
-        5,
-        "Bell should have all 5 elements (3 frame + 2 body)"
-    );
-    let bell_mesh = bell_model.to_mesh(false);
-    assert!(
-        bell_mesh.face_count() >= 28,
-        "Bell should have at least 28 faces (16+ frame + 12 body)"
     );
 
     // Test Chest UV correctness (top of lid and base floor)
@@ -680,10 +637,6 @@ fn test_builtin_blockbench_json_models() {
         "minecraft:block/skull_wall",
         "minecraft:block/dragon_head",
         "minecraft:block/piglin_head",
-        "minecraft:block/bell_floor",
-        "minecraft:block/bell_ceiling",
-        "minecraft:block/bell_wall",
-        "minecraft:block/bell_between_walls",
         "minecraft:block/end_portal",
         "minecraft:block/decorated_pot",
     ];
@@ -720,64 +673,9 @@ fn test_builtin_blockbench_json_models() {
         .expect("Right chest should bake");
     assert_eq!(chest_right.elements.len(), 3);
 
-    // Test baking bell in all 4 attachments
-    for att in ["floor", "ceiling", "single_wall", "double_wall"] {
-        let state = format!("minecraft:bell[attachment={},facing=north]", att);
-        let bell = baker
-            .bake_blockstate(&state, None, empty_loader)
-            .unwrap_or_else(|_| panic!("Bell {} must bake", att));
-        assert!(!bell.elements.is_empty(), "Bell {} must have elements", att);
-        // Has both support frame elements and 2 bell body elements
-        assert!(
-            bell.elements.len() >= 3,
-            "Bell {} must contain frame and body",
-            att
-        );
-    }
-
-    // Verify single_wall bell touches the wall in all 4 directions
-    for (facing, expected_dir) in [
-        ("east", mtk_core::Direction::East),
-        ("west", mtk_core::Direction::West),
-        ("north", mtk_core::Direction::North),
-        ("south", mtk_core::Direction::South),
-    ] {
-        let state = format!("minecraft:bell[attachment=single_wall,facing={}]", facing);
-        let bell = baker
-            .bake_blockstate(&state, None, empty_loader)
-            .unwrap_or_else(|_| panic!("Bell single_wall facing {} must bake", facing));
-        let mesh = bell.to_mesh(false);
-        // Find extreme coordinate in the wall direction (should be 1.0 or 0.0)
-        let mut touches_wall = false;
-        for v in &mesh.positions {
-            match expected_dir {
-                mtk_core::Direction::East => {
-                    if (v[0] - 1.0).abs() < 1e-4 {
-                        touches_wall = true;
-                    }
-                }
-                mtk_core::Direction::West => {
-                    if v[0].abs() < 1e-4 {
-                        touches_wall = true;
-                    }
-                }
-                mtk_core::Direction::South => {
-                    if (v[2] - 1.0).abs() < 1e-4 {
-                        touches_wall = true;
-                    }
-                }
-                mtk_core::Direction::North if v[2].abs() < 1e-4 => {
-                    touches_wall = true;
-                }
-                _ => {}
-            }
-        }
-        assert!(
-            touches_wall,
-            "Bell single_wall facing {} must touch wall at {:?}",
-            facing, expected_dir
-        );
-    }
+    // Bell geometry is not builtin: 26.2 ships `bell_floor`/`bell_ceiling`/`bell_wall`/
+    // `bell_between_walls` with real elements, so the pack supplies it (covered by the
+    // real-asset suite).
 }
 
 #[test]
