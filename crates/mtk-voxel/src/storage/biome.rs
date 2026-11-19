@@ -146,10 +146,18 @@ impl SectionBiomes {
         self.explicit_mask.count_ones()
     }
 
-    /// Returns true when every one of the 64 quart cells has been explicitly assigned.
+    /// Returns true when every quart cell carries an authoritative biome.
+    ///
+    /// A single-entry palette is authoritative by construction (every cell is that biome and
+    /// `indices` is intentionally empty), which is what [`Self::uniform`] and the 2D save/sync
+    /// paths rely on. Multi-entry sections are only fully assigned once all 64 cells were
+    /// written through a sampled/dense constructor.
     #[inline]
     pub fn is_fully_assigned(&self) -> bool {
-        self.indices.len() == 64 && self.explicit_mask == u64::MAX
+        if self.palette.is_empty() {
+            return false;
+        }
+        self.palette.len() == 1 || (self.indices.len() == 64 && self.explicit_mask == u64::MAX)
     }
 
     /// Fills every unassigned quart cell with the biome of the nearest assigned cell

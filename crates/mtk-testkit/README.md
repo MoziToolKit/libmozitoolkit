@@ -11,11 +11,22 @@
 | 优先级 | 来源 | 说明 |
 | :---: | :--- | :--- |
 | 1 | 环境变量 | CI 从临时 Release 下载真包后设置（`MTK_TEST_ASSETS` 等） |
-| 2 | 工作区相邻目录 | `../mc`、`../26.2-Fabric.jar`、`../SPBR-21.zip` 等本地约定 |
+| 2 | 工作区相邻目录 | `../mc` / `../Minecraft_Source` / `../Minecraft_Unpacked`、`../26.2-Fabric.jar`、`../SPBR-21.zip`、`../mtk-save-world` 等本地约定 |
 | 3 | 内置 fixtures | `fixtures/mc` 下的最小 JSON 子集，保证测试在纯仓库环境下可运行 |
 
-- 需要**完整原版资产**的测试（如 canonical debug world）应查询 [`real_assets_root`] 并在缺失时优雅跳过。
+- 需要**完整原版资产**的测试（如 canonical debug world）应查询 [`real_assets_root`] 并在缺失时通过 `mtk_testkit::skip(...)` 跳过——跳过永远打印一行 `[mtk-testkit] SKIP ...`，不允许静默。
+- 设置 `MTK_REQUIRE_REAL_ASSETS=1`（CI 与本地交付门禁均设置）时，`skip()` 变成 `panic!`，缺资产即失败。
 - 仅依赖少量模型 JSON 的**密闭测试**可直接使用 [`assets_root`]（自动回退到 fixtures）。
+
+### 跳过与失败
+
+```rust
+let Some(root) = mtk_testkit::real_assets_root() else {
+    mtk_testkit::skip("no full vanilla asset set");   // 打印 SKIP；REQUIRE=1 时 panic
+    return;
+};
+// 或者： let root = mtk_testkit::require_real_assets!();
+```
 
 ---
 
@@ -34,8 +45,10 @@ let loader = |id: &str| std::fs::read_to_string(model_json_path(&root, id)).ok()
 | `workspace_root()` | `PathBuf` | 工作区根目录 |
 | `fixtures_root()` | `PathBuf` | 内置 fixtures 根目录 |
 | `assets_root()` | `Option<PathBuf>` | 真实资产或 fixtures（总是尽量可用） |
-| `real_assets_root()` | `Option<PathBuf>` | 仅完整原版资产 |
+| `real_assets_root()` | `Option<PathBuf>` | 仅完整原版资产（含 `../mc` 与 `../Minecraft_Source` 自动探测） |
 | `has_real_assets()` | `bool` | 是否存在完整原版资产 |
+| `real_assets_required()` | `bool` | `MTK_REQUIRE_REAL_ASSETS` 是否为真 |
+| `skip(reason)` | `()` | 记录跳过（打印 SKIP）；require 模式下 panic |
 | `fabric_jar()` | `Option<PathBuf>` | 客户端/整合包 jar |
 | `resource_pack_zip()` | `Option<PathBuf>` | 外部资源包 zip |
 | `save_world()` | `Option<PathBuf>` | 存档目录（含 `level.dat`） |
@@ -44,6 +57,8 @@ let loader = |id: &str| std::fs::read_to_string(model_json_path(&root, id)).ok()
 | `blockstate_json_path(root, id)` | `PathBuf` | 去除属性谓词并定位 blockstate JSON |
 | `read_asset(rel)` / `read_fixture(rel)` | `Option<String>` | 相对于资产根 / fixtures 根读取 UTF-8 |
 | `require_assets!()` | `PathBuf` | 无资产时提前 `return` 的便捷宏 |
+| `require_real_assets!()` | `PathBuf` | 需要完整原版资产时使用（缺失即 `skip`/失败） |
+| `skip_unless_required!(reason)` | `()` | 显式记录跳过原因 |
 | `is_online_enabled()` | `bool` | 是否显式启用了外网在线测试 |
 | `require_online!()` | `()` | 未显式开启 `MTK_TEST_ONLINE=1` 时提前 `return` |
 
@@ -57,6 +72,7 @@ let loader = |id: &str| std::fs::read_to_string(model_json_path(&root, id)).ok()
 | `MTK_TEST_SAVE` | 存档目录 |
 | `MTK_TEST_MODELS_CACHE` | 预编译模型缓存 `models.bin` |
 | `MTK_TEST_ONLINE` / `MTK_ONLINE_TESTS` | 显式开启真实 HTTP 联网测试（如 Mojang 皮肤拉取） |
+| `MTK_REQUIRE_REAL_ASSETS` | 缺资产时失败而不是跳过（CI / 交付门禁设为 `1`） |
 
 ---
 

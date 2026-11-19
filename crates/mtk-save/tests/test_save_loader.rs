@@ -6,7 +6,7 @@ use mtk_voxel::VoxelStorage;
 #[test]
 fn test_real_world_level_dat_if_present() {
     let Some(test_save_path) = save_world() else {
-        eprintln!("Skipping: no Minecraft save available (set MTK_TEST_SAVE)");
+        mtk_testkit::skip("no Minecraft save world available (set MTK_TEST_SAVE)");
         return;
     };
 
@@ -20,7 +20,7 @@ fn test_real_world_level_dat_if_present() {
 #[test]
 fn test_real_world_bounded_box_loading() {
     let Some(test_save_path) = save_world() else {
-        eprintln!("Skipping: no Minecraft save available (set MTK_TEST_SAVE)");
+        mtk_testkit::skip("no Minecraft save world available (set MTK_TEST_SAVE)");
         return;
     };
 

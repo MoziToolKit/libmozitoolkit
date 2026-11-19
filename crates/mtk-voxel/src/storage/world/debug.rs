@@ -270,9 +270,7 @@ mod tests {
     #[test]
     fn test_canonical_debug_world_generation() {
         let Some(root) = mtk_testkit::real_assets_root() else {
-            eprintln!(
-                "[mtk-testkit] skipping canonical debug world test: full vanilla assets unavailable"
-            );
+            mtk_testkit::skip("canonical debug world test needs the full vanilla asset set");
             return;
         };
 

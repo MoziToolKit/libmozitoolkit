@@ -302,7 +302,7 @@ fn test_python_save_bindings() {
     Python::initialize();
     Python::attach(|_py| {
         let Some(test_save_path) = mtk_testkit::save_world() else {
-            eprintln!("Skipping: no Minecraft save available (set MTK_TEST_SAVE)");
+            mtk_testkit::skip("no Minecraft save world available (set MTK_TEST_SAVE)");
             return;
         };
         let test_path = test_save_path.to_string_lossy().to_string();

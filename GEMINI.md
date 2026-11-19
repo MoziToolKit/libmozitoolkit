@@ -149,8 +149,9 @@ cargo check -p mtk-wasm --target wasm32-unknown-unknown
 # 4. DNA 独立性门禁 (mtk-blender-dna 严禁反向引入核心 crate)
 cargo tree -p mtk-blender-dna | grep -Eq 'mtk-(core|voxel|material|model|texture|resource)' && exit 1 || true
 
-# 5. 全工作区单元与集成测试 (自动消费 ../mc, ../26.2-Fabric.jar, ../SPBR-21.zip 等真实资产)
-cargo test --workspace --no-fail-fast
+# 5. 全工作区单元与集成测试 (自动消费 ../mc 或 ../Minecraft_Source, ../26.2-Fabric.jar, ../SPBR-21.zip, ../mtk-save-world)
+#    MTK_REQUIRE_REAL_ASSETS=1 把「缺资产导致跳过」变成失败，禁止在跳过状态下交付
+MTK_REQUIRE_REAL_ASSETS=1 cargo test --workspace --no-fail-fast
 
 # 6. Python 绑定测试 (复用 MoziToolKit 的 uv 虚拟环境与 dev/lib)
 cargo build-all-py
@@ -159,7 +160,8 @@ PYTHONPATH=../MoziToolKit/dev/lib uv run --directory ../MoziToolKit pytest ../li
 ```
 
 - **测试资产约定**：
-  测试资产统一走 `mtk-testkit` 动态解析。工作区相邻父目录 (`..`，即 `/Volumes/Data/code_projects/mtk/`) 部署有全套 CI 资产（`../mc`, `../26.2-Fabric.jar`, `../SPBR-21.zip`, `../mtk-save-world`）。本地运行 `cargo test --workspace` 将自动检测并覆盖全量资产路径测试，严禁在缺少资产导致的跳过状态下交付代码。
+  测试资产统一走 `mtk-testkit` 动态解析。工作区相邻父目录 (`..`，即 `/Volumes/Data/code_projects/mtk/`) 部署有全套 CI 资产：解包客户端（`../mc` 或 `../Minecraft_Source` / `../Minecraft_Unpacked`）、`../26.2-Fabric.jar`、`../SPBR-21.zip`、`../mtk-save-world`。本地运行 `cargo test --workspace` 会自动检测并覆盖全量资产路径测试。
+  需要完整原版资产/存档的测试必须经由 `mtk_testkit::skip(...)` 记录跳过（输出可见的 `SKIP` 行）；设置 `MTK_REQUIRE_REAL_ASSETS=1` 后跳过即失败。**严禁在缺资产导致的跳过状态下交付代码**。
 
 ### 规则 11：三层数据交换与宿主无关批量规范 (Tiered Ingestion & Host-Agnostic Model)
 

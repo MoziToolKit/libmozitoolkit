@@ -11,9 +11,7 @@ fn remap_local_to_atlas(u: f32, v: f32, sprite: &AtlasSpriteLocation) -> [f32; 2
 #[test]
 fn test_uv_remap_real_fabric_jar_and_spbr() {
     let Some(jar_path) = fabric_jar() else {
-        eprintln!(
-            "Skipping test: Minecraft jar not found (set MTK_TEST_JAR or place ../26.2-Fabric.jar)"
-        );
+        mtk_testkit::skip("no Minecraft jar (set MTK_TEST_JAR or place ../26.2-Fabric.jar)");
         return;
     };
 

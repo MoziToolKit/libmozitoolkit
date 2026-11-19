@@ -390,7 +390,10 @@ fn assert_all_sections_fully_assigned(storage: &VoxelStorage) {
             .unwrap_or_else(|| panic!("section {coord:?} lost its biome container"));
         assert!(
             biomes.is_fully_assigned(),
-            "section {coord:?} has unassigned quart cells (placeholder leak)"
+            "section {coord:?} has unassigned quart cells (placeholder leak): explicit={}/64 palette={:?} indices={}",
+            biomes.explicit_count(),
+            biomes.palette,
+            biomes.indices.len(),
         );
     }
 }
@@ -552,7 +555,7 @@ fn test_baseline_replay_partial_edge_falls_back_to_nearest_sample() {
 #[test]
 fn test_real_save_import_and_live_sync_align() {
     let Some(save_dir) = mtk_testkit::save_world() else {
-        eprintln!("Skipping: no Minecraft save available (set MTK_TEST_SAVE)");
+        mtk_testkit::skip("no Minecraft save world available (set MTK_TEST_SAVE)");
         return;
     };
     let min = IVec3::new(-32, -64, -32);

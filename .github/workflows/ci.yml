@@ -54,18 +54,27 @@ jobs:
           set -euo pipefail
           work="$RUNNER_TEMP/mtk-assets"
           mkdir -p "$work"
+          jar_ok=0
+          pack_ok=0
           if curl -fL --retry 3 -o "$work/mc.jar" "$MTK_CI_ASSETS_BASE/26.2-Fabric.jar"; then
             mkdir -p "$work/mc"
             unzip -q "$work/mc.jar" -d "$work/mc"
             echo "MTK_TEST_ASSETS=$work/mc" >> "$GITHUB_ENV"
             echo "MTK_TEST_JAR=$work/mc.jar" >> "$GITHUB_ENV"
+            jar_ok=1
           else
             echo "::warning::Real Minecraft jar unavailable; real-pack tests will fall back to vendored fixtures."
           fi
           if curl -fL --retry 3 -o "$work/SPBR-21.zip" "$MTK_CI_ASSETS_BASE/SPBR-21.zip"; then
             echo "MTK_TEST_RESOURCE_PACK=$work/SPBR-21.zip" >> "$GITHUB_ENV"
+            pack_ok=1
           else
             echo "::warning::External resource pack unavailable; companion-pack tests will be skipped."
+          fi
+          # Only demand full coverage when the full asset set really is present: from here on a
+          # test that would skip for missing assets fails instead, so a green run proves coverage.
+          if [ "$jar_ok" = "1" ] && [ "$pack_ok" = "1" ]; then
+            echo "MTK_REQUIRE_REAL_ASSETS=1" >> "$GITHUB_ENV"
           fi
       - name: cargo test --workspace
         run: cargo test --workspace --no-fail-fast
