@@ -41,6 +41,9 @@ impl BuiltinModelRegistry {
         if let Some(model) = crate::builtin::props::chest::build_chest_model(blockstate) {
             return Some(model);
         }
+        if let Some(model) = crate::builtin::props::shulker::build_shulker_model(blockstate) {
+            return Some(model);
+        }
         if let Some(model) = MiExModelLoader::load_for_block_entity(blockstate, entity) {
             return Some(model);
         }

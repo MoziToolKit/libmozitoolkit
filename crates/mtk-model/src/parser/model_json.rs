@@ -391,10 +391,7 @@ impl BlockModelJson {
             };
 
             if visited.contains(var_name) {
-                return Err(ModelError::CircularParentHierarchy(format!(
-                    "Cyclic texture variable '#{}'",
-                    var_name
-                )));
+                return Err(ModelError::CyclicTextureVariable(var_name.to_string()));
             }
             visited.insert(var_name.to_string());
 

@@ -37,13 +37,6 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 /// Embedded static raw JSON strings from upstream MiEx `base_resource_pack`.
-pub const MIEX_BED_JSON: &str = include_str!("../../assets/builtins/blockstates/bed.json");
-pub const MIEX_CHEST_JSON: &str = include_str!("../../assets/builtins/blockstates/chest.json");
-pub const MIEX_SHULKER_BOX_JSON: &str =
-    include_str!("../../assets/builtins/blockstates/shulker_box.json");
-pub const MIEX_SIGN_JSON: &str = include_str!("../../assets/builtins/blockstates/sign.json");
-pub const MIEX_HANGING_SIGN_JSON: &str =
-    include_str!("../../assets/builtins/blockstates/hanging_sign.json");
 pub const MIEX_SKULL_JSON: &str = include_str!("../../assets/builtins/blockstates/skull.json");
 pub const MIEX_END_PORTAL_JSON: &str =
     include_str!("../../assets/builtins/blockstates/end_portal.json");
@@ -52,11 +45,6 @@ pub const MIEX_END_PORTAL_JSON: &str =
 pub struct MiExModelLoader;
 
 impl MiExModelLoader {
-    /// Loads a builtin model for a blockstate using the official upstream MiEx JSON definition.
-    pub fn load_for_blockstate(blockstate: &BlockState) -> Option<BlockModelJson> {
-        Self::load_for_block_entity(blockstate, None)
-    }
-
     /// Loads a builtin model for a blockstate using the official upstream MiEx JSON definition,
     /// enriched with optional dynamic entity properties (e.g. skull rotation or custom profile textures).
     pub fn load_for_block_entity(
@@ -66,21 +54,11 @@ impl MiExModelLoader {
         let name = blockstate.name.as_str();
         let short_name = name.strip_prefix("minecraft:").unwrap_or(name);
 
-        let raw_json = if short_name == "chest" || short_name.ends_with("_chest") {
-            MIEX_CHEST_JSON
-        } else if short_name == "bed" || short_name.ends_with("_bed") {
-            MIEX_BED_JSON
-        } else if short_name == "shulker_box" || short_name.ends_with("_shulker_box") {
-            MIEX_SHULKER_BOX_JSON
-        } else if short_name == "end_portal" {
+        // Only the families whose client geometry has no block model at all are handled here.
+        // Bed, sign, hanging sign, chest and shulker box all ship real models (or native
+        // generators) now, so a definition for them would be dead weight.
+        let raw_json = if short_name == "end_portal" {
             MIEX_END_PORTAL_JSON
-        } else if short_name.contains("hanging_sign") {
-            MIEX_HANGING_SIGN_JSON
-        } else if short_name.ends_with("_sign")
-            || short_name == "sign"
-            || short_name.contains("_wall_sign")
-        {
-            MIEX_SIGN_JSON
         } else if (short_name.contains("head") || short_name.contains("skull"))
             && !short_name.contains("piston")
         {

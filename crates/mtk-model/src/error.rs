@@ -11,6 +11,14 @@ pub enum ModelError {
     #[error("Model parent hierarchy cycle detected: '{0}'")]
     CircularParentHierarchy(String),
 
+    /// A texture variable resolves to itself.
+    ///
+    /// Templates do this on purpose (`"particle": "#particle"`) and rely on a child to supply the
+    /// value, so this is not a defect in the model that defines it; callers must not report it as a
+    /// broken hierarchy.
+    #[error("Cyclic texture variable '#{0}'")]
+    CyclicTextureVariable(String),
+
     #[error("Texture variable unresolved: '#{0}'")]
     UnresolvedTextureVariable(String),
 

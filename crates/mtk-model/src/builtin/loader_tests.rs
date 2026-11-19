@@ -1,44 +1,10 @@
 use super::*;
 
 #[test]
-fn test_load_chest() {
-    let bs_north = BlockState::parse("minecraft:chest[facing=north,type=single]").unwrap();
-    let model_north =
-        MiExModelLoader::load_for_blockstate(&bs_north).expect("Chest north should load");
-    let elems_north = model_north.elements.unwrap_or_default();
-    assert!(!elems_north.is_empty());
-    let t_north = elems_north[0]
-        .transform
-        .as_ref()
-        .expect("Transform should be present");
-    assert_eq!(t_north.rotate[1], 0.0);
-
-    let bs_south = BlockState::parse("minecraft:chest[facing=south,type=single]").unwrap();
-    let model_south =
-        MiExModelLoader::load_for_blockstate(&bs_south).expect("Chest south should load");
-    let elems_south = model_south.elements.unwrap_or_default();
-    let t_south = elems_south[0]
-        .transform
-        .as_ref()
-        .expect("Transform should be present");
-    assert_eq!(
-        t_south.rotate[1], 180.0,
-        "South chest should rotate 180 deg"
-    );
-
-    let bs_east = BlockState::parse("minecraft:chest[facing=east,type=single]").unwrap();
-    let model_east =
-        MiExModelLoader::load_for_blockstate(&bs_east).expect("Chest east should load");
-    let elems_east = model_east.elements.unwrap();
-    let t_east = elems_east[0].transform.as_ref().unwrap();
-    assert_eq!(t_east.rotate[1], 90.0, "East chest should rotate 90 deg");
-}
-
-#[test]
 fn test_skull_floor_vs_wall() {
     let bs_floor = BlockState::parse("minecraft:skeleton_skull[rotation=0]").unwrap();
     let model_floor =
-        MiExModelLoader::load_for_blockstate(&bs_floor).expect("Floor skull should load");
+        MiExModelLoader::load_for_block_entity(&bs_floor, None).expect("Floor skull should load");
     let elems_floor = model_floor.elements.unwrap();
     assert_eq!(
         elems_floor[0].from,
@@ -48,7 +14,7 @@ fn test_skull_floor_vs_wall() {
 
     let bs_wall = BlockState::parse("minecraft:skeleton_wall_skull[facing=north]").unwrap();
     let model_wall =
-        MiExModelLoader::load_for_blockstate(&bs_wall).expect("Wall skull should load");
+        MiExModelLoader::load_for_block_entity(&bs_wall, None).expect("Wall skull should load");
     let elems_wall = model_wall.elements.unwrap();
     assert_eq!(
         elems_wall[0].from,
@@ -61,7 +27,7 @@ fn test_skull_floor_vs_wall() {
 fn test_dragon_and_piglin_heads() {
     let bs_dragon = BlockState::parse("minecraft:dragon_head[rotation=0]").unwrap();
     let model_dragon =
-        MiExModelLoader::load_for_blockstate(&bs_dragon).expect("Dragon head should load");
+        MiExModelLoader::load_for_block_entity(&bs_dragon, None).expect("Dragon head should load");
     let elems_dragon = model_dragon.elements.unwrap();
     assert_eq!(elems_dragon.len(), 7, "Dragon head should have 7 elements");
     let tex_dragon = model_dragon.textures.unwrap();
@@ -82,7 +48,7 @@ fn test_dragon_and_piglin_heads() {
 
     let bs_piglin = BlockState::parse("minecraft:piglin_head[rotation=4]").unwrap();
     let model_piglin =
-        MiExModelLoader::load_for_blockstate(&bs_piglin).expect("Piglin head should load");
+        MiExModelLoader::load_for_block_entity(&bs_piglin, None).expect("Piglin head should load");
     let elems_piglin = model_piglin.elements.unwrap();
     assert_eq!(elems_piglin.len(), 6, "Piglin head should have 6 elements");
     let tex_piglin = model_piglin.textures.unwrap();
@@ -121,61 +87,6 @@ fn test_dragon_and_piglin_heads() {
     assert_ne!(
         right_faces.get("west").unwrap().uv,
         left_faces.get("west").unwrap().uv
-    );
-}
-
-#[test]
-fn test_hanging_sign_load() {
-    let bs_standing =
-        BlockState::parse("minecraft:oak_hanging_sign[attached=false,rotation=0]").unwrap();
-    let model_standing = MiExModelLoader::load_for_blockstate(&bs_standing)
-        .expect("Standing hanging sign must load");
-    let elems_standing = model_standing.elements.unwrap_or_default();
-    // Board (1) + 4 angled chains (4) = 5 elements. Absolutely NO vertical sign post!
-    assert_eq!(
-        elems_standing.len(),
-        5,
-        "Standing hanging sign without attachment must have board and 4 chains"
-    );
-    let tex = model_standing.textures.unwrap();
-    assert_eq!(
-        tex.get("texture").unwrap().as_str(),
-        "minecraft:entity/signs/hanging/oak"
-    );
-    for elem in &elems_standing {
-        // Confirm none of the elements are the vertical sign post (which had X in [7, 9], Y in [0, 9.333])
-        let is_post =
-            elem.from[0] > 6.0 && elem.to[0] < 10.0 && elem.from[1] < 1.0 && elem.to[1] < 10.0;
-        assert!(
-            !is_post,
-            "Hanging sign must NOT contain vertical standing sign post!"
-        );
-    }
-
-    let bs_wall = BlockState::parse("minecraft:oak_wall_hanging_sign[facing=north]").unwrap();
-    let model_wall =
-        MiExModelLoader::load_for_blockstate(&bs_wall).expect("Wall hanging sign must load");
-    let elems_wall = model_wall.elements.unwrap_or_default();
-    for (i, el) in elems_wall.iter().enumerate() {
-        println!("Wall elem {}: from={:?}, to={:?}", i, el.from, el.to);
-    }
-    // Board (1) + wall bracket (1) = 2 elements
-    assert_eq!(
-        elems_wall.len(),
-        2,
-        "Wall hanging sign must have board and bracket"
-    );
-
-    let bs_attached =
-        BlockState::parse("minecraft:oak_hanging_sign[attached=true,rotation=0]").unwrap();
-    let model_attached = MiExModelLoader::load_for_blockstate(&bs_attached)
-        .expect("Attached hanging sign must load");
-    let elems_attached = model_attached.elements.unwrap_or_default();
-    // Board (1) + center chain (1) = 2 elements
-    assert_eq!(
-        elems_attached.len(),
-        2,
-        "Attached hanging sign must have board and center chain"
     );
 }
 

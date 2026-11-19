@@ -7,7 +7,6 @@ pub mod bell;
 pub mod helpers;
 pub mod pot;
 
-use crate::builtin::loader::MiExModelLoader;
 use crate::parser::blockstate::{BlockState, BlockStateDefinition};
 use crate::parser::model_json::BlockModelJson;
 use crate::BakedModel;
@@ -67,7 +66,8 @@ pub fn get_builtin_model_by_id(model_id: &str) -> Option<BlockModelJson> {
         return serde_json::from_str(MODEL_CONDUIT).ok();
     }
 
-    // Map entity block model IDs to canonical BlockStates evaluated by MiExModelLoader
+    // Models whose geometry comes from a renderer: evaluate the canonical blockstate through the
+    // same path the baker uses (native generators first, remaining MiEx definitions after).
     let canonical_state = match stem {
         "chest" => "minecraft:chest[facing=north,type=single]",
         "chest_left" => "minecraft:chest[facing=north,type=left]",
@@ -85,7 +85,7 @@ pub fn get_builtin_model_by_id(model_id: &str) -> Option<BlockModelJson> {
     };
 
     let bs = BlockState::parse(canonical_state).ok()?;
-    MiExModelLoader::load_for_blockstate(&bs)
+    crate::builtin::BuiltinModelRegistry::get_block_entity_model_json(&bs, None)
 }
 
 /// Fallback model for a blockstate and optional block entity data.
