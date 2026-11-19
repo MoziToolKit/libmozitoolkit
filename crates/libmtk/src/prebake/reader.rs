@@ -16,8 +16,10 @@ use crate::MtkError;
 
 /// Format version for compiled cache compatibility checking.
 ///
+/// v10: chest up/down faces carry the corrected v orientation (upper plane v-descending, lower
+///     plane v-ascending) and copper/ender sheets are selected like the client does.
 /// v9: chest geometry comes from a native generator (derived from `ChestModel`/`ChestRenderer`,
-///     expressed in the y-up block-model space) that reproduces the previous MiEx output exactly.
+///     expressed in the y-up block-model space).
 /// v8: item models whose geometry comes from a block (chest, shulker box, decorated pot, conduit)
 ///     are baked with their own display transforms, and element rotations accept the Euler form;
 ///     older caches miss that geometry and are invalidated.
@@ -27,7 +29,7 @@ use crate::MtkError;
 ///     producing smaller `models.bin` payloads; older caches are invalidated.
 /// v4: LabPBR is decoded at precompile time; atlas chunks carry `_n` (GL normal + height),
 ///     `_orm` (AO/roughness/metallic/emission) and `_aux` (IOR/porosity/SSS/transmission).
-pub const ASSET_CACHE_FORMAT_VERSION: u32 = 9;
+pub const ASSET_CACHE_FORMAT_VERSION: u32 = 10;
 
 /// Derives the 16-byte package-header fingerprint from a fingerprint string.
 ///
