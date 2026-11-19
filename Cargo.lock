@@ -748,18 +748,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mtk-bench"
-version = "0.1.0"
-dependencies = [
- "glam",
- "mtk-core",
- "mtk-cull",
- "mtk-model",
- "mtk-voxel",
- "rayon",
-]
-
-[[package]]
 name = "mtk-blender-dna"
 version = "0.1.0"
 dependencies = [
@@ -781,12 +769,15 @@ dependencies = [
  "clap",
  "glam",
  "image",
+ "libmtk",
  "mtk-core",
  "mtk-cull",
  "mtk-material",
  "mtk-model",
  "mtk-resource",
+ "mtk-save",
  "mtk-texture",
+ "mtk-voxel",
  "serde",
  "serde_json",
  "zip",

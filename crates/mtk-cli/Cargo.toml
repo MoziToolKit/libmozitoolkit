@@ -9,12 +9,15 @@ readme = "README.md"
 description = "Unified command-line interface for MoziToolKit (libmtk)."
 
 [dependencies]
+libmtk = { workspace = true }
 mtk-core = { workspace = true }
 mtk-cull = { workspace = true }
 mtk-model = { workspace = true }
 mtk-resource = { workspace = true }
 mtk-texture = { workspace = true }
 mtk-material = { workspace = true }
+mtk-save = { workspace = true }
+mtk-voxel = { workspace = true }
 clap = { workspace = true }
 glam = { workspace = true }
 serde = { workspace = true }

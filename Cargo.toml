@@ -12,7 +12,6 @@ members = [
     "crates/mtk-save",
     "crates/mtk-package",
     "crates/libmtk",
-    "crates/mtk-bench",
     "crates/mtk-cli",
     "crates/mtk-testkit",
     "bindings/mtk-py",

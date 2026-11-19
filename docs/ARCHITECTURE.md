@@ -21,7 +21,6 @@ graph TD
         WASM["mtk-wasm (wasm-bindgen / npm)"]
         PY["mtk-py (PyO3 / maturin / Wheel)"]
         CLI["mtk-cli (独立命令行工具)"]
-        BENCH["mtk-bench (性能基准测试)"]
         DNA["libmtk_blender_dna (独立宿主适配器)"]
         HOSTMEM["mtk-host-memory (raw slice → pointer)"]
     end
@@ -50,7 +49,6 @@ graph TD
     PY --> LIBMTK
     PY -. Buffer Protocol .-> DNA
     CLI --> LIBMTK
-    BENCH --> LIBMTK
 
     LIBMTK --> VOXEL
     LIBMTK --> SYNC
@@ -98,8 +96,7 @@ graph TD
 | **`crates/mtk-save`** | 现代 Minecraft 存档加载核心：基于内置零拷贝 NBT、Anvil `.mca` 区域文件寻址、384 高度世界 3D 生物群系与方块状态解包、按 3D 边界盒空间切片加载 | `mtk-core`, `mtk-voxel` | `LevelData`, `RegionFile`, `ChunkParser`, `SaveLoader` |
 | **`crates/mtk-package`** | 统一二进制包与场景交换容器编解码器：64 字节头部校验与 CRC、分块 Zstd 压缩 TOC、`memmap2` 零拷贝解析与逐块惰性解压（支持 `AssetCache` 与 `SceneInterchange` 双 Profile） | `mtk-core` | `MtkPackageWriter`, `MtkPackageReader`, `TableOfContents`, `PackageHeader`, `PackageProfile` |
 | **`crates/libmtk`** | **应用编排层**：提供端到端资产预编译管线 (`precompile_all_assets`) 与场景交换编解码及 Mini-Atlas 导出管线 (`libmtk::scene`)，不重导出领域类型 | 全部 Layer 1 Crates | `prebake`, `scene`, `pipeline`, `MtkError`, `CacheManifest`, `ScenePackageReader`, `SceneMetadata` |
-| **`crates/mtk-bench`** | 性能基准测试套件，覆盖 4000 区块大规模网格化与复杂面剔除场景 | 全部核心 Crates | 基准测试报告与性能指标 |
-| **`crates/mtk-cli`** | 独立命令行终端工具，为无头环境与 CI/CD 提供资产预编译与检查能力 | Layer 0/1 Crates | 命令行二进制 `mtk` |
+| **`crates/mtk-cli`** | 独立命令行终端工具：资产预编译、模型/图集检查，以及**真实场景基准**（`mtk bench model` / `mtk bench world`，后者读真实 `.mtkcache` + 存档并按阶段输出吞吐） | Layer 0/1/2 Crates | 命令行二进制 `mtk` |
 | **`crates/mtk-testkit`** | **仅测试用**（`publish = false`）资产解析器与内置 JSON fixtures：统一真包位置发现、缺省跳过策略与路径拼接 | 仅 `std` | `assets_root`, `real_assets_root`, `fabric_jar`, `model_json_path`, fixtures |
 | **`bindings/mtk-py`** | Python 动态扩展模块 (PyO3 + maturin)，提供 `MeshData`、零拷贝内存视图、极速批处理算子与 `.mtkscene` 场景包编解码支持 | 各领域 Crate + `libmtk` | `libmtk_py` CPython 轮子 (.whl) |
 | **`bindings/mtk-jni`** | Java Native Interface 绑定 (JNI)，为 Minecraft 模组 ([`Yefira`](https://github.com/MoziToolKit/yefira)) 提供无锁高性能原生 `LiveSyncServer`、xxHash64 权威指纹计算与流式分帧推送 | `mtk-sync`, `mtk-core` | `libmtk_jni` 动态链接库 (.dylib / .so / .dll) |

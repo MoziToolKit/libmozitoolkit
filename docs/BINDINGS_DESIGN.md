@@ -21,7 +21,6 @@
 | :--- | :---: | :--- | :--- |
 | **`mtk-py`** | **P0 (当前核心)** | PyO3 + maturin + CPython ABI3 (`libmtk_py`) | **生产事实标准**：MoziToolKit (Blender 4.2+) 扩展插件的核心胶水后端 |
 | **`mtk-cli`** | **P1 (工具与验证)** | Rust 原生 CLI (`mtk`) | **核心工具链**：无头资产预编译、模型排查与测试验证 |
-| **`mtk-bench`** | **P1 (基准压测)** | 性能基准测试套件 | **质量防线**：4000+ 区块段多核网格化与遮挡剔除压测 |
 | **`mtk-wasm`** | **P2 (远期预备)** | wasm-bindgen (`mtk_wasm`) | **生态预备**：面向 WebGPU / Three.js 网页端 3D 资产预览 |
 
 ```

@@ -24,7 +24,7 @@
 | **Layer 3: Python 绑定** | **[`mtk-py`](../bindings/mtk-py/README.md)** | **P0 核心绑定**：PyO3 驱动的 `libmtk_py` 模块，为 MoziToolKit (Blender 4.2+ 插件) 提供零拷贝 Buffer Protocol / NumPy 视图、极速批处理算子与 `.mtkscene` 场景包编解码支持 | [查看 API 手册 ↗](../bindings/mtk-py/README.md) |
 | **Layer 3: JNI 模组原生绑定** | **[`mtk-jni`](../bindings/mtk-jni/README.md)** | **P0 模组绑定**：Java Native Interface 驱动的 `libmtk_jni` 原生库，为 Minecraft 模组 (Yefira) 与 JVM 端提供零拷贝 WebSocket 协同服务端 (`LiveSyncServer`)、xxHash64 权威指纹与极速基线分块流式推送 | [查看 API 手册 ↗](../bindings/mtk-jni/README.md) |
 | **Layer 3: 独立命令行** | **[`mtk-cli`](../crates/mtk-cli/README.md)** | **P1 核心工具**：独立无头命令行终端工具 (`mtk`)，支持图集烘焙、模型导出、CTM 求解与遮挡校验 | [查看 API 手册 ↗](../crates/mtk-cli/README.md) |
-| **Layer 3: 性能基准测试** | **[`mtk-bench`](../crates/mtk-bench/README.md)** | **P1 压测套件**：4000+ 区块段多核网格化与数百万次遮挡剔除压力基准套件 | [查看 API 手册 ↗](../crates/mtk-bench/README.md) |
+| **Layer 3: 性能基准** | **[`mtk-cli bench`](../crates/mtk-cli/README.md)** | **真实场景基准**：`bench model`（真实 jar 冷烘）与 `bench world`（真实 `.mtkcache` + 存档，按阶段输出吞吐）；宿主侧用 `tools/blender/scenario_bench.py` | [📖 `crates/mtk-cli/README.md`](../crates/mtk-cli/README.md) |
 | **Layer 3: WebAssembly** | **[`mtk-wasm`](../bindings/mtk-wasm/README.md)** | **P2 远期预备**：wasm-bindgen WebAssembly 绑定，暴露线性内存 TypedArray 视图，面向 WebGPU / Three.js 网页预览 | [查看 API 手册 ↗](../bindings/mtk-wasm/README.md) |
 | **Layer 3: 宿主内存适配** | **[`mtk-host-memory`](../adapters/mtk-host-memory/README.md)** / **[`mtk-blender-dna`](../adapters/blender/mtk-blender-dna/README.md)** | **P0 DNA 适配**：通用 raw slice → pointer 复制 + Blender 语义包装；独立 `libmtk_blender_dna` wheel，提供网格拓扑与点云属性的双向零拷贝直写与直读适配 | [查看 API 手册 ↗](../adapters/blender/mtk-blender-dna/README.md) |
 

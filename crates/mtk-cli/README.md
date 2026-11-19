@@ -47,7 +47,7 @@ Commands:
   export   Export baked models and textures to Wavefront OBJ / MTL
   ctm      Continuity and OptiFine Connected Textures (CTM) rule parsing and atlas testing
   verify   Verification utilities (e.g. face culling rules against reference test cases)
-  bench    High-performance benchmarks for model baking and parallel throughput
+  bench    Benchmarks: real jar model baking, and the real world-meshing pipeline
   help     Print this message or the help of the given subcommand(s)
 ```
 
@@ -102,6 +102,11 @@ Commands:
 | 子命令 | 参数 | 说明 |
 | :--- | :--- | :--- |
 | `model` | `-j, --jar <JAR>` (原版 JAR 文件) | 扫描并对全量原版 BlockState 进行多线程并发模型烘焙压测，测算 TPS 与耗时 |
+| `world` | `--cache <MTKCACHE>`<br>`--save <DIR>`<br>`--dimension <ID>` (默认 `overworld`)<br>`--bounds <MIN_MAX>` (默认 `-64,-64,-64,512,320,512`)<br>`--iterations <N>` (默认 3)<br>`--threads <N>`<br>`--no-ctm`<br>`--json` | **真实场景基准**：打开真实 `.mtkcache`，从真实存档加载选区，跑完整管线（`extract_padded` → 模型/图集/CTM/biome 网格化 → weld 合并），逐阶段输出毫秒与 quads/s |
+
+`bench world` 拒绝在"没有模型库"的缓存上运行（那测的是回退立方体路径，不是用户看到的世界）。
+同一份缓存 + 存档 + bounds 才能比较两次结果；`--no-ctm` 用于把 CTM 的逐面成本单独量出来。
+宿主侧（Blender 注入 + 材质绑定）用 `tools/blender/scenario_bench.py`。
 
 ---
 
@@ -157,6 +162,16 @@ mtk verify cull \
 ### 示例 5：运行模型烘焙吞吐量压测
 ```bash
 mtk bench model --jar 26.2-Fabric.jar
+```
+
+### 示例 6：真实场景体素管线基准（缓存 + 存档）
+```bash
+cargo build --release -p mtk-cli
+./target/release/mtk bench world \
+    --cache ../MoziToolKit/.ci-cache/mtk_fp_58d0c7fee81ad3bf.mtkcache \
+    --save ../mtk-save-world \
+    --bounds -64,-64,-64,512,320,512 \
+    --iterations 3
 ```
 
 ---

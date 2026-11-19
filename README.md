@@ -43,7 +43,6 @@
 | **[`mtk-py`](bindings/mtk-py)** | **P0 (当前重点)** | 基于 PyO3 的统一 Python 扩展模块 (`libmtk_py`)，提供通用 Buffer Protocol 内存视图，直供 [`MoziToolKit`](https://github.com/MoziToolKit/MoziToolKit) 消费 | [📖 `bindings/mtk-py/README.md`](bindings/mtk-py/README.md) |
 | **[`mtk-jni`](bindings/mtk-jni)** | **P0 (模组 JNI)** | 高性能 Java Native Interface 绑定 (`libmtk_jni`)，为 Minecraft 模组 ([`Yefira`](https://github.com/MoziToolKit/yefira)) 提供无锁原生 WebSocket 协同服务端 (`LiveSyncServer`)、xxHash64 权威指纹与极速基线分块流式推送 | [📖 `bindings/mtk-jni/README.md`](bindings/mtk-jni/README.md) |
 | **[`mtk-cli`](crates/mtk-cli)** | **P1 (工具链)** | 独立命令行工具 (`mtk`)，支持图集烘焙 (`atlas`)、模型烘焙/导出 (`model` / `export`)、CTM 测试 (`ctm`)、规则校验 (`verify`) 与性能基准 (`bench`) | [📖 `crates/mtk-cli/README.md`](crates/mtk-cli/README.md) |
-| **[`mtk-bench`](crates/mtk-bench)** | **P1 (基准压测)** | 4000 区块与网格面剔除基准性能压测套件 | [📖 `crates/mtk-bench/README.md`](crates/mtk-bench/README.md) |
 | **[`mtk-testkit`](crates/mtk-testkit)** | **Dev (测试基建)** | 仅用于测试的资产解析器与内置 JSON fixtures（`publish = false`），统一真包位置发现与缺省跳过策略 | [📖 `crates/mtk-testkit/README.md`](crates/mtk-testkit/README.md) |
 | **[`mtk-wasm`](bindings/mtk-wasm)** | **P2 (远期预备)** | 基于 wasm-bindgen 的 WebAssembly 绑定，支持浏览器/Node.js/WebGPU 零拷贝 TypedArray 视图 | [📖 `bindings/mtk-wasm/README.md`](bindings/mtk-wasm/README.md) |
 | **[`mtk-host-memory`](adapters/mtk-host-memory)** | **P0 (宿主内存)** | 宿主无关 raw slice → pointer 复制原语，无线程/核心/宿主 SDK 依赖 | [📖 `adapters/mtk-host-memory/README.md`](adapters/mtk-host-memory/README.md) |
