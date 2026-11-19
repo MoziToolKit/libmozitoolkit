@@ -95,11 +95,9 @@ fn body_face_uvs_use_the_y_up_mapping() {
     };
 
     // `CubeSpec::model_face_uvs` on a 64px sheet, scaled by 16/64.
-    // up samples the client's down panel, handed over v-descending:
-    // (u1, v0) - (u2, v1) = (14, 19) - (28, 33) -> stored as [14, 33, 28, 19] / 4
-    assert_eq!(uv("up"), [3.5, 8.25, 7.0, 4.75]);
-    // down samples the client's up panel, also v-descending:
-    // (u2, v1) - (u22, v0) = (28, 33) - (42, 19) -> stored as [28, 33, 42, 19] / 4
+    // up samples the client's down panel, v ascending: (u1, v0) - (u2, v1) = (14, 19) - (28, 33)
+    assert_eq!(uv("up"), [3.5, 4.75, 7.0, 8.25]);
+    // down samples the client's up panel, v descending: (u2, v1) - (u22, v0) = (28, 33) - (42, 19)
     assert_eq!(uv("down"), [7.0, 8.25, 10.5, 4.75]);
     // north samples the client's south panel: (u3, v1) - (u4, v2) = (42, 33) - (56, 43)
     assert_eq!(uv("north"), [10.5, 8.25, 14.0, 10.75]);
@@ -154,23 +152,26 @@ fn chest_sheets_cover_every_shape_and_oxidation_state() {
     }
 }
 
-/// Top and bottom faces must hand the baker a v-descending rectangle.
+/// The upper plane keeps a v-descending rectangle, the lower plane a v-ascending one.
 ///
-/// The client's `ModelPart.Polygon` assigns UVs in a different vertex order than the block-model
-/// baker, and for up/down that difference is a `v0 <-> v2` swap: with an ascending rectangle the
-/// lid's top texture reads upside down (it needed a manual Y flip in the UV editor to match the
-/// game).
+/// `model_corners` emits a y-inverted box, so the model's `down` key lands on the visible top and
+/// `up` on the underside. Those two planes receive mirrored vertex orders from the baker, so they
+/// need opposite v conventions; using one rule for both leaves either the lid top or the chest
+/// bottom upside down (both were observed in the client comparison).
 #[test]
-fn top_and_bottom_faces_are_v_flipped() {
+fn upper_plane_is_v_flipped_and_lower_plane_is_not() {
     let model = model("minecraft:chest[facing=north,type=single,waterlogged=false]");
     for element in model.elements.as_ref().expect("elements") {
-        for face in ["up", "down"] {
-            let uv = element.faces[face].uv.expect("uv present");
-            assert!(
-                uv[1] > uv[3],
-                "{face} must be stored v-descending, got {uv:?}"
-            );
-        }
+        let down = element.faces["down"].uv.expect("uv present");
+        assert!(
+            down[1] > down[3],
+            "the upper plane must be stored v-descending, got {down:?}"
+        );
+        let up = element.faces["up"].uv.expect("uv present");
+        assert!(
+            up[1] < up[3],
+            "the lower plane must stay v-ascending, got {up:?}"
+        );
         for face in ["north", "south", "east", "west"] {
             let uv = element.faces[face].uv.expect("uv present");
             assert!(uv[1] < uv[3], "{face} stays v-ascending, got {uv:?}");

@@ -49,8 +49,19 @@
 3. **双箱层名互换**：`_left` 贴图配原版 `createDoubleBodyRightLayer` 的几何，反之亦然；且双箱**不屏蔽**
    贴合面（MiEx 输出 18 个面，屏蔽会少 3 个）。
 
-另外 `from`/`to` 不是简单的 min/max：`from = (max_x, max_y, min_z)`、`to = (min_x, min_y, max_z)`，
-烘焙器据此推导面绕向，写反会导致背面剔除错误（这也是"纹理反了"的一半原因）。
+另外 `from`/`to` 不是简单的 min/max：`from = (max_x, max_y, min_z)`、`to = (min_x, min_y, max_z)`。
+烘焙器**不归一化**这对角点，所以 y 反向会让它的 `down` 面落到**上面板**、`up` 面落到**下面板**；这正好
+把原版的 up 面板送到可见的顶面。写成 min/max 会把箱盖底面贴到箱子顶上。
+
+由此 up/down 的 V 方向**不能同规则**（实测两轮）：
+
+| 模型 key | 烘焙器放置的平面 | 可见位置 | 矩形 v 方向 |
+|---|---|---|---|
+| `down` | `fy = max_y` | 箱盖/箱体**顶面** | **降序**（否则顶面上下颠倒） |
+| `up` | `ty = min_y` | 箱盖/箱体**底面** | **升序**（否则底面上下颠倒） |
+| north / south / east / west | — | 侧面 | 升序 |
+
+原因是烘焙器的 Up 与 Down 顶点序互为镜像，同一个 v 约定只能让其中一面正确。
 
 因此**验收标准是：原生生成器的输出必须与 MiEx 逐字节一致**。金色快照
 `crates/mtk-model/tests/fixtures/builtin_models_golden.json` 就是这样来的，`test_builtin_model_golden.rs`

@@ -40,19 +40,21 @@ impl CubeSpec {
         }
     }
 
-    /// UV rectangle for `face` in the block-model space (y up), in texels.
+    /// UV rectangle for `face` in the block-model space, in texels.
     ///
-    /// Two conversions are needed against `ModelPart.Cube`:
+    /// Three effects of the `ModelPart` -> block-model conversion are encoded here:
     ///
-    /// 1. **Panel choice.** The client's `up` panel belongs to the block model's `down` face (and
-    ///    vice versa) because the box is expressed on a y-up grid, and mirroring depth move the
-    ///    north/south panels to the opposite faces. East/west are unaffected.
-    /// 2. **V orientation on up/down.** The client's polygon assigns UVs as
-    ///    `v0←(u_end, v_start)`, `v1←(u_start, v_start)`, `v2←(u_start, v_end)`, `v3←(u_end, v_end)`,
-    ///    while [`crate::baker`] assigns `v0←(min_u, min_v)`, `v1←(min_u, max_v)`,
-    ///    `v2←(max_u, max_v)`, `v3←(max_u, min_v)`. For up/down the client's vertex order is our
-    ///    `v0 <-> v2`, so the rectangle has to be handed over with v descending; otherwise the
-    ///    top/bottom texture reads upside down (visible on the chest lid).
+    /// 1. **Panel choice.** [`model_corners`] emits a y-inverted corner pair, so the baker places
+    ///    the `down` key on the *upper* plane and the `up` key on the *lower* one. The client's
+    ///    panels therefore swap between the keys, and north/south swap as well because the box is
+    ///    mirrored in depth.
+    /// 2. **V orientation.** The client's polygon assigns UVs as `v0←(u_end, v_start)`,
+    ///    `v1←(u_start, v_start)`, `v2←(u_start, v_end)`, `v3←(u_end, v_end)`, while the baker
+    ///    assigns `v0←(min_u, min_v)`, `v1←(min_u, max_v)`, `v2←(max_u, max_v)`,
+    ///    `v3←(max_u, min_v)`. For the plane that receives the baker's `down` mapping the orders
+    ///    differ by a `v0 <-> v2` swap, so that rectangle is handed over v-descending; the plane
+    ///    that receives the baker's `up` mapping (its mirror) keeps v ascending.
+    /// 3. East/west are unaffected and stay ascending.
     pub fn model_face_uvs(&self, face: Direction) -> [f32; 4] {
         let rect = match face {
             Direction::Up => self.face_uvs(Direction::Down),
@@ -64,9 +66,8 @@ impl CubeSpec {
         let (u0, u1) = (rect[0].min(rect[2]), rect[0].max(rect[2]));
         let (v0, v1) = (rect[1].min(rect[3]), rect[1].max(rect[3]));
         match face {
-            // `[min_u, max_v, max_u, min_v]`: the baker reads element 0/2 as u and 1/3 as v, so a
-            // descending v reverses the vertical texture direction on these two faces.
-            Direction::Up | Direction::Down => [u0, v1, u1, v0],
+            // Rendered on the upper plane (see `model_corners`): needs the reversed v.
+            Direction::Down => [u0, v1, u1, v0],
             _ => [u0, v0, u1, v1],
         }
     }
