@@ -21,5 +21,6 @@ pub use item::{bake_item_from_png_bytes, bake_item_generated_model, ItemMeshOpti
 pub use parser::{
     mesh_to_obj_string, normalize_canonical_blockstate, BakedObjFace, BlockModelJson, BlockState,
     BlockStateDefinition, BlockStateResolver, GuiLight, ItemDisplayContext, ItemTransforms,
-    ModelOverride, ModelTransform, ResolvedBlockModel, RotationJson, RotationValue, VariantModel,
+    ModelOverride, ModelTransform, ResolvedBlockModel, RotationJson, RotationValue, TextureValue,
+    VariantModel,
 };

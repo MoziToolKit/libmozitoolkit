@@ -38,6 +38,9 @@ impl BuiltinModelRegistry {
         blockstate: &BlockState,
         entity: Option<&crate::block_entity::BlockEntityData>,
     ) -> Option<BlockModelJson> {
+        if let Some(model) = crate::builtin::props::chest::build_chest_model(blockstate) {
+            return Some(model);
+        }
         if let Some(model) = MiExModelLoader::load_for_block_entity(blockstate, entity) {
             return Some(model);
         }

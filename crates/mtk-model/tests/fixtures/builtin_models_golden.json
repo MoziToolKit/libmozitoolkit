@@ -1,0 +1,4091 @@
+{
+  "minecraft:chest[facing=east,type=left,waterlogged=false]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              7.25,
+              4.75,
+              11.0,
+              8.25
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              7.25,
+              8.25,
+              10.75,
+              10.75
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              10.75,
+              8.25,
+              14.5,
+              10.75
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              3.5,
+              8.25,
+              7.25,
+              10.75
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              3.5,
+              4.75,
+              7.25,
+              8.25
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              8.25,
+              3.5,
+              10.75
+            ]
+          }
+        },
+        "from": [
+          16.0,
+          10.0,
+          1.0
+        ],
+        "shade": true,
+        "to": [
+          1.0,
+          0.0,
+          15.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            90.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              7.25,
+              0.0,
+              11.0,
+              3.5
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              7.25,
+              3.5,
+              10.75,
+              4.75
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              10.75,
+              3.5,
+              14.5,
+              4.75
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              3.5,
+              3.5,
+              7.25,
+              4.75
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              3.5,
+              0.0,
+              7.25,
+              3.5
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              3.5,
+              3.5,
+              4.75
+            ]
+          }
+        },
+        "from": [
+          16.0,
+          14.0,
+          1.0
+        ],
+        "shade": true,
+        "to": [
+          1.0,
+          9.0,
+          15.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            90.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              0.5,
+              0.0,
+              0.75,
+              0.25
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              0.5,
+              0.25,
+              0.75,
+              1.25
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              0.75,
+              0.25,
+              1.0,
+              1.25
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              0.25,
+              0.25,
+              0.5,
+              1.25
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              0.25,
+              0.0,
+              0.5,
+              0.25
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              0.25,
+              0.25,
+              1.25
+            ]
+          }
+        },
+        "from": [
+          16.0,
+          11.0,
+          0.0
+        ],
+        "shade": true,
+        "to": [
+          15.0,
+          7.0,
+          1.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            90.0,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/chest/normal",
+      "texture": "minecraft:entity/chest/normal_left"
+    }
+  },
+  "minecraft:chest[facing=north,type=single,waterlogged=false]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              7.0,
+              4.75,
+              10.5,
+              8.25
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              7.0,
+              8.25,
+              10.5,
+              10.75
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              10.5,
+              8.25,
+              14.0,
+              10.75
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              3.5,
+              8.25,
+              7.0,
+              10.75
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              3.5,
+              4.75,
+              7.0,
+              8.25
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              8.25,
+              3.5,
+              10.75
+            ]
+          }
+        },
+        "from": [
+          15.0,
+          10.0,
+          1.0
+        ],
+        "shade": true,
+        "to": [
+          1.0,
+          0.0,
+          15.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              7.0,
+              0.0,
+              10.5,
+              3.5
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              7.0,
+              3.5,
+              10.5,
+              4.75
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              10.5,
+              3.5,
+              14.0,
+              4.75
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              3.5,
+              3.5,
+              7.0,
+              4.75
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              3.5,
+              0.0,
+              7.0,
+              3.5
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              3.5,
+              3.5,
+              4.75
+            ]
+          }
+        },
+        "from": [
+          15.0,
+          14.0,
+          1.0
+        ],
+        "shade": true,
+        "to": [
+          1.0,
+          9.0,
+          15.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              0.75,
+              0.0,
+              1.25,
+              0.25
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              0.75,
+              0.25,
+              1.0,
+              1.25
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              1.0,
+              0.25,
+              1.5,
+              1.25
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              0.25,
+              0.25,
+              0.75,
+              1.25
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              0.25,
+              0.0,
+              0.75,
+              0.25
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              0.25,
+              0.25,
+              1.25
+            ]
+          }
+        },
+        "from": [
+          9.0,
+          11.0,
+          0.0
+        ],
+        "shade": true,
+        "to": [
+          7.0,
+          7.0,
+          1.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/chest/normal",
+      "texture": "minecraft:entity/chest/normal"
+    }
+  },
+  "minecraft:creeper_head[rotation=3]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              0.0,
+              6.0,
+              4.0
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              4.0,
+              6.0,
+              8.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              6.0,
+              4.0,
+              8.0,
+              8.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              2.0,
+              4.0,
+              4.0,
+              8.0
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              2.0,
+              0.0,
+              4.0,
+              4.0
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              4.0,
+              2.0,
+              8.0
+            ]
+          }
+        },
+        "from": [
+          4.0,
+          0.0,
+          4.0
+        ],
+        "shade": true,
+        "to": [
+          12.0,
+          8.0,
+          12.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            247.5,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/player/wide/steve",
+      "texture": "minecraft:entity/creeper/creeper"
+    }
+  },
+  "minecraft:dragon_wall_head[facing=south]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              9.0,
+              1.875,
+              10.0,
+              2.875
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              9.0,
+              2.875,
+              10.0,
+              3.875
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              10.0,
+              2.875,
+              11.0,
+              3.875
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              8.0,
+              2.875,
+              9.0,
+              3.875
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              8.0,
+              1.875,
+              9.0,
+              2.875
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              7.0,
+              2.875,
+              8.0,
+              3.875
+            ]
+          }
+        },
+        "from": [
+          2.0,
+          4.0,
+          0.0
+        ],
+        "shade": true,
+        "to": [
+          14.0,
+          16.0,
+          12.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              12.75,
+              2.75,
+              13.5,
+              3.75
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              12.75,
+              3.75,
+              13.75,
+              4.0625
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              13.75,
+              3.75,
+              14.5,
+              4.0625
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              12.0,
+              3.75,
+              12.75,
+              4.0625
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              12.0,
+              2.75,
+              12.75,
+              3.75
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              11.0,
+              3.75,
+              12.0,
+              4.0625
+            ]
+          }
+        },
+        "from": [
+          3.5,
+          7.0,
+          10.5
+        ],
+        "shade": true,
+        "to": [
+          12.5,
+          10.75,
+          22.5
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              12.75,
+              4.0625,
+              13.5,
+              5.0625
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              12.75,
+              5.0625,
+              13.75,
+              5.3125
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              13.75,
+              5.0625,
+              14.5,
+              5.3125
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              12.0,
+              5.0625,
+              12.75,
+              5.3125
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              12.0,
+              4.0625,
+              12.75,
+              5.0625
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              11.0,
+              5.0625,
+              12.0,
+              5.3125
+            ]
+          }
+        },
+        "from": [
+          3.5,
+          4.0,
+          10.5
+        ],
+        "rotation": {
+          "angle": 11.5,
+          "axis": "x",
+          "origin": [
+            8.0,
+            7.0,
+            10.5
+          ]
+        },
+        "shade": true,
+        "to": [
+          12.5,
+          7.0,
+          22.5
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              7.375,
+              0.0,
+              7.5,
+              0.25
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              7.375,
+              0.25,
+              7.625,
+              0.375
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              7.625,
+              0.25,
+              7.75,
+              0.375
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              7.25,
+              0.25,
+              7.375,
+              0.375
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              7.25,
+              0.0,
+              7.375,
+              0.25
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              7.0,
+              0.25,
+              7.25,
+              0.375
+            ]
+          }
+        },
+        "from": [
+          10.25,
+          10.75,
+          19.5
+        ],
+        "shade": true,
+        "to": [
+          11.75,
+          12.25,
+          22.5
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              7.375,
+              0.0,
+              7.5,
+              0.25
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              7.375,
+              0.25,
+              7.625,
+              0.375
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              7.625,
+              0.25,
+              7.75,
+              0.375
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              7.25,
+              0.25,
+              7.375,
+              0.375
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              7.25,
+              0.0,
+              7.375,
+              0.25
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              7.0,
+              0.25,
+              7.25,
+              0.375
+            ]
+          }
+        },
+        "from": [
+          4.25,
+          10.75,
+          19.5
+        ],
+        "shade": true,
+        "to": [
+          5.75,
+          12.25,
+          22.5
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              0.5,
+              0.0,
+              0.625,
+              0.375
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              0.5,
+              0.375,
+              0.875,
+              0.625
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              0.875,
+              0.375,
+              1.0,
+              0.625
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              0.375,
+              0.375,
+              0.5,
+              0.625
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              0.375,
+              0.0,
+              0.5,
+              0.375
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              0.375,
+              0.375,
+              0.625
+            ]
+          }
+        },
+        "from": [
+          10.25,
+          16.0,
+          3.0
+        ],
+        "shade": true,
+        "to": [
+          11.75,
+          19.0,
+          7.5
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              3.5,
+              0.0,
+              3.625,
+              0.375
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              3.5,
+              0.375,
+              3.875,
+              0.625
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              3.875,
+              0.375,
+              4.0,
+              0.625
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              3.375,
+              0.375,
+              3.5,
+              0.625
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              3.375,
+              0.0,
+              3.5,
+              0.375
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              3.0,
+              0.375,
+              3.375,
+              0.625
+            ]
+          }
+        },
+        "from": [
+          4.25,
+          16.0,
+          3.0
+        ],
+        "shade": true,
+        "to": [
+          5.75,
+          19.0,
+          7.5
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/player/wide/steve",
+      "texture": "minecraft:entity/enderdragon/dragon"
+    }
+  },
+  "minecraft:end_portal": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "up": {
+            "texture": "#texture"
+          }
+        },
+        "from": [
+          0.0,
+          12.0,
+          0.0
+        ],
+        "shade": true,
+        "to": [
+          16.0,
+          12.0,
+          16.0
+        ]
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/end_portal/end_portal",
+      "texture": "minecraft:entity/end_portal/end_portal"
+    }
+  },
+  "minecraft:ender_chest[facing=west,type=single,waterlogged=false]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              7.0,
+              4.75,
+              10.5,
+              8.25
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              7.0,
+              8.25,
+              10.5,
+              10.75
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              10.5,
+              8.25,
+              14.0,
+              10.75
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              3.5,
+              8.25,
+              7.0,
+              10.75
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              3.5,
+              4.75,
+              7.0,
+              8.25
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              8.25,
+              3.5,
+              10.75
+            ]
+          }
+        },
+        "from": [
+          15.0,
+          10.0,
+          1.0
+        ],
+        "shade": true,
+        "to": [
+          1.0,
+          0.0,
+          15.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            270.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              7.0,
+              0.0,
+              10.5,
+              3.5
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              7.0,
+              3.5,
+              10.5,
+              4.75
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              10.5,
+              3.5,
+              14.0,
+              4.75
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              3.5,
+              3.5,
+              7.0,
+              4.75
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              3.5,
+              0.0,
+              7.0,
+              3.5
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              3.5,
+              3.5,
+              4.75
+            ]
+          }
+        },
+        "from": [
+          15.0,
+          14.0,
+          1.0
+        ],
+        "shade": true,
+        "to": [
+          1.0,
+          9.0,
+          15.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            270.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              0.75,
+              0.0,
+              1.25,
+              0.25
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              0.75,
+              0.25,
+              1.0,
+              1.25
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              1.0,
+              0.25,
+              1.5,
+              1.25
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              0.25,
+              0.25,
+              0.75,
+              1.25
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              0.25,
+              0.0,
+              0.75,
+              0.25
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              0.25,
+              0.25,
+              1.25
+            ]
+          }
+        },
+        "from": [
+          9.0,
+          11.0,
+          0.0
+        ],
+        "shade": true,
+        "to": [
+          7.0,
+          7.0,
+          1.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            270.0,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/chest/normal",
+      "texture": "minecraft:entity/chest/ender"
+    }
+  },
+  "minecraft:light_blue_bed[facing=west,occupied=true,part=head]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "rotation": 180,
+            "texture": "#texture",
+            "uv": [
+              7.0,
+              1.5,
+              11.0,
+              5.5
+            ]
+          },
+          "east": {
+            "rotation": 90,
+            "texture": "#texture",
+            "uv": [
+              5.5,
+              1.5,
+              7.0,
+              5.5
+            ]
+          },
+          "north": {
+            "rotation": 180,
+            "texture": "#texture",
+            "uv": [
+              1.5,
+              0.0,
+              5.5,
+              1.5
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              5.5,
+              0.0,
+              9.5,
+              1.5
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              1.5,
+              1.5,
+              5.5,
+              5.5
+            ]
+          },
+          "west": {
+            "rotation": 270,
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              1.5,
+              1.5,
+              5.5
+            ]
+          }
+        },
+        "from": [
+          0.0,
+          3.0,
+          0.0
+        ],
+        "shade": true,
+        "to": [
+          16.0,
+          9.0,
+          16.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            270.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              14.0,
+              0.0,
+              14.75,
+              0.75
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              14.75,
+              0.75,
+              15.5,
+              1.5
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              12.5,
+              0.75,
+              13.25,
+              1.5
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              14.0,
+              0.75,
+              14.75,
+              1.5
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              13.25,
+              0.0,
+              14.0,
+              0.75
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              13.25,
+              0.75,
+              14.0,
+              1.5
+            ]
+          }
+        },
+        "from": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "shade": true,
+        "to": [
+          3.0,
+          3.0,
+          3.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            270.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "rotation": 270,
+            "texture": "#texture",
+            "uv": [
+              14.0,
+              1.5,
+              14.75,
+              2.25
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              12.5,
+              2.25,
+              13.25,
+              3.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              13.25,
+              2.25,
+              14.0,
+              3.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              14.75,
+              2.25,
+              15.5,
+              3.0
+            ]
+          },
+          "up": {
+            "rotation": 90,
+            "texture": "#texture",
+            "uv": [
+              13.25,
+              1.5,
+              14.0,
+              2.25
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              14.0,
+              2.25,
+              14.75,
+              3.0
+            ]
+          }
+        },
+        "from": [
+          13.0,
+          0.0,
+          0.0
+        ],
+        "shade": true,
+        "to": [
+          16.0,
+          3.0,
+          3.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            270.0,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/bed/red",
+      "texture": "minecraft:entity/bed/light_blue"
+    }
+  },
+  "minecraft:oak_hanging_sign[attached=false,rotation=0,waterlogged=false]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              6.0,
+              7.5,
+              7.0
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              7.0,
+              4.5,
+              12.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              4.5,
+              7.0,
+              8.0,
+              12.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              0.5,
+              7.0,
+              4.0,
+              12.0
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              0.5,
+              6.0,
+              4.0,
+              7.0
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              7.0,
+              0.5,
+              12.0
+            ]
+          }
+        },
+        "from": [
+          1.0,
+          0.0,
+          7.0
+        ],
+        "shade": true,
+        "to": [
+          15.0,
+          10.0,
+          9.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              3.0,
+              0.75,
+              6.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              3.0,
+              0.75,
+              6.0
+            ]
+          }
+        },
+        "from": [
+          2.0,
+          10.0,
+          8.0
+        ],
+        "rotation": {
+          "angle": 45.0,
+          "axis": "y",
+          "origin": [
+            3.5,
+            10.0,
+            8.0
+          ]
+        },
+        "shade": true,
+        "to": [
+          5.0,
+          16.0,
+          8.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              1.5,
+              3.0,
+              2.25,
+              6.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              1.5,
+              3.0,
+              2.25,
+              6.0
+            ]
+          }
+        },
+        "from": [
+          2.0,
+          10.0,
+          8.0
+        ],
+        "rotation": {
+          "angle": -45.0,
+          "axis": "y",
+          "origin": [
+            3.5,
+            10.0,
+            8.0
+          ]
+        },
+        "shade": true,
+        "to": [
+          5.0,
+          16.0,
+          8.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              3.0,
+              0.75,
+              6.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              3.0,
+              0.75,
+              6.0
+            ]
+          }
+        },
+        "from": [
+          11.0,
+          10.0,
+          8.0
+        ],
+        "rotation": {
+          "angle": 45.0,
+          "axis": "y",
+          "origin": [
+            12.5,
+            10.0,
+            8.0
+          ]
+        },
+        "shade": true,
+        "to": [
+          14.0,
+          16.0,
+          8.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              1.5,
+              3.0,
+              2.25,
+              6.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              1.5,
+              3.0,
+              2.25,
+              6.0
+            ]
+          }
+        },
+        "from": [
+          11.0,
+          10.0,
+          8.0
+        ],
+        "rotation": {
+          "angle": -45.0,
+          "axis": "y",
+          "origin": [
+            12.5,
+            10.0,
+            8.0
+          ]
+        },
+        "shade": true,
+        "to": [
+          14.0,
+          16.0,
+          8.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/signs/oak",
+      "texture": "minecraft:entity/signs/hanging/oak"
+    }
+  },
+  "minecraft:oak_sign[rotation=0,waterlogged=false]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              6.5,
+              0.0,
+              12.500000953674316,
+              7.0
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              6.5,
+              7.0,
+              7.000000476837158,
+              7.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              7.000000476837158,
+              7.0,
+              13.0,
+              7.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              0.5000000596046448,
+              7.0,
+              6.5,
+              7.0
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              0.5000000596046448,
+              0.0,
+              6.5,
+              7.0
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              7.0,
+              0.5000000596046448,
+              7.0
+            ]
+          }
+        },
+        "from": [
+          0.0,
+          0.0,
+          7.333333492279053
+        ],
+        "shade": true,
+        "to": [
+          16.0,
+          0.0,
+          8.666666984558105
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              1.0,
+              7.0,
+              1.5,
+              8.0
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              1.0,
+              8.0,
+              1.5,
+              15.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              1.5,
+              8.0,
+              2.0,
+              15.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              0.5,
+              8.0,
+              1.0,
+              15.0
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              0.5,
+              7.0,
+              1.0,
+              8.0
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              8.0,
+              0.5,
+              15.0
+            ]
+          }
+        },
+        "from": [
+          7.333333492279053,
+          0.0,
+          7.333333492279053
+        ],
+        "shade": true,
+        "to": [
+          8.666666984558105,
+          9.333333969116211,
+          8.666666984558105
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/signs/oak",
+      "texture": "minecraft:entity/signs/oak"
+    }
+  },
+  "minecraft:oak_sign[rotation=9,waterlogged=false]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              6.5,
+              0.0,
+              12.500000953674316,
+              7.0
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              6.5,
+              7.0,
+              7.000000476837158,
+              7.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              7.000000476837158,
+              7.0,
+              13.0,
+              7.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              0.5000000596046448,
+              7.0,
+              6.5,
+              7.0
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              0.5000000596046448,
+              0.0,
+              6.5,
+              7.0
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              7.0,
+              0.5000000596046448,
+              7.0
+            ]
+          }
+        },
+        "from": [
+          0.0,
+          0.0,
+          7.333333492279053
+        ],
+        "shade": true,
+        "to": [
+          16.0,
+          0.0,
+          8.666666984558105
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            202.5,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              1.0,
+              7.0,
+              1.5,
+              8.0
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              1.0,
+              8.0,
+              1.5,
+              15.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              1.5,
+              8.0,
+              2.0,
+              15.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              0.5,
+              8.0,
+              1.0,
+              15.0
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              0.5,
+              7.0,
+              1.0,
+              8.0
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              8.0,
+              0.5,
+              15.0
+            ]
+          }
+        },
+        "from": [
+          7.333333492279053,
+          0.0,
+          7.333333492279053
+        ],
+        "shade": true,
+        "to": [
+          8.666666984558105,
+          9.333333969116211,
+          8.666666984558105
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            202.5,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/signs/oak",
+      "texture": "minecraft:entity/signs/oak"
+    }
+  },
+  "minecraft:oak_wall_hanging_sign[facing=east,waterlogged=false]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              6.0,
+              7.5,
+              7.0
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              7.0,
+              4.5,
+              12.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              4.5,
+              7.0,
+              8.0,
+              12.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              0.5,
+              7.0,
+              4.0,
+              12.0
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              0.5,
+              6.0,
+              4.0,
+              7.0
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              7.0,
+              0.5,
+              12.0
+            ]
+          }
+        },
+        "from": [
+          1.0,
+          0.0,
+          7.0
+        ],
+        "shade": true,
+        "to": [
+          15.0,
+          10.0,
+          9.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            270.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              5.0,
+              0.0,
+              9.0,
+              2.0
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              5.0,
+              2.0,
+              6.0,
+              3.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              6.0,
+              2.0,
+              10.0,
+              3.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              1.0,
+              2.0,
+              5.0,
+              3.0
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              1.0,
+              0.0,
+              5.0,
+              2.0
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              2.0,
+              1.0,
+              3.0
+            ]
+          }
+        },
+        "from": [
+          0.0,
+          14.0,
+          6.0
+        ],
+        "shade": true,
+        "to": [
+          16.0,
+          16.0,
+          10.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            270.0,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/signs/oak",
+      "texture": "minecraft:entity/signs/hanging/oak"
+    }
+  },
+  "minecraft:oak_wall_sign[facing=north,waterlogged=false]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              6.5,
+              0.0,
+              12.500000953674316,
+              7.0
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              6.5,
+              7.0,
+              7.000000476837158,
+              7.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              7.000000476837158,
+              7.0,
+              13.0,
+              7.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              0.5000000596046448,
+              7.0,
+              6.5,
+              7.0
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              0.5000000596046448,
+              0.0,
+              6.5,
+              7.0
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              7.0,
+              0.5000000596046448,
+              7.0
+            ]
+          }
+        },
+        "from": [
+          0.0,
+          0.0,
+          0.3333333134651184
+        ],
+        "shade": true,
+        "to": [
+          16.0,
+          0.0,
+          1.6666667461395264
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            180.0,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/signs/oak",
+      "texture": "minecraft:entity/signs/oak"
+    }
+  },
+  "minecraft:player_head[rotation=7]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              0.0,
+              6.0,
+              2.0
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              2.0,
+              6.0,
+              4.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              6.0,
+              2.0,
+              8.0,
+              4.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              2.0,
+              2.0,
+              4.0,
+              4.0
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              2.0,
+              0.0,
+              4.0,
+              2.0
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              2.0,
+              2.0,
+              4.0
+            ]
+          }
+        },
+        "from": [
+          4.0,
+          0.0,
+          4.0
+        ],
+        "shade": true,
+        "to": [
+          12.0,
+          8.0,
+          12.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            337.5,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              12.0,
+              0.0,
+              14.0,
+              2.0
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              12.0,
+              2.0,
+              14.0,
+              4.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              14.0,
+              2.0,
+              16.0,
+              4.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              10.0,
+              2.0,
+              12.0,
+              4.0
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              10.0,
+              0.0,
+              12.0,
+              2.0
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              8.0,
+              2.0,
+              10.0,
+              4.0
+            ]
+          }
+        },
+        "from": [
+          3.75,
+          -0.25,
+          3.75
+        ],
+        "shade": true,
+        "to": [
+          12.25,
+          8.25,
+          12.25
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            337.5,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/player/wide/steve",
+      "texture": "minecraft:entity/player/wide/steve"
+    }
+  },
+  "minecraft:red_bed[facing=north,occupied=false,part=foot]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "rotation": 180,
+            "texture": "#texture",
+            "uv": [
+              7.0,
+              7.0,
+              11.0,
+              11.0
+            ]
+          },
+          "east": {
+            "rotation": 90,
+            "texture": "#texture",
+            "uv": [
+              5.5,
+              7.0,
+              7.0,
+              11.0
+            ]
+          },
+          "north": {
+            "rotation": 180,
+            "texture": "#texture",
+            "uv": [
+              1.5,
+              5.5,
+              5.5,
+              7.0
+            ]
+          },
+          "south": {
+            "rotation": 180,
+            "texture": "#texture",
+            "uv": [
+              5.5,
+              5.5,
+              9.5,
+              7.0
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              1.5,
+              7.0,
+              5.5,
+              11.0
+            ]
+          },
+          "west": {
+            "rotation": 270,
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              7.0,
+              1.5,
+              11.0
+            ]
+          }
+        },
+        "from": [
+          0.0,
+          3.0,
+          0.0
+        ],
+        "shade": true,
+        "to": [
+          16.0,
+          9.0,
+          16.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "rotation": 90,
+            "texture": "#texture",
+            "uv": [
+              14.0,
+              3.0,
+              14.75,
+              3.75
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              14.0,
+              3.75,
+              14.75,
+              4.5
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              14.75,
+              3.75,
+              15.5,
+              4.5
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              13.25,
+              3.75,
+              14.0,
+              4.5
+            ]
+          },
+          "up": {
+            "rotation": 270,
+            "texture": "#texture",
+            "uv": [
+              13.25,
+              3.0,
+              14.0,
+              3.75
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              12.5,
+              3.75,
+              13.25,
+              4.5
+            ]
+          }
+        },
+        "from": [
+          0.0,
+          0.0,
+          13.0
+        ],
+        "shade": true,
+        "to": [
+          3.0,
+          3.0,
+          16.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "rotation": 180,
+            "texture": "#texture",
+            "uv": [
+              14.0,
+              4.5,
+              14.75,
+              5.25
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              13.25,
+              5.25,
+              14.0,
+              6.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              14.0,
+              5.25,
+              14.75,
+              6.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              12.5,
+              5.25,
+              13.25,
+              6.0
+            ]
+          },
+          "up": {
+            "rotation": 180,
+            "texture": "#texture",
+            "uv": [
+              13.25,
+              4.5,
+              14.0,
+              5.25
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              14.75,
+              5.25,
+              15.5,
+              6.0
+            ]
+          }
+        },
+        "from": [
+          13.0,
+          0.0,
+          13.0
+        ],
+        "shade": true,
+        "to": [
+          16.0,
+          3.0,
+          16.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/bed/red",
+      "texture": "minecraft:entity/bed/red"
+    }
+  },
+  "minecraft:red_bed[facing=north,occupied=false,part=head]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "rotation": 180,
+            "texture": "#texture",
+            "uv": [
+              7.0,
+              1.5,
+              11.0,
+              5.5
+            ]
+          },
+          "east": {
+            "rotation": 90,
+            "texture": "#texture",
+            "uv": [
+              5.5,
+              1.5,
+              7.0,
+              5.5
+            ]
+          },
+          "north": {
+            "rotation": 180,
+            "texture": "#texture",
+            "uv": [
+              1.5,
+              0.0,
+              5.5,
+              1.5
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              5.5,
+              0.0,
+              9.5,
+              1.5
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              1.5,
+              1.5,
+              5.5,
+              5.5
+            ]
+          },
+          "west": {
+            "rotation": 270,
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              1.5,
+              1.5,
+              5.5
+            ]
+          }
+        },
+        "from": [
+          0.0,
+          3.0,
+          0.0
+        ],
+        "shade": true,
+        "to": [
+          16.0,
+          9.0,
+          16.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              14.0,
+              0.0,
+              14.75,
+              0.75
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              14.75,
+              0.75,
+              15.5,
+              1.5
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              12.5,
+              0.75,
+              13.25,
+              1.5
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              14.0,
+              0.75,
+              14.75,
+              1.5
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              13.25,
+              0.0,
+              14.0,
+              0.75
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              13.25,
+              0.75,
+              14.0,
+              1.5
+            ]
+          }
+        },
+        "from": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "shade": true,
+        "to": [
+          3.0,
+          3.0,
+          3.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "rotation": 270,
+            "texture": "#texture",
+            "uv": [
+              14.0,
+              1.5,
+              14.75,
+              2.25
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              12.5,
+              2.25,
+              13.25,
+              3.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              13.25,
+              2.25,
+              14.0,
+              3.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              14.75,
+              2.25,
+              15.5,
+              3.0
+            ]
+          },
+          "up": {
+            "rotation": 90,
+            "texture": "#texture",
+            "uv": [
+              13.25,
+              1.5,
+              14.0,
+              2.25
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              14.0,
+              2.25,
+              14.75,
+              3.0
+            ]
+          }
+        },
+        "from": [
+          13.0,
+          0.0,
+          0.0
+        ],
+        "shade": true,
+        "to": [
+          16.0,
+          3.0,
+          3.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/bed/red",
+      "texture": "minecraft:entity/bed/red"
+    }
+  },
+  "minecraft:red_shulker_box[facing=north]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              8.0,
+              7.0,
+              12.0,
+              11.0
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              8.0,
+              11.0,
+              12.0,
+              13.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              12.0,
+              11.0,
+              16.0,
+              13.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              11.0,
+              8.0,
+              13.0
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              7.0,
+              8.0,
+              11.0
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              11.0,
+              4.0,
+              13.0
+            ]
+          }
+        },
+        "from": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "shade": true,
+        "to": [
+          16.0,
+          8.0,
+          16.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            90.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              8.0,
+              0.0,
+              12.0,
+              3.9978554248809814
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              8.0,
+              3.9978554248809814,
+              12.0,
+              7.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              12.0,
+              3.9978554248809814,
+              16.0,
+              7.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              3.9978554248809814,
+              8.0,
+              7.0
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              0.0,
+              8.0,
+              3.9978554248809814
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              3.9978554248809814,
+              4.0,
+              7.0
+            ]
+          }
+        },
+        "from": [
+          0.009999999776482582,
+          4.0,
+          0.009999999776482582
+        ],
+        "shade": true,
+        "to": [
+          15.989999771118164,
+          16.0,
+          15.989999771118164
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            90.0,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/shulker/shulker",
+      "texture": "minecraft:entity/shulker/shulker_red"
+    }
+  },
+  "minecraft:shulker_box[facing=up]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              8.0,
+              7.0,
+              12.0,
+              11.0
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              8.0,
+              11.0,
+              12.0,
+              13.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              12.0,
+              11.0,
+              16.0,
+              13.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              11.0,
+              8.0,
+              13.0
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              7.0,
+              8.0,
+              11.0
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              11.0,
+              4.0,
+              13.0
+            ]
+          }
+        },
+        "from": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "shade": true,
+        "to": [
+          16.0,
+          8.0,
+          16.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              8.0,
+              0.0,
+              12.0,
+              3.9978554248809814
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              8.0,
+              3.9978554248809814,
+              12.0,
+              7.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              12.0,
+              3.9978554248809814,
+              16.0,
+              7.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              3.9978554248809814,
+              8.0,
+              7.0
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              0.0,
+              8.0,
+              3.9978554248809814
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              3.9978554248809814,
+              4.0,
+              7.0
+            ]
+          }
+        },
+        "from": [
+          0.009999999776482582,
+          4.0,
+          0.009999999776482582
+        ],
+        "shade": true,
+        "to": [
+          15.989999771118164,
+          16.0,
+          15.989999771118164
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/shulker/shulker",
+      "texture": "minecraft:entity/shulker/shulker"
+    }
+  },
+  "minecraft:skeleton_skull[rotation=0]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              0.0,
+              6.0,
+              4.0
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              4.0,
+              6.0,
+              8.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              6.0,
+              4.0,
+              8.0,
+              8.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              2.0,
+              4.0,
+              4.0,
+              8.0
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              2.0,
+              0.0,
+              4.0,
+              4.0
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              4.0,
+              2.0,
+              8.0
+            ]
+          }
+        },
+        "from": [
+          4.0,
+          0.0,
+          4.0
+        ],
+        "shade": true,
+        "to": [
+          12.0,
+          8.0,
+          12.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            180.0,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/player/wide/steve",
+      "texture": "minecraft:entity/skeleton/skeleton"
+    }
+  },
+  "minecraft:skeleton_wall_skull[facing=north]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              0.0,
+              6.0,
+              4.0
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              4.0,
+              4.0,
+              6.0,
+              8.0
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              6.0,
+              4.0,
+              8.0,
+              8.0
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              2.0,
+              4.0,
+              4.0,
+              8.0
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              2.0,
+              0.0,
+              4.0,
+              4.0
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              4.0,
+              2.0,
+              8.0
+            ]
+          }
+        },
+        "from": [
+          4.0,
+          4.0,
+          0.0
+        ],
+        "shade": true,
+        "to": [
+          12.0,
+          12.0,
+          8.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            180.0,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/player/wide/steve",
+      "texture": "minecraft:entity/skeleton/skeleton"
+    }
+  },
+  "minecraft:trapped_chest[facing=south,type=single,waterlogged=false]": {
+    "ambientocclusion": true,
+    "elements": [
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              7.0,
+              4.75,
+              10.5,
+              8.25
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              7.0,
+              8.25,
+              10.5,
+              10.75
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              10.5,
+              8.25,
+              14.0,
+              10.75
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              3.5,
+              8.25,
+              7.0,
+              10.75
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              3.5,
+              4.75,
+              7.0,
+              8.25
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              8.25,
+              3.5,
+              10.75
+            ]
+          }
+        },
+        "from": [
+          15.0,
+          10.0,
+          1.0
+        ],
+        "shade": true,
+        "to": [
+          1.0,
+          0.0,
+          15.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            180.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              7.0,
+              0.0,
+              10.5,
+              3.5
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              7.0,
+              3.5,
+              10.5,
+              4.75
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              10.5,
+              3.5,
+              14.0,
+              4.75
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              3.5,
+              3.5,
+              7.0,
+              4.75
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              3.5,
+              0.0,
+              7.0,
+              3.5
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              3.5,
+              3.5,
+              4.75
+            ]
+          }
+        },
+        "from": [
+          15.0,
+          14.0,
+          1.0
+        ],
+        "shade": true,
+        "to": [
+          1.0,
+          9.0,
+          15.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            180.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "faces": {
+          "down": {
+            "texture": "#texture",
+            "uv": [
+              0.75,
+              0.0,
+              1.25,
+              0.25
+            ]
+          },
+          "east": {
+            "texture": "#texture",
+            "uv": [
+              0.75,
+              0.25,
+              1.0,
+              1.25
+            ]
+          },
+          "north": {
+            "texture": "#texture",
+            "uv": [
+              1.0,
+              0.25,
+              1.5,
+              1.25
+            ]
+          },
+          "south": {
+            "texture": "#texture",
+            "uv": [
+              0.25,
+              0.25,
+              0.75,
+              1.25
+            ]
+          },
+          "up": {
+            "texture": "#texture",
+            "uv": [
+              0.25,
+              0.0,
+              0.75,
+              0.25
+            ]
+          },
+          "west": {
+            "texture": "#texture",
+            "uv": [
+              0.0,
+              0.25,
+              0.25,
+              1.25
+            ]
+          }
+        },
+        "from": [
+          9.0,
+          11.0,
+          0.0
+        ],
+        "shade": true,
+        "to": [
+          7.0,
+          7.0,
+          1.0
+        ],
+        "transform": {
+          "pivot": [
+            8.0,
+            8.0,
+            8.0
+          ],
+          "rotate": [
+            0.0,
+            180.0,
+            0.0
+          ]
+        }
+      }
+    ],
+    "textures": {
+      "particle": "minecraft:entity/chest/normal",
+      "texture": "minecraft:entity/chest/trapped"
+    }
+  }
+}
