@@ -89,9 +89,9 @@ pub fn get_builtin_model_by_id(model_id: &str) -> Option<BlockModelJson> {
 }
 
 /// Fallback model for a blockstate and optional block entity data.
-pub fn get_builtin_model_for_state_and_entity(
+pub fn get_builtin_block_entity_model_json(
     blockstate: &BlockState,
-    entity: Option<&crate::entity::BlockEntityData>,
+    entity: Option<&crate::block_entity::BlockEntityData>,
 ) -> Option<BlockModelJson> {
     let clean = blockstate
         .name
@@ -128,9 +128,9 @@ pub fn get_builtin_model_for_state_and_entity(
 }
 
 /// Pre-baked direct model synthesizer for entity blocks (e.g. Copper Golem Statue, Decorated Pot).
-pub fn get_builtin_baked_model_for_state_and_entity(
+pub fn get_builtin_baked_block_entity_model(
     blockstate: &BlockState,
-    entity: Option<&crate::entity::BlockEntityData>,
+    entity: Option<&crate::block_entity::BlockEntityData>,
 ) -> Option<BakedModel> {
     let clean = blockstate
         .name
@@ -138,11 +138,11 @@ pub fn get_builtin_baked_model_for_state_and_entity(
         .unwrap_or(&blockstate.name);
 
     if clean == "copper_golem_statue" || clean.ends_with("_copper_golem_statue") {
-        return Some(crate::entity::copper_statue::create_copper_statue_baked_model(blockstate));
+        return Some(crate::block_entity::copper_statue::create_copper_statue_baked_model(blockstate));
     }
 
     if clean == "decorated_pot" {
-        if let Some(crate::entity::BlockEntityData::DecoratedPot { sherds }) = entity {
+        if let Some(crate::block_entity::BlockEntityData::DecoratedPot { sherds }) = entity {
             let facing = blockstate
                 .properties
                 .get("facing")

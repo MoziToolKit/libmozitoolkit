@@ -254,12 +254,12 @@ pub fn decode_packet<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, P
             dict.set_item("error_code", error_code as u16)?;
             dict.set_item("message", message)?;
         }
-        Packet::BaselineEntities {
+        Packet::BaselineBlockEntities {
             epoch,
             snapshot_uuid,
             entities,
         } => {
-            dict.set_item("type", "BASELINE_ENTITIES")?;
+            dict.set_item("type", "BASELINE_BLOCK_ENTITIES")?;
             dict.set_item("epoch", epoch)?;
             dict.set_item("snapshot_uuid", PyBytes::new(py, &snapshot_uuid))?;
             let ent_list = pyo3::types::PyList::empty(py);
@@ -274,13 +274,13 @@ pub fn decode_packet<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, P
             }
             dict.set_item("entities", ent_list)?;
         }
-        Packet::DeltaEntity {
+        Packet::DeltaBlockEntity {
             epoch,
             seq_id,
             rel_pos,
             entity,
         } => {
-            dict.set_item("type", "DELTA_ENTITY")?;
+            dict.set_item("type", "DELTA_BLOCK_ENTITY")?;
             dict.set_item("epoch", epoch)?;
             dict.set_item("seq_id", seq_id)?;
             dict.set_item("rel_x", rel_pos.x)?;

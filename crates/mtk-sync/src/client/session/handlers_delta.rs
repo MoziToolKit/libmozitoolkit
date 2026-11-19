@@ -133,7 +133,7 @@ pub(crate) fn handle_palette_update(
     }
 }
 
-pub(crate) fn handle_delta_entity(
+pub(crate) fn handle_delta_block_entity(
     epoch: u64,
     seq_id: u64,
     rel_pos: IVec3,

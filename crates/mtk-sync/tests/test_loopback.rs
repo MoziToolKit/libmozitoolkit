@@ -80,7 +80,7 @@ fn test_loopback_storage_baseline_assembly() {
             Packet::BaselineEnd { .. } => {
                 end_pkt = Some(decoded);
             }
-            Packet::BaselineEntities { entities, .. } => {
+            Packet::BaselineBlockEntities { entities, .. } => {
                 let asm = client_assembler.as_mut().expect("Assembler must exist");
                 for (rel_pos, be) in entities {
                     asm.block_entities.insert(rel_pos, be);

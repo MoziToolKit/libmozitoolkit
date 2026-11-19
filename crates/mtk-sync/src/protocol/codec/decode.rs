@@ -172,8 +172,8 @@ pub fn decode_packet(buf: &[u8]) -> Result<Packet, ProtocolError> {
         Opcode::Ping => decode_ping(buf, &mut offset),
         Opcode::Pong => decode_pong(buf, &mut offset),
         Opcode::Error => decode_error(buf, &mut offset),
-        Opcode::BaselineEntities => decode_baseline_entities(buf, &mut offset),
-        Opcode::DeltaEntity => decode_delta_entity(buf, &mut offset),
+        Opcode::BaselineBlockEntities => decode_baseline_entities(buf, &mut offset),
+        Opcode::DeltaBlockEntity => decode_delta_entity(buf, &mut offset),
     }
 }
 
@@ -432,24 +432,24 @@ fn decode_error(buf: &[u8], offset: &mut usize) -> Result<Packet, ProtocolError>
 fn decode_delta_entity(buf: &[u8], offset: &mut usize) -> Result<Packet, ProtocolError> {
     if *offset + 32 > buf.len() {
         return Err(ProtocolError::TruncatedPayload {
-            field: "DeltaEntity header",
+            field: "DeltaBlockEntity header",
         });
     }
-    let epoch = read_u64_le(buf, offset, "DeltaEntity epoch")?;
-    let seq_id = read_u64_le(buf, offset, "DeltaEntity seq_id")?;
-    let rx = read_i32_le(buf, offset, "DeltaEntity rx")?;
-    let ry = read_i32_le(buf, offset, "DeltaEntity ry")?;
-    let rz = read_i32_le(buf, offset, "DeltaEntity rz")?;
-    let payload_len = read_u32_le(buf, offset, "DeltaEntity payload_len")? as usize;
+    let epoch = read_u64_le(buf, offset, "DeltaBlockEntity epoch")?;
+    let seq_id = read_u64_le(buf, offset, "DeltaBlockEntity seq_id")?;
+    let rx = read_i32_le(buf, offset, "DeltaBlockEntity rx")?;
+    let ry = read_i32_le(buf, offset, "DeltaBlockEntity ry")?;
+    let rz = read_i32_le(buf, offset, "DeltaBlockEntity rz")?;
+    let payload_len = read_u32_le(buf, offset, "DeltaBlockEntity payload_len")? as usize;
 
     let entity = if payload_len > 0 {
-        let payload_slice = read_slice(buf, offset, payload_len, "DeltaEntity payload")?;
+        let payload_slice = read_slice(buf, offset, payload_len, "DeltaBlockEntity payload")?;
         decode_entity_payload(payload_slice)?
     } else {
         None
     };
 
-    Ok(Packet::DeltaEntity {
+    Ok(Packet::DeltaBlockEntity {
         epoch,
         seq_id,
         rel_pos: IVec3::new(rx, ry, rz),

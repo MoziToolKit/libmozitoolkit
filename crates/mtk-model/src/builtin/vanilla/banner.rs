@@ -6,7 +6,7 @@ use std::collections::HashMap;
 /// Procedurally synthesizes a banner model (standing or wall) with pole, crossbar, and cloth.
 pub fn create_builtin_banner_model(
     blockstate: &BlockState,
-    entity: Option<&crate::entity::BlockEntityData>,
+    entity: Option<&crate::block_entity::BlockEntityData>,
 ) -> Option<BlockModelJson> {
     let name = blockstate.name.as_str();
     let clean = name.strip_prefix("minecraft:").unwrap_or(name);
@@ -34,7 +34,7 @@ pub fn create_builtin_banner_model(
         (rotation / 16.0) * 360.0
     };
 
-    let cloth_texture = if let Some(crate::entity::BlockEntityData::Banner {
+    let cloth_texture = if let Some(crate::block_entity::BlockEntityData::Banner {
         base_color,
         patterns,
     }) = entity

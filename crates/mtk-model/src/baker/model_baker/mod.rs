@@ -80,7 +80,7 @@ impl ModelBaker {
     pub fn bake_blockstate_with_entity<F>(
         &mut self,
         state_str: &str,
-        entity: Option<&crate::entity::BlockEntityData>,
+        entity: Option<&crate::block_entity::BlockEntityData>,
         blockstate_def: Option<&BlockStateDefinition>,
         mut model_loader: F,
     ) -> Result<BakedModel, ModelError>
@@ -108,7 +108,7 @@ impl ModelBaker {
         }
 
         if let Some(baked) =
-            BuiltinModelRegistry::get_builtin_baked_model_with_entity(&blockstate, entity)
+            BuiltinModelRegistry::get_baked_block_entity_model(&blockstate, entity)
         {
             self.bake_cache.insert(cache_key, baked.clone());
             return Ok(baked);
@@ -153,7 +153,7 @@ impl ModelBaker {
         }
 
         if let Some(baked) =
-            BuiltinModelRegistry::get_builtin_baked_model_with_entity(&blockstate, None)
+            BuiltinModelRegistry::get_baked_block_entity_model(&blockstate, None)
         {
             let group = BakedVariantGroup::new(canonical_str.clone(), vec![baked.clone()], vec![1]);
             self.variant_cache

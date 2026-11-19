@@ -2,7 +2,7 @@
 
 mod baker;
 mod builtin;
-mod entity;
+mod block_entity;
 mod error;
 mod item;
 mod parser;
@@ -13,7 +13,7 @@ pub use baker::{
     BakedModelDatabase, BakedVariantGroup, ModelBakeFailure, ModelBaker,
 };
 pub use builtin::BuiltinModelRegistry;
-pub use entity::{
+pub use block_entity::{
     banner, skull, BannerPatternLayer, BlockEntityData, PlayerProfileData, SkullKind,
 };
 pub use error::ModelError;

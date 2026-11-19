@@ -9,7 +9,7 @@ impl ModelBaker {
         &mut self,
         model_id: &str,
         blockstate: &BlockState,
-        entity: Option<&crate::entity::BlockEntityData>,
+        entity: Option<&crate::block_entity::BlockEntityData>,
         allow_blockstate_builtin: bool,
         model_loader: &mut F,
     ) -> Result<std::sync::Arc<ResolvedBlockModel>, ModelError>
@@ -49,7 +49,7 @@ impl ModelBaker {
             if res.elements.is_empty() || is_missing_bell_body {
                 if allow_blockstate_builtin {
                     if let Some(builtin) =
-                        BuiltinModelRegistry::get_builtin_model_with_entity(blockstate, entity)
+                        BuiltinModelRegistry::get_block_entity_model_json(blockstate, entity)
                     {
                         builtin.resolve_hierarchy(model_id, |id| {
                             model_loader(id)
@@ -81,7 +81,7 @@ impl ModelBaker {
             }
         } else if allow_blockstate_builtin {
             if let Some(builtin) =
-                BuiltinModelRegistry::get_builtin_model_with_entity(blockstate, entity)
+                BuiltinModelRegistry::get_block_entity_model_json(blockstate, entity)
             {
                 builtin.resolve_hierarchy(model_id, |id| {
                     model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))

@@ -97,7 +97,7 @@ pub(crate) fn event_worker_loop(
                 }
 
                 // Drain all immediately available queued messages from the network channel
-                // before evaluating debounced remeshing (ensures companion DeltaEntity packets
+                // before evaluating debounced remeshing (ensures companion DeltaBlockEntity packets
                 // are applied in the same cycle as DeltaOp).
                 while let Ok(next_msg) = msg_receiver.try_recv() {
                     let cont = dispatch_single_client_message(
@@ -270,7 +270,7 @@ pub fn check_debounced_remesh(
         .unwrap_or(Duration::from_millis(100));
 
     // True debounce window: wait for 30ms of channel silence after the latest delta packet
-    // (allows companion DELTA_ENTITY packets and consecutive rapid block edits to settle).
+    // (allows companion DELTA_BLOCK_ENTITY packets and consecutive rapid block edits to settle).
     // If continuous editing lasts > 100ms, flush to maintain interactive visual feedback.
     let is_quiet = quiet_elapsed >= Duration::from_millis(30);
     let max_deadline_hit = dirty_elapsed >= Duration::from_millis(100);
@@ -377,12 +377,12 @@ pub(crate) fn handle_packet(
                 event_sender,
             );
         }
-        Packet::BaselineEntities {
+        Packet::BaselineBlockEntities {
             epoch,
             snapshot_uuid,
             entities,
         } => {
-            super::handlers_baseline::handle_baseline_entities(
+            super::handlers_baseline::handle_baseline_block_entities(
                 epoch,
                 snapshot_uuid,
                 entities,
@@ -436,13 +436,13 @@ pub(crate) fn handle_packet(
                 event_sender,
             );
         }
-        Packet::DeltaEntity {
+        Packet::DeltaBlockEntity {
             epoch,
             seq_id,
             rel_pos,
             ref entity,
         } => {
-            super::handlers_delta::handle_delta_entity(
+            super::handlers_delta::handle_delta_block_entity(
                 epoch,
                 seq_id,
                 rel_pos,

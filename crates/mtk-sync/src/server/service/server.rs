@@ -349,7 +349,7 @@ impl LiveSyncServer {
             let entity_data = payload_opt
                 .as_deref()
                 .and_then(mtk_model::BlockEntityData::from_visual_json);
-            let ent_pkt = Packet::DeltaEntity {
+            let ent_pkt = Packet::DeltaBlockEntity {
                 epoch,
                 seq_id: seq,
                 rel_pos: *coord,

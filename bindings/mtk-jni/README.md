@@ -85,7 +85,7 @@ public static native boolean nativeServerSubmitBaseline(
     String[] blockEntities
 );
 
-// 增量变动批量广播（自动注册调色板并下发 DeltaOp / DeltaEntity）
+// 增量变动批量广播（自动注册调色板并下发 DeltaOp / DeltaBlockEntity）
 public static native void nativeServerSubmitDeltas(
     long handle, int[] relCoords, String[] blockStates, String[] blockEntities
 );

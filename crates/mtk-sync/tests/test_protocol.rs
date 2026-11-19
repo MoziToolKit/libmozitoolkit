@@ -178,17 +178,17 @@ fn test_baseline_entities_and_delta_entity_roundtrip() {
         ),
     ];
 
-    let baseline_entities = Packet::BaselineEntities {
+    let baseline_entities = Packet::BaselineBlockEntities {
         epoch: 7,
         snapshot_uuid: [9u8; 16],
         entities,
     };
 
     let encoded = encode_packet(&baseline_entities).expect("encode packet");
-    let decoded = decode_packet(&encoded).expect("Failed decoding BaselineEntities");
+    let decoded = decode_packet(&encoded).expect("Failed decoding BaselineBlockEntities");
     assert_eq!(decoded, baseline_entities);
 
-    let delta_entity = Packet::DeltaEntity {
+    let delta_entity = Packet::DeltaBlockEntity {
         epoch: 7,
         seq_id: 1024,
         rel_pos: IVec3::new(4, 5, 6),
@@ -196,7 +196,7 @@ fn test_baseline_entities_and_delta_entity_roundtrip() {
     };
 
     let encoded_delta = encode_packet(&delta_entity).expect("encode packet");
-    let decoded_delta = decode_packet(&encoded_delta).expect("Failed decoding DeltaEntity");
+    let decoded_delta = decode_packet(&encoded_delta).expect("Failed decoding DeltaBlockEntity");
     assert_eq!(decoded_delta, delta_entity);
 }
 
@@ -220,49 +220,49 @@ fn test_negative_coordinates_roundtrip_entities_and_deltas() {
         IVec3::new(-12345, 67890, -13579),
     ];
 
-    // 1. DeltaEntity round-trip with negative coordinates
+    // 1. DeltaBlockEntity round-trip with negative coordinates
     for &pos in &test_coords {
-        let delta = Packet::DeltaEntity {
+        let delta = Packet::DeltaBlockEntity {
             epoch: 42,
             seq_id: 1001,
             rel_pos: pos,
             entity: Some(pot_entity.clone()),
         };
         let encoded = encode_packet(&delta).expect("encode packet");
-        let decoded = decode_packet(&encoded).expect("DeltaEntity decode failed");
-        assert_eq!(decoded, delta, "DeltaEntity mismatch for coord {:?}", pos);
+        let decoded = decode_packet(&encoded).expect("DeltaBlockEntity decode failed");
+        assert_eq!(decoded, delta, "DeltaBlockEntity mismatch for coord {:?}", pos);
 
-        let delta_none = Packet::DeltaEntity {
+        let delta_none = Packet::DeltaBlockEntity {
             epoch: 42,
             seq_id: 1002,
             rel_pos: pos,
             entity: None,
         };
         let encoded_none = encode_packet(&delta_none).expect("encode packet");
-        let decoded_none = decode_packet(&encoded_none).expect("DeltaEntity None decode failed");
+        let decoded_none = decode_packet(&encoded_none).expect("DeltaBlockEntity None decode failed");
         assert_eq!(
             decoded_none, delta_none,
-            "DeltaEntity None mismatch for coord {:?}",
+            "DeltaBlockEntity None mismatch for coord {:?}",
             pos
         );
     }
 
-    // 2. BaselineEntities round-trip with all negative coordinates
+    // 2. BaselineBlockEntities round-trip with all negative coordinates
     let baseline_entries: Vec<(IVec3, mtk_model::BlockEntityData)> = test_coords
         .iter()
         .map(|&pos| (pos, pot_entity.clone()))
         .collect();
 
-    let baseline = Packet::BaselineEntities {
+    let baseline = Packet::BaselineBlockEntities {
         epoch: 99,
         snapshot_uuid: [0x55; 16],
         entities: baseline_entries.clone(),
     };
     let encoded_bl = encode_packet(&baseline).expect("encode packet");
-    let decoded_bl = decode_packet(&encoded_bl).expect("BaselineEntities decode failed");
+    let decoded_bl = decode_packet(&encoded_bl).expect("BaselineBlockEntities decode failed");
     assert_eq!(
         decoded_bl, baseline,
-        "BaselineEntities negative coords round-trip mismatch"
+        "BaselineBlockEntities negative coords round-trip mismatch"
     );
 
     // 3. DeltaOp round-trip with negative coordinates
@@ -293,11 +293,11 @@ fn test_negative_coordinates_roundtrip_entities_and_deltas() {
 
 #[test]
 fn test_raw_negative_coordinate_decoding_endianness() {
-    // Manually construct raw little-endian bytes for DeltaEntity
+    // Manually construct raw little-endian bytes for DeltaBlockEntity
     let mut raw_bytes = Vec::new();
     raw_bytes.extend_from_slice(&PROTOCOL_MAGIC);
     raw_bytes.push(PROTOCOL_VERSION);
-    raw_bytes.push(Opcode::DeltaEntity as u8);
+    raw_bytes.push(Opcode::DeltaBlockEntity as u8);
     raw_bytes.extend_from_slice(&100u64.to_le_bytes());
     raw_bytes.extend_from_slice(&200u64.to_le_bytes());
     raw_bytes.extend_from_slice(&(-500i32).to_le_bytes());
@@ -305,9 +305,9 @@ fn test_raw_negative_coordinate_decoding_endianness() {
     raw_bytes.extend_from_slice(&(-30_000_000i32).to_le_bytes());
     raw_bytes.extend_from_slice(&0u32.to_le_bytes());
 
-    let packet = decode_packet(&raw_bytes).expect("Failed decoding manual DeltaEntity");
+    let packet = decode_packet(&raw_bytes).expect("Failed decoding manual DeltaBlockEntity");
     match packet {
-        Packet::DeltaEntity {
+        Packet::DeltaBlockEntity {
             rel_pos,
             epoch,
             seq_id,
@@ -318,14 +318,14 @@ fn test_raw_negative_coordinate_decoding_endianness() {
             assert_eq!(rel_pos, IVec3::new(-500, -64, -30_000_000));
             assert!(entity.is_none());
         }
-        _ => panic!("Expected DeltaEntity packet"),
+        _ => panic!("Expected DeltaBlockEntity packet"),
     }
 
-    // Manually construct raw little-endian bytes for BaselineEntities
+    // Manually construct raw little-endian bytes for BaselineBlockEntities
     let mut raw_baseline = Vec::new();
     raw_baseline.extend_from_slice(&PROTOCOL_MAGIC);
     raw_baseline.push(PROTOCOL_VERSION);
-    raw_baseline.push(Opcode::BaselineEntities as u8);
+    raw_baseline.push(Opcode::BaselineBlockEntities as u8);
     raw_baseline.extend_from_slice(&1u64.to_le_bytes()); // epoch
     raw_baseline.extend_from_slice(&[0xAA; 16]); // snapshot_uuid
     raw_baseline.extend_from_slice(&1u32.to_le_bytes()); // count = 1
@@ -340,13 +340,13 @@ fn test_raw_negative_coordinate_decoding_endianness() {
     raw_baseline.extend_from_slice(&pot_bytes);
 
     let decoded_baseline =
-        decode_packet(&raw_baseline).expect("Failed decoding manual BaselineEntities");
+        decode_packet(&raw_baseline).expect("Failed decoding manual BaselineBlockEntities");
     match decoded_baseline {
-        Packet::BaselineEntities { entities, .. } => {
+        Packet::BaselineBlockEntities { entities, .. } => {
             assert_eq!(entities.len(), 1);
             assert_eq!(entities[0].0, IVec3::new(i32::MIN, -1, i32::MAX));
         }
-        _ => panic!("Expected BaselineEntities packet"),
+        _ => panic!("Expected BaselineBlockEntities packet"),
     }
 }
 
@@ -355,7 +355,7 @@ fn test_sync_codec_throughput_benchmark() {
     let pot_entity = mtk_model::BlockEntityData::DecoratedPot {
         sherds: [None, None, None, None],
     };
-    let delta = Packet::DeltaEntity {
+    let delta = Packet::DeltaBlockEntity {
         epoch: 1,
         seq_id: 100,
         rel_pos: IVec3::new(-16, -64, -128),
@@ -381,7 +381,7 @@ fn test_sync_codec_throughput_benchmark() {
     let mb_per_sec = (iterations * encoded.len()) as f64 / (1024.0 * 1024.0 * total_secs);
 
     println!("\n============================================================");
-    println!(" RFC v3.1 Codec DeltaEntity Decoding Throughput");
+    println!(" RFC v3.1 Codec DeltaBlockEntity Decoding Throughput");
     println!(" Iterations: {}", iterations);
     println!(" Encoded Packet Size: {} bytes", encoded.len());
     println!(

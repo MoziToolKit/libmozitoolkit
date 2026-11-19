@@ -140,7 +140,7 @@ pub(crate) fn handle_baseline_chunk(
     }
 }
 
-pub(crate) fn handle_baseline_entities(
+pub(crate) fn handle_baseline_block_entities(
     epoch: u64,
     snapshot_uuid: [u8; 16],
     entities: Vec<(glam::IVec3, mtk_model::BlockEntityData)>,

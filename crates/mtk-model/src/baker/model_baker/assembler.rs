@@ -18,7 +18,7 @@ impl ModelBaker {
         &mut self,
         canonical_str: &str,
         blockstate: &BlockState,
-        entity: Option<&crate::entity::BlockEntityData>,
+        entity: Option<&crate::block_entity::BlockEntityData>,
         variant_matches: &[VariantMatch],
         model_loader: &mut F,
     ) -> Result<BakedModel, ModelError>

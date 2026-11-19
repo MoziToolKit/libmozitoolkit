@@ -107,7 +107,7 @@ Python 模块名：`libmtk_py`
   - `stop()`, `is_running()`, `client_count()`, `local_addr()`, `server_uuid`
   - `set_selection(min_pos, size, dimension="minecraft:overworld")`, `clear_selection()`
   - `submit_baseline(client_id, min_pos, size, dimension, raw_states, block_palette, raw_biomes, biome_palette, block_entities=None) -> int`：全自动计算 state_hash、建立选区与调色板、编码切片分帧并流式推送给客户端（返回计算的 `state_hash`）。
-  - `submit_deltas(rel_coords, block_states, block_entities=None)`：全自动增量调色板注册、分片打包 DeltaOp 与 DeltaEntity 并广播。
+  - `submit_deltas(rel_coords, block_states, block_entities=None)`：全自动增量调色板注册、分片打包 DeltaOp 与 DeltaBlockEntity 并广播。
   - `poll_events() -> List[dict]`（事件包含 `client_connected`, `client_disconnected`, `baseline_requested`, `client_resync`）。
 
 ### 2.7 资源包预烘焙与图集 (`resource` & `texture`)

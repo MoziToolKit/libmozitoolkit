@@ -98,8 +98,8 @@
 | `0x0E` | `Ping` | 双向 | 链路保活探测。 |
 | `0x0F` | `Pong` | 双向 | 链路保活响应。 |
 | `0x10` | `Error` | 双向 | 错误诊断响应 (`ErrorCode`)。 |
-| `0x11` | `BaselineEntities`| S $\to$ C | RFC v3.2 选区稀疏方块实体伴生基线流。 |
-| `0x12` | `DeltaEntity` | S $\to$ C | RFC v3.2 增量稀疏方块实体修改。 |
+| `0x11` | `BaselineBlockEntities`| S $\to$ C | RFC v3.2 选区稀疏方块实体伴生基线流。 |
+| `0x12` | `DeltaBlockEntity` | S $\to$ C | RFC v3.2 增量稀疏方块实体修改。 |
 | `0x13` | `BaselineVisualEntities` | S $\to$ C | RFC v3.2 连续视觉实体伴生基线流（含独立 `entities_hash`）。 |
 | `0x14` | `DeltaVisualEntity` | S $\to$ C | RFC v3.2 增量连续视觉实体变动（UPSERT / REMOVE）。 |
 

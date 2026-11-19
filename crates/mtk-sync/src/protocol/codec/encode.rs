@@ -278,12 +278,12 @@ pub fn encode_packet(packet: &Packet) -> Result<Vec<u8>, ProtocolError> {
             write_str(&mut buf, message)?;
         }
 
-        Packet::BaselineEntities {
+        Packet::BaselineBlockEntities {
             epoch,
             snapshot_uuid,
             entities,
         } => {
-            buf.push(Opcode::BaselineEntities as u8);
+            buf.push(Opcode::BaselineBlockEntities as u8);
             buf.extend_from_slice(&epoch.to_le_bytes());
             buf.extend_from_slice(snapshot_uuid);
             buf.extend_from_slice(&(entities.len() as u32).to_le_bytes());
@@ -297,13 +297,13 @@ pub fn encode_packet(packet: &Packet) -> Result<Vec<u8>, ProtocolError> {
             }
         }
 
-        Packet::DeltaEntity {
+        Packet::DeltaBlockEntity {
             epoch,
             seq_id,
             rel_pos,
             entity,
         } => {
-            buf.push(Opcode::DeltaEntity as u8);
+            buf.push(Opcode::DeltaBlockEntity as u8);
             buf.extend_from_slice(&epoch.to_le_bytes());
             buf.extend_from_slice(&seq_id.to_le_bytes());
             buf.extend_from_slice(&(rel_pos.x as u32).to_le_bytes());

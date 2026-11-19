@@ -54,14 +54,14 @@ pub struct MiExModelLoader;
 impl MiExModelLoader {
     /// Loads a builtin model for a blockstate using the official upstream MiEx JSON definition.
     pub fn load_for_blockstate(blockstate: &BlockState) -> Option<BlockModelJson> {
-        Self::load_for_blockstate_with_entity(blockstate, None)
+        Self::load_for_block_entity(blockstate, None)
     }
 
     /// Loads a builtin model for a blockstate using the official upstream MiEx JSON definition,
     /// enriched with optional dynamic entity properties (e.g. skull rotation or custom profile textures).
-    pub fn load_for_blockstate_with_entity(
+    pub fn load_for_block_entity(
         blockstate: &BlockState,
-        entity: Option<&crate::entity::BlockEntityData>,
+        entity: Option<&crate::block_entity::BlockEntityData>,
     ) -> Option<BlockModelJson> {
         let name = blockstate.name.as_str();
         let short_name = name.strip_prefix("minecraft:").unwrap_or(name);
@@ -96,7 +96,7 @@ impl MiExModelLoader {
     fn eval_builtin_json(
         raw_json: &str,
         blockstate: &BlockState,
-        entity: Option<&crate::entity::BlockEntityData>,
+        entity: Option<&crate::block_entity::BlockEntityData>,
     ) -> Option<BlockModelJson> {
         let root: Value = serde_json::from_str(raw_json).ok()?;
         let mut vars_str: HashMap<String, String> = HashMap::new();
@@ -115,7 +115,7 @@ impl MiExModelLoader {
         }
 
         // Inject dynamic entity context variables before AST handler execution
-        if let Some(crate::entity::BlockEntityData::Skull {
+        if let Some(crate::block_entity::BlockEntityData::Skull {
             kind,
             rotation,
             profile,
@@ -156,7 +156,7 @@ impl MiExModelLoader {
         }
 
         // Post-handler enforcement: ensure skull textures override AST templates
-        if let Some(crate::entity::BlockEntityData::Skull { kind, profile, .. }) = entity {
+        if let Some(crate::block_entity::BlockEntityData::Skull { kind, profile, .. }) = entity {
             Self::apply_skull_texture(
                 blockstate,
                 *kind,
@@ -177,8 +177,8 @@ impl MiExModelLoader {
 
     fn apply_skull_texture(
         blockstate: &BlockState,
-        kind: crate::entity::skull::SkullKind,
-        profile: Option<&crate::entity::PlayerProfileData>,
+        kind: crate::block_entity::skull::SkullKind,
+        profile: Option<&crate::block_entity::PlayerProfileData>,
         vars_str: &mut HashMap<String, String>,
         textures: &mut HashMap<String, TextureValue>,
     ) {
@@ -186,7 +186,7 @@ impl MiExModelLoader {
             prof.texture_identifier()
         } else {
             let effective_kind =
-                crate::entity::skull::SkullKind::from_block_name(&blockstate.name).unwrap_or(kind);
+                crate::block_entity::skull::SkullKind::from_block_name(&blockstate.name).unwrap_or(kind);
             effective_kind.default_texture_path().to_string()
         };
         vars_str.insert("entity_texture".to_string(), tex.clone());

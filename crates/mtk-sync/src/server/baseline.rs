@@ -470,9 +470,9 @@ fn assemble_baseline_stream(
     packets.push(begin_packet);
     packets.extend(chunk_packets);
 
-    // 3. Optional BASELINE_ENTITIES (RFC v3.2 Sparse Block Entities)
+    // 3. Optional BASELINE_BLOCK_ENTITIES (RFC v3.2 Sparse Block Entities)
     if !block_entities.is_empty() {
-        packets.push(Packet::BaselineEntities {
+        packets.push(Packet::BaselineBlockEntities {
             epoch: config.epoch,
             snapshot_uuid: config.snapshot_uuid,
             entities: block_entities,

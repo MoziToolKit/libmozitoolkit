@@ -181,8 +181,8 @@ fn test_hanging_sign_load() {
 
 #[test]
 fn test_unprofiled_skull_direct_atlas_textures() {
-    use crate::entity::skull::SkullKind;
-    use crate::entity::BlockEntityData;
+    use crate::block_entity::skull::SkullKind;
+    use crate::block_entity::BlockEntityData;
 
     // 1. Zombie head without profile -> direct internal zombie texture
     let bs_zombie = BlockState::parse("minecraft:zombie_head[rotation=0]").unwrap();
@@ -192,7 +192,7 @@ fn test_unprofiled_skull_direct_atlas_textures() {
         profile: None,
     };
     let model_zombie =
-        MiExModelLoader::load_for_blockstate_with_entity(&bs_zombie, Some(&entity_zombie))
+        MiExModelLoader::load_for_block_entity(&bs_zombie, Some(&entity_zombie))
             .expect("Zombie head should load");
     let tex_zombie = model_zombie.textures.unwrap();
     assert_eq!(
@@ -208,7 +208,7 @@ fn test_unprofiled_skull_direct_atlas_textures() {
         profile: None,
     };
     let model_creeper =
-        MiExModelLoader::load_for_blockstate_with_entity(&bs_creeper, Some(&entity_creeper))
+        MiExModelLoader::load_for_block_entity(&bs_creeper, Some(&entity_creeper))
             .expect("Creeper head should load");
     let tex_creeper = model_creeper.textures.unwrap();
     assert_eq!(
@@ -224,7 +224,7 @@ fn test_unprofiled_skull_direct_atlas_textures() {
         profile: None,
     };
     let model_player =
-        MiExModelLoader::load_for_blockstate_with_entity(&bs_player, Some(&entity_player))
+        MiExModelLoader::load_for_block_entity(&bs_player, Some(&entity_player))
             .expect("Player head without profile should load");
     let tex_player = model_player.textures.unwrap();
     assert_eq!(

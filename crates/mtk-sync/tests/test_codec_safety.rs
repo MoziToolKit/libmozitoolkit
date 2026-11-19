@@ -51,11 +51,11 @@ fn test_encode_string_too_long() {
 
 #[test]
 fn test_decode_corrupt_entity_payload() {
-    // Construct a binary DeltaEntity frame with corrupt JSON block entity payload
+    // Construct a binary DeltaBlockEntity frame with corrupt JSON block entity payload
     let mut buf = Vec::new();
     buf.extend_from_slice(&PROTOCOL_MAGIC);
     buf.push(PROTOCOL_VERSION);
-    buf.push(Opcode::DeltaEntity as u8);
+    buf.push(Opcode::DeltaBlockEntity as u8);
 
     let epoch: u64 = 1;
     let seq_id: u64 = 100;

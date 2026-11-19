@@ -328,8 +328,8 @@ fn test_baseline_and_delta_entity_integration() {
         biome_palette: vec!["minecraft:plains".to_string()],
     });
 
-    // 3. BaselineEntities
-    session.process_packet_direct(Packet::BaselineEntities {
+    // 3. BaselineBlockEntities
+    session.process_packet_direct(Packet::BaselineBlockEntities {
         epoch: 1,
         snapshot_uuid: [7u8; 16],
         entities: vec![(IVec3::new(0, 0, 0), pot_data.clone())],
@@ -375,7 +375,7 @@ fn test_baseline_and_delta_entity_integration() {
         assert_eq!(*entity, pot_data);
     }
 
-    // 6. Send DeltaEntity for (1, 1, 1)
+    // 6. Send DeltaBlockEntity for (1, 1, 1)
     let new_pot_data = mtk_model::BlockEntityData::DecoratedPot {
         sherds: [
             Some("minecraft:miner_pottery_sherd".to_string()),
@@ -384,14 +384,14 @@ fn test_baseline_and_delta_entity_integration() {
             None,
         ],
     };
-    session.process_packet_direct(Packet::DeltaEntity {
+    session.process_packet_direct(Packet::DeltaBlockEntity {
         epoch: 1,
         seq_id: 11,
         rel_pos: IVec3::new(1, 1, 1),
         entity: Some(new_pot_data.clone()),
     });
 
-    // Verify DeltaEntity updated section
+    // Verify DeltaBlockEntity updated section
     {
         let world = session.world.read().unwrap();
         let sec = world
@@ -406,8 +406,8 @@ fn test_baseline_and_delta_entity_integration() {
         assert_eq!(*entity, new_pot_data);
     }
 
-    // 7. Send DeltaEntity with None to delete entity at (0, 0, 0)
-    session.process_packet_direct(Packet::DeltaEntity {
+    // 7. Send DeltaBlockEntity with None to delete entity at (0, 0, 0)
+    session.process_packet_direct(Packet::DeltaBlockEntity {
         epoch: 1,
         seq_id: 12,
         rel_pos: IVec3::new(0, 0, 0),

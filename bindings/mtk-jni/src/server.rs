@@ -259,7 +259,7 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerB
 }
 
 /// Submits incremental block and entity delta changes to the server.
-/// The server auto-registers palette additions, creates DeltaOp and DeltaEntity frames, and broadcasts.
+/// The server auto-registers palette additions, creates DeltaOp and DeltaBlockEntity frames, and broadcasts.
 #[no_mangle]
 pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerSubmitDeltas(
     mut env: JNIEnv,

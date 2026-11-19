@@ -21,32 +21,32 @@ pub struct BuiltinModelRegistry;
 
 impl BuiltinModelRegistry {
     /// Attempts to provide an optimized pre-baked model for an entity block.
-    pub fn get_builtin_baked_model_with_entity(
+    pub fn get_baked_block_entity_model(
         blockstate: &BlockState,
-        entity: Option<&crate::entity::BlockEntityData>,
+        entity: Option<&crate::block_entity::BlockEntityData>,
     ) -> Option<BakedModel> {
-        vanilla::get_builtin_baked_model_for_state_and_entity(blockstate, entity)
+        vanilla::get_builtin_baked_block_entity_model(blockstate, entity)
     }
 
     /// Attempts to provide a builtin fallback `BlockModelJson` using upstream MiEx JSON templates
     /// or procedural fallbacks, enriched with dynamic entity data.
-    pub fn get_builtin_model_with_entity(
+    pub fn get_block_entity_model_json(
         blockstate: &BlockState,
-        entity: Option<&crate::entity::BlockEntityData>,
+        entity: Option<&crate::block_entity::BlockEntityData>,
     ) -> Option<BlockModelJson> {
-        if let Some(model) = MiExModelLoader::load_for_blockstate_with_entity(blockstate, entity) {
+        if let Some(model) = MiExModelLoader::load_for_block_entity(blockstate, entity) {
             return Some(model);
         }
-        vanilla::get_builtin_model_for_state_and_entity(blockstate, entity)
+        vanilla::get_builtin_block_entity_model_json(blockstate, entity)
     }
 
     /// Universal block entity baker: synthesizes or bakes a dynamic block entity model.
     pub fn bake_block_entity(
         state_str: &str,
-        entity: &crate::entity::BlockEntityData,
+        entity: &crate::block_entity::BlockEntityData,
     ) -> Option<BakedModel> {
         let blockstate = BlockState::parse(state_str).ok()?;
-        if let Some(baked) = Self::get_builtin_baked_model_with_entity(&blockstate, Some(entity)) {
+        if let Some(baked) = Self::get_baked_block_entity_model(&blockstate, Some(entity)) {
             return Some(baked);
         }
         let mut baker = crate::baker::ModelBaker::new();

@@ -117,7 +117,7 @@ fn block_entity_delta_advances_the_sequence() {
     peer.send(&[welcome_live(EPOCH, 7, MIN, SIZE)]);
     wait_until_live(&mut session);
 
-    peer.send(&[Packet::DeltaEntity {
+    peer.send(&[Packet::DeltaBlockEntity {
         epoch: EPOCH,
         seq_id: 8,
         rel_pos: IVec3::new(1, 0, 1),

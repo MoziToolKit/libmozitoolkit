@@ -150,13 +150,13 @@ fn test_all_packets_truncated_payload_safety() {
             ],
         },
     )];
-    let baseline_entities = Packet::BaselineEntities {
+    let baseline_entities = Packet::BaselineBlockEntities {
         epoch: 5,
         snapshot_uuid: [8u8; 16],
         entities,
     };
 
-    let delta_entity = Packet::DeltaEntity {
+    let delta_entity = Packet::DeltaBlockEntity {
         epoch: 5,
         seq_id: 200,
         rel_pos: IVec3::new(1, 2, 3),
@@ -364,12 +364,12 @@ fn test_boundary_extreme_values_safety() {
     let res = decode_packet(&chunk_buf);
     assert!(matches!(res, Err(ProtocolError::TruncatedPayload { .. })));
 
-    // 4. BaselineEntities with huge count claimed, but truncated buffer
+    // 4. BaselineBlockEntities with huge count claimed, but truncated buffer
     let mut entities_buf = vec![
         PROTOCOL_MAGIC[0],
         PROTOCOL_MAGIC[1],
         PROTOCOL_VERSION,
-        Opcode::BaselineEntities as u8,
+        Opcode::BaselineBlockEntities as u8,
     ];
     entities_buf.extend_from_slice(&1u64.to_le_bytes()); // epoch
     entities_buf.extend_from_slice(&[0u8; 16]); // uuid
@@ -379,12 +379,12 @@ fn test_boundary_extreme_values_safety() {
     // At line 203: if *offset + 16 > buf.len() -> TruncatedPayload
     assert!(matches!(res, Err(ProtocolError::TruncatedPayload { .. })));
 
-    // 5. BaselineEntities with count = u32::MAX
+    // 5. BaselineBlockEntities with count = u32::MAX
     let mut max_entities_buf = vec![
         PROTOCOL_MAGIC[0],
         PROTOCOL_MAGIC[1],
         PROTOCOL_VERSION,
-        Opcode::BaselineEntities as u8,
+        Opcode::BaselineBlockEntities as u8,
     ];
     max_entities_buf.extend_from_slice(&1u64.to_le_bytes()); // epoch
     max_entities_buf.extend_from_slice(&[0u8; 16]); // uuid

@@ -1,7 +1,7 @@
 //! # Baseline Packet Decoders (RFC v3.1)
 //!
 //! Binary decoders for full snapshot streaming: BaselineBegin, BaselineChunk,
-//! BaselineEnd, BaselineAck, and BaselineEntities.
+//! BaselineEnd, BaselineAck, and BaselineBlockEntities.
 
 use glam::IVec3;
 use xxhash_rust::xxh64::Xxh64;
@@ -199,32 +199,32 @@ pub(crate) fn decode_baseline_entities(
 ) -> Result<Packet, ProtocolError> {
     if *offset + 28 > buf.len() {
         return Err(ProtocolError::TruncatedPayload {
-            field: "BaselineEntities header",
+            field: "BaselineBlockEntities header",
         });
     }
-    let epoch = read_u64_le(buf, offset, "BaselineEntities epoch")?;
-    let snapshot_uuid = read_array::<16>(buf, offset, "BaselineEntities snapshot_uuid")?;
-    let count = read_u32_le(buf, offset, "BaselineEntities count")? as usize;
+    let epoch = read_u64_le(buf, offset, "BaselineBlockEntities epoch")?;
+    let snapshot_uuid = read_array::<16>(buf, offset, "BaselineBlockEntities snapshot_uuid")?;
+    let count = read_u32_le(buf, offset, "BaselineBlockEntities count")? as usize;
     let max_possible = (buf.len().saturating_sub(*offset)) / 16;
     let mut entities = Vec::with_capacity(count.min(max_possible));
     for _ in 0..count {
         if *offset + 16 > buf.len() {
             return Err(ProtocolError::TruncatedPayload {
-                field: "BaselineEntities entry coords & len",
+                field: "BaselineBlockEntities entry coords & len",
             });
         }
-        let rx = read_i32_le(buf, offset, "BaselineEntities rx")?;
-        let ry = read_i32_le(buf, offset, "BaselineEntities ry")?;
-        let rz = read_i32_le(buf, offset, "BaselineEntities rz")?;
-        let payload_len = read_u32_le(buf, offset, "BaselineEntities payload_len")? as usize;
-        let payload_slice = read_slice(buf, offset, payload_len, "BaselineEntities entry payload")?;
+        let rx = read_i32_le(buf, offset, "BaselineBlockEntities rx")?;
+        let ry = read_i32_le(buf, offset, "BaselineBlockEntities ry")?;
+        let rz = read_i32_le(buf, offset, "BaselineBlockEntities rz")?;
+        let payload_len = read_u32_le(buf, offset, "BaselineBlockEntities payload_len")? as usize;
+        let payload_slice = read_slice(buf, offset, payload_len, "BaselineBlockEntities entry payload")?;
 
         if let Some(ed) = decode_entity_payload(payload_slice)? {
             entities.push((IVec3::new(rx, ry, rz), ed));
         }
     }
 
-    Ok(Packet::BaselineEntities {
+    Ok(Packet::BaselineBlockEntities {
         epoch,
         snapshot_uuid,
         entities,
