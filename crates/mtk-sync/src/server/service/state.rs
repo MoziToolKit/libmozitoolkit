@@ -45,6 +45,8 @@ pub(crate) struct ServerInner {
     pub(crate) running: AtomicBool,
     pub(crate) epoch: AtomicU64,
     pub(crate) sequence: AtomicU64,
+    /// Monotonic per-baseline id source; see [`ServerInner::next_snapshot_uuid`].
+    pub(crate) snapshot_counter: AtomicU64,
     pub(crate) server_uuid: [u8; 16],
     pub(crate) selection: Mutex<Option<SelectionContext>>,
     pub(crate) palette: Mutex<PaletteState>,
@@ -61,6 +63,7 @@ impl ServerInner {
             running: AtomicBool::new(true),
             epoch: AtomicU64::new(1),
             sequence: AtomicU64::new(1),
+            snapshot_counter: AtomicU64::new(0),
             server_uuid,
             selection: Mutex::new(None),
             palette: Mutex::new(PaletteState::default()),
@@ -73,6 +76,17 @@ impl ServerInner {
 
     pub(crate) fn is_running(&self) -> bool {
         self.running.load(Ordering::Relaxed)
+    }
+
+    /// Allocates the identity of one baseline stream.
+    ///
+    /// Clients drop chunks whose `snapshot_uuid` does not match the baseline they are currently
+    /// assembling. The previous implementation derived it from `Instant::now().elapsed()`, which
+    /// is nanoseconds since a freshly created `Instant` — effectively zero, so two baselines could
+    /// share an id and stale chunks from an aborted stream were accepted into the new one.
+    pub(crate) fn next_snapshot_uuid(&self) -> [u8; 16] {
+        let counter = self.snapshot_counter.fetch_add(1, Ordering::Relaxed);
+        snapshot_uuid_for(counter, self.server_uuid)
     }
 
     pub(crate) fn remove_client(&self, client_id: u64) {
@@ -109,5 +123,70 @@ impl ServerInner {
             is_loopback: addr.ip().is_loopback(),
             allow_loopback_without_token: config.allow_loopback_without_token,
         }
+    }
+}
+
+/// Deterministic-but-unique baseline id: the counter guarantees distinctness within a session,
+/// the server uuid (regenerated per process when the host passes zeros) keeps ids from lining up
+/// across restarts, and splitmix64 decorrelates neighbours.
+pub(crate) fn snapshot_uuid_for(counter: u64, server_uuid: [u8; 16]) -> [u8; 16] {
+    let seed = u64::from_le_bytes([
+        server_uuid[0],
+        server_uuid[1],
+        server_uuid[2],
+        server_uuid[3],
+        server_uuid[4],
+        server_uuid[5],
+        server_uuid[6],
+        server_uuid[7],
+    ]);
+    let mut z = counter ^ seed;
+    z = z.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^= z >> 31;
+
+    let mut uuid = [0u8; 16];
+    uuid[..8].copy_from_slice(&counter.to_le_bytes());
+    uuid[8..].copy_from_slice(&z.to_le_bytes());
+    uuid
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn snapshot_ids_are_unique_per_baseline() {
+        let inner = ServerInner::new([0x11; 16]);
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..1024 {
+            assert!(
+                seen.insert(inner.next_snapshot_uuid()),
+                "baseline ids must never repeat within a session"
+            );
+        }
+    }
+
+    #[test]
+    fn snapshot_ids_do_not_collide_across_server_restarts() {
+        let first = ServerInner::new([0x22; 16]);
+        let second = ServerInner::new([0x33; 16]);
+        assert_ne!(
+            first.next_snapshot_uuid(),
+            second.next_snapshot_uuid(),
+            "two processes starting from counter 0 must not share the first baseline id"
+        );
+    }
+
+    #[test]
+    fn snapshot_ids_neighbours_are_decorrelated() {
+        let a = snapshot_uuid_for(0, [9u8; 16]);
+        let b = snapshot_uuid_for(1, [9u8; 16]);
+        assert_ne!(
+            a[8..],
+            b[8..],
+            "counter neighbours must not share the hash half"
+        );
     }
 }

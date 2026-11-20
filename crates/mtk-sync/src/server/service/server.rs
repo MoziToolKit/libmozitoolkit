@@ -3,7 +3,7 @@ use std::net::{SocketAddr, TcpListener};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use glam::IVec3;
 
@@ -21,7 +21,9 @@ use super::worker::run_client_worker;
 /// The Native Live Sync WebSocket Server instance.
 pub struct LiveSyncServer {
     inner: Arc<ServerInner>,
-    listener_thread: Option<JoinHandle<()>>,
+    /// Mutex so `stop` can take `&self`: JNI hands the server out as a shared `Arc`, and an
+    /// in-flight call must be able to observe the stopped state without exclusive access.
+    listener_thread: std::sync::Mutex<Option<JoinHandle<()>>>,
 }
 
 impl LiveSyncServer {
@@ -103,12 +105,12 @@ impl LiveSyncServer {
 
         Ok(Self {
             inner,
-            listener_thread: Some(listener_thread),
+            listener_thread: std::sync::Mutex::new(Some(listener_thread)),
         })
     }
 
     /// Stops the server, closes all client connections, and terminates the listener.
-    pub fn stop(&mut self) {
+    pub fn stop(&self) {
         self.inner.running.store(false, Ordering::Relaxed);
 
         if let Ok(mut clients) = self.inner.clients.lock() {
@@ -127,7 +129,12 @@ impl LiveSyncServer {
             *sel = None;
         }
 
-        if let Some(handle) = self.listener_thread.take() {
+        let listener_thread = self
+            .listener_thread
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(handle) = listener_thread {
             let _ = handle.join();
         }
     }
@@ -232,12 +239,11 @@ impl LiveSyncServer {
             pal.revision = 1;
         }
 
-        let mut snapshot_uuid = [0u8; 16];
-        let now = Instant::now().elapsed().as_nanos();
+        // Unique per baseline so a client assembling a newer stream drops chunks that arrive
+        // late from an aborted one.
+        let snapshot_uuid = self.inner.next_snapshot_uuid();
         let seq = self.inner.sequence.fetch_add(1, Ordering::Relaxed);
         let ep = self.inner.epoch.load(Ordering::Relaxed);
-        snapshot_uuid[..8].copy_from_slice(&(now as u64).to_le_bytes());
-        snapshot_uuid[8..].copy_from_slice(&((now >> 64) as u64).to_le_bytes());
 
         let encoder_config = BaselineEncoderConfig {
             max_chunk_size: 65536,

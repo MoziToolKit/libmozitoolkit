@@ -119,8 +119,18 @@ impl DynamicAtlasManager {
         };
 
         let chunk = &mut self.chunks[target_idx];
-        let slot_idx = chunk.allocate_slot(skin_key);
         let chunk_id = chunk.chunk_id;
+        let will_wrap = chunk.will_wrap();
+        let slot_idx = chunk.allocate_slot(skin_key);
+
+        if will_wrap {
+            // The chunk just recycled `slot_idx` and purged the keys that pointed at it. Mirror
+            // that in the manager index: otherwise an evicted key keeps resolving to a slot that
+            // now holds someone else's skin, `contains_key` says it is cached, and it is never
+            // re-blitted — a permanent "wrong skin" that only a restart clears.
+            self.key_to_location
+                .retain(|_, &mut (cid, slot)| cid != chunk_id || slot != slot_idx);
+        }
 
         self.key_to_location
             .insert(skin_key.to_string(), (chunk_id, slot_idx));

@@ -19,7 +19,7 @@ fn test_native_server_handshake_baseline_and_delta_e2e() {
         ping_interval: Duration::from_millis(1000),
     };
 
-    let mut server = LiveSyncServer::start(config).expect("server must start");
+    let server = LiveSyncServer::start(config).expect("server must start");
     let local_addr = server.local_addr().expect("local addr must be known");
     let ws_url = format!("ws://{}", local_addr);
 
@@ -138,7 +138,7 @@ fn test_native_server_auth_token_protection() {
         ping_interval: Duration::from_millis(1000),
     };
 
-    let mut server = LiveSyncServer::start(config).expect("server must start");
+    let server = LiveSyncServer::start(config).expect("server must start");
     let local_addr = server.local_addr().expect("local addr");
     let ws_url = format!("ws://{}", local_addr);
 

@@ -11,8 +11,12 @@ use jni::JNIEnv;
 use mtk_sync::server::{LiveSyncServer, ServerConfig};
 
 use super::convert::{extract_int_array, extract_optional_string_array, extract_string_array};
+use crate::handle::HandleTable;
 
-/// Starts a native LiveSync WebSocket server. Returns a pointer handle (jlong) or 0 on error.
+/// Live native server instances, keyed by the opaque handle handed to the JVM.
+static SERVERS: HandleTable<LiveSyncServer> = HandleTable::new();
+
+/// Starts a native LiveSync WebSocket server. Returns an opaque handle (jlong) or 0 on error.
 #[no_mangle]
 pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerStart(
     mut env: JNIEnv,
@@ -54,22 +58,23 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerS
     };
 
     match LiveSyncServer::start(config) {
-        Ok(server) => Box::into_raw(Box::new(server)) as jlong,
+        Ok(server) => SERVERS.insert(server) as jlong,
         Err(_) => 0,
     }
 }
 
-/// Stops the native server and destroys its handle.
+/// Stops the native server and retires its handle.
+///
+/// Calls already in flight hold an `Arc` and finish safely; the handle stops resolving, so a
+/// worker thread polling after the stop gets the "not running" answer instead of freed memory.
 #[no_mangle]
 pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerStop(
     _env: JNIEnv,
     _class: JClass,
     handle: jlong,
 ) {
-    if handle != 0 {
-        let mut server = unsafe { Box::from_raw(handle as *mut LiveSyncServer) };
+    if let Some(server) = SERVERS.remove(handle as u64) {
         server.stop();
-        drop(server);
     }
 }
 
@@ -80,10 +85,9 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerI
     _class: JClass,
     handle: jlong,
 ) -> jboolean {
-    if handle == 0 {
+    let Some(server) = SERVERS.get(handle as u64) else {
         return 0;
-    }
-    let server = unsafe { &*(handle as *const LiveSyncServer) };
+    };
     if server.is_running() {
         1
     } else {
@@ -98,10 +102,9 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerG
     _class: JClass,
     handle: jlong,
 ) -> jint {
-    if handle == 0 {
+    let Some(server) = SERVERS.get(handle as u64) else {
         return 0;
-    }
-    let server = unsafe { &*(handle as *const LiveSyncServer) };
+    };
     server.local_addr().map(|a| a.port() as jint).unwrap_or(0)
 }
 
@@ -112,10 +115,9 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerG
     _class: JClass,
     handle: jlong,
 ) -> jint {
-    if handle == 0 {
+    let Some(server) = SERVERS.get(handle as u64) else {
         return 0;
-    }
-    let server = unsafe { &*(handle as *const LiveSyncServer) };
+    };
     server.client_count() as jint
 }
 
@@ -133,10 +135,9 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerS
     size_z: jint,
     dimension: JString,
 ) {
-    if handle == 0 {
+    let Some(server) = SERVERS.get(handle as u64) else {
         return;
-    }
-    let server = unsafe { &*(handle as *const LiveSyncServer) };
+    };
     let dim_str: String = match env.get_string(&dimension) {
         Ok(s) => s.into(),
         Err(_) => return,
@@ -155,10 +156,9 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerC
     _class: JClass,
     handle: jlong,
 ) {
-    if handle == 0 {
+    let Some(server) = SERVERS.get(handle as u64) else {
         return;
-    }
-    let server = unsafe { &*(handle as *const LiveSyncServer) };
+    };
     server.clear_selection();
 }
 
@@ -184,10 +184,9 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerS
     entity_coords: JIntArray,
     entity_payloads: JObjectArray,
 ) -> jboolean {
-    if handle == 0 {
+    let Some(server) = SERVERS.get(handle as u64) else {
         return 0;
-    }
-    let server = unsafe { &*(handle as *const LiveSyncServer) };
+    };
 
     let dim_str: String = match env.get_string(&dimension) {
         Ok(s) => s.into(),
@@ -247,14 +246,16 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerB
     handle: jlong,
     data: JByteArray,
 ) {
-    if handle == 0 || data.is_null() {
+    if data.is_null() {
         return;
     }
+    let Some(server) = SERVERS.get(handle as u64) else {
+        return;
+    };
     let bytes = match env.convert_byte_array(&data) {
         Ok(b) => b,
         Err(_) => return,
     };
-    let server = unsafe { &*(handle as *const LiveSyncServer) };
     server.broadcast_packet_bytes(bytes);
 }
 
@@ -270,10 +271,9 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerS
     entity_coords: JIntArray,
     entity_payloads: JObjectArray,
 ) {
-    if handle == 0 {
+    let Some(server) = SERVERS.get(handle as u64) else {
         return;
-    }
-    let server = unsafe { &*(handle as *const LiveSyncServer) };
+    };
 
     let coords = match extract_int_array(&mut env, &rel_coords) {
         Ok(c) => c,

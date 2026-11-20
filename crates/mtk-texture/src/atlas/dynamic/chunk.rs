@@ -129,6 +129,14 @@ impl DynamicAtlasChunk {
         self.slot_map.get(skin_key).copied()
     }
 
+    /// Whether the next allocation will recycle a slot instead of consuming a fresh one.
+    ///
+    /// Callers that keep their own key -> slot index (e.g. `DynamicAtlasManager`) need this to
+    /// mirror the eviction `allocate_slot` performs.
+    pub fn will_wrap(&self) -> bool {
+        (self.next_slot as usize) >= DYNAMIC_TOTAL_SLOTS
+    }
+
     /// Allocates or retrieves an existing slot for a skin key (natural deduplication).
     ///
     /// Respects `pinned_slots`: slots 0..pinned_slots are never evicted during wrap-around.

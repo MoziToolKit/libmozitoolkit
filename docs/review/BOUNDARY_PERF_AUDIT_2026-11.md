@@ -721,3 +721,66 @@ Python 后台线程（AsyncTask）
 **实测**：本机 10 核（4P+6E）默认 8 workers。`mtk bench world` 默认策略下
 42.0 → **40.7 ms**（8.27M quads/s，反而比用满 10 核略快，P/E 混跑更少）；
 端到端 `scenario_bench` 130.6 ms，与 T-1 后持平。
+
+---
+
+## 12. C1：两个 P0 + 动态图集 + T-3（2026-11-20）
+
+性能与线程批完成后，先把两件会真正"炸"的联机缺陷清掉，再处理一处会一直看错的画质 bug。
+
+### 12.1 S-13 · JNI 句柄 UAF（P0）
+
+旧实现把 `Box<LiveSyncServer>` 的裸指针当 `jlong` 发给 JVM，每个入口 `unsafe { &*(handle as *const _) }`。
+Java 侧 poller 线程读句柄、主线程 `nativeServerStop` 释放 → use-after-free，JVM 无法阻止。
+
+改为 `bindings/mtk-jni/src/handle.rs::HandleTable<T>`：
+
+- 句柄是自增 id，表里存 `Arc<T>`；每次调用 `get()` 克隆一个 `Arc`，正在执行的调用在 stop 之后仍然安全；
+- `remove()` 之后句柄不再解析，重复 stop 是 no-op，之后所有调用走"未运行"返回值而不是读已释放内存；
+- 锁被 panic 毒化时用 `PoisonError::into_inner` 恢复，不会让整个 JNI 面永久 panic（原来 server.rs 里 7 处 `.lock().unwrap()` 也不复存在）。
+
+`LiveSyncServer::stop` 由 `&mut self` 改为 `&self`（`listener_thread` 移进 `Mutex`），这样共享 `Arc` 也能停。
+测试（无需 JVM）：句柄唯一且可解析、**stop 后 in-flight Arc 仍有效且句柄不再解析**、毒化后仍可服务。
+
+### 12.2 Y-06 · baseline 的 `snapshot_uuid` 恒定（P0）
+
+`submit_baseline` 用 `Instant::now().elapsed().as_nanos()` 生成快照 id —— 这是"刚创建的 Instant 到现在的纳秒数"，
+实际恒为 0 附近。客户端正是靠这个 id 丢弃"上一个中断的 baseline 的迟到分片"，于是**重连/移动选区后会混入旧流的分片**。
+
+改为 `ServerInner::next_snapshot_uuid()`：单调计数器 + 服务器启动 uuid（宿主传全零时由 `start` 生成）
+经 splitmix64 混淆，低 8 字节放计数器保证会话内绝不重复，高 8 字节与进程身份相关避免重启后首包撞车。
+测试：同会话 1024 次不重复、两个"进程"首包不同、相邻计数器哈希半区不同。
+
+### 12.3 动态图集回绕的幽灵映射（P1，画质）
+
+`DynamicAtlasManager` 在 16 个 chunk 全满后于最后一个 chunk 内轮转复用槽位。
+`DynamicAtlasChunk::allocate_slot` 会清掉自己 `slot_map` 里旧 key，但 manager 的 `key_to_location` **没同步**：
+被逐出的玩家皮肤仍然 `contains_key == true`、仍解析到已被别人重画的槽位，并且永远不会再 blit ——
+"某个人的头颅一直显示成别人的皮肤，重启才好"。
+
+修法：`DynamicAtlasChunk::will_wrap()` 暴露"下一次分配会回收槽位"，manager 在回收时把该 (chunk, slot) 的旧 key
+从索引里一起删掉。测试把 16×256 个槽位填满后分配第 4097 个 key，断言被逐出的 key 不再解析、
+不出现在 `all_slot_locations()`、也不会被重新注册进图集地址表。
+
+### 12.4 T-3 · 线程契约的"另一半"
+
+save 侧已经断言"回调只在调用线程"；网格化相反——它**故意**从 rayon worker 上报进度（宿主负责 marshal）。
+新增 `mtk-voxel/tests/test_mesher_threading.rs`：32 段实心世界 + 4 线程，断言有进度事件、
+同一阶段内 `current` 不倒退、并且（多核时）**至少有一个事件来自非调用线程**。
+这样"回调可能来自任意线程"就从隐含假设变成了被测试钉住的契约。
+
+prebake 路径暂未单测（它走同一套 `ProgressCallback`，且 guardrail 已在绑定侧守住 detach）。
+
+### 12.5 门禁
+
+`fmt` / `ci_guardrails`(0) / `clippy -D warnings` / `MTK_REQUIRE_REAL_ASSETS=1 cargo test --workspace`
+（0 失败 0 SKIP）/ `cargo build-all-py` / Blender 全套件 591 passed。
+
+### 12.6 下一批的优先级（我的建议）
+
+| 顺序 | 批次 | 理由 |
+|---|---|---|
+| 1 | **B3 边界** | `mtk-voxel` 直接持有 `SkinResolver`(HTTP)/`BannerBaker`/模型烘焙，与 `ARCHITECTURE_2.0` 的 L0 禁令矛盾；`mtk-cli` 还自带一套未加固的 zip loader。越晚改越贵。 |
+| 2 | **C-06 + K-04**（mtk-texture） | 图集 `padding=0` 的 HD/mipmap 渗色，以及 `HashMap` 进 serde 导致的非确定性字节；两项都要动烘焙输出，需要一次缓存格式版本递增，适合一起做。 |
+| 3 | **B4 其余** | `mtk-resource` 的 fallible pack API（K-06）、`.mcmeta.frames`（C-01）、filter 顺序（C-02）；`mtk-material` 的 66 biome 与 jar 一致性测试。 |
+| 4 | **B5 剩余** | Y-07/Y-08/Y-10/Y-11/Y-13、V-07/V-08、K-05/K-08..K-12、A-03/A-05..A-17。 |

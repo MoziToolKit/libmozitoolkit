@@ -49,7 +49,7 @@ impl PyLiveSyncServer {
 
     /// Stops the server.
     pub fn stop(&mut self) {
-        if let Some(mut server) = self.inner.take() {
+        if let Some(server) = self.inner.take() {
             server.stop();
         }
     }

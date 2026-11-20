@@ -9,6 +9,7 @@ use jni::JNIEnv;
 
 pub(crate) mod convert;
 pub mod event;
+mod handle;
 pub mod server;
 
 /// Computes 64-bit xxHash (xxHash64) over arbitrary byte array.

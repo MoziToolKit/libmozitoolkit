@@ -200,3 +200,53 @@ fn test_dynamic_atlas_pinned_slots_overflow_protection() {
     assert_eq!(chunk.get_slot("entity_16"), None);
     assert_eq!(chunk.get_slot("overflow_1"), Some(16));
 }
+
+/// When every chunk is full the manager recycles slots in the last chunk. The evicted key used to
+/// keep its entry in `key_to_location`, so it still "resolved" to a slot that now paints another
+/// player's skin and was never re-blitted (a permanent wrong skin).
+#[test]
+fn manager_forgets_keys_evicted_by_a_wrapped_chunk() {
+    let mut mgr = DynamicAtlasManager::new(DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID);
+    let capacity = MAX_DYNAMIC_CHUNKS * DYNAMIC_TOTAL_SLOTS;
+    for index in 0..capacity {
+        mgr.allocate_slot(&format!("player_{index}"));
+    }
+    assert_eq!(mgr.chunk_count(), MAX_DYNAMIC_CHUNKS);
+
+    let evicted = format!("player_{}", capacity - DYNAMIC_TOTAL_SLOTS);
+    assert!(
+        mgr.get_location(&evicted).is_some(),
+        "precondition: the oldest key of the last chunk owns slot 0"
+    );
+
+    let (chunk_id, slot) = mgr.allocate_slot("player_overflow");
+    assert_eq!(
+        slot, 0,
+        "a full manager recycles the last chunk from slot 0"
+    );
+
+    assert_eq!(
+        mgr.get_location(&evicted),
+        None,
+        "evicted key must stop resolving to the recycled slot"
+    );
+    assert!(!mgr.contains_key(&evicted));
+    assert!(
+        !mgr.all_slot_locations().contains_key(&evicted),
+        "stale alias would be re-registered into the address map"
+    );
+    assert_eq!(mgr.get_location("player_overflow"), Some((chunk_id, slot)));
+
+    // Keys in earlier chunks are untouched.
+    assert!(mgr.contains_key("player_0"));
+
+    let mut address_map = AtlasAddressMap::new();
+    mgr.register_to_address_map(&mut address_map);
+    assert!(
+        address_map
+            .lookup_str(&format!("minecraft:skin/{evicted}"))
+            .is_none(),
+        "the evicted skin must not stay in the atlas address map"
+    );
+    assert!(address_map.lookup_str("minecraft:skin/player_0").is_some());
+}

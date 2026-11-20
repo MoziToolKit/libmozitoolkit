@@ -10,4 +10,7 @@ pub use chunk::{
 pub use manager::DynamicAtlasManager;
 
 #[cfg(test)]
+pub(crate) use chunk::{DYNAMIC_TOTAL_SLOTS, MAX_DYNAMIC_CHUNKS};
+
+#[cfg(test)]
 mod tests;
