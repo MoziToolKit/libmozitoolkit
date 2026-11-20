@@ -203,18 +203,7 @@ impl ResourcePackStack {
         hasher.update(FINGERPRINT_DOMAIN.as_bytes());
         hasher.update(&(self.packs.len() as u64).to_le_bytes());
         for pack in &self.packs {
-            let label = pack.source_label();
-            hasher.update(&(label.len() as u64).to_le_bytes());
-            hasher.update(label.as_bytes());
-            let mut entries = pack.content_entries();
-            entries.sort_by(|a, b| a.path.cmp(&b.path));
-            hasher.update(&(entries.len() as u64).to_le_bytes());
-            for entry in entries {
-                hasher.update(&(entry.path.len() as u64).to_le_bytes());
-                hasher.update(entry.path.as_bytes());
-                hasher.update(&entry.size.to_le_bytes());
-                hasher.update(&entry.modified_secs.to_le_bytes());
-            }
+            hash_pack_content(&mut hasher, &pack.source_label(), pack.content_entries());
         }
         format!("mtk_fp_{:016x}", hasher.digest())
     }
@@ -234,17 +223,7 @@ impl ResourcePackStack {
             let canonical =
                 std::fs::canonicalize(resolved).unwrap_or_else(|_| resolved.to_path_buf());
             let label = canonical.display().to_string();
-            hasher.update(&(label.len() as u64).to_le_bytes());
-            hasher.update(label.as_bytes());
-            let mut entries = content_entries_from_path(&canonical);
-            entries.sort_by(|a, b| a.path.cmp(&b.path));
-            hasher.update(&(entries.len() as u64).to_le_bytes());
-            for entry in entries {
-                hasher.update(&(entry.path.len() as u64).to_le_bytes());
-                hasher.update(entry.path.as_bytes());
-                hasher.update(&entry.size.to_le_bytes());
-                hasher.update(&entry.modified_secs.to_le_bytes());
-            }
+            hash_pack_content(&mut hasher, &label, content_entries_from_path(&canonical));
         }
         format!("mtk_fp_{:016x}", hasher.digest())
     }
@@ -267,48 +246,32 @@ fn content_entries_from_path(path: &Path) -> Vec<crate::pack::source::PackConten
         return vec![PackContentEntry {
             path: String::new(),
             size: meta.len(),
-            modified_secs: modified_secs(&meta),
+            modified_secs: crate::pack::source::modified_secs(&meta),
         }];
     }
     if !meta.is_dir() {
         return Vec::new();
     }
-
-    fn walk(root: &Path, current: &Path, out: &mut Vec<PackContentEntry>) {
-        let Ok(entries) = std::fs::read_dir(current) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let Ok(meta) = entry.metadata() else { continue };
-            if meta.is_dir() {
-                walk(root, &path, out);
-                continue;
-            }
-            if !meta.is_file() {
-                continue;
-            }
-            let Ok(rel) = path.strip_prefix(root) else {
-                continue;
-            };
-            out.push(PackContentEntry {
-                path: rel.to_string_lossy().replace('\\', "/"),
-                size: meta.len(),
-                modified_secs: modified_secs(&meta),
-            });
-        }
-    }
-
-    let mut out = Vec::new();
-    walk(path, path, &mut out);
-    out
+    crate::pack::source::content_entries_from_dir(path)
 }
 
-/// Modification time in whole seconds since the Unix epoch (0 when unavailable).
-fn modified_secs(meta: &std::fs::Metadata) -> i64 {
-    meta.modified()
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
+/// Feeds one pack's identity and content into the fingerprint.
+///
+/// Shared by the loaded-stack and path-only variants so they cannot drift: the two must produce
+/// the same digest for the same packs, or a host decides READY and then loads a different package.
+fn hash_pack_content(
+    hasher: &mut Xxh64,
+    label: &str,
+    mut entries: Vec<crate::pack::source::PackContentEntry>,
+) {
+    hasher.update(&(label.len() as u64).to_le_bytes());
+    hasher.update(label.as_bytes());
+    entries.sort_by(|a, b| a.path.cmp(&b.path));
+    hasher.update(&(entries.len() as u64).to_le_bytes());
+    for entry in entries {
+        hasher.update(&(entry.path.len() as u64).to_le_bytes());
+        hasher.update(entry.path.as_bytes());
+        hasher.update(&entry.size.to_le_bytes());
+        hasher.update(&entry.modified_secs.to_le_bytes());
+    }
 }

@@ -102,3 +102,40 @@ fn path_fingerprint_matches_the_loaded_stack() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// Archives are identified by the archive's own size and mtime. The path-only fast path must
+/// agree with a stack that loaded the same file, otherwise the host would resolve a cache built
+/// from different bytes.
+#[test]
+fn path_fingerprint_matches_the_loaded_archive_stack() {
+    use std::io::Write;
+
+    let dir = temp_dir("zip_parity");
+    let archive_path = dir.join("pack.zip");
+    {
+        let file = fs::File::create(&archive_path).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        zip.start_file("assets/minecraft/textures/block/stone.png", options)
+            .unwrap();
+        zip.write_all(b"stone").unwrap();
+        zip.finish().unwrap();
+    }
+
+    let mut stack = ResourcePackStack::new();
+    stack.push_pack(Box::new(
+        mtk_resource::ZipPack::from_file("pack", &archive_path).unwrap(),
+    ));
+
+    let from_paths =
+        ResourcePackStack::compute_fingerprint_from_paths([archive_path.to_str().unwrap()]);
+
+    assert_eq!(
+        from_paths,
+        stack.compute_stack_fingerprint(),
+        "an archive must fingerprint identically from its path and from the loaded stack"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}

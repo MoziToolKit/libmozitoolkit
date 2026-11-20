@@ -87,7 +87,7 @@ pub trait ResourcePack: Send + Sync {
 }
 
 /// Modification time of a file in whole seconds since the Unix epoch (0 when unavailable).
-fn modified_secs(meta: &fs::Metadata) -> i64 {
+pub(crate) fn modified_secs(meta: &fs::Metadata) -> i64 {
     meta.modified()
         .ok()
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
@@ -126,6 +126,43 @@ impl DirectoryPack {
     }
 }
 
+/// Walks `root` and reports one [`PackContentEntry`] per regular file.
+///
+/// Single source of truth for directory-pack content: `DirectoryPack::content_entries` and
+/// `ResourcePackStack::compute_fingerprint_from_paths` must produce identical entries, otherwise
+/// the cache fingerprint computed from paths can disagree with the one computed from the loaded
+/// stack and serve a package built from different files.
+pub(crate) fn content_entries_from_dir(root: &Path) -> Vec<PackContentEntry> {
+    fn walk(root: &Path, current: &Path, out: &mut Vec<PackContentEntry>) {
+        let Ok(entries) = fs::read_dir(current) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(meta) = entry.metadata() else { continue };
+            if meta.is_dir() {
+                walk(root, &path, out);
+                continue;
+            }
+            if !meta.is_file() {
+                continue;
+            }
+            let Ok(rel) = path.strip_prefix(root) else {
+                continue;
+            };
+            out.push(PackContentEntry {
+                path: rel.to_string_lossy().replace('\\', "/"),
+                size: meta.len(),
+                modified_secs: modified_secs(&meta),
+            });
+        }
+    }
+
+    let mut out = Vec::new();
+    walk(root, root, &mut out);
+    out
+}
+
 impl ResourcePack for DirectoryPack {
     fn name(&self) -> &str {
         &self.name
@@ -141,34 +178,7 @@ impl ResourcePack for DirectoryPack {
     }
 
     fn content_entries(&self) -> Vec<PackContentEntry> {
-        fn walk(root: &Path, current: &Path, out: &mut Vec<PackContentEntry>) {
-            let Ok(entries) = fs::read_dir(current) else {
-                return;
-            };
-            for entry in entries.flatten() {
-                let path = entry.path();
-                let Ok(meta) = entry.metadata() else { continue };
-                if meta.is_dir() {
-                    walk(root, &path, out);
-                    continue;
-                }
-                if !meta.is_file() {
-                    continue;
-                }
-                let Ok(rel) = path.strip_prefix(root) else {
-                    continue;
-                };
-                out.push(PackContentEntry {
-                    path: rel.to_string_lossy().replace('\\', "/"),
-                    size: meta.len(),
-                    modified_secs: modified_secs(&meta),
-                });
-            }
-        }
-
-        let mut out = Vec::new();
-        walk(&self.root_dir, &self.root_dir, &mut out);
-        out
+        content_entries_from_dir(&self.root_dir)
     }
 
     fn open(&self, relative_path: &str) -> Option<Vec<u8>> {

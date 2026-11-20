@@ -871,7 +871,7 @@ atlas_changed && (原有 atlas 存在 || 本次真的新增了动态精灵)
 
 1. ✅ `mtk-cli` 删除 `UniversalAssetLoader`，改走 `mtk-resource`（见 §14）；
 2. `mtk-resource` 的 `net` feature 默认关、`parallel` 空 feature 清理；
-3. 两处 `content_entries` 目录遍历合一；
+3. ✅ 两处 `content_entries` 目录遍历合一（见 §16）；
 4. `ci_guardrails` 依赖白名单（防止下一个 crate 反向依赖）。
 
 ---
@@ -915,7 +915,7 @@ atlas_changed && (原有 atlas 存在 || 本次真的新增了动态精灵)
 ### 14.4 B3 剩余
 
 2. ✅ `mtk-resource` 的 `net` feature 默认关 + 清理空的 `parallel` feature（见 §15）；
-3. 两处 `content_entries` 目录遍历合一；
+3. ✅ 两处 `content_entries` 目录遍历合一（见 §16）；
 4. `ci_guardrails` 依赖白名单。
 
 ---
@@ -956,5 +956,41 @@ atlas_changed && (原有 atlas 存在 || 本次真的新增了动态精灵)
 
 ### 15.4 B3 剩余
 
-3. 两处 `content_entries` 目录遍历合一；
+3. ✅ 两处 `content_entries` 目录遍历合一（见 §16）；
+4. `ci_guardrails` 依赖白名单。
+
+---
+
+## 16. B3 第 4 步：资产指纹的两份实现合一（2026-11-20）
+
+### 16.1 问题
+
+`ResourcePackStack` 有两种指纹入口：
+
+- `compute_stack_fingerprint()` —— 从**已加载的包**取 `content_entries()`；
+- `compute_fingerprint_from_paths()` —— 主机在 UI 线程上、加载任何归档**之前**用路径算。
+
+两者必须逐字节一致，否则会出现"主机判断 READY，却加载到另一个包"的情况。为此两处各自
+实现了一份目录遍历（`DirectoryPack::content_entries` 与 `content_entries_from_path`），
+以及一份相同的"排序 + 逐字段喂哈希"循环。两份代码只靠一个测试的目录场景保证一致——
+任何一边的排序键、字段顺序、路径分隔符改写变化都会静默破坏另一个入口。
+
+### 16.2 改法
+
+- `pack/source.rs::content_entries_from_dir(root)` 成为唯一目录遍历；`DirectoryPack::content_entries`
+  直接委托。
+- `pack/stack/mod.rs::content_entries_from_path` 只保留"文件 → 单条 (size, mtime)"的分支，
+  目录分支委托同一个遍历。
+- `hash_pack_content(hasher, label, entries)` 成为唯一"排序 + 编码"实现，
+  两个指纹入口共用。
+- `modified_secs` 提升为 `pub(crate)`，只保留一份。
+
+### 16.3 测试
+
+`test_pack_fingerprint.rs` 新增 `path_fingerprint_matches_the_loaded_archive_stack`：
+归档（zip）场景下，路径指纹必须等于加载后的栈指纹。原有目录场景的等值测试保留，
+两组覆盖了两种 pack 类型。
+
+### 16.4 B3 剩余
+
 4. `ci_guardrails` 依赖白名单。
