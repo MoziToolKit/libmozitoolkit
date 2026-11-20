@@ -914,6 +914,47 @@ atlas_changed && (原有 atlas 存在 || 本次真的新增了动态精灵)
 
 ### 14.4 B3 剩余
 
-2. `mtk-resource` 的 `net` feature 默认关 + 清理空的 `parallel` feature；
+2. ✅ `mtk-resource` 的 `net` feature 默认关 + 清理空的 `parallel` feature（见 §15）；
+3. 两处 `content_entries` 目录遍历合一；
+4. `ci_guardrails` 依赖白名单。
+
+---
+
+## 15. B3 第 3 步：`mtk-resource` 的 feature 边界（2026-11-20）
+
+### 15.1 问题
+
+`mtk-resource` 的默认 feature 是 `["parallel", "zip", "net"]`：
+
+- `net`（`ureq` + rustls）默认开，于是 `mtk-texture` / `mtk-material` / `mtk-model` / `mtk-voxel`
+  全部**传递链接**了 HTTP/TLS 栈 —— 而它们没有一处需要抓皮肤；
+- `parallel = []` 是空 feature，却被 `mtk-material` / `mtk-texture` / `mtk-model` / `mtk-voxel` /
+  `libmtk` 五个 crate 转发，等于死配置。
+
+### 15.2 改法
+
+- `default = ["zip"]`；`net` 保留但改为**显式 opt-in**；
+- 删除 `parallel` feature 与全部转发；
+- 只有 `mtk-block-entity-textures`（皮肤三级解析/旗帜烘焙）打开 `net`；
+- 顺带修掉一个被 feature 默认值掩盖的测试 bug：`skin/mod.rs` 的 `circuit` 测试在 `net` 关闭时
+  引用了不存在的 `SkinResolver.circuit` 字段（`mod circuit` 原先被 `any(test, ...)` 放行）。
+  现在 `circuit` 与相关测试都严格 `cfg(net && !wasm)` —— **`cargo test -p mtk-resource`
+  在无网络 feature 下也能编译并通过**，这是之前从未验证过的路径。
+
+### 15.3 验证
+
+| 检查 | 结果 |
+|---|---|
+| `cargo tree -p mtk-voxel/mtk-model/mtk-texture/mtk-material` 含 `ureq`/`rustls` | **0**（改前全部非 0） |
+| `cargo test -p mtk-resource`（net 关） | 28 passed |
+| `cargo test -p mtk-resource --features net` | 33 passed |
+| `cargo check -p mtk-wasm --target wasm32-unknown-unknown` | 通过 |
+| `cargo tree -p mtk-py` 含 `ureq` | 2（宿主需要，符合预期） |
+
+`mtk-cli` 仍会链接 net（它注入 `BlockEntityTextures` 以便 `bench world` 能解析存档里的头颅皮肤）；
+这是宿主选择，不是库层默认。
+
+### 15.4 B3 剩余
+
 3. 两处 `content_entries` 目录遍历合一；
 4. `ci_guardrails` 依赖白名单。

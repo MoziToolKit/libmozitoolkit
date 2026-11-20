@@ -10,7 +10,7 @@ description = "Runtime textures for block entities (player skulls, banners) for 
 [dependencies]
 mtk-core = { workspace = true }
 mtk-model = { workspace = true }
-mtk-resource = { workspace = true }
+mtk-resource = { workspace = true, features = ["net"] }
 mtk-texture = { workspace = true }
 mtk-voxel = { workspace = true }
 glam = { workspace = true }

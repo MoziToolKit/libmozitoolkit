@@ -21,9 +21,10 @@ zip = { workspace = true, optional = true }
 ureq = { workspace = true, optional = true }
 
 [features]
-default = ["parallel", "zip", "net"]
+# `net` is opt-in: only the skin-fetching hosts need ureq/rustls, and every domain crate used to
+# link it transitively through the default feature set.
+default = ["zip"]
 zip = ["dep:zip"]
-parallel = []
 net = ["dep:ureq"]
 
 [dev-dependencies]

@@ -21,11 +21,7 @@ rayon = { workspace = true, optional = true }
 
 [features]
 default = ["parallel"]
-parallel = [
-    "dep:rayon",
-    "mtk-resource/parallel",
-    "mtk-texture/parallel",
-]
+parallel = ["dep:rayon", "mtk-texture/parallel"]
 
 [dev-dependencies]
 mtk-testkit = { workspace = true }

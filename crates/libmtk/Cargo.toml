@@ -31,7 +31,6 @@ parallel = [
     "mtk-core/parallel",
     "mtk-model/parallel",
     "mtk-voxel/parallel",
-    "mtk-resource/parallel",
     "mtk-texture/parallel",
     "mtk-material/parallel",
     "dep:rayon",

@@ -4,7 +4,7 @@
 //! negative caching for 404/invalid URLs, non-blocking disk/memory checks,
 //! background HTTP fetching, and 0-second indexed local cache hits.
 
-#[cfg(any(test, all(feature = "net", not(target_arch = "wasm32"))))]
+#[cfg(all(feature = "net", not(target_arch = "wasm32")))]
 mod circuit;
 mod fetch;
 mod index;
@@ -19,10 +19,12 @@ pub use resolver::{decode_base64, extract_skin_url_from_property_base64, SkinRes
 
 #[cfg(test)]
 mod tests {
+    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     use super::circuit::*;
     use super::index::*;
     use super::resolver::*;
     use super::*;
+    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     use mtk_testkit::require_online;
     use std::fs;
 
@@ -293,6 +295,7 @@ mod tests {
         let _ = fs::remove_dir_all(&temp_dir);
     }
 
+    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     #[test]
     fn test_skin_circuit_breaker_trip_and_fast_fail() {
         let circuit = SkinCircuitBreaker::new(2, 60);

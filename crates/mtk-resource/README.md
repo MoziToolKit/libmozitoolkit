@@ -348,9 +348,10 @@ tiles=0 1 2 3
 
 | Feature | 默认启用 | 描述 |
 | :--- | :---: | :--- |
-| `std` | 是 | 启用标准库与 `mtk-core/std`、`serde/std`、`zip`。 |
-| `zip` | 是 | 启用 `zip` crate 支持直接读取 `.zip` / `.jar` 资源包文件。 |
-| `parallel` | 是 | 启用 `rayon` 多线程并发加速（如大批量文件扫描与 CTM 规则预加载）。 |
+| `zip` | 是 | 启用 `zip` crate 以直接读取 `.zip` / `.jar` 资源包文件（含单 entry 256 MiB 上限与路径穿越拒绝）。 |
+| `net` | **否** | 启用玩家皮肤的网络抓取（`ureq` + rustls）。只有 `mtk-block-entity-textures` 这类宿主显式打开；`mtk-voxel` / `mtk-model` / `mtk-texture` / `mtk-material` 都不再传递链接 HTTP 栈。 |
+
+> 已删除空转的 `parallel` feature（它曾什么都不做，却被 5 个 crate 转发）。并行加速由各 crate 自己的 `parallel` feature 负责。
 
 ---
 

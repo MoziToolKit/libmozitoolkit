@@ -24,7 +24,7 @@ rayon = { workspace = true, optional = true }
 
 [features]
 default = ["parallel", "serde"]
-parallel = ["dep:rayon", "mtk-model/parallel", "mtk-resource/parallel", "mtk-texture/parallel"]
+parallel = ["dep:rayon", "mtk-model/parallel", "mtk-texture/parallel"]
 serde = ["dep:serde", "dep:serde_json", "mtk-core/serde", "mtk-cull/serde"]
 
 [dev-dependencies]
