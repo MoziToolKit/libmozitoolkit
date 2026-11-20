@@ -58,6 +58,9 @@ xxhash-rust = { version = "0.8.19", default-features = false, features = ["xxh64
 sha2 = { version = "0.11.1", default-features = false }
 memmap2 = "0.9.12"
 bytemuck = { version = "1.25.2", default-features = false }
+# Atlas `filter` patterns are Java regexes matched with `Pattern.asPredicate()` (substring search),
+# so reading atlas definitions faithfully needs a regex engine.
+regex = "1.12.2"
 
 # Internal workspace crates
 mtk-core = { path = "crates/mtk-core", version = "0.1.0" }

@@ -1294,4 +1294,93 @@ fixture 测试仍通过；恢复实现后三个全绿。
 
 ### 21.6 B4 剩余
 
-5. C-02 atlas `filter` 顺序与匹配语义（需要先确认 MC 侧语义）；biome 常量与 jar 一致性测试。
+5. ✅ C-02 atlas `filter`（见 §22；同时发现新的 C-07）；biome 常量与 jar 一致性测试仍在。
+
+---
+
+## 22. C-02：atlas `filter` —— 先读 MC 源码，再改代码
+
+### 22.1 先纠正审计里的两个错误判断
+
+审计当时建议"两阶段：先收集全部 source，再按 pack 优先级覆盖"，理由是"顺序相关 = bug"。读过
+`Minecraft_Source/net/minecraft/client/renderer/texture/atlas` 之后可以确认这个建议是**错的**：
+
+```java
+// SpriteSourceList.list(...)
+this.sources.forEach(s -> s.run(resourceManager, output));   // 顺序执行
+...
+// SourceFilter.run(...)
+output.removeAll(this.filter.locationPredicate());           // 只删"此刻已收集"的
+```
+
+`filter` 的位置是 vanilla 语义的一部分：放在 directory 源之前的 filter 什么都不会删。改顺序会
+偏离原版。
+
+第二处：`IdentifierPattern` 的匹配不是 `contains`，而是
+
+```java
+// IdentifierPattern
+this.namespacePredicate = namespacePattern.map(Pattern::asPredicate)...
+this.pathPredicate = pathPattern.map(Pattern::asPredicate)...
+// ExtraCodecs.PATTERN = Codec.STRING -> Pattern.compile(...)
+```
+
+即 **Java 正则 + `Pattern.asPredicate()`（`matcher.find()`，子串匹配）**。对字面量模式而言
+`find()` 与 `contains` 等价，所以旧实现的差别只在正则模式上——但真正的问题不在匹配，而在**形状**。
+
+### 22.2 真正的问题：`pattern` 被 `flatten` 了
+
+我们的 `AtlasSource::Filter` 是
+
+```rust
+Filter { #[serde(flatten)] pattern: AtlasFilterPattern },   // 期望 namespace/path 在源对象顶层
+```
+
+而 vanilla 的形状是 `{"type":"…filter","pattern":{"namespace":…,"path":…}}`（`fieldOf("pattern")`）。
+实测（新测试集第一条只是把它暴露出来）：
+
+```
+输入 {"type":"minecraft:filter","pattern":{"namespace":"minecraft","path":"block/"}}
+解析结果 Filter { pattern: AtlasFilterPattern { namespace: None, path: None } }
+```
+
+`pattern` 键被忽略、两个字段都是 `None` → 匹配器认为"匹配一切" → `retain` 把**整个图集清空**。
+任何带 `filter` 的材质包在当前版本会得到一个只剩 fallback 的图集。
+
+### 22.3 改法
+
+- `Filter { pattern: AtlasFilterPattern }`（嵌套字段，`pattern` **必填**——缺省值会退化成"删光"）；
+- 新增 `FilterPattern`：保存原始文本 + 编译好的 `regex::Regex`（`Serialize` 写回文本，
+  `PartialEq` 比文本）；`AtlasFilterPattern::matches` = namespace 与 path 各自 `find()`；
+- 无效正则 → 反序列化失败 → 整个 atlas 定义解析失败（MC 同样在 `Pattern.compile` 失败时丢弃
+  该文件的 source 列表，我们退化为该分类的内置默认定义）；
+- 保留"按位置 `retain`"的顺序语义，并加测试把 vanilla 行为钉住（防止未来有人把它"清理"成两阶段）。
+
+**新增依赖 `regex`**：atlas `filter` 的数据格式本身就是正则，用 `contains` 近似等于换一套语义。
+`regex` 是纯 Rust、可用 `wasm32-unknown-unknown`（已验证 `cargo check -p mtk-wasm --target
+wasm32-unknown-unknown`）。Java 专有构造（lookbehind/backreference）会被拒绝并报出模式文本——
+比"静默按字面量处理"更容易发现。
+
+### 22.4 测试（红→绿）
+
+`crates/mtk-resource/tests/test_atlas_filter.rs`（8 个）：
+
+| 测试 | 覆盖 |
+|---|---|
+| `a_literal_filter_removes_only_the_named_sprite` | 字面量只删目标精灵 |
+| `a_regex_filter_matches_like_minecraft` | `block/.*_ore` 命中 `diamond_ore` |
+| `an_anchored_regex_only_matches_the_whole_path` | `^block/stone$` 不误伤 |
+| `a_namespace_only_pattern_ignores_the_path` | 只给 namespace |
+| `a_filter_before_the_directory_source_removes_nothing` | 顺序语义（vanilla） |
+| `an_invalid_regex_is_rejected` | 无效正则 → 解析失败 |
+| `a_filter_without_a_pattern_is_rejected` | `pattern` 必填 |
+| `unrelated_sources_still_collect` | 无 filter 时行为不变 |
+
+红态证据：改前前 6 条里 5 条失败，输出是 `got []`——图集被清空，正是 22.2 描述的后果。
+
+### 22.5 顺带发现（已记为 C-07，未在本项修）
+
+`load_atlas_definition` 只读**最高优先级包**的那一份 `atlases/blocks.json`；而 MC 的
+`SpriteSourceList.load` 是 `for (Resource entry : resourceManager.getResourceStack(resourceId))`
+——把**所有包**的同名文件按优先级顺序拼起来。于是"只追加自己的 sprite、不重复原版列表"的材质包
+在我们这里会丢掉整个原版目录源（渲染成 fallback）。这是与 filter 相邻但独立的一项，见 §23 / backlog C-07。

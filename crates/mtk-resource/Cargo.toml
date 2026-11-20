@@ -11,6 +11,7 @@ description = "Headless Minecraft resource pack virtual file system, .mcmeta, an
 [dependencies]
 mtk-core = { workspace = true }
 glam = { workspace = true }
+regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

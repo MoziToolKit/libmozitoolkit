@@ -174,18 +174,10 @@ impl ResourcePackStack {
                 }
 
                 AtlasSource::Filter { pattern } => {
-                    // Filter matching entries
-                    results.retain(|s| {
-                        let ns_match = pattern
-                            .namespace
-                            .as_ref()
-                            .is_none_or(|ns_pat| s.sprite_id.namespace.contains(ns_pat));
-                        let path_match = pattern
-                            .path
-                            .as_ref()
-                            .is_none_or(|p_pat| s.sprite_id.path.contains(p_pat));
-                        !(ns_match && path_match)
-                    });
+                    // Drops only sprites collected so far: Minecraft runs sources in list order
+                    // against one shared map (`SpriteSourceList.list`), so a filter placed before a
+                    // directory source removes nothing from it.
+                    results.retain(|sprite| !pattern.matches(&sprite.sprite_id));
                 }
             }
         }

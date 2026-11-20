@@ -15,7 +15,9 @@ mod probe;
 pub mod skin;
 mod texture_key;
 
-pub use atlas::{AtlasCategory, AtlasDefinition, AtlasFilterPattern, AtlasSource, UnstitchRegion};
+pub use atlas::{
+    AtlasCategory, AtlasDefinition, AtlasFilterPattern, AtlasSource, FilterPattern, UnstitchRegion,
+};
 pub use ctm::{
     extract_block_name, BlockMatch, ConnectLogic, CtmMethod, CtmRule, CtmSolver, CtmSymmetry,
 };

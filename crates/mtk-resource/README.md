@@ -125,6 +125,7 @@ pub struct AnimationMetadata {
 pub enum AtlasSource {
     Directory { source: String, prefix: String },
     Single { resource: ResourceLocation, sprite: Option<ResourceLocation> },
+    /// `{"type":"…filter","pattern":{"namespace"?: <regex>, "path"?: <regex>}}`
     Filter { pattern: AtlasFilterPattern },
     Unstitch { resource: ResourceLocation, divisor_x: f64, divisor_y: f64, regions: Vec<UnstitchRegion> },
     PalettedPermutations {
@@ -132,6 +133,14 @@ pub enum AtlasSource {
         permutations: HashMap<String, ResourceLocation>,
         textures: Vec<ResourceLocation>,
     },
+}
+
+/// 与 Minecraft 的 `IdentifierPattern` 一致：两个字段各自是 Java 正则，用 `find()`（子串）匹配，
+/// 缺省字段匹配一切；`filter` 只删除**它之前**已收集的精灵（源码 `SpriteSourceList.list`）。
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct AtlasFilterPattern {
+    pub namespace: Option<FilterPattern>,
+    pub path: Option<FilterPattern>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
