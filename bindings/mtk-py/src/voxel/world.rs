@@ -8,9 +8,23 @@ use pyo3::types::PyBytes;
 
 /// Python wrapper for `VoxelWorld` 3D scene engine.
 #[pyclass(name = "VoxelWorld")]
-#[derive(Clone)]
 pub struct PyVoxelWorld {
     pub(crate) inner: mtk_voxel::VoxelWorld,
+}
+
+/// Installs the runtime block-entity texture provider (skulls, banners) on a new world.
+///
+/// The provider owns the network access, disk cache and banner baking; `mtk-voxel` only sees the
+/// resulting sprites. Python callers never construct it.
+pub(crate) fn attach_block_entity_textures(
+    world: &mut mtk_voxel::VoxelWorld,
+    config: Option<&PyMesherConfig>,
+) {
+    let mut textures = mtk_block_entity_textures::BlockEntityTextures::default();
+    if let Some(baker) = config.and_then(|cfg| cfg.banner_baker.as_ref()) {
+        textures.set_banner_baker((**baker).clone());
+    }
+    world.set_block_entity_textures(Some(Box::new(textures)));
 }
 
 #[pymethods]
@@ -25,9 +39,9 @@ impl PyVoxelWorld {
         let cfg = config.map(|c| c.inner.clone());
         let cul = culler.map(|c| c.inner.clone());
         let mdb = model_db.map(|db| db.inner.clone());
-        Self {
-            inner: mtk_voxel::VoxelWorld::new(cfg, cul, mdb),
-        }
+        let mut inner = mtk_voxel::VoxelWorld::new(cfg, cul, mdb);
+        attach_block_entity_textures(&mut inner, config);
+        Self { inner }
     }
 
     /// Creates a `VoxelWorld` taking initial data from an existing `VoxelStorage`.
@@ -46,6 +60,7 @@ impl PyVoxelWorld {
         let threads = num_threads.or_else(|| config.and_then(|c| c.num_threads));
         let mut inner = mtk_voxel::VoxelWorld::from_storage(storage.inner.clone(), cfg, cul, mdb);
         inner.num_threads = threads;
+        attach_block_entity_textures(&mut inner, config);
         Self { inner }
     }
 
@@ -76,6 +91,8 @@ impl PyVoxelWorld {
         }
         .map_err(map_voxel_err)?;
 
+        let mut world = world;
+        attach_block_entity_textures(&mut world, config);
         Ok(Self { inner: world })
     }
 
@@ -201,6 +218,9 @@ impl PyVoxelWorld {
         }
         if let Some(mdb) = model_db {
             self.inner.set_model_db(Some(mdb.inner.clone()));
+        }
+        if let Some(baker) = config.and_then(|cfg| cfg.banner_baker.as_ref()) {
+            self.inner.set_banner_baker((**baker).clone());
         }
         self.inner.clear_cache();
     }

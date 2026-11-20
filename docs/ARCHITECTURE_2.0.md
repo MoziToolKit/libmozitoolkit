@@ -7,7 +7,7 @@
 
 | 层 | crate / 模块 | 允许知道什么 | 明确禁止 |
 |---|---|---|---|
-| L0 体素 | `mtk-voxel` | 方块状态、biome、section、网格 | 任何实体概念 |
+| L0 体素 | `mtk-voxel` | 方块状态、biome、section、网格；**通过 `BlockEntityTextureProvider` 只消费宿主提供的方块实体运行时贴图** | 任何实体概念、网络访问、贴图烘焙、皮肤缓存 |
 | L1 模型 | `mtk-model::block_entity` | 方块实体 NBT → 几何（陶罐/旗帜/头颅） | 连续空间坐标 |
 | L1 模型 | `mtk-model::builtin::props` | blockstate → 程序化几何（铜像） | 方块实体 NBT 之外的运行时数据 |
 | L2 同步 | `mtk-sync` | 协议 v4：体素 + 方块实体流（0x11/0x12） | 0x13/0x14（为实体包保留） |
@@ -20,6 +20,13 @@
   **由 blockstate 驱动**的程序化几何。
 - 协议包名以 `BlockEntity` 结尾时，编号必须落在 0x11/0x12；0x13/0x14 永久预留给实体包。
 - 自定义属性（Blender）沿用 `mtk:is_*` 前缀；方块实体与实体包各自命名空间，不共用。
+
+## 方块实体的运行时贴图（玩家头颅 / 复合旗帜）
+
+`mtk-voxel` 只定义 `BlockEntityTextureProvider` 接口：网格化前询问一次「这个世界需要哪些运行时精灵」，
+拿到结果后合并进 `config.atlas_address_map`，网格化后由宿主读取 RGBA chunk 做材质绑定。
+**皮肤下载、磁盘缓存、横幅烘焙都在宿主层**（`mtk-block-entity-textures` crate，由 `mtk-py` /
+live-sync 客户端注入）。`mtk-voxel` 不再持有 `SkinResolver` / `BannerBaker` / `DynamicAtlasManager`。
 
 ## 铜像为什么留在核心里
 

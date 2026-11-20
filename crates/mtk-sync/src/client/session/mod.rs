@@ -63,7 +63,12 @@ impl LiveSyncSession {
         model_db: Option<Arc<BakedModelDatabase>>,
     ) -> Self {
         let (event_sender, event_receiver) = crossbeam_channel::unbounded::<SyncEvent>();
-        let world = VoxelWorld::new(config, culler, model_db);
+        // The live-sync client is a host: it owns the runtime block-entity textures (player-head
+        // skins, banners) and injects them, because `mtk-voxel` must not.
+        let mut world = VoxelWorld::new(config, culler, model_db);
+        world.set_block_entity_textures(Some(Box::new(
+            mtk_block_entity_textures::BlockEntityTextures::default(),
+        )));
 
         Self {
             world: Arc::new(RwLock::new(world)),

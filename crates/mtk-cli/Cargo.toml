@@ -13,6 +13,7 @@ libmtk = { workspace = true }
 mtk-core = { workspace = true }
 mtk-cull = { workspace = true }
 mtk-model = { workspace = true }
+mtk-block-entity-textures = { workspace = true }
 mtk-resource = { workspace = true }
 mtk-texture = { workspace = true }
 mtk-material = { workspace = true }

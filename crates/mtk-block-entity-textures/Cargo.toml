@@ -1,0 +1,27 @@
+[package]
+name = "mtk-block-entity-textures"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Runtime textures for block entities (player skulls, banners) for libmtk hosts."
+
+[dependencies]
+mtk-core = { workspace = true }
+mtk-model = { workspace = true }
+mtk-resource = { workspace = true }
+mtk-texture = { workspace = true }
+mtk-voxel = { workspace = true }
+glam = { workspace = true }
+rayon = { workspace = true, optional = true }
+
+[dev-dependencies]
+image = { workspace = true }
+
+[features]
+default = ["parallel"]
+parallel = ["dep:rayon", "mtk-core/parallel", "mtk-voxel/parallel"]
+
+[lints]
+workspace = true

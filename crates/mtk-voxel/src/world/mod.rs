@@ -21,16 +21,17 @@ use crate::storage::VoxelStorage;
 use crate::types::{MesherConfig, VoxelError};
 
 mod assembly;
+mod block_entity_textures;
 mod debug;
-mod dynamic_entities;
 mod rebuild;
 mod sync;
 
-pub use dynamic_entities::SkinResolvedCallback;
+pub use block_entity_textures::{
+    BlockEntityTextureProvider, SkinResolvedCallback, TexturePrepareOutcome, TextureResolveMode,
+};
 
 /// Unified 3D Voxel World scene managing storage, multi-source ingestion,
 /// Section mesh caching, incremental remeshing, and unified geometry assembly.
-#[derive(Debug, Clone)]
 pub struct VoxelWorld {
     /// In-memory 3D Voxel storage (sections, palettes, biomes, bounds).
     pub storage: VoxelStorage,
@@ -50,31 +51,50 @@ pub struct VoxelWorld {
     pub last_profile: Option<mtk_core::ExecutionProfile>,
     /// Unique Atlas Chunk IDs actually present on the active world mesh geometry.
     pub(crate) used_chunk_ids: Vec<u32>,
-    /// Dedicated multi-chunk dynamic entity atlas manager for player skulls, custom heads, and banners.
-    pub dynamic_entities: mtk_texture::DynamicAtlasManager,
-    /// Multi-tier skin resolver for player heads.
-    pub skin_resolver: mtk_resource::skin::SkinResolver,
-    /// Procedural banner baker for multi-layer composite banners.
-    pub banner_baker: mtk_texture::BannerBaker,
-    /// Callback triggered when a background skin download finishes successfully.
-    pub on_skin_resolved: Option<SkinResolvedCallback>,
-}
-
-#[inline]
-fn create_default_dynamic_atlas() -> mtk_texture::DynamicAtlasManager {
-    let mut mgr = mtk_texture::DynamicAtlasManager::default();
-    let _ = mgr.prewarm_vanilla_banners(None);
-    mgr
+    /// Host-supplied runtime textures for block entities (player skulls, banners).
+    ///
+    /// `None` means "this world has no runtime textures": skulls and banners render without their
+    /// dynamic sprites. `mtk-voxel` never constructs an implementation itself — see
+    /// [`BlockEntityTextureProvider`].
+    pub(crate) block_textures: Option<Box<dyn BlockEntityTextureProvider>>,
 }
 
 impl VoxelWorld {
-    /// Synchronizes all registered dynamic entity slots into `self.config.atlas_address_map`.
-    pub(crate) fn sync_dynamic_atlas_to_config(&mut self) {
-        if let Some(ref current_map) = self.config.atlas_address_map {
-            let mut new_map = (**current_map).clone();
-            self.dynamic_entities.register_to_address_map(&mut new_map);
-            self.config.atlas_address_map = Some(Arc::new(new_map));
+    /// Installs (or removes) this world's runtime block-entity texture provider.
+    ///
+    /// Hosts own the provider; the world only borrows its results.
+    pub fn set_block_entity_textures(
+        &mut self,
+        textures: Option<Box<dyn BlockEntityTextureProvider>>,
+    ) {
+        self.block_textures = textures;
+        self.clear_cache();
+    }
+
+    /// Resolves block-entity textures and merges the provider's sprites into the atlas map.
+    ///
+    /// Returns `true` when new sprites were added. `sections = None` scans every section.
+    pub fn prepare_block_entity_textures(
+        &mut self,
+        sections: Option<&[IVec3]>,
+        mode: TextureResolveMode,
+        progress: Option<mtk_core::ProgressCallback>,
+    ) -> bool {
+        let Some(textures) = self.block_textures.as_mut() else {
+            return false;
+        };
+        let existing = self.config.atlas_address_map.as_deref().cloned();
+        let mut atlas = existing.clone().unwrap_or_default();
+        let outcome = textures.prepare(&mut self.storage, &mut atlas, sections, mode, progress);
+
+        // Publishing rule mirrors the pre-provider behaviour: a world that already has an atlas
+        // map gets the provider's sprites (including the pinned banner slots) merged in, while a
+        // world without one (standalone materials) only gains a map when a real dynamic sprite
+        // appeared — otherwise `atlas_address_map: None` would silently become a dynamic-only map.
+        if outcome.atlas_changed && (existing.is_some() || outcome.added) {
+            self.config.atlas_address_map = Some(Arc::new(atlas));
         }
+        outcome.added
     }
 
     /// Creates a new `VoxelWorld` with empty storage.
@@ -83,19 +103,9 @@ impl VoxelWorld {
         culler: Option<FaceCuller>,
         model_db: Option<Arc<BakedModelDatabase>>,
     ) -> Self {
-        let cfg = config.unwrap_or_default();
-        let banner_baker = cfg
-            .banner_baker
-            .as_ref()
-            .map(|b| (**b).clone())
-            .unwrap_or_default();
-        let mut dynamic_entities = create_default_dynamic_atlas();
-        if cfg.banner_baker.is_some() {
-            let _ = dynamic_entities.prewarm_vanilla_banners(Some(banner_baker.base_cloth()));
-        }
-        let mut world = Self {
+        Self {
             storage: VoxelStorage::new(),
-            config: cfg,
+            config: config.unwrap_or_default(),
             culler: culler.unwrap_or_default(),
             model_db,
             num_threads: None,
@@ -103,13 +113,8 @@ impl VoxelWorld {
             world_mesh: None,
             used_chunk_ids: Vec::new(),
             last_profile: None,
-            dynamic_entities,
-            skin_resolver: mtk_resource::skin::SkinResolver::default(),
-            banner_baker,
-            on_skin_resolved: None,
-        };
-        world.sync_dynamic_atlas_to_config();
-        world
+            block_textures: None,
+        }
     }
 
     /// Creates a `VoxelWorld` taking ownership of an existing `VoxelStorage`.
@@ -119,19 +124,9 @@ impl VoxelWorld {
         culler: Option<FaceCuller>,
         model_db: Option<Arc<BakedModelDatabase>>,
     ) -> Self {
-        let cfg = config.unwrap_or_default();
-        let banner_baker = cfg
-            .banner_baker
-            .as_ref()
-            .map(|b| (**b).clone())
-            .unwrap_or_default();
-        let mut dynamic_entities = create_default_dynamic_atlas();
-        if cfg.banner_baker.is_some() {
-            let _ = dynamic_entities.prewarm_vanilla_banners(Some(banner_baker.base_cloth()));
-        }
-        let mut world = Self {
+        Self {
             storage,
-            config: cfg,
+            config: config.unwrap_or_default(),
             culler: culler.unwrap_or_default(),
             model_db,
             num_threads: None,
@@ -139,13 +134,8 @@ impl VoxelWorld {
             world_mesh: None,
             used_chunk_ids: Vec::new(),
             last_profile: None,
-            dynamic_entities,
-            skin_resolver: mtk_resource::skin::SkinResolver::default(),
-            banner_baker,
-            on_skin_resolved: None,
-        };
-        world.sync_dynamic_atlas_to_config();
-        world
+            block_textures: None,
+        }
     }
 
     /// Returns the configured worker thread count.
@@ -159,24 +149,18 @@ impl VoxelWorld {
     }
 
     /// Sets or replaces the procedural banner baker for multi-layer composite banners.
+    ///
+    /// Forwarded to the active [`BlockEntityTextureProvider`]; without one there is nothing to
+    /// bake banners into, so the call is a no-op.
     pub fn set_banner_baker(&mut self, banner_baker: mtk_texture::BannerBaker) {
-        let _ = self
-            .dynamic_entities
-            .prewarm_vanilla_banners(Some(banner_baker.base_cloth()));
-        self.banner_baker = banner_baker;
-        self.sync_dynamic_atlas_to_config();
+        if let Some(textures) = self.block_textures.as_mut() {
+            textures.set_banner_baker(banner_baker);
+        }
     }
 
     /// Updates mesher configuration.
     pub fn set_config(&mut self, config: MesherConfig) {
-        if let Some(ref baker) = config.banner_baker {
-            self.banner_baker = (**baker).clone();
-            let _ = self
-                .dynamic_entities
-                .prewarm_vanilla_banners(Some(self.banner_baker.base_cloth()));
-        }
         self.config = config;
-        self.sync_dynamic_atlas_to_config();
     }
 
     /// Sets the active 3D selection bounding box.
@@ -408,7 +392,6 @@ impl VoxelWorld {
         self.model_db = model_db;
         self.config.atlas_address_map = atlas_map;
         self.config.biome_resolver = biome_resolver;
-        self.sync_dynamic_atlas_to_config();
         self.clear_cache();
     }
 

@@ -5,6 +5,7 @@ members = [
     "crates/mtk-cull",
     "crates/mtk-model",
     "crates/mtk-voxel",
+    "crates/mtk-block-entity-textures",
     "crates/mtk-sync",
     "crates/mtk-resource",
     "crates/mtk-texture",
@@ -63,6 +64,7 @@ mtk-core = { path = "crates/mtk-core", version = "0.1.0" }
 mtk-cull = { path = "crates/mtk-cull", version = "0.1.0" }
 mtk-model = { path = "crates/mtk-model", version = "0.1.0" }
 mtk-voxel = { path = "crates/mtk-voxel", version = "0.1.0" }
+mtk-block-entity-textures = { path = "crates/mtk-block-entity-textures", version = "0.1.0" }
 mtk-sync = { path = "crates/mtk-sync", version = "0.1.0" }
 mtk-resource = { path = "crates/mtk-resource", version = "0.1.0" }
 mtk-texture = { path = "crates/mtk-texture", version = "0.1.0" }

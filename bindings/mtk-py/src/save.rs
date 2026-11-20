@@ -226,6 +226,7 @@ pub fn load_and_mesh_minecraft_save(
     let threads = num_threads.or_else(|| config.and_then(|c| c.num_threads));
     let mut world = VoxelWorld::from_storage(storage.clone(), cfg, cul, mdb);
     world.num_threads = threads;
+    crate::voxel::world::attach_block_entity_textures(&mut world, config);
     if let Some(ref dir) = skin_cache_dir {
         world.set_skin_cache_dir(Some(std::path::PathBuf::from(dir)));
     }

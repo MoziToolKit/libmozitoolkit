@@ -763,6 +763,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "mtk-block-entity-textures"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "image",
+ "mtk-core",
+ "mtk-model",
+ "mtk-resource",
+ "mtk-texture",
+ "mtk-voxel",
+ "rayon",
+]
+
+[[package]]
 name = "mtk-cli"
 version = "0.1.0"
 dependencies = [
@@ -770,6 +784,7 @@ dependencies = [
  "glam",
  "image",
  "libmtk",
+ "mtk-block-entity-textures",
  "mtk-core",
  "mtk-cull",
  "mtk-material",
@@ -880,6 +895,7 @@ version = "0.1.0"
 dependencies = [
  "glam",
  "libmtk",
+ "mtk-block-entity-textures",
  "mtk-core",
  "mtk-cull",
  "mtk-material",
@@ -937,6 +953,7 @@ version = "0.1.0"
 dependencies = [
  "crossbeam-channel",
  "glam",
+ "mtk-block-entity-textures",
  "mtk-core",
  "mtk-cull",
  "mtk-material",

@@ -26,4 +26,7 @@ pub use storage::{
     SectionStorage, SparseVoxelColumns, SparseVoxelPayload, VoxelPointCloud, VoxelStorage,
 };
 pub use types::{CoordinateSystem, MesherConfig, UnknownBlockStrategy, VoxelError};
-pub use world::{SkinResolvedCallback, VoxelWorld};
+pub use world::{
+    BlockEntityTextureProvider, SkinResolvedCallback, TexturePrepareOutcome, TextureResolveMode,
+    VoxelWorld,
+};

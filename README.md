@@ -33,6 +33,7 @@
 | **[`mtk-cull`](crates/mtk-cull)** | 核心 | 6 向邻域遮挡状态机、原版剔除规则、2D 矩形差集切分与外部网格叠面剔除 (`cull_mesh_faces`) | [📖 `crates/mtk-cull/README.md`](crates/mtk-cull/README.md) |
 | **[`mtk-model`](crates/mtk-model)** | 核心 | 无头 BlockState 状态机解析与对齐 1.21+ 规范的 Model JSON 模型烘焙、OBJ 导出/加载 | [📖 `crates/mtk-model/README.md`](crates/mtk-model/README.md) |
 | **[`mtk-voxel`](crates/mtk-voxel)** | 核心 | 纯体素核心：16x16x16 Chunk Section 体素存储、流体曲面计算、平滑环境光遮蔽 (AO)、网格化器 (Mesher)、差量网格构建与统一体素源抽象接口 (`VoxelSource`) | [📖 `crates/mtk-voxel/README.md`](crates/mtk-voxel/README.md) |
+| **[`mtk-block-entity-textures`](crates/mtk-block-entity-textures)** | **P1 (宿主侧)** | 方块实体运行时贴图：玩家头颅皮肤三级解析、复合旗帜烘焙、动态图集分配（`BlockEntityTextureProvider` 的生产实现） | [📖 `crates/mtk-block-entity-textures/`](crates/mtk-block-entity-textures) |
 | **[`mtk-sync`](crates/mtk-sync)** | 核心 | 实时网络协同：原生多线程 WebSocket 协同客户端 (`SyncClient`) 与权威服务端 (`LiveSyncServer`)、小端序二进制协议编解码、RFC v3.1 / v3.2 (稀疏方块实体与连续视觉实体) 全生命周期会话管理、xxHash64 空间指纹与 0ms 零重建快速重连 | [📖 `crates/mtk-sync/README.md`](crates/mtk-sync/README.md) |
 | **[`mtk-resource`](crates/mtk-resource)** | 核心 | 无头资源包虚拟文件系统 (VFS)、.mcmeta 动图元数据、原版 atlases/*.json 规范解析与 CTM 47/17 连接纹理求解 | [📖 `crates/mtk-resource/README.md`](crates/mtk-resource/README.md) |
 | **[`mtk-texture`](crates/mtk-texture)** | 核心 | 矩形空间装箱 Stitcher、多类别 PBR 图集与 Companion Overlay 贴图烘焙、透明度采样与边缘外推填充 | [📖 `crates/mtk-texture/README.md`](crates/mtk-texture/README.md) |

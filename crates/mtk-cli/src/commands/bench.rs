@@ -405,7 +405,6 @@ fn run_bench_world(args: BenchWorldArgs) -> Result<(), Box<dyn std::error::Error
         atlas_address_map: atlas.map(Arc::new),
         biome_resolver: biome_resolver.map(Arc::new),
         colormaps,
-        banner_baker: Some(Arc::new(banner_baker)),
         ..MesherConfig::default()
     };
     config.selection_bounds = Some((
@@ -415,6 +414,9 @@ fn run_bench_world(args: BenchWorldArgs) -> Result<(), Box<dyn std::error::Error
 
     let mut world = VoxelWorld::from_storage(storage, Some(config), None, Some(Arc::new(models)));
     world.num_threads = args.threads;
+    let mut textures = mtk_block_entity_textures::BlockEntityTextures::default();
+    textures.set_banner_baker(banner_baker);
+    world.set_block_entity_textures(Some(Box::new(textures)));
 
     println!();
     println!(

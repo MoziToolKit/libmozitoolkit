@@ -13,6 +13,9 @@ use std::sync::Arc;
 pub struct PyMesherConfig {
     pub(crate) inner: MesherConfig,
     pub(crate) num_threads: Option<usize>,
+    /// Banner baker is a host concern: it is handed to the world's block-entity texture
+    /// provider, not to the mesher config.
+    pub(crate) banner_baker: Option<Arc<mtk_texture::BannerBaker>>,
 }
 
 #[pymethods]
@@ -74,7 +77,6 @@ impl PyMesherConfig {
             enable_random_offsets,
             ctm_solver: ctm_solver.map(|s| s.inner.clone()),
             enable_animated_textures,
-            banner_baker: atlas.and_then(|a| a.banner_baker.clone()),
             colormaps: colormaps.map(|c| c.inner.clone()),
             unknown_block_strategy: strategy,
             smooth_biome_blend,
@@ -83,6 +85,7 @@ impl PyMesherConfig {
         Ok(Self {
             inner: config,
             num_threads,
+            banner_baker: atlas.and_then(|a| a.banner_baker.clone()),
         })
     }
 

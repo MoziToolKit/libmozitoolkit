@@ -784,3 +784,92 @@ prebake 路径暂未单测（它走同一套 `ProgressCallback`，且 guardrail 
 | 2 | **C-06 + K-04**（mtk-texture） | 图集 `padding=0` 的 HD/mipmap 渗色，以及 `HashMap` 进 serde 导致的非确定性字节；两项都要动烘焙输出，需要一次缓存格式版本递增，适合一起做。 |
 | 3 | **B4 其余** | `mtk-resource` 的 fallible pack API（K-06）、`.mcmeta.frames`（C-01）、filter 顺序（C-02）；`mtk-material` 的 66 biome 与 jar 一致性测试。 |
 | 4 | **B5 剩余** | Y-07/Y-08/Y-10/Y-11/Y-13、V-07/V-08、K-05/K-08..K-12、A-03/A-05..A-17。 |
+
+---
+
+## 13. B3 第 1 步：`mtk-voxel` 去实体化（2026-11-20）
+
+### 13.1 问题
+
+`ARCHITECTURE_2.0` 的 L0 表写着 `mtk-voxel` **禁止任何实体概念**，但 `VoxelWorld` 实际持有：
+
+- `mtk_texture::DynamicAtlasManager`（动态图集分配）
+- `mtk_resource::skin::SkinResolver`（**HTTP 下载 + 磁盘缓存**）
+- `mtk_texture::BannerBaker`（旗帜程序化烘焙）
+- 以及 479 行的扫描/解析/回调逻辑（async 与 sync 两份近似实现，即 A-04）
+
+L0 因此间接依赖了网络栈与图像烘焙，任何想替换皮肤来源或禁用网络的主机都无法做到。
+
+### 13.2 切法
+
+`mtk-voxel` 只保留一个接口：
+
+```rust
+pub trait BlockEntityTextureProvider: Send + Sync {
+    fn prepare(&mut self, storage: &mut VoxelStorage, atlas: &mut AtlasAddressMap,
+               sections: Option<&[IVec3]>, mode: TextureResolveMode,
+               progress: Option<ProgressCallback>) -> TexturePrepareOutcome;
+    fn atlases(&self) -> Vec<(u16, &[u8])>;
+    fn slots(&self) -> HashMap<String, (u16, u16)>;
+    fn set_skin_cache_dir(&mut self, Option<PathBuf>);
+    fn set_banner_baker(&mut self, BannerBaker);
+    fn set_skin_resolved_callback(&mut self, SkinResolvedCallback);
+}
+```
+
+- `VoxelWorld` 持有 `Option<Box<dyn BlockEntityTextureProvider>>`，构造时为空（`None` = 没有运行时贴图），
+  由宿主 `set_block_entity_textures(...)` 注入；`rebuild_all` 的 prep 阶段调用一次 `prepare`。
+- `SkinResolvedCallback` / `TextureResolveMode` / `TexturePrepareOutcome` 与 trait 同居一处。
+- 新增 crate **`mtk-block-entity-textures`**：实现上述 trait，把原来的扫描逻辑合并成**一份**
+  （A-04 的双实现收敛：`Cached` 走后台队列、`Blocking` 走并行阻塞，共用同一段扫描），
+  持有 `DynamicAtlasManager` / `SkinResolver` / `BannerBaker`。
+- `MesherConfig.banner_baker` 字段删除（它从来不是"mesher 配置"，而是宿主贴图来源）；
+  `mtk-py` 的 `PyMesherConfig` 自己保存 baker，并在构造 world 时交给 provider。
+- 注入点：`mtk-py`（`PyVoxelWorld` 构造函数 / save 导入）、`mtk-sync`（live-sync 客户端的 world）、
+  `mtk-cli bench world`（保持"真实场景"）。
+
+### 13.3 行为保持一致的一个坑（值得记录）
+
+把"预热 16 个原版旗帜槽位"从构造器搬到 `prepare` 之后，`test_ctm_bridge` 有 3 个用例失败：
+standalone 材质模式（`atlas=None`）下，provider 的首个 `prepare` 会把自己的动态图集合成一个
+**只有动态精灵的** `atlas_address_map`，于是 CTM 分支看到 `Some(atlas)` 但在里面查不到 CTM 子图 →
+静默退回基础贴图。
+
+修法是让"发布规则"显式化：
+
+```
+atlas_changed && (原有 atlas 存在 || 本次真的新增了动态精灵)
+```
+
+即：**已经有图集的世界**把 provider 的精灵（含预热的旗帜）合并进去；**没有图集的世界**
+（standalone）只有当真的出现动态精灵时才生成图集。这样既保留了旧构造器的预热行为，
+又不改变 `atlas_address_map: None` 的语义。
+
+### 13.4 测试搬迁与新增
+
+| 测试 | 位置 | 说明 |
+|---|---|---|
+| `test_player_skull_dynamic_atlas_meshing_and_uv_remapping` | `mtk-block-entity-textures/tests` | 内存皮肤 → 动态图集 → 网格 UV 全部断言 |
+| `test_banner_dynamic_atlas_meshing_and_baking` | 同上 | 复合旗帜烘焙 + 槽位 UV |
+| `test_plain_banner_without_block_entity_meshing` | 同上 | 无方块实体的纯旗帜依赖 provider 的预热槽位 |
+| `mtk-voxel` 的 `test_mesher` | 保持不变 | 方块实体几何（陶罐/头颅/铜像）仍通过 `BuiltinModelRegistry` 默认路径覆盖 |
+
+这三个测试原先直接访问 `world.skin_resolver` / `world.dynamic_entities`，搬迁后改用公开面
+（`set_block_entity_textures` + `prepare_block_entity_textures` + `dynamic_entity_slots/atlases`），
+顺带证明宿主的公开入口足够用。
+
+### 13.5 结果
+
+- `mtk-voxel` 不再引用 `mtk_resource::skin`、`mtk_texture::DynamicAtlasManager`、
+  `mtk_texture::BannerBaker`（仍使用 `AtlasAddressMap` 等数据类型的来自 `mtk-texture`）。
+- `VoxelWorld` 的 `Debug`/`Clone` derive 去掉（provider 不可克隆，克隆一个世界本来也没有语义）。
+- 门禁全绿：fmt / guardrails(0) / clippy -D warnings / `MTK_REQUIRE_REAL_ASSETS=1 cargo test --workspace`
+  （0 失败 0 SKIP）/ build-all-py / Blender 全套件 591 passed。
+- 场景基准端到端 130–143 ms（机器噪声区间内，无回归）。
+
+### 13.6 B3 剩余
+
+1. `mtk-cli` 删除 `UniversalAssetLoader`，改走 `libmtk::prebake` + `mtk-resource`；
+2. `mtk-resource` 的 `net` feature 默认关、`parallel` 空 feature 清理；
+3. 两处 `content_entries` 目录遍历合一；
+4. `ci_guardrails` 依赖白名单（防止下一个 crate 反向依赖）。
