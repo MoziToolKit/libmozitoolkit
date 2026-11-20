@@ -41,12 +41,15 @@ impl Default for TintInfo {
 /// Discovers model JSON `tintindex` metadata and `side` / `overlay` texture pairings.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BiomeResolver {
+    #[serde(serialize_with = "mtk_core::serialize_sorted_map")]
     pub overlay_pairs: HashMap<String, String>,
+    #[serde(serialize_with = "mtk_core::serialize_sorted_map")]
     pub texture_tint_categories: HashMap<String, String>,
+    #[serde(serialize_with = "mtk_core::serialize_sorted_map")]
     pub texture_hardcoded_colors: HashMap<String, [f32; 4]>,
-    #[serde(default)]
+    #[serde(default, serialize_with = "mtk_core::serialize_sorted_map")]
     pub models: HashMap<String, Value>,
-    #[serde(default)]
+    #[serde(default, serialize_with = "mtk_core::serialize_sorted_map")]
     pub models_by_stem: HashMap<String, Value>,
 }
 

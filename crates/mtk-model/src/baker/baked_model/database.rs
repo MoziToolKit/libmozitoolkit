@@ -28,7 +28,9 @@ pub struct ModelBakeFailure {
 
 #[derive(Serialize)]
 struct CompactDatabasePayload<'a> {
+    #[serde(serialize_with = "mtk_core::serialize_sorted_map")]
     models: &'a HashMap<String, BakedModel>,
+    #[serde(serialize_with = "mtk_core::serialize_sorted_map")]
     multi_variants: HashMap<String, &'a BakedVariantGroup>,
 }
 

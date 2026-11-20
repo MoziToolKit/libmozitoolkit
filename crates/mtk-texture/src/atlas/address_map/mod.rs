@@ -20,12 +20,17 @@ pub struct AtlasAddressMap {
     #[serde(default)]
     pub chunks: Vec<AtlasChunkMeta>,
     /// Static atlas sprites (100% texture coverage, Frame 0 for animated sprites).
+    #[serde(serialize_with = "mtk_core::serialize_sorted_map")]
     pub sprites: HashMap<ResourceLocation, AtlasSpriteLocation>,
     /// Dedicated animated atlas sprites (full strips for multi-frame animated textures).
-    #[serde(default)]
+    #[serde(default, serialize_with = "mtk_core::serialize_sorted_map")]
     pub anim_sprites: HashMap<ResourceLocation, AtlasSpriteLocation>,
     /// Source priority records per sprite key (Static vs Dynamic).
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    #[serde(
+        default,
+        skip_serializing_if = "HashMap::is_empty",
+        serialize_with = "mtk_core::serialize_sorted_map"
+    )]
     pub(crate) sprite_sources: HashMap<ResourceLocation, AtlasKeySource>,
     /// Optional CTM rules associated with this address map.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

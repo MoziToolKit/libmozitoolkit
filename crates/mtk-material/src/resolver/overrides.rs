@@ -27,9 +27,9 @@ pub struct ResolverOverrides {
     pub strip_biome_suffixes: Option<Vec<String>>,
     #[serde(default)]
     pub material_fallbacks: Option<Vec<MaterialFallbackRule>>,
-    #[serde(default)]
+    #[serde(default, serialize_with = "mtk_core::serialize_sorted_map")]
     pub tint_categories: HashMap<String, String>,
-    #[serde(default)]
+    #[serde(default, serialize_with = "mtk_core::serialize_sorted_map")]
     pub hardcoded_colors: HashMap<String, [f32; 4]>,
 }
 

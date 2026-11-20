@@ -138,15 +138,18 @@ pub(crate) fn write_scene_package(
 
     // 9. Dynamic Entity Slots (optional)
     if let Some(slots) = req.dynamic_entity_slots {
-        let active_slots: HashMap<String, (u16, u16)> = if let Some(map) = req.atlas_mapping {
-            slots
-                .iter()
-                .filter(|(k, _)| map.resolve_texture_key(k).is_some())
-                .map(|(k, v)| (k.clone(), *v))
-                .collect()
-        } else {
-            slots.clone()
-        };
+        // BTreeMap, not HashMap: the JSON object's key order would otherwise be randomized per
+        // map instance, so two exports of the same scene would differ byte-for-byte.
+        let active_slots: std::collections::BTreeMap<String, (u16, u16)> =
+            if let Some(map) = req.atlas_mapping {
+                slots
+                    .iter()
+                    .filter(|(k, _)| map.resolve_texture_key(k).is_some())
+                    .map(|(k, v)| (k.clone(), *v))
+                    .collect()
+            } else {
+                slots.iter().map(|(k, v)| (k.clone(), *v)).collect()
+            };
         if !active_slots.is_empty() {
             writer.add_json_chunk(
                 *b"ENTT",

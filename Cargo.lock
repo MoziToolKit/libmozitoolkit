@@ -674,6 +674,7 @@ dependencies = [
  "mtk-package",
  "mtk-resource",
  "mtk-save",
+ "mtk-testkit",
  "mtk-texture",
  "mtk-voxel",
  "postcard",

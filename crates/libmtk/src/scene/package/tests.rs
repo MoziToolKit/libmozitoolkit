@@ -469,3 +469,44 @@ fn test_validate_dynamic_entity_slots_valid() {
 
     let _ = std::fs::remove_file(&temp_path);
 }
+
+/// The `entity/slots` chunk is a JSON object; `HashMap` order would make two exports of the same
+/// scene produce different bytes.
+#[test]
+fn dynamic_entity_slots_are_written_in_key_order() {
+    use mtk_package::MtkPackageReader;
+
+    let temp_path = std::env::temp_dir().join(format!(
+        "test_dyn_slots_order_{}.mtkscene",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+
+    let metadata = PackageManifest::new_scene([0, 0, 0, 1, 1, 1], 0);
+    let voxels = mtk_voxel::SparseVoxelPayload::new();
+    let mut slots = std::collections::HashMap::new();
+    slots.insert("zzz:last".to_string(), (2u16, 3u16));
+    slots.insert("aaa:first".to_string(), (0u16, 1u16));
+    slots.insert("mmm:middle".to_string(), (1u16, 2u16));
+
+    let mut request =
+        crate::scene::package::writer::SceneWriteRequest::new(&metadata, &voxels, &[]);
+    request.dynamic_entity_slots = Some(&slots);
+    crate::scene::package::writer::write_scene_package(&temp_path, request).unwrap();
+
+    let reader = MtkPackageReader::open_file(&temp_path).unwrap();
+    let json = reader.read_chunk_decompressed("entity/slots").unwrap();
+    let json = String::from_utf8(json).unwrap();
+
+    let first = json.find("aaa:first").expect("first key");
+    let middle = json.find("mmm:middle").expect("middle key");
+    let last = json.find("zzz:last").expect("last key");
+    assert!(
+        first < middle && middle < last,
+        "entity/slots must be serialized in key order, got: {json}"
+    );
+
+    let _ = std::fs::remove_file(&temp_path);
+}

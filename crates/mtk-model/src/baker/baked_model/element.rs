@@ -83,6 +83,7 @@ impl Default for BakedFace {
 pub struct BakedElement {
     pub from_pos: [f32; 3],
     pub to_pos: [f32; 3],
+    #[serde(serialize_with = "mtk_core::serialize_sorted_map")]
     pub faces: HashMap<Direction, BakedFace>,
 }
 

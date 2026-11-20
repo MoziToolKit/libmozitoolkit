@@ -13,6 +13,8 @@ mod polygon;
 mod profile;
 mod progress;
 mod random;
+#[cfg(feature = "serde")]
+mod serde_util;
 mod subdivide;
 pub mod threading;
 mod uv;
@@ -57,6 +59,8 @@ pub use progress::{ProgressCallback, ProgressReport, ProgressThrottler};
 pub use random::{
     determine_block_offset_type, get_block_offset, mc_coordinate_seed, JavaRandom, OffsetType,
 };
+#[cfg(feature = "serde")]
+pub use serde_util::serialize_sorted_map;
 
 // 9. Adaptive Pixel Subdivision & Splitting
 pub use subdivide::{

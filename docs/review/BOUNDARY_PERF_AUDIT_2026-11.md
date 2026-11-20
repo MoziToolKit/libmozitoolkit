@@ -1110,5 +1110,59 @@ padding 0 的布局抄了一遍）。现在改为：源图上半红下半蓝、�
 
 ### 18.6 B4 剩余
 
-2. K-04：`AtlasAddressMap` 的 `HashMap` 进 serde → 同输入两次烘焙字节不同；
+2. ✅ K-04：`HashMap` 直接进 serde → 同输入两次烘焙字节不同（见 §19）；
 3. K-06 缓存读错误的回退、C-01 `.mcmeta.frames`、C-02 filter 顺序、biome 一致性测试等。
+
+---
+
+## 19. K-04：烘焙产物字节级确定性 —— B4 第 2 步
+
+### 19.1 问题与实测范围
+
+`HashMap` 的迭代顺序对每个 map 实例随机（`RandomState` 每次 `new()` 取新种子），任何直接
+serde 的 `HashMap` 都会让"同输入两次烘焙"产出不同字节。审计只点了 `AtlasAddressMap`，实际写的
+时候是按"测试找证据"的方式做的——先写包级对照测试，让它逐个报错，再逐个修。
+
+实测发现（真实 jar + Mojang 资源 + SPBR，17 MB 包 / 18878 模型 / 17 图集块）：
+
+| 块 | 是否不确定 | 原因 |
+|---|---|---|
+| `models/database` | 是 | `BakedModelDatabase` 的 payload 两个 map，且每个 `BakedElement.faces` 也是 `HashMap` |
+| `biome/mapping` | 是 | `BiomeResolver` 5 个 map（overlay / tint 类别 / 硬编码色 / models / models_by_stem） |
+| `banner/patterns` | 是 | `HashMap<String, Vec<u8>>` 直接 postcard |
+| `entity/slots`（场景包） | 是 | 槽位表直接 JSON |
+| `atlas/mapping` | 是 | `sprites` / `anim_sprites` / `sprite_sources` |
+| `resolver/overrides` | 是 | `ResolverOverrides` 两个 map |
+| `manifest` | **预期不同** | `created_at_epoch_secs`，不是输入 |
+
+### 19.2 改法
+
+`mtk_core::serialize_sorted_map`（`mtk-core/src/serde_util.rs`，经 crate 根 re-export）：
+把 map 的条目按 key 排序后仍用 `serialize_map` 输出。**线上格式完全不变**（postcard / JSON 的
+map 编码都是 `len + 条目`），所以旧包照常反序列化——已用改动前写出的 v12 包验证过加载。
+
+接入点：`AtlasAddressMap`×3、`CompactDatabasePayload`×2、`BakedElement.faces`、
+`BiomeResolver`×5、`ResolverOverrides`×2、`PackageManifest.extra_props`。
+另外两处不用 serde 路径，直接换容器：场景包 `entity/slots` 与横幅图案块用 `BTreeMap`。
+
+**没有 bump 缓存格式**：读路径与语义都没变，只有写出来的条目顺序变了；旧包仍然正确。
+
+### 19.3 测试（先红后绿）
+
+- `mtk-texture/tests/test_address_map_determinism.rs`：同输入烘两次字节相等；
+  反序插入的 map 序列化结果相同且 key 有序。（红：两个都失败）
+- `libmtk/tests/test_package_determinism.rs`：
+  - 合成 48 模型栈烘两次，**逐块**比较（`CHUNK_TAGS` 覆盖全部块类型，并断言找到的块数
+    等于 `header.chunk_count`，防止新增块类型让测试悄悄变窄）。红：先是
+    `models/database`（排序 map 后仍差）→ 再 `biome/mapping` → 逐个修完转绿。
+  - 真资产栈（18k 模型）烘两次逐块比较，只有 `manifest` 跳过（时间戳）。
+- `libmtk` 场景包单测：`entity/slots` 以 key 序写出（红：`{"zzz":..,"aaa":..,"mmm":..}`）。
+
+### 19.4 结论
+
+真实资产 `.mtkcache` 现在两次烘焙**逐块字节相同**（除 `manifest.created_at_epoch_secs`）。
+`ASSET_CACHE_FORMAT_VERSION` 保持 12。
+
+### 19.5 B4 剩余
+
+3. K-06 缓存读错误静默回退、C-01 `.mcmeta.frames`、C-02 filter 顺序、biome 常量一致性等。

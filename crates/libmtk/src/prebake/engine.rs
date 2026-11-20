@@ -389,7 +389,11 @@ fn precompile_all_assets_inner(
         }
         let pattern_map = banner_baker.all_pattern_png_bytes();
         if !pattern_map.is_empty() {
-            if let Ok(pattern_bytes) = postcard::to_allocvec(&pattern_map) {
+            // BTreeMap so the chunk's key order is stable between bakes; postcard's map layout is
+            // identical either way, so readers keep deserializing into a HashMap.
+            let ordered: std::collections::BTreeMap<String, Vec<u8>> =
+                pattern_map.into_iter().collect();
+            if let Ok(pattern_bytes) = postcard::to_allocvec(&ordered) {
                 writer.add_chunk(
                     *b"BANR",
                     "banner/patterns",

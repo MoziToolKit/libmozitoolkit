@@ -100,6 +100,7 @@ pub struct PackageManifest {
     pub capabilities: crate::package::SceneCapabilities,
     /// Custom key-value properties (title, author, tags, ...).
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    #[serde(serialize_with = "mtk_core::serialize_sorted_map")]
     pub extra_props: HashMap<String, String>,
 }
 

@@ -52,6 +52,7 @@ blender --background --python ../MoziToolKit/tests/run_tests.py -- -rs -q
 | **K-02** | 资产缓存读取校验 `manifest.format_version`（不只是 64B header） | `libmtk/src/package/source.rs:100-110`、`prebake/reader.rs:55-69` |
 | **V-03 / V-04 / V-05 / V-06** | dirty 合并、biome-only 置脏、26 邻居、`(cy>>2).min(3)` | `mtk-voxel/src/world/sync.rs`、`storage/world/container.rs`、`mesher/shading/resolver.rs:398`；测试 `sync_keeps_dirt_queued_before_the_sync`、`biome_only_change_still_marks_the_section_dirty`、`corner_edit_dirties_every_diagonal_neighbour`、`test_top_corner_samples_the_highest_quart_layer` |
 | **T-01（Rust/Python）** | 资产发现补 `../Minecraft_Source` / `../Minecraft_Unpacked`；存档补 `../mtk-save-world`；跳过统一经 `mtk_testkit::skip()` 打印 `SKIP`，`MTK_REQUIRE_REAL_ASSETS=1` 时失败；CI 在真包齐备时自动开启该门禁 | `crates/mtk-testkit/src/lib.rs`、`../MoziToolKit/tests/_assets.py`、`.github/workflows/ci.yml` |
+| **K-04** | 新增 `mtk_core::serialize_sorted_map`（排序后仍以 map 编码，线上格式不变）；接入 11 处 HashMap 序列化（`AtlasAddressMap`×3、模型库 payload×2 与 `BakedElement.faces`、`BiomeResolver`×5、`ResolverOverrides`×2、`extra_props`）；场景包 `entity/slots` 与横幅图案块改 `BTreeMap` | `crates/mtk-core/src/serde_util.rs`、`mtk-texture/tests/test_address_map_determinism.rs`、`libmtk/tests/test_package_determinism.rs`（合成 + 真资产两组）；审计 §19 |
 | **C-06** | 生产配置收敛到 `AtlasBuilderConfig::production()`：`padding = max(2, 2^mip)`（mip 0 时为 2），`default()` 也走生产策略；预烘/场景导出/CTM/atlas CLI/`PyAtlasBuilder` 全部改用；缓存格式 v11→12、场景包 v3→v4 | `mtk-texture/src/atlas/builder/types.rs`、`tests/test_atlas_padding.rs`（3 个新测试）、`libmtk/src/scene/exporter/tests/basic.rs`（改为像素级 crop 方向断言）；审计 §18 |
 | **quart 契约** | `SectionBiomes::is_fully_assigned()` 现在把单元素调色板视为权威（`uniform`/2D 存档/单 biome 流），不再把"合法的单 biome 段"误判成占位泄漏 | `mtk-voxel/src/storage/biome.rs` + 重新启用的 `mtk-sync/tests/test_save_alignment.rs::test_real_save_import_and_live_sync_align`（此前一直被跳过） |
 
@@ -119,7 +120,6 @@ P0 = 崩溃/数据错/安全；P1 = 用户可见错误或确定性；P2 = 边界
 
 | ID | P | 位置 | 现象 | 修法 | 验证 |
 |---|---|---|---|---|---|
-| **K-04** | P1 | `mtk-texture/src/atlas/address_map/mod.rs:21-33` | `sprites`/`anim_sprites`/`sprite_sources` 是 `HashMap` 且直接 serde → 同输入两次烘焙字节不同 | `BTreeMap` 或 `serialize_with` 排序 | 同输入烘两次字节相等 |
 | **K-05** | P1 | `libmtk/src/prebake/models.rs:99-103` | 原版命名空间的模型同时插短名 `block/stone` 并可被回退查找 → 模组 `mymod:block/stone` 命中原版 | 只保留全限定名 | 模组命名空间模型解析测试 |
 | **K-06** | P1 | `mtk-resource/src/pack/source.rs:176` | `fs::read(..).ok()`：权限/IO 错误 = 文件不存在 → 静默用低优先级包 | `ResourcePack::open` 改 `Result<Option<Vec<u8>>>`，全链路传播（架构改动） | 无读权限的文件必须报错而不是回退 |
 | **K-03** | P2 | `libmtk/src/prebake/resolver.rs:24-37,63-77` | Rust API 在 `fingerprint=None` 时仍返回"最新包"（主机侧已不再这样调用，且注释写明仅供内省） | 让 `resolve_active_cache_package` 要求指纹；内省走 `newest_cache_package` | 单测：None 指纹返回 None |
