@@ -869,7 +869,51 @@ atlas_changed && (原有 atlas 存在 || 本次真的新增了动态精灵)
 
 ### 13.6 B3 剩余
 
-1. `mtk-cli` 删除 `UniversalAssetLoader`，改走 `libmtk::prebake` + `mtk-resource`；
+1. ✅ `mtk-cli` 删除 `UniversalAssetLoader`，改走 `mtk-resource`（见 §14）；
 2. `mtk-resource` 的 `net` feature 默认关、`parallel` 空 feature 清理；
 3. 两处 `content_entries` 目录遍历合一；
 4. `ci_guardrails` 依赖白名单（防止下一个 crate 反向依赖）。
+
+---
+
+## 14. B3 第 2 步：`mtk-cli` 不再自带资产读取器（2026-11-20）
+
+### 14.1 问题
+
+`crates/mtk-cli/src/utils/loader.rs` 是一套手写的 zip/目录读取：
+
+- 直接用 `zip::ZipArchive`，**绕过** `mtk-resource` 的单 entry 256 MiB 上限与路径穿越过滤（S-07
+  只加固了 `ZipPack`，CLI 这条路径没有）；
+- 只认 `assets/minecraft/...`（jar 模式连命名空间都不保留），不认多包叠加、`.mcmeta`、`atlases` 分层；
+- 与生产预烘各自解析同一份 JSON，任何一边的模型查找规则变化都会让 CLI 与 Blender 的结果漂移。
+
+### 14.2 改法
+
+新增 `crates/mtk-cli/src/utils/assets.rs::AssetStack`，只是 `ResourcePackStack` 之上的一层薄胶水：
+
+- 目录 → `DirectoryPack`，`.zip`/`.jar` → `ZipPack::from_file`（都走上限/穿越加固）；
+- `list_all_blockstates()` = `list_all_blockstate_locations()` 排序去重（多命名空间）；
+- `load_blockstate` / `load_model` 只负责取字节 + `serde_json` 解析 + memo；
+  模型路径解析交给 `ResourceLocation::model_candidate_asset_paths`；
+- 删除 `UniversalAssetLoader`（173 行）与 `mtk-cli` 对 `zip` 的普通依赖（测试仍用它造包）。
+
+四个调用方（`model` / `export` / `bench model`）只改了类型与构造名，方法签名保持一致；
+`atlas` / `ctm` 本来就已使用 `ResourcePackStack`。
+
+### 14.3 测试
+
+`utils::assets::tests`：
+
+| 测试 | 覆盖 |
+|---|---|
+| `directory_pack_lists_and_resolves_assets` | 多命名空间列举排序、`minecraft:`/裸 id/模组命名空间三种模型 id、原始字节读取 |
+| `archive_pack_matches_the_directory_pack` | 同一份内容打包成 zip 后解析结果与目录包一致 |
+| `path_traversal_entries_are_not_reachable` | `../`、`assets/../../`、绝对路径 entry 均不可读——CLI 不再绕过加固 |
+
+真实 jar 冒烟：`mtk model dump ../26.2-Fabric.jar "minecraft:oak_stairs[facing=east,half=top,shape=inner_left]"` 正常输出几何。
+
+### 14.4 B3 剩余
+
+2. `mtk-resource` 的 `net` feature 默认关 + 清理空的 `parallel` feature；
+3. 两处 `content_entries` 目录遍历合一；
+4. `ci_guardrails` 依赖白名单。

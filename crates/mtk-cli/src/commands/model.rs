@@ -6,7 +6,7 @@ use clap::{Args, Subcommand};
 use mtk_model::{BlockState, ModelBaker};
 use serde::{Deserialize, Serialize};
 
-use crate::utils::UniversalAssetLoader;
+use crate::utils::AssetStack;
 
 #[derive(Subcommand, Debug)]
 pub enum ModelSubcommand {
@@ -89,7 +89,7 @@ pub fn run_model(cmd: ModelSubcommand) -> Result<(), Box<dyn std::error::Error>>
 }
 
 fn run_dump(args: ModelDumpArgs) -> Result<(), Box<dyn std::error::Error>> {
-    let mut loader = UniversalAssetLoader::new(&args.assets)?;
+    let mut loader = AssetStack::new(&args.assets)?;
     let blockstate = BlockState::parse(&args.state)?;
     let block_id = format!("{}:{}", blockstate.namespace, blockstate.name);
     let def = loader.load_blockstate(&block_id);
@@ -114,7 +114,7 @@ fn run_dump(args: ModelDumpArgs) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn run_dump_batch(args: ModelDumpBatchArgs) -> Result<(), Box<dyn std::error::Error>> {
-    let mut loader = UniversalAssetLoader::new(&args.assets)?;
+    let mut loader = AssetStack::new(&args.assets)?;
     let states_json = fs::read_to_string(&args.input)?;
     let states: Vec<String> = serde_json::from_str(&states_json)?;
 

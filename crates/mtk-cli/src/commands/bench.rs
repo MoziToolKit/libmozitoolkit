@@ -8,7 +8,7 @@ use glam::IVec3;
 use mtk_model::{BlockState, BlockStateResolver, ModelBaker};
 use mtk_voxel::{MesherConfig, VoxelStorage, VoxelWorld};
 
-use crate::utils::UniversalAssetLoader;
+use crate::utils::AssetStack;
 
 #[derive(Subcommand, Debug)]
 pub enum BenchSubcommand {
@@ -84,7 +84,7 @@ fn run_bench_model(args: BenchModelArgs) -> Result<(), Box<dyn std::error::Error
     println!(" Assets path : {:?}", args.jar);
     println!("============================================================");
 
-    let mut loader = UniversalAssetLoader::new(&args.jar)?;
+    let mut loader = AssetStack::new(&args.jar)?;
     let all_blockstate_names = loader.list_all_blockstates();
     println!(
         " Total blockstate JSONs found: {}",

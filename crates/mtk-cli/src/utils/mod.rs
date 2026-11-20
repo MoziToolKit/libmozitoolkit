@@ -1,3 +1,3 @@
-pub mod loader;
+pub mod assets;
 
-pub use loader::UniversalAssetLoader;
+pub use assets::AssetStack;

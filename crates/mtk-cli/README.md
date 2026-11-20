@@ -29,6 +29,9 @@
 ## 1. 架构定位与演进优先级
 
 - **演进优先级**：`P1`（**核心工具链与无头资产验证**）。
+- **资产读取**：所有子命令（`model` / `export` / `bench model` / `atlas` / `ctm`）统一经
+  `mtk-resource::ResourcePackStack` 读取资源包。CLI 不再自带 zip 读取器，因此与生产预烘
+  使用同一套加固（单 entry 256 MiB 上限、路径穿越拒绝、多包叠加、`.mcmeta`/atlas 分层）。
 - **核心定位**：
   1. **离线资产预编译与图集装箱**：在无 Blender 或图形界面环境下，极速解析 Minecraft 原版 JAR 与第三方面资源包（如 SPBR、LabPBR），输出 `atlas_mapping.json`、`biome_mapping.json` 与 `<fingerprint>.mtkcache` 单一缓存包。
   2. **模型烘焙与几何排查**：验证 1.21+ BlockState 状态机与复杂模型几何结构，一键导出为标准 Wavefront OBJ/MTL 文件。

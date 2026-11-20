@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use clap::{Args, Subcommand};
 use mtk_model::{BlockState, ModelBaker};
 
-use crate::utils::UniversalAssetLoader;
+use crate::utils::AssetStack;
 
 #[derive(Subcommand, Debug)]
 pub enum ExportSubcommand {
@@ -63,7 +63,7 @@ fn run_export_samples(args: ExportSamplesArgs) -> Result<(), Box<dyn std::error:
 
     fs::create_dir_all(&args.output)?;
 
-    let mut loader = UniversalAssetLoader::new(&args.jar)?;
+    let mut loader = AssetStack::new(&args.jar)?;
     let mut baker = ModelBaker::new();
 
     let test_states = [
@@ -168,7 +168,7 @@ fn run_export_builtin_objs(args: ExportBuiltinObjsArgs) -> Result<(), Box<dyn st
     fs::create_dir_all(&args.output)?;
     fs::create_dir_all(&args.textures_dir)?;
 
-    let mut loader = UniversalAssetLoader::new(&args.assets)?;
+    let mut loader = AssetStack::new(&args.assets)?;
     let mut baker = ModelBaker::new();
 
     let test_cases = vec![
