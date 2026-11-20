@@ -125,7 +125,7 @@ fn precompile_all_assets_inner(
     let biome_resolver =
         profiler.measure("biome", "bake", |_| -> Result<BiomeResolver, MtkError> {
             let mut biome_resolver = BiomeResolver::new();
-            biome_resolver.load_from_pack_stack(stack);
+            biome_resolver.load_from_pack_stack(stack)?;
             if let Some(overrides) = config.resolver_overrides.as_ref() {
                 biome_resolver.apply_overrides(overrides);
                 let overrides_json = serde_json::to_string(overrides)?;
@@ -146,7 +146,7 @@ fn precompile_all_assets_inner(
 
             for cm_name in &["grass", "foliage", "dry_foliage"] {
                 let asset_path = format!("assets/minecraft/textures/colormap/{}.png", cm_name);
-                if let Some(bytes) = stack.open_asset_raw(&asset_path) {
+                if let Some(bytes) = stack.open_asset_raw(&asset_path)? {
                     writer.add_chunk(
                         *b"BIOM",
                         format!("biome/colormap/{}", cm_name),
@@ -157,7 +157,7 @@ fn precompile_all_assets_inner(
             }
 
             // Extract CTM rules from active stack and write to cache
-            let ctm_rules = stack.load_ctm_rules();
+            let ctm_rules = stack.load_ctm_rules()?;
             if !ctm_rules.is_empty() {
                 let ctm_json = serde_json::to_string(&ctm_rules).map_err(MtkError::Json)?;
                 writer.add_str_chunk(
@@ -378,7 +378,7 @@ fn precompile_all_assets_inner(
     // 3. Package Banner Patterns and Base Cloth into BANR chunks for runtime Dynamic Entity Atlas synthesis
     profiler.measure("banner", "bake", |_| -> Result<_, MtkError> {
         let mut banner_baker = mtk_texture::BannerBaker::default();
-        let _ = banner_baker.load_from_pack_stack(stack);
+        banner_baker.load_from_pack_stack(stack)?;
         if let Ok(base_bytes) = banner_baker.base_cloth_png_bytes() {
             writer.add_chunk(
                 *b"BANR",

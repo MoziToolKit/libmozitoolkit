@@ -1215,4 +1215,83 @@ PBR 伴随层同步重排（仅当它本身也是整条条带；单帧伴随层�
 
 ### 20.4 B4 剩余
 
-4. K-06 缓存读错误静默回退（需要 fallible pack API）；C-02 filter 顺序；biome 常量一致性测试。
+4. ✅ K-06 缓存读错误静默回退（见 §21）；C-02 filter 顺序；biome 常量一致性测试。
+
+---
+
+## 21. K-06：把"读不出"和"没有"分开 —— B4 第 4 步
+
+### 21.1 问题
+
+`ResourcePack::open` 返回 `Option<Vec<u8>>`，`DirectoryPack` 实现是 `fs::read(..).ok()`：
+
+```rust
+let norm = Self::normalize_path(relative_path)?;
+fs::read(self.root_dir.join(norm)).ok()      // 权限错误 == 文件不存在
+```
+
+于是 `ResourcePackStack::open_asset_raw` 在最高优先级包读失败时继续往下找，**静默返回下一个包的
+同名字节**。用户把材质包里的 `stone.png` 改坏权限（或文件被占用、NFS 抖动），渲染里看到的是原版
+贴图，日志里什么都没有；预烘还会把这个结果写进 `.mtkcache`，从此一直是错的。
+
+### 21.2 改法
+
+- 新增 `ResourceError::ReadFailed { pack, path, source }`（带包名与路径，错误信息可直接给用户看）；
+- `ResourcePack::open` → `Result<Option<Vec<u8>>, ResourceError>`：
+  - `NotFound` / `NotADirectory` / `IsADirectory` → `Ok(None)`（确实没有，或那个路径是个目录）；
+  - 其他 I/O 错误 → `Err(ReadFailed)`。
+  - `MemoryPack` / `ZipPack` 恒为 `Ok(...)`（zip 的读错误在装载时就已暴露）；
+- 栈层：`open_asset_raw` / `open_texture_raw` / `open_model_raw` / `resolve_pbr_companions` /
+  `load_ctm_rules` / `build_ctm_solver` 全部返回 `Result`，**第一个 Err 直接中断查询**；
+- 上游一路传播：`mtk-material` 的 `BiomeResolver::load_from_pack(_stack)`、
+  `mtk-texture` 的 `process_paletted_permutations` 与 `BannerBaker::load_from_pack_stack`（原本返回
+  `Result` 却被 `let _ =` 吞掉）、`mtk-voxel` 的 debug world（映射进 `MissingAssets`）、
+  `libmtk::prebake` 的模型扫描/blockstate/物品贴图、`mtk-cli` 的 `AssetStack`、`mtk-py` 的
+  `bake_blockstate` / material resolver / `build_ctm_solver` / `get_ctm_rule_count`。
+- 删除 `ResourcePack::has_file`：零生产消费者（只在测试里用于路径穿越断言），它会把 `Err` 折成
+  `false`，正是本项要消灭的模式。
+
+### 21.3 无法返回错误的回调
+
+`ModelBaker::bake_blockstate(state, def, lookup: impl Fn(&str) -> Option<BlockModelJson>)` 的父模型
+查找回调不能返回错误。两处按同一方式处理：把第一个读失败**暂存**，烘焙结束后立即上抛。
+
+- `libmtk::prebake`：`Mutex<Option<ResourceError>>`（解析阶段是并行的），`get_model` 记录，使用
+  `resolved_map` 之前检查；
+- `mtk-cli`：`ReadFailureCell`（`RefCell` + `capture`/`into_result`），每个 bake 调用点包一层。
+
+物品烘焙原本的错误类型是 `(String, &'static str)`（诊断），改为
+`enum ItemBakeError { Read(ResourceError), Diagnostic { key, reason } }`，读失败进 `Read` 并中止整次
+预烘，真正的诊断（`no_geometry` 等）行为不变。
+
+### 21.4 测试（先红后绿）
+
+`mtk-resource/tests/test_pack_read_errors.rs`：
+
+1. `an_unreadable_asset_does_not_fall_back_to_a_lower_priority_pack` —— chmod 000 的 `stone.png`
+   + 低优先级包同名文件。**旧行为实测返回 `Some("from-vanilla")`**（红），现在要求
+   `ReadFailed { pack: "user", path: … }`；
+2. `a_directory_at_the_asset_path_is_absent` —— 目录不是资产，必须是 `Ok(None)`；
+3. `a_missing_asset_is_absent` —— 普通缺失仍是 `Ok(None)`。
+
+`libmtk/tests/test_pack_read_failures.rs`：
+
+1. `a_model_that_cannot_be_read_fails_the_precompile` —— 模型 JSON chmod 000，预烘必须报错且错误里
+   含文件名；
+2. `a_failing_pack_is_not_replaced_by_a_lower_priority_pack` —— 栈查询不得返回低优先级包的同名模型；
+3. `the_fixture_bakes_when_readable` —— 同一个 fixture 可读时能正常烘出模型（保证前两个测试是因
+   为权限而不是 fixture 本身失败）。
+
+红态证据：临时把 `DirectoryPack::open` 改回"任何错误都 `Ok(None)`"，上面 libmtk 的两个测试分别以
+`an unreadable model must fail the bake instead of silently skipping it` 与第 2 条断言失败，而
+fixture 测试仍通过；恢复实现后三个全绿。
+
+### 21.5 行为约定（写进 crate README）
+
+- `Ok(None)` 才会让栈去找下一个包；`Err` 中止整次查询并上抛；
+- 越界路径（`../`、绝对路径、`C:`）按"没有"处理（既不是错误也不泄漏）；
+- "路径是目录"也算"没有"。
+
+### 21.6 B4 剩余
+
+5. C-02 atlas `filter` 顺序与匹配语义（需要先确认 MC 侧语义）；biome 常量与 jar 一致性测试。

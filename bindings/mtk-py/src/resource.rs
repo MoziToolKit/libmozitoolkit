@@ -86,15 +86,22 @@ impl PyResourcePackStack {
     }
 
     /// Builds an indexed `CtmSolver` containing all active CTM rules loaded in this stack.
-    pub fn build_ctm_solver(&self) -> crate::ctm::PyCtmSolver {
-        crate::ctm::PyCtmSolver {
-            inner: std::sync::Arc::new(self.inner.build_ctm_solver()),
-        }
+    pub fn build_ctm_solver(&self) -> PyResult<crate::ctm::PyCtmSolver> {
+        Ok(crate::ctm::PyCtmSolver {
+            inner: std::sync::Arc::new(
+                self.inner
+                    .build_ctm_solver()
+                    .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?,
+            ),
+        })
     }
 
     /// Returns the number of CTM rules discovered across all active packs in the stack.
-    pub fn get_ctm_rule_count(&self) -> usize {
-        self.inner.load_ctm_rules().len()
+    pub fn get_ctm_rule_count(&self) -> PyResult<usize> {
+        self.inner
+            .load_ctm_rules()
+            .map(|rules| rules.len())
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 
     fn __repr__(&self) -> String {

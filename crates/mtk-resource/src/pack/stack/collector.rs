@@ -7,7 +7,7 @@ use std::collections::HashSet;
 
 impl ResourcePackStack {
     /// Scan all active resource packs and load all OptiFine / Continuity CTM rules.
-    pub fn load_ctm_rules(&self) -> Vec<crate::ctm::CtmRule> {
+    pub fn load_ctm_rules(&self) -> Result<Vec<crate::ctm::CtmRule>, ResourceError> {
         let mut rules = Vec::new();
         let mut seen_paths = HashSet::new();
 
@@ -24,7 +24,7 @@ impl ResourcePackStack {
                 }
                 seen_paths.insert(file.clone());
 
-                if let Some(bytes) = pack.open(&file) {
+                if let Some(bytes) = pack.open(&file)? {
                     if let Ok(content) = std::str::from_utf8(&bytes) {
                         let parts: Vec<&str> = file.split('/').collect();
                         let namespace = if parts.len() > 1 {
@@ -44,12 +44,12 @@ impl ResourcePackStack {
         }
 
         rules.sort_by_key(|r| std::cmp::Reverse(r.priority));
-        rules
+        Ok(rules)
     }
 
     /// Constructs an indexed `CtmSolver` containing all active CTM rules loaded from this stack.
-    pub fn build_ctm_solver(&self) -> crate::ctm::CtmSolver {
-        crate::ctm::CtmSolver::new(self.load_ctm_rules())
+    pub fn build_ctm_solver(&self) -> Result<crate::ctm::CtmSolver, ResourceError> {
+        Ok(crate::ctm::CtmSolver::new(self.load_ctm_rules()?))
     }
 
     /// Collect and expand all Sprite references declared in an AtlasDefinition into discrete `DiscoveredSprite`s.
@@ -104,7 +104,7 @@ impl ResourcePackStack {
                         let sprite_id = ResourceLocation::new(&tex_loc.namespace, sprite_path);
 
                         if !registered_sprites.contains(&sprite_id) {
-                            let companions = self.resolve_pbr_companions(&tex_loc);
+                            let companions = self.resolve_pbr_companions(&tex_loc)?;
                             if companions.albedo.is_some() {
                                 registered_sprites.insert(sprite_id.clone());
                                 results.push(DiscoveredSprite {
@@ -126,7 +126,7 @@ impl ResourcePackStack {
                 AtlasSource::Single { resource, sprite } => {
                     let sprite_id = sprite.clone().unwrap_or_else(|| resource.clone());
                     if !registered_sprites.contains(&sprite_id) {
-                        let companions = self.resolve_pbr_companions(resource);
+                        let companions = self.resolve_pbr_companions(resource)?;
                         if companions.albedo.is_some() {
                             registered_sprites.insert(sprite_id.clone());
                             results.push(DiscoveredSprite {
@@ -154,7 +154,7 @@ impl ResourcePackStack {
                     divisor_y: _,
                     regions,
                 } => {
-                    let companions = self.resolve_pbr_companions(resource);
+                    let companions = self.resolve_pbr_companions(resource)?;
                     for region in regions {
                         if !registered_sprites.contains(&region.sprite) {
                             registered_sprites.insert(region.sprite.clone());
@@ -206,7 +206,7 @@ impl ResourcePackStack {
         for rule in ctm_rules {
             for tile_loc in rule.tiles.iter().flatten() {
                 if !registered_sprites.contains(tile_loc) {
-                    let companions = self.resolve_pbr_companions(tile_loc);
+                    let companions = self.resolve_pbr_companions(tile_loc)?;
                     if companions.albedo.is_some() {
                         registered_sprites.insert(tile_loc.clone());
                         results.push(DiscoveredSprite {

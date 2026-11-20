@@ -1,4 +1,5 @@
 use super::ResourcePackStack;
+use crate::error::ResourceError;
 use crate::identifier::ResourceLocation;
 use crate::meta::{AnimationMetadata, TextureMetadata};
 
@@ -47,7 +48,13 @@ pub(crate) fn is_companion_asset_path(file: &str) -> bool {
 
 impl ResourcePackStack {
     /// Resolve all PBR companions (`_n`, `_s`, `.mcmeta`) using granular per-channel fallback.
-    pub fn resolve_pbr_companions(&self, location: &ResourceLocation) -> PbrCompanions {
+    ///
+    /// Fails when a pack holds a companion texture that cannot be read, so a broken pack does not
+    /// silently downgrade to vanilla companions.
+    pub fn resolve_pbr_companions(
+        &self,
+        location: &ResourceLocation,
+    ) -> Result<PbrCompanions, ResourceError> {
         let mut companions = PbrCompanions::default();
 
         // Try standard textures/ prefix as well as raw path (for optifine/ctm/ assets)
@@ -58,7 +65,7 @@ impl ResourcePackStack {
 
         // 1. Albedo
         for path in &candidates {
-            if let Some(bytes) = self.open_asset_raw(path) {
+            if let Some(bytes) = self.open_asset_raw(path)? {
                 companions.albedo = Some(bytes);
                 break;
             }
@@ -72,7 +79,7 @@ impl ResourcePackStack {
             format!("assets/{}/{}_N.png", location.namespace, location.path),
         ];
         for path in &normal_candidates {
-            if let Some(bytes) = self.open_asset_raw(path) {
+            if let Some(bytes) = self.open_asset_raw(path)? {
                 companions.normal = Some(bytes);
                 break;
             }
@@ -86,7 +93,7 @@ impl ResourcePackStack {
             format!("assets/{}/{}_S.png", location.namespace, location.path),
         ];
         for path in &spec_candidates {
-            if let Some(bytes) = self.open_asset_raw(path) {
+            if let Some(bytes) = self.open_asset_raw(path)? {
                 companions.specular = Some(bytes);
                 break;
             }
@@ -116,7 +123,7 @@ impl ResourcePackStack {
         ];
         for path in &overlay_candidates {
             if path != &candidates[0] && path != &candidates[1] {
-                if let Some(bytes) = self.open_asset_raw(path) {
+                if let Some(bytes) = self.open_asset_raw(path)? {
                     companions.overlay = Some(bytes);
                     break;
                 }
@@ -139,7 +146,7 @@ impl ResourcePackStack {
         ];
         for path in &emissive_candidates {
             if path != &candidates[0] && path != &candidates[1] {
-                if let Some(bytes) = self.open_asset_raw(path) {
+                if let Some(bytes) = self.open_asset_raw(path)? {
                     companions.emissive = Some(bytes);
                     break;
                 }
@@ -157,7 +164,7 @@ impl ResourcePackStack {
             ),
         ];
         for path in &emissive_meta_candidates {
-            if let Some(meta_bytes) = self.open_asset_raw(path) {
+            if let Some(meta_bytes) = self.open_asset_raw(path)? {
                 if let Ok(meta_str) = std::str::from_utf8(&meta_bytes) {
                     if let Ok(tex_meta) = TextureMetadata::parse_json(meta_str) {
                         companions.emissive_mcmeta = tex_meta.animation;
@@ -173,7 +180,7 @@ impl ResourcePackStack {
             format!("assets/{}/{}.png.mcmeta", location.namespace, location.path),
         ];
         for path in &meta_candidates {
-            if let Some(meta_bytes) = self.open_asset_raw(path) {
+            if let Some(meta_bytes) = self.open_asset_raw(path)? {
                 if let Ok(meta_str) = std::str::from_utf8(&meta_bytes) {
                     if let Ok(tex_meta) = TextureMetadata::parse_json(meta_str) {
                         companions.mcmeta = tex_meta.animation;
@@ -183,6 +190,6 @@ impl ResourcePackStack {
             }
         }
 
-        companions
+        Ok(companions)
     }
 }

@@ -123,8 +123,8 @@ fn test_python_ctm_bindings() {
     Python::initialize();
     Python::attach(|_py| {
         let stack = PyResourcePackStack::new();
-        assert_eq!(stack.get_ctm_rule_count(), 0);
-        let solver = stack.build_ctm_solver();
+        assert_eq!(stack.get_ctm_rule_count().unwrap(), 0);
+        let solver = stack.build_ctm_solver().unwrap();
         assert_eq!(solver.inner.rules.len(), 0);
 
         let mut config = PyMesherConfig::default();

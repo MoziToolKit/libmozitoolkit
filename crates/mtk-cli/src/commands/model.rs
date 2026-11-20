@@ -6,6 +6,7 @@ use clap::{Args, Subcommand};
 use mtk_model::{BlockState, ModelBaker};
 use serde::{Deserialize, Serialize};
 
+use crate::utils::assets::ReadFailureCell;
 use crate::utils::AssetStack;
 
 #[derive(Subcommand, Debug)]
@@ -92,10 +93,14 @@ fn run_dump(args: ModelDumpArgs) -> Result<(), Box<dyn std::error::Error>> {
     let mut loader = AssetStack::new(&args.assets)?;
     let blockstate = BlockState::parse(&args.state)?;
     let block_id = format!("{}:{}", blockstate.namespace, blockstate.name);
-    let def = loader.load_blockstate(&block_id);
+    let def = loader.load_blockstate(&block_id)?;
 
     let mut baker = ModelBaker::new();
-    let baked = baker.bake_blockstate(&args.state, def.as_ref(), |m_id| loader.load_model(m_id))?;
+    let read_failures = ReadFailureCell::default();
+    let baked = baker.bake_blockstate(&args.state, def.as_ref(), |m_id| {
+        read_failures.capture(loader.load_model(m_id))
+    })?;
+    read_failures.into_result()?;
 
     let json_str = if args.pretty {
         serde_json::to_string_pretty(&baked)?
@@ -136,8 +141,13 @@ fn run_dump_batch(args: ModelDumpBatchArgs) -> Result<(), Box<dyn std::error::Er
             }
         };
 
-        let bs_def = loader.load_blockstate(&bs.name);
-        match baker.bake_blockstate(state_str, bs_def.as_ref(), |id| loader.load_model(id)) {
+        let bs_def = loader.load_blockstate(&bs.name)?;
+        let read_failures = ReadFailureCell::default();
+        let baked = baker.bake_blockstate(state_str, bs_def.as_ref(), |id| {
+            read_failures.capture(loader.load_model(id))
+        });
+        read_failures.into_result()?;
+        match baked {
             Ok(baked) => {
                 let (mesh, textures) = baked.to_mesh_with_textures(true);
                 let mut elements = Vec::new();

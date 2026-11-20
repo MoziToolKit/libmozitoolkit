@@ -121,7 +121,7 @@ impl BannerBaker {
             "assets/minecraft/textures/entity/banner/base.png",
             "textures/entity/banner/base.png",
         ] {
-            if let Some(bytes) = stack.open_asset_raw(path) {
+            if let Some(bytes) = stack.open_asset_raw(path)? {
                 if let Ok(img) = image::load_from_memory(&bytes) {
                     let rgba = img.to_rgba8();
                     self.base_cloth = RgbaBuffer {
@@ -149,7 +149,7 @@ impl BannerBaker {
                     if stem == "base" || stem == "banner_base" {
                         continue;
                     }
-                    if let Some(bytes) = pack.open(&file) {
+                    if let Some(bytes) = pack.open(&file)? {
                         if self.register_pattern_png_bytes(stem, &bytes).is_ok() {
                             loaded_count += 1;
                         }

@@ -35,23 +35,34 @@ fn block_model_id_for_item(loc: &ResourceLocation) -> Option<String> {
 }
 
 #[inline]
-fn open_item_texture_png(stack: &ResourcePackStack, tex: &str) -> Option<Vec<u8>> {
+fn open_item_texture_png(
+    stack: &ResourcePackStack,
+    tex: &str,
+) -> Result<Option<Vec<u8>>, mtk_resource::ResourceError> {
     let loc = ResourceLocation::parse(tex).unwrap_or_else(|_| ResourceLocation::vanilla(tex));
     let path = loc.to_asset_path("textures", "png");
-    if let Some(bytes) = stack.open_asset_raw(&path) {
-        return Some(bytes);
+    if let Some(bytes) = stack.open_asset_raw(&path)? {
+        return Ok(Some(bytes));
     }
     if !loc.path.contains('/') {
         let item_path = format!("assets/{}/textures/item/{}.png", loc.namespace, loc.path);
-        if let Some(bytes) = stack.open_asset_raw(&item_path) {
-            return Some(bytes);
+        if let Some(bytes) = stack.open_asset_raw(&item_path)? {
+            return Ok(Some(bytes));
         }
         let block_path = format!("assets/{}/textures/block/{}.png", loc.namespace, loc.path);
-        if let Some(bytes) = stack.open_asset_raw(&block_path) {
-            return Some(bytes);
+        if let Some(bytes) = stack.open_asset_raw(&block_path)? {
+            return Ok(Some(bytes));
         }
     }
-    None
+    Ok(None)
+}
+
+/// Why one item model produced no geometry.
+///
+/// A read failure must abort the bake (its own variant); the rest are per-model diagnostics.
+enum ItemBakeError {
+    Read(mtk_resource::ResourceError),
+    Diagnostic { key: String, reason: &'static str },
 }
 
 /// Prebakes all blockstates discovered across all active resource packs in the stack with physical progress reporting.
@@ -82,7 +93,7 @@ pub(crate) fn prebake_all_models_with_progress(
     for pack in stack.packs().iter().rev() {
         for file in pack.list_files("assets/") {
             if file.ends_with(".json") && file.contains("/models/") {
-                let Some(bytes) = pack.open(&file) else {
+                let Some(bytes) = pack.open(&file)? else {
                     continue;
                 };
                 let Some(loc) = ResourceLocation::from_asset_path(&file, "models", "json") else {
@@ -110,6 +121,11 @@ pub(crate) fn prebake_all_models_with_progress(
         }
     }
 
+    // `get_model` feeds `resolve_hierarchy`, whose callback cannot return an error, so a read
+    // failure is parked here and surfaced once the parallel phases finish.
+    let read_error: std::sync::Mutex<Option<mtk_resource::ResourceError>> =
+        std::sync::Mutex::new(None);
+
     // Helper closure to look up models with unified candidate paths
     let get_model = |model_id: &str| -> Option<BlockModelJson> {
         if let Some(m) = model_cache.get(model_id) {
@@ -124,9 +140,18 @@ pub(crate) fn prebake_all_models_with_progress(
                     return Some(m.clone());
                 }
             }
-            if let Some(bytes) = stack.open_asset_raw(&path) {
-                if let Ok(m) = serde_json::from_slice::<BlockModelJson>(&bytes) {
-                    return Some(m);
+            match stack.open_asset_raw(&path) {
+                Ok(None) => {}
+                Ok(Some(bytes)) => {
+                    if let Ok(m) = serde_json::from_slice::<BlockModelJson>(&bytes) {
+                        return Some(m);
+                    }
+                }
+                Err(err) => {
+                    if let Ok(mut slot) = read_error.lock() {
+                        slot.get_or_insert(err);
+                    }
+                    return None;
                 }
             }
         }
@@ -183,13 +208,21 @@ pub(crate) fn prebake_all_models_with_progress(
         }
     }
 
+    if let Some(err) = read_error
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .take()
+    {
+        return Err(err.into());
+    }
+
     let shared_resolved = std::sync::Arc::new(resolved_map);
 
     // 3. Pre-load BlockStateDefinitions for all discovered locations
     let mut blockstate_defs: Vec<(ResourceLocation, BlockStateDefinition)> = Vec::new();
     for loc in &blockstate_locs {
         let path = loc.to_asset_path("blockstates", "json");
-        let Some(bytes) = stack.open_asset_raw(&path) else {
+        let Some(bytes) = stack.open_asset_raw(&path)? else {
             continue;
         };
         match serde_json::from_slice::<BlockStateDefinition>(&bytes) {
@@ -344,131 +377,134 @@ pub(crate) fn prebake_all_models_with_progress(
 
     let item_mesh_opts = ItemMeshOptions::default();
 
-    let bake_single_item = |loc: &ResourceLocation| -> Result<
-        (Vec<String>, mtk_model::BakedModel),
-        (String, &'static str),
-    > {
-        let canon = loc.as_string();
-        let resolved = shared_resolved
-            .get(&canon)
-            .ok_or_else(|| (canon.clone(), "unresolved_model"))?;
+    let bake_single_item =
+        |loc: &ResourceLocation| -> Result<(Vec<String>, mtk_model::BakedModel), ItemBakeError> {
+            let canon = loc.as_string();
+            let resolved =
+                shared_resolved
+                    .get(&canon)
+                    .ok_or_else(|| ItemBakeError::Diagnostic {
+                        key: canon.clone(),
+                        reason: "unresolved_model",
+                    })?;
 
-        let baked: Option<mtk_model::BakedModel> = if !resolved.elements.is_empty() {
-            let baker = ModelBaker::new();
-            Some(baker.bake_resolved_model(&canon, resolved))
-        } else {
-            // 2D sprite items: extrude the layer textures into a flat model.
-            let mut combined_model: Option<mtk_model::BakedModel> = None;
-            for layer_idx in 0..8 {
-                let layer_key = format!("layer{}", layer_idx);
-                if let Some(tex) = resolved.textures.get(&layer_key) {
-                    if let Some(png_bytes) = open_item_texture_png(stack, tex) {
-                        if let Ok(layer_model) =
-                            bake_item_from_png_bytes(&png_bytes, tex, &item_mesh_opts)
+            let baked: Option<mtk_model::BakedModel> = if !resolved.elements.is_empty() {
+                let baker = ModelBaker::new();
+                Some(baker.bake_resolved_model(&canon, resolved))
+            } else {
+                // 2D sprite items: extrude the layer textures into a flat model.
+                let mut combined_model: Option<mtk_model::BakedModel> = None;
+                for layer_idx in 0..8 {
+                    let layer_key = format!("layer{}", layer_idx);
+                    if let Some(tex) = resolved.textures.get(&layer_key) {
+                        if let Some(png_bytes) =
+                            open_item_texture_png(stack, tex).map_err(ItemBakeError::Read)?
                         {
-                            if let Some(ref mut base) = combined_model {
-                                base.elements.extend(layer_model.elements);
-                            } else {
-                                combined_model = Some(layer_model);
-                            }
-                        }
-                    }
-                }
-            }
-
-            // `builtin/entity` items (chests, shulker boxes, decorated pots, conduits, ...)
-            // declare display transforms but no geometry: vanilla renders them through a
-            // block-entity renderer. Bake that geometry and keep the item's own display data,
-            // otherwise the item renders with guessed scale and orientation.
-            if combined_model.is_none() {
-                if let Some(block_name) = loc.path.strip_prefix("item/") {
-                    let state = format!("{}:{}", loc.namespace, block_name);
-                    let mut baker = ModelBaker::new();
-                    let builtin = baker
-                        .bake_blockstate_with_entity(&state, None, None, |id| get_model(id))
-                        .ok()
-                        .filter(|model| !model.elements.is_empty());
-                    if let Some(mut model) = builtin {
-                        model.transforms = resolved.transforms.clone();
-                        model.gui_light = resolved.gui_light.or(model.gui_light);
-                        model.block_state = canon.clone();
-                        combined_model = Some(model);
-                    }
-
-                    if combined_model.is_none() {
-                        if let Some(block_id) = block_model_id_for_item(loc) {
-                            if let Some(block_resolved) = shared_resolved.get(&block_id) {
-                                if !block_resolved.elements.is_empty() {
-                                    let mut model = ModelBaker::new()
-                                        .bake_resolved_model(&canon, block_resolved);
-                                    model.transforms = resolved.transforms.clone();
-                                    model.gui_light =
-                                        resolved.gui_light.or(block_resolved.gui_light);
-                                    combined_model = Some(model);
+                            if let Ok(layer_model) =
+                                bake_item_from_png_bytes(&png_bytes, tex, &item_mesh_opts)
+                            {
+                                if let Some(ref mut base) = combined_model {
+                                    base.elements.extend(layer_model.elements);
+                                } else {
+                                    combined_model = Some(layer_model);
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            if let Some(ref mut model) = combined_model {
-                if resolved.transforms != mtk_model::ItemTransforms::default() {
-                    model.transforms = resolved.transforms.clone();
+                // `builtin/entity` items (chests, shulker boxes, decorated pots, conduits, ...)
+                // declare display transforms but no geometry: vanilla renders them through a
+                // block-entity renderer. Bake that geometry and keep the item's own display data,
+                // otherwise the item renders with guessed scale and orientation.
+                if combined_model.is_none() {
+                    if let Some(block_name) = loc.path.strip_prefix("item/") {
+                        let state = format!("{}:{}", loc.namespace, block_name);
+                        let mut baker = ModelBaker::new();
+                        let builtin = baker
+                            .bake_blockstate_with_entity(&state, None, None, |id| get_model(id))
+                            .ok()
+                            .filter(|model| !model.elements.is_empty());
+                        if let Some(mut model) = builtin {
+                            model.transforms = resolved.transforms.clone();
+                            model.gui_light = resolved.gui_light.or(model.gui_light);
+                            model.block_state = canon.clone();
+                            combined_model = Some(model);
+                        }
+
+                        if combined_model.is_none() {
+                            if let Some(block_id) = block_model_id_for_item(loc) {
+                                if let Some(block_resolved) = shared_resolved.get(&block_id) {
+                                    if !block_resolved.elements.is_empty() {
+                                        let mut model = ModelBaker::new()
+                                            .bake_resolved_model(&canon, block_resolved);
+                                        model.transforms = resolved.transforms.clone();
+                                        model.gui_light =
+                                            resolved.gui_light.or(block_resolved.gui_light);
+                                        combined_model = Some(model);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-                if resolved.gui_light.is_some() {
-                    model.gui_light = resolved.gui_light;
+
+                if let Some(ref mut model) = combined_model {
+                    if resolved.transforms != mtk_model::ItemTransforms::default() {
+                        model.transforms = resolved.transforms.clone();
+                    }
+                    if resolved.gui_light.is_some() {
+                        model.gui_light = resolved.gui_light;
+                    }
                 }
+                combined_model
+            };
+
+            let mut baked = baked.ok_or_else(|| ItemBakeError::Diagnostic {
+                key: canon.clone(),
+                reason: if resolved.textures.is_empty() {
+                    "no_geometry"
+                } else {
+                    "no_texture_layers"
+                },
+            })?;
+
+            if let Some(atlas) = atlas_map {
+                baked.remap_to_atlas_with(|tex| {
+                    if is_dynamic_entity_texture(tex) {
+                        return None;
+                    }
+                    MaterialResolver::resolve(tex, None, atlas)
+                        .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
+                });
             }
-            combined_model
+            baked.rebuild_face_buckets();
+            baked.deduplicate_faces();
+
+            // Only canonical item-model keys. Inserting the bare item name (e.g.
+            // `minecraft:chest`) would overwrite the blockstate entry with item geometry
+            // and item display data, corrupting block meshing for every block item.
+            let keys = vec![loc.as_string(), loc.path.clone()];
+
+            item_throttler.inc();
+            Ok((keys, baked))
         };
 
-        let mut baked = baked.ok_or_else(|| {
-            let reason = if resolved.textures.is_empty() {
-                "no_geometry"
-            } else {
-                "no_texture_layers"
-            };
-            (canon.clone(), reason)
-        })?;
-
-        if let Some(atlas) = atlas_map {
-            baked.remap_to_atlas_with(|tex| {
-                if is_dynamic_entity_texture(tex) {
-                    return None;
-                }
-                MaterialResolver::resolve(tex, None, atlas)
-                    .map(|(_, sp)| (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id))
-            });
-        }
-        baked.rebuild_face_buckets();
-        baked.deduplicate_faces();
-
-        // Only canonical item-model keys. Inserting the bare item name (e.g.
-        // `minecraft:chest`) would overwrite the blockstate entry with item geometry
-        // and item display data, corrupting block meshing for every block item.
-        let keys = vec![loc.as_string(), loc.path.clone()];
-
-        item_throttler.inc();
-        Ok((keys, baked))
-    };
-
     #[cfg(feature = "parallel")]
-    let item_results: Vec<
-        Result<(Vec<String>, mtk_model::BakedModel), (String, &'static str)>,
-    > = mtk_core::threading::install(|| item_model_locs.par_iter().map(bake_single_item).collect());
+    let item_results: Vec<Result<(Vec<String>, mtk_model::BakedModel), ItemBakeError>> =
+        mtk_core::threading::install(|| item_model_locs.par_iter().map(bake_single_item).collect());
 
     #[cfg(not(feature = "parallel"))]
-    let item_results: Vec<
-        Result<(Vec<String>, mtk_model::BakedModel), (String, &'static str)>,
-    > = item_model_locs.iter().map(bake_single_item).collect();
+    let item_results: Vec<Result<(Vec<String>, mtk_model::BakedModel), ItemBakeError>> =
+        item_model_locs.iter().map(bake_single_item).collect();
 
     let mut baked_item_pairs: Vec<(Vec<String>, mtk_model::BakedModel)> = Vec::new();
     let mut item_failures: Vec<(String, &'static str)> = Vec::new();
     for result in item_results {
         match result {
             Ok(pair) => baked_item_pairs.push(pair),
-            Err(failure) => item_failures.push(failure),
+            Err(ItemBakeError::Read(err)) => return Err(err.into()),
+            Err(ItemBakeError::Diagnostic { key, reason }) => item_failures.push((key, reason)),
         }
     }
 

@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use clap::{Args, Subcommand};
 use mtk_model::{BlockState, ModelBaker};
 
+use crate::utils::assets::ReadFailureCell;
 use crate::utils::AssetStack;
 
 #[derive(Subcommand, Debug)]
@@ -101,11 +102,13 @@ fn run_export_samples(args: ExportSamplesArgs) -> Result<(), Box<dyn std::error:
 
     for &state_str in &test_states {
         let bs = BlockState::parse(state_str)?;
-        let bs_def = loader.load_blockstate(&bs.name);
+        let bs_def = loader.load_blockstate(&bs.name)?;
 
+        let read_failures = ReadFailureCell::default();
         let baked = baker.bake_blockstate(state_str, bs_def.as_ref(), |model_id| {
-            loader.load_model(model_id)
+            read_failures.capture(loader.load_model(model_id))
         })?;
+        read_failures.into_result()?;
 
         let sanitized = state_str
             .replace("minecraft:", "")
@@ -249,10 +252,13 @@ fn run_export_builtin_objs(args: ExportBuiltinObjsArgs) -> Result<(), Box<dyn st
 
     for (label, state_str) in test_cases {
         let bs = BlockState::parse(state_str)?;
-        let def = loader.load_blockstate(&bs.name);
+        let def = loader.load_blockstate(&bs.name)?;
 
-        let baked =
-            baker.bake_blockstate(state_str, def.as_ref(), |m_id| loader.load_model(m_id))?;
+        let read_failures = ReadFailureCell::default();
+        let baked = baker.bake_blockstate(state_str, def.as_ref(), |m_id| {
+            read_failures.capture(loader.load_model(m_id))
+        })?;
+        read_failures.into_result()?;
         let (mesh, textures) = baked.to_mesh_with_textures(false);
 
         println!(
@@ -282,7 +288,7 @@ fn run_export_builtin_objs(args: ExportBuiltinObjsArgs) -> Result<(), Box<dyn st
 
             let mut found_bytes = None;
             for rel in &rel_candidates {
-                if let Some(bytes) = loader.read_entry_bytes(rel) {
+                if let Some(bytes) = loader.read_entry_bytes(rel)? {
                     found_bytes = Some(bytes);
                     break;
                 }

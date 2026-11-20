@@ -309,21 +309,39 @@ impl PyModelBaker {
             .detach(|| -> Result<(mtk_core::MeshData, Vec<String>), String> {
                 let bs_def = {
                     let bs_path = format!("assets/{}/blockstates/{}.json", bs.namespace, bs.name);
-                    stack.inner.open_asset_raw(&bs_path).and_then(|bytes| {
-                        serde_json::from_slice::<BlockStateDefinition>(&bytes).ok()
-                    })
+                    stack
+                        .inner
+                        .open_asset_raw(&bs_path)
+                        .map_err(|e| e.to_string())?
+                        .and_then(|bytes| {
+                            serde_json::from_slice::<BlockStateDefinition>(&bytes).ok()
+                        })
                 };
 
+                // The parent-lookup callback cannot return an error, so the first read failure is
+                // parked and surfaced instead of silently baking without that model.
+                let read_failure: std::cell::RefCell<Option<String>> =
+                    std::cell::RefCell::new(None);
                 let baked = self
                     .inner
                     .bake_blockstate(state_str, bs_def.as_ref(), |model_id| {
-                        if let Some(bytes) = stack.inner.open_model_raw(model_id) {
-                            serde_json::from_slice::<BlockModelJson>(&bytes).ok()
-                        } else {
-                            None
+                        match stack.inner.open_model_raw(model_id) {
+                            Ok(Some(bytes)) => {
+                                serde_json::from_slice::<BlockModelJson>(&bytes).ok()
+                            }
+                            Ok(None) => None,
+                            Err(err) => {
+                                read_failure
+                                    .borrow_mut()
+                                    .get_or_insert_with(|| err.to_string());
+                                None
+                            }
                         }
                     })
                     .map_err(|e| e.to_string())?;
+                if let Some(err) = read_failure.into_inner() {
+                    return Err(err);
+                }
 
                 let (mesh, textures) = baked.to_mesh_with_textures(clip_hidden);
                 Ok((mesh, textures))

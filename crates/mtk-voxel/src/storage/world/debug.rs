@@ -100,7 +100,10 @@ impl VoxelStorage {
 
             for loc in &locs {
                 let path = loc.to_asset_path("blockstates", "json");
-                if let Some(bytes) = stack.open_asset_raw(&path) {
+                if let Some(bytes) = stack
+                    .open_asset_raw(&path)
+                    .map_err(|err| VoxelError::MissingAssets(err.to_string()))?
+                {
                     if let Ok(def) =
                         serde_json::from_slice::<mtk_model::BlockStateDefinition>(&bytes)
                     {

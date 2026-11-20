@@ -92,54 +92,33 @@ fn test_zip_path_safety_rejects_parent_dir_and_absolute_paths() {
     let pack = ZipPack::from_bytes("test_paths", &buf).expect("pack should load well-formed files");
 
     // Well-formed entries must be present
-    assert!(
-        pack.has_file("assets/minecraft/textures/block/stone.png"),
+    assert_eq!(
+        pack.open("assets/minecraft/textures/block/stone.png")
+            .unwrap(),
+        Some(b"stone".to_vec()),
         "stone.png must be present"
     );
     assert_eq!(
-        pack.open("assets/minecraft/textures/block/stone.png"),
-        Some(b"stone".to_vec())
-    );
-
-    assert!(
-        pack.has_file("assets/minecraft/textures/block/..stone.png"),
+        pack.open("assets/minecraft/textures/block/..stone.png")
+            .unwrap(),
+        Some(b"dotdot_stone".to_vec()),
         "..stone.png is a normal component and must be preserved"
-    );
-    assert_eq!(
-        pack.open("assets/minecraft/textures/block/..stone.png"),
-        Some(b"dotdot_stone".to_vec())
     );
 
     // Malicious entries must be rejected (not present in pack)
-    assert!(
-        !pack.has_file("../evil.png"),
-        "../evil.png must be rejected"
-    );
-    assert_eq!(pack.open("../evil.png"), None);
-
-    assert!(
-        !pack.has_file("assets/../evil2.png"),
-        "assets/../evil2.png must be rejected"
-    );
-    assert_eq!(pack.open("assets/../evil2.png"), None);
-
-    assert!(
-        !pack.has_file("/etc/passwd"),
-        "/etc/passwd must be rejected"
-    );
-    assert_eq!(pack.open("/etc/passwd"), None);
-
-    assert!(
-        !pack.has_file("C:/windows/win.ini"),
-        "C:/windows/win.ini must be rejected"
-    );
-    assert_eq!(pack.open("C:/windows/win.ini"), None);
-
-    assert!(
-        !pack.has_file("\\windows\\system32\\cmd.exe"),
-        "\\windows\\system32\\cmd.exe must be rejected"
-    );
-    assert_eq!(pack.open("\\windows\\system32\\cmd.exe"), None);
+    for attack in [
+        "../evil.png",
+        "assets/../evil2.png",
+        "/etc/passwd",
+        "C:/windows/win.ini",
+        "\\windows\\system32\\cmd.exe",
+    ] {
+        assert_eq!(
+            pack.open(attack).unwrap(),
+            None,
+            "{attack} must be rejected"
+        );
+    }
 
     // Enumerated files must only include well-formed paths
     let files = pack.list_files("");

@@ -49,16 +49,13 @@ pub trait ResourcePack: Send + Sync {
     /// Open and read the raw bytes of a file inside the pack given its relative path
     /// (e.g. `"assets/minecraft/textures/block/stone.png"`).
     ///
-    /// A path that escapes the pack root is treated as absent.
-    fn open(&self, relative_path: &str) -> Option<Vec<u8>>;
+    /// `Ok(None)` means the pack genuinely does not hold that path (including paths that escape the
+    /// pack root, which are treated as absent). `Err` means the path is in this pack but could not
+    /// be read: the stack must report that instead of falling back to a lower-priority pack.
+    fn open(&self, relative_path: &str) -> Result<Option<Vec<u8>>, ResourceError>;
 
     /// List all relative paths starting with the given prefix.
     fn list_files(&self, prefix: &str) -> Vec<String>;
-
-    /// Check if a relative path exists in this pack.
-    fn has_file(&self, relative_path: &str) -> bool {
-        self.open(relative_path).is_some()
-    }
 
     /// Cheap, deterministic identity of the pack's *content*.
     ///
@@ -181,9 +178,30 @@ impl ResourcePack for DirectoryPack {
         content_entries_from_dir(&self.root_dir)
     }
 
-    fn open(&self, relative_path: &str) -> Option<Vec<u8>> {
-        let norm = Self::normalize_path(relative_path)?;
-        fs::read(self.root_dir.join(norm)).ok()
+    fn open(&self, relative_path: &str) -> Result<Option<Vec<u8>>, ResourceError> {
+        let Some(norm) = Self::normalize_path(relative_path) else {
+            return Ok(None);
+        };
+        match fs::read(self.root_dir.join(norm)) {
+            Ok(bytes) => Ok(Some(bytes)),
+            // Not a readable file in this pack at all: the stack may consult the next pack.
+            // `IsADirectory` covers `assets/.../stone.png` being a directory inside the pack.
+            Err(err)
+                if matches!(
+                    err.kind(),
+                    std::io::ErrorKind::NotFound
+                        | std::io::ErrorKind::NotADirectory
+                        | std::io::ErrorKind::IsADirectory
+                ) =>
+            {
+                Ok(None)
+            }
+            Err(err) => Err(ResourceError::ReadFailed {
+                pack: self.name.clone(),
+                path: relative_path.to_string(),
+                source: err,
+            }),
+        }
     }
 
     fn list_files(&self, prefix: &str) -> Vec<String> {
@@ -263,9 +281,9 @@ impl ResourcePack for MemoryPack {
         out
     }
 
-    fn open(&self, relative_path: &str) -> Option<Vec<u8>> {
+    fn open(&self, relative_path: &str) -> Result<Option<Vec<u8>>, ResourceError> {
         let clean = relative_path.replace('\\', "/");
-        self.files.get(&clean).cloned()
+        Ok(self.files.get(&clean).cloned())
     }
 
     fn list_files(&self, prefix: &str) -> Vec<String> {
@@ -412,10 +430,12 @@ impl ResourcePack for ZipPack {
         out
     }
 
-    fn open(&self, relative_path: &str) -> Option<Vec<u8>> {
-        normalize_relative_path(relative_path)?;
+    fn open(&self, relative_path: &str) -> Result<Option<Vec<u8>>, ResourceError> {
+        if normalize_relative_path(relative_path).is_none() {
+            return Ok(None);
+        }
         let clean = relative_path.replace('\\', "/");
-        self.file_map.get(&clean).cloned()
+        Ok(self.file_map.get(&clean).cloned())
     }
 
     fn list_files(&self, prefix: &str) -> Vec<String> {

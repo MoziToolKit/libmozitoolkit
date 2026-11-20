@@ -55,7 +55,7 @@ impl AtlasBuilder {
         for (category_name, definition) in definitions {
             // 1. Discover raw sprites (including CTM tiles for blocks)
             let discovered = if category_name == "blocks" {
-                let ctm_rules = stack.load_ctm_rules();
+                let ctm_rules = stack.load_ctm_rules()?;
                 if !ctm_rules.is_empty() {
                     address_map.ctm_rules = ctm_rules.clone();
                     stack.collect_sprites_including_ctm(definition, &ctm_rules)?
@@ -73,7 +73,7 @@ impl AtlasBuilder {
             let mut decoded = DecodedSprite::decode_batch(discovered)?;
 
             // 3. Process PalettedPermutations sources if any
-            process_paletted_permutations(&definition.sources, stack, &mut decoded);
+            process_paletted_permutations(&definition.sources, stack, &mut decoded)?;
 
             if decoded.is_empty() {
                 continue;

@@ -1,5 +1,6 @@
 use mtk_resource::{AtlasSource, ResourceLocation, ResourcePackStack};
 
+use crate::error::TextureError;
 use crate::image::bake_paletted_permutation;
 use crate::{DecodedSprite, RgbaBuffer};
 
@@ -8,7 +9,7 @@ pub(crate) fn process_paletted_permutations(
     sources: &[AtlasSource],
     stack: &ResourcePackStack,
     decoded: &mut Vec<DecodedSprite>,
-) {
+) -> Result<(), TextureError> {
     for source in sources {
         if let AtlasSource::PalettedPermutations {
             palette_key,
@@ -16,7 +17,7 @@ pub(crate) fn process_paletted_permutations(
             textures,
         } = source
         {
-            let key_bytes = match stack.open_texture_raw(palette_key) {
+            let key_bytes = match stack.open_texture_raw(palette_key)? {
                 Some(b) => b,
                 None => continue,
             };
@@ -26,7 +27,7 @@ pub(crate) fn process_paletted_permutations(
             };
 
             for (perm_name, perm_loc) in permutations {
-                let perm_bytes = match stack.open_texture_raw(perm_loc) {
+                let perm_bytes = match stack.open_texture_raw(perm_loc)? {
                     Some(b) => b,
                     None => continue,
                 };
@@ -36,7 +37,7 @@ pub(crate) fn process_paletted_permutations(
                 };
 
                 for tex_loc in textures {
-                    let companions = stack.resolve_pbr_companions(tex_loc);
+                    let companions = stack.resolve_pbr_companions(tex_loc)?;
                     if let Some(bytes) = companions.albedo {
                         if let Ok(base_buf) = RgbaBuffer::from_png_bytes(&bytes) {
                             if let Ok(baked_perm) =
@@ -81,4 +82,5 @@ pub(crate) fn process_paletted_permutations(
             }
         }
     }
+    Ok(())
 }

@@ -57,7 +57,7 @@ pub fn run_ctm_test(args: CtmTestArgs) -> Result<(), Box<dyn std::error::Error>>
         let mut single_stack = ResourcePackStack::new();
         single_stack.push_pack(Box::new(pack));
 
-        let rules = single_stack.load_ctm_rules();
+        let rules = single_stack.load_ctm_rules()?;
         println!(
             "Loaded in {:?}, parsed {} CTM rules:",
             t0.elapsed(),
@@ -114,7 +114,7 @@ pub fn run_ctm_test(args: CtmTestArgs) -> Result<(), Box<dyn std::error::Error>>
         t_stack.elapsed()
     );
 
-    let all_ctm_rules = full_stack.load_ctm_rules();
+    let all_ctm_rules = full_stack.load_ctm_rules()?;
     println!(
         "Total Active CTM Rules across all packs: {}",
         all_ctm_rules.len()

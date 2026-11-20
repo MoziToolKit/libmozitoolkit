@@ -8,6 +8,7 @@ use glam::IVec3;
 use mtk_model::{BlockState, BlockStateResolver, ModelBaker};
 use mtk_voxel::{MesherConfig, VoxelStorage, VoxelWorld};
 
+use crate::utils::assets::ReadFailureCell;
 use crate::utils::AssetStack;
 
 #[derive(Subcommand, Debug)]
@@ -96,7 +97,7 @@ fn run_bench_model(args: BenchModelArgs) -> Result<(), Box<dyn std::error::Error
     let scan_start = Instant::now();
 
     for bs_name in &all_blockstate_names {
-        if let Some(def) = loader.load_blockstate(bs_name) {
+        if let Some(def) = loader.load_blockstate(bs_name)? {
             if let Some(ref variants) = def.variants {
                 for k in variants.keys() {
                     if k.is_empty() {
@@ -127,10 +128,13 @@ fn run_bench_model(args: BenchModelArgs) -> Result<(), Box<dyn std::error::Error
 
     for state_str in &all_test_states {
         if let Ok(bs) = BlockState::parse(state_str) {
-            let bs_def = loader.load_blockstate(&bs.name);
-            if let Ok(baked) =
-                baker.bake_blockstate(state_str, bs_def.as_ref(), |id| loader.load_model(id))
-            {
+            let bs_def = loader.load_blockstate(&bs.name)?;
+            let read_failures = ReadFailureCell::default();
+            let baked = baker.bake_blockstate(state_str, bs_def.as_ref(), |id| {
+                read_failures.capture(loader.load_model(id))
+            });
+            read_failures.into_result()?;
+            if let Ok(baked) = baked {
                 successful_bakes += 1;
                 let mesh = baked.to_mesh(true);
                 total_tris += mesh.triangle_count();
@@ -170,7 +174,7 @@ fn run_bench_model(args: BenchModelArgs) -> Result<(), Box<dyn std::error::Error
     let mut in_memory_models_json = HashMap::new();
 
     for name in &all_blockstate_names {
-        if let Some(def) = loader.load_blockstate(name) {
+        if let Some(def) = loader.load_blockstate(name)? {
             in_memory_states_json.insert(name.clone(), def);
         }
     }
@@ -179,7 +183,7 @@ fn run_bench_model(args: BenchModelArgs) -> Result<(), Box<dyn std::error::Error
             if let Some(def) = in_memory_states_json.get(&bs.name) {
                 let matches = BlockStateResolver::resolve(def, &bs);
                 for m in matches {
-                    if let Some(model) = loader.load_model(&m.model_id) {
+                    if let Some(model) = loader.load_model(&m.model_id)? {
                         in_memory_models_json.insert(m.model_id.clone(), model);
                     }
                 }
@@ -239,7 +243,7 @@ fn run_bench_model(args: BenchModelArgs) -> Result<(), Box<dyn std::error::Error
     let mut preloaded_models = HashMap::new();
     for &state_str in &sample_states {
         let bs = BlockState::parse(state_str)?;
-        if let Some(def) = loader.load_blockstate(&bs.name) {
+        if let Some(def) = loader.load_blockstate(&bs.name)? {
             preloaded_defs.insert(bs.name.clone(), def);
         }
     }
@@ -259,7 +263,7 @@ fn run_bench_model(args: BenchModelArgs) -> Result<(), Box<dyn std::error::Error
         "minecraft:block/observer",
     ];
     for name in model_names {
-        if let Some(m) = loader.load_model(name) {
+        if let Some(m) = loader.load_model(name)? {
             preloaded_models.insert(name.to_string(), m);
         }
     }
@@ -293,9 +297,12 @@ fn run_bench_model(args: BenchModelArgs) -> Result<(), Box<dyn std::error::Error
     println!("\n[Benchmark 4: Mesh Generation & Hidden Volume Culling (100k iters)]");
     let stairs_state = "minecraft:oak_stairs[facing=east,half=bottom,shape=straight]";
     let bs = BlockState::parse(stairs_state)?;
-    let def = loader.load_blockstate(&bs.name);
-    let stairs_baked =
-        baker.bake_blockstate(stairs_state, def.as_ref(), |id| loader.load_model(id))?;
+    let def = loader.load_blockstate(&bs.name)?;
+    let read_failures = ReadFailureCell::default();
+    let stairs_baked = baker.bake_blockstate(stairs_state, def.as_ref(), |id| {
+        read_failures.capture(loader.load_model(id))
+    })?;
+    read_failures.into_result()?;
 
     let mesh_iters = 100_000;
     let mesh_start = Instant::now();

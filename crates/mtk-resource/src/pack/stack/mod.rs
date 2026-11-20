@@ -71,17 +71,23 @@ impl ResourcePackStack {
     }
 
     /// Open a file by its explicit asset path, returning the first match from top to bottom.
-    pub fn open_asset_raw(&self, asset_path: &str) -> Option<Vec<u8>> {
+    ///
+    /// A pack that holds the file but cannot read it aborts the lookup: continuing would serve a
+    /// lower-priority pack's bytes and hide the failure from the user.
+    pub fn open_asset_raw(&self, asset_path: &str) -> Result<Option<Vec<u8>>, ResourceError> {
         for pack in &self.packs {
-            if let Some(bytes) = pack.open(asset_path) {
-                return Some(bytes);
+            if let Some(bytes) = pack.open(asset_path)? {
+                return Ok(Some(bytes));
             }
         }
-        None
+        Ok(None)
     }
 
     /// Open a specific categorized asset (e.g. category `"textures"`, ext `"png"`).
-    pub fn open_texture_raw(&self, location: &ResourceLocation) -> Option<Vec<u8>> {
+    pub fn open_texture_raw(
+        &self,
+        location: &ResourceLocation,
+    ) -> Result<Option<Vec<u8>>, ResourceError> {
         let path = location.to_asset_path("textures", "png");
         self.open_asset_raw(&path)
     }
@@ -134,7 +140,7 @@ impl ResourcePackStack {
         location: &ResourceLocation,
     ) -> Result<AtlasDefinition, ResourceError> {
         let path = location.to_asset_path("atlases", "json");
-        let bytes = self.open_asset_raw(&path).ok_or_else(|| {
+        let bytes = self.open_asset_raw(&path)?.ok_or_else(|| {
             ResourceError::NotFound(format!("Atlas definition not found: {}", path))
         })?;
         let json_str = std::str::from_utf8(&bytes).map_err(|e| {
@@ -184,13 +190,13 @@ impl ResourcePackStack {
     }
 
     /// Open a model JSON by its identifier, resolving standard candidate asset paths.
-    pub fn open_model_raw(&self, model_id: &str) -> Option<Vec<u8>> {
+    pub fn open_model_raw(&self, model_id: &str) -> Result<Option<Vec<u8>>, ResourceError> {
         for path in ResourceLocation::model_candidate_asset_paths(model_id) {
-            if let Some(bytes) = self.open_asset_raw(&path) {
-                return Some(bytes);
+            if let Some(bytes) = self.open_asset_raw(&path)? {
+                return Ok(Some(bytes));
             }
         }
-        None
+        Ok(None)
     }
 
     /// Computes the stack fingerprint that keys the asset cache.

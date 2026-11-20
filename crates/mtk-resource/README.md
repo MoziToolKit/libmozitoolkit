@@ -67,9 +67,10 @@ pub struct ResourceLocation {
 ```rust
 pub trait ResourcePack: Send + Sync {
     fn name(&self) -> &str;
-    fn open(&self, relative_path: &str) -> Option<Vec<u8>>;
+    /// `Ok(None)` = 该包内确实没有这个路径（越界路径同样按"没有"处理）；
+    /// `Err(ReadFailed)` = 文件在包里但读不出来（权限、I/O）。
+    fn open(&self, relative_path: &str) -> Result<Option<Vec<u8>>, ResourceError>;
     fn list_files(&self, prefix: &str) -> Vec<String>;
-    fn has_file(&self, relative_path: &str) -> bool;
 }
 
 pub struct DirectoryPack { /* ... */ }
@@ -81,6 +82,11 @@ pub struct ResourcePackStack {
     packs: Vec<Box<dyn ResourcePack>>,
 }
 ```
+**"没有"与"读不出"是两件事**：`open` 返回 `Ok(None)` 时栈才会去找下一个包；返回 `Err` 时整次
+查询立刻失败。把读失败当成"不存在"会让用户材质包里的纹理悄悄回退成原版——渲染结果错了却没有任何提示。
+`ResourcePackStack::open_asset_raw` / `open_texture_raw` / `open_model_raw` / `resolve_pbr_companions`
+都遵循这个契约。
+
 - `PbrCompanions`: 单一纹理对应的复合伴随数据（Albedo, Normal, Specular, Overlay, Emissive, MCMETA）。
 - `DiscoveredSprite`: 图集构建前收集的完整待解码精灵图描述。
 

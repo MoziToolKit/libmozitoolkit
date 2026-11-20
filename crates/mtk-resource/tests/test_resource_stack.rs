@@ -97,7 +97,7 @@ fn test_pack_stack_granular_fallback() {
     stack.push_pack(Box::new(top_pack));
 
     let loc = ResourceLocation::parse("minecraft:block/diamond_ore").unwrap();
-    let companions = stack.resolve_pbr_companions(&loc);
+    let companions = stack.resolve_pbr_companions(&loc).expect("companions");
 
     // Albedo & Normal from bottom pack, Specular from top pack
     assert_eq!(companions.albedo, Some(vec![10, 20]));

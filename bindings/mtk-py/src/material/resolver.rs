@@ -396,7 +396,9 @@ impl PyBiomeResolver {
 
     /// Load block models from a ResourcePackStack.
     pub fn load_from_pack_stack(&mut self, stack: &PyResourcePackStack) -> PyResult<()> {
-        self.inner.load_from_pack_stack(&stack.inner);
+        self.inner
+            .load_from_pack_stack(&stack.inner)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         Ok(())
     }
 

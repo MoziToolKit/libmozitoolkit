@@ -212,11 +212,17 @@ impl BiomeResolver {
     }
 
     /// Parse block models from any `ResourcePack` implementation.
-    pub fn load_from_pack(&mut self, pack: &dyn mtk_resource::ResourcePack) {
+    ///
+    /// A model that exists but cannot be read is an error: skipping it would silently drop tint
+    /// metadata and bake the block with the wrong biome colouring.
+    pub fn load_from_pack(
+        &mut self,
+        pack: &dyn mtk_resource::ResourcePack,
+    ) -> Result<(), mtk_resource::ResourceError> {
         let files = pack.list_files("assets/minecraft/models/block/");
         for file in files {
             if file.ends_with(".json") {
-                if let Some(bytes) = pack.open(&file) {
+                if let Some(bytes) = pack.open(&file)? {
                     if let Ok(val) = serde_json::from_slice::<Value>(&bytes) {
                         let stem = Path::new(&file)
                             .file_stem()
@@ -230,12 +236,17 @@ impl BiomeResolver {
         }
         self.update_models_index();
         self.analyze_models();
+        Ok(())
     }
 
     /// Parse block models across all layers of a `ResourcePackStack`.
-    pub fn load_from_pack_stack(&mut self, stack: &mtk_resource::ResourcePackStack) {
+    pub fn load_from_pack_stack(
+        &mut self,
+        stack: &mtk_resource::ResourcePackStack,
+    ) -> Result<(), mtk_resource::ResourceError> {
         for pack in stack.packs() {
-            self.load_from_pack(pack.as_ref());
+            self.load_from_pack(pack.as_ref())?;
         }
+        Ok(())
     }
 }

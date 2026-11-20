@@ -10,7 +10,39 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use mtk_model::{BlockModelJson, BlockStateDefinition};
-use mtk_resource::{DirectoryPack, ResourcePackStack, ZipPack};
+use mtk_resource::{DirectoryPack, ResourceError, ResourcePackStack, ZipPack};
+
+/// Read failures raised inside `Option`-returning bake callbacks.
+///
+/// `ModelBaker`'s parent lookup callback cannot return an error, so an unreadable model would
+/// otherwise be indistinguishable from a missing one. The first failure is parked here and
+/// surfaced right after the bake.
+#[derive(Default)]
+pub struct ReadFailureCell(std::cell::RefCell<Option<ResourceError>>);
+
+impl ReadFailureCell {
+    /// Records the failure (if any) and forwards the value.
+    pub fn capture<T>(&self, result: Result<Option<T>, ResourceError>) -> Option<T> {
+        match result {
+            Ok(value) => value,
+            Err(err) => {
+                let mut slot = self.0.borrow_mut();
+                if slot.is_none() {
+                    *slot = Some(err);
+                }
+                None
+            }
+        }
+    }
+
+    /// Fails with the first recorded read error.
+    pub fn into_result(self) -> Result<(), ResourceError> {
+        match self.0.into_inner() {
+            Some(err) => Err(err),
+            None => Ok(()),
+        }
+    }
+}
 
 /// A resource pack (directory, `.zip` or `.jar`) opened for read-only CLI inspection.
 pub struct AssetStack {
@@ -63,14 +95,23 @@ impl AssetStack {
     }
 
     /// Reads raw bytes by explicit asset path (`assets/<ns>/<category>/<name>.<ext>`).
-    pub fn read_entry_bytes(&mut self, relative_path: &str) -> Option<Vec<u8>> {
+    ///
+    /// A path that is absent yields `Ok(None)`; a file this pack holds but cannot read yields
+    /// `Err`, so the CLI reports it instead of probing other packs.
+    pub fn read_entry_bytes(
+        &mut self,
+        relative_path: &str,
+    ) -> Result<Option<Vec<u8>>, ResourceError> {
         self.stack.open_asset_raw(relative_path)
     }
 
     /// Parses `assets/<ns>/blockstates/<name>.json`, memoised.
-    pub fn load_blockstate(&mut self, blockstate_id: &str) -> Option<BlockStateDefinition> {
+    pub fn load_blockstate(
+        &mut self,
+        blockstate_id: &str,
+    ) -> Result<Option<BlockStateDefinition>, ResourceError> {
         if let Some(cached) = self.blockstate_cache.get(blockstate_id) {
-            return cached.clone();
+            return Ok(cached.clone());
         }
 
         let (namespace, name) = blockstate_id
@@ -79,28 +120,28 @@ impl AssetStack {
         let path = format!("assets/{namespace}/blockstates/{name}.json");
         let parsed = self
             .stack
-            .open_asset_raw(&path)
+            .open_asset_raw(&path)?
             .and_then(|bytes| serde_json::from_slice::<BlockStateDefinition>(&bytes).ok());
 
         self.blockstate_cache
             .insert(blockstate_id.to_string(), parsed.clone());
-        parsed
+        Ok(parsed)
     }
 
     /// Parses a model JSON through `mtk-resource`'s canonical candidate paths, memoised.
-    pub fn load_model(&mut self, model_id: &str) -> Option<BlockModelJson> {
+    pub fn load_model(&mut self, model_id: &str) -> Result<Option<BlockModelJson>, ResourceError> {
         if let Some(cached) = self.model_cache.get(model_id) {
-            return cached.clone();
+            return Ok(cached.clone());
         }
 
         let parsed = self
             .stack
-            .open_model_raw(model_id)
+            .open_model_raw(model_id)?
             .and_then(|bytes| serde_json::from_slice::<BlockModelJson>(&bytes).ok());
 
         self.model_cache
             .insert(model_id.to_string(), parsed.clone());
-        parsed
+        Ok(parsed)
     }
 }
 
@@ -155,17 +196,23 @@ mod tests {
 
         let stairs = stack
             .load_blockstate("minecraft:oak_stairs")
+            .expect("read")
             .expect("blockstate must parse");
         assert!(stairs.variants.is_some());
 
         // Bare and namespaced ids both resolve through the canonical candidate paths.
-        assert!(stack.load_model("minecraft:block/oak_stairs").is_some());
-        assert!(stack.load_model("block/oak_stairs").is_some());
-        assert!(stack.load_model("mymod:block/gadget").is_some());
-        assert!(stack.load_model("mymod:block/missing").is_none());
+        assert!(stack
+            .load_model("minecraft:block/oak_stairs")
+            .unwrap()
+            .is_some());
+        assert!(stack.load_model("block/oak_stairs").unwrap().is_some());
+        assert!(stack.load_model("mymod:block/gadget").unwrap().is_some());
+        assert!(stack.load_model("mymod:block/missing").unwrap().is_none());
 
         assert_eq!(
-            stack.read_entry_bytes("assets/minecraft/textures/block/oak_planks.png"),
+            stack
+                .read_entry_bytes("assets/minecraft/textures/block/oak_planks.png")
+                .unwrap(),
             Some(b"PNG".to_vec())
         );
     }
@@ -260,7 +307,7 @@ mod tests {
             "/etc/escape.json",
         ] {
             assert!(
-                stack.read_entry_bytes(probe).is_none(),
+                stack.read_entry_bytes(probe).unwrap().is_none(),
                 "`{probe}` must not be readable through the pack"
             );
         }
