@@ -1294,7 +1294,7 @@ fixture 测试仍通过；恢复实现后三个全绿。
 
 ### 21.6 B4 剩余
 
-5. ✅ C-02 atlas `filter`（见 §22；同时发现新的 C-07）；biome 常量与 jar 一致性测试仍在。
+5. ✅ C-02 atlas `filter`（见 §22）；✅ C-07 图集定义按 stack 合并（见 §23）；biome 常量与 jar 一致性测试仍在。
 
 ---
 
@@ -1384,3 +1384,73 @@ wasm32-unknown-unknown`）。Java 专有构造（lookbehind/backreference）会�
 `SpriteSourceList.load` 是 `for (Resource entry : resourceManager.getResourceStack(resourceId))`
 ——把**所有包**的同名文件按优先级顺序拼起来。于是"只追加自己的 sprite、不重复原版列表"的材质包
 在我们这里会丢掉整个原版目录源（渲染成 fallback）。这是与 filter 相邻但独立的一项，见 §23 / backlog C-07。
+
+---
+
+## 23. C-07：图集定义按 stack 合并 —— B4 第 5 步
+
+### 23.1 源码依据（先确认方向，再写代码）
+
+`SpriteSourceList.load` 把**所有包**的同名 `atlases/*.json` 拼起来：
+
+```java
+for (Resource entry : resourceManager.getResourceStack(resourceId)) {
+    loaders.addAll(SpriteSources.FILE_CODEC.parse(contents).getOrThrow());
+}
+```
+
+关键在于 `getResourceStack` 返回的顺序。`FallbackResourceManager.getResourceStack` 的收集循环是
+`for (i = fallbacks.size()-1; i >= 0; i--) result.add(...)`，最后一行是
+
+```java
+return Lists.reverse(result);
+```
+
+而 `fallbacks` 的末尾是最高优先级（`getResource` 同样自末尾向前找第一个命中）。所以**返回顺序 =
+低 → 高优先级**，`loaders.addAll` 也是低 → 高。这与 `SpriteSourceList.Output.add` 的"后来的
+替换先前的"一致：高优先级包的 sprite 覆盖低优先级包的。
+
+### 23.2 问题
+
+`load_atlas_definition` 只读**最高优先级包**的那一份文件：
+
+```rust
+let bytes = self.open_asset_raw(&path)?.ok_or_else(...)?;   // 只返回栈顶命中的那一份
+```
+
+于是"只追加自己的 sprite、不重复原版列表"的材质包会把整个原版目录源顶掉——原版方块全变
+fallback。实测（红态）只有 `["minecraft:custom/glow"]`，`block/stone`、`block/dirt` 全丢。
+
+### 23.3 改法
+
+按 `packs()`（高→低）`.rev()` 遍历，即低→高；每个包里如果有该文件就读、解析、把 `sources`
+追加到累积结果；一个包都没有时仍返回 `NotFound`（调用方据此回退到内置默认定义）。
+解析失败时错误信息带上包名与路径（不静默丢弃——MC 会记日志丢弃该文件，我们选择让调用方
+看到；`load_atlas_category` 的回退行为不变）。
+
+### 23.4 测试（7 个，红→绿）
+
+`crates/mtk-resource/tests/test_atlas_definition_merge.rs`：
+
+| 测试 | 覆盖 |
+|---|---|
+| `a_pack_that_only_adds_sprites_keeps_the_lower_pack_sources` | 增量包不顶掉原版目录源（红态：`["minecraft:custom/glow"]`） |
+| `sources_are_concatenated_from_low_to_high_priority` | 合并顺序 = 低→高 |
+| `a_higher_pack_filter_can_remove_a_lower_pack_sprite` | 高优先级包的 filter 能删掉低优先级包的 sprite（C-02 的位置语义在合并后仍然成立） |
+| `three_packs_all_contribute` | 三个包各贡献一份 |
+| `a_missing_definition_is_reported` | 谁都没有 → `NotFound` |
+| `a_broken_definition_in_one_pack_is_an_error_not_a_silent_skip` | 坏 JSON → 报错（含包名） |
+| `a_single_pack_behaves_as_before` | 单包行为不变 |
+
+真资产复核：jar + Mojang 资源目录 + SPBR 三者都带 `atlases/*.json`，合并后仍是 17 个图集块、
+18878 个模型（重复 source 由收集阶段的 `registered_sprites` 去重），`mtk bench world` 与确定性
+测试均不变。
+
+### 23.5 顺带发现（C-08）
+
+1. `load_atlas_category` 仍会把"atlas 定义解析失败"静默替换成内置默认（`unwrap_or_else`），
+   连一条日志都没有；
+2. MC 的 `getResourceStack` 还会尊重 pack.mcmeta 的 `filter.block`（`PackEntry.isFiltered`），
+   我们完全没实现——被材质包过滤掉的资源在我们这里依然可见。
+
+两项都记入 backlog C-08（P2），不在本项处理。

@@ -134,19 +134,51 @@ impl ResourcePackStack {
         results
     }
 
-    /// Read and parse an atlas definition from `assets/<namespace>/atlases/<name>.json`.
+    /// Read and merge `assets/<namespace>/atlases/<name>.json` from every pack in the stack.
+    ///
+    /// Minecraft's `SpriteSourceList.load` iterates `resourceManager.getResourceStack(id)` and
+    /// appends each file's `sources`, so the lists are concatenated from the lowest priority pack
+    /// to the highest. A pack may therefore add sprites without repeating the vanilla list, and a
+    /// higher pack's `filter` can remove what a lower pack contributed.
+    ///
+    /// A pack that ships an unparseable definition is reported instead of being dropped: silently
+    /// skipping it would render the pack's additions as missing textures with no hint why.
     pub fn load_atlas_definition(
         &self,
         location: &ResourceLocation,
     ) -> Result<AtlasDefinition, ResourceError> {
         let path = location.to_asset_path("atlases", "json");
-        let bytes = self.open_asset_raw(&path)?.ok_or_else(|| {
-            ResourceError::NotFound(format!("Atlas definition not found: {}", path))
-        })?;
-        let json_str = std::str::from_utf8(&bytes).map_err(|e| {
-            ResourceError::AtlasConfig(format!("Invalid UTF-8 in atlas JSON: {}", e))
-        })?;
-        AtlasDefinition::parse_json(json_str).map_err(ResourceError::from)
+
+        let mut merged: Option<AtlasDefinition> = None;
+        // `packs()` is highest priority first; Minecraft appends from lowest to highest.
+        for pack in self.packs.iter().rev() {
+            let Some(bytes) = pack.open(&path)? else {
+                continue;
+            };
+            let json_str = std::str::from_utf8(&bytes).map_err(|e| {
+                ResourceError::AtlasConfig(format!(
+                    "Invalid UTF-8 in atlas JSON '{}' from pack '{}': {}",
+                    path,
+                    pack.name(),
+                    e
+                ))
+            })?;
+            let definition = AtlasDefinition::parse_json(json_str).map_err(|e| {
+                ResourceError::AtlasConfig(format!(
+                    "Invalid atlas JSON '{}' from pack '{}': {}",
+                    path,
+                    pack.name(),
+                    e
+                ))
+            })?;
+
+            match merged.as_mut() {
+                Some(accumulated) => accumulated.sources.extend(definition.sources),
+                None => merged = Some(definition),
+            }
+        }
+
+        merged.ok_or_else(|| ResourceError::NotFound(format!("Atlas definition not found: {path}")))
     }
 
     /// Read and parse an atlas definition for a category, falling back to standard default if not found.
