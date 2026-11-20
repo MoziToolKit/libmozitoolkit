@@ -18,6 +18,9 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 rayon = { workspace = true, optional = true }
 
+[dev-dependencies]
+mtk-testkit = { workspace = true }
+
 [features]
 default = ["parallel"]
 parallel = ["dep:rayon"]

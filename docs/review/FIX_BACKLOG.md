@@ -52,6 +52,7 @@ blender --background --python ../MoziToolKit/tests/run_tests.py -- -rs -q
 | **K-02** | 资产缓存读取校验 `manifest.format_version`（不只是 64B header） | `libmtk/src/package/source.rs:100-110`、`prebake/reader.rs:55-69` |
 | **V-03 / V-04 / V-05 / V-06** | dirty 合并、biome-only 置脏、26 邻居、`(cy>>2).min(3)` | `mtk-voxel/src/world/sync.rs`、`storage/world/container.rs`、`mesher/shading/resolver.rs:398`；测试 `sync_keeps_dirt_queued_before_the_sync`、`biome_only_change_still_marks_the_section_dirty`、`corner_edit_dirties_every_diagonal_neighbour`、`test_top_corner_samples_the_highest_quart_layer` |
 | **T-01（Rust/Python）** | 资产发现补 `../Minecraft_Source` / `../Minecraft_Unpacked`；存档补 `../mtk-save-world`；跳过统一经 `mtk_testkit::skip()` 打印 `SKIP`，`MTK_REQUIRE_REAL_ASSETS=1` 时失败；CI 在真包齐备时自动开启该门禁 | `crates/mtk-testkit/src/lib.rs`、`../MoziToolKit/tests/_assets.py`、`.github/workflows/ci.yml` |
+| **C-06** | 生产配置收敛到 `AtlasBuilderConfig::production()`：`padding = max(2, 2^mip)`（mip 0 时为 2），`default()` 也走生产策略；预烘/场景导出/CTM/atlas CLI/`PyAtlasBuilder` 全部改用；缓存格式 v11→12、场景包 v3→v4 | `mtk-texture/src/atlas/builder/types.rs`、`tests/test_atlas_padding.rs`（3 个新测试）、`libmtk/src/scene/exporter/tests/basic.rs`（改为像素级 crop 方向断言）；审计 §18 |
 | **quart 契约** | `SectionBiomes::is_fully_assigned()` 现在把单元素调色板视为权威（`uniform`/2D 存档/单 biome 流），不再把"合法的单 biome 段"误判成占位泄漏 | `mtk-voxel/src/storage/biome.rs` + 重新启用的 `mtk-sync/tests/test_save_alignment.rs::test_real_save_import_and_live_sync_align`（此前一直被跳过） |
 
 ### D1–D5 期间落地、本轮未逐行复核（按记录保留，不算 OPEN）
@@ -113,7 +114,6 @@ P0 = 崩溃/数据错/安全；P1 = 用户可见错误或确定性；P2 = 边界
 | **C-03** | P2 | `collector.rs:13-46` + `ctm/solver.rs:136` | CTM 同优先级排序依赖文件枚举序 | 稳定排序（pack 序 + 文件名） | 打乱目录枚举起始位置后结果不变 |
 | **C-04** | P2 | `libmtk/src/prebake/engine.rs:204-206` | 请求 `blocks` 分类仍烘全部图集 | 按分类过滤 | 只请求 blocks 时 manifest 的 atlas 分类只有 blocks |
 | **C-05** | P2 | `libmtk/src/prebake/engine.rs:308-311` | 进度 total 与 `inc()` 次数不同源 → 百分比 >100% | 用同一计数源 | 进度回调断言 `current <= total` |
-| **C-06** | P1 | `libmtk/src/prebake/engine.rs:247-251`、`scene/exporter/builder.rs:99-103`、`mtk-texture/src/atlas/builder/types.rs:9-18` | 生产写死 `padding: 0, mip_level: 0`，UV 正好落在精灵边界 → HD 包/mipmap 渗色 | 打开 `padding = 2..4`（且 `padding >= 2^mip`）**或** UV 内缩半纹素 | 图集边界像素不渗色（读相邻精灵边缘像素断言） |
 
 ### B-缓存与确定性
 

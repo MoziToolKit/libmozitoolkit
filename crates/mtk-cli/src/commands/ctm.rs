@@ -151,12 +151,7 @@ pub fn run_ctm_test(args: CtmTestArgs) -> Result<(), Box<dyn std::error::Error>>
     );
 
     println!("Baking CTM Atlas...");
-    let builder = AtlasBuilder::new(AtlasBuilderConfig {
-        max_width: 4096,
-        max_height: 4096,
-        mip_level: 0,
-        padding: 0,
-    });
+    let builder = AtlasBuilder::new(AtlasBuilderConfig::production(4096, 4096, 0));
 
     let t_bake = Instant::now();
     let baked = builder.build_from_sprites(decoded)?;

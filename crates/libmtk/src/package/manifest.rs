@@ -13,15 +13,18 @@ use serde::{Deserialize, Serialize};
 ///
 /// Bump whenever the baked payloads change meaning (geometry, atlas layout, manifest layout): old
 /// packages are rejected rather than served.
+/// v12: every atlas sprite is padded (replicated edges) so bilinear/mip taps cannot read a
+///      neighbour sprite; sprite rects and UVs are unchanged.
 /// v11: unified manifest (scene fields are present but defaulted).
 /// v10: chest up/down faces carry the corrected v orientation; copper/ender sheet selection.
-pub const ASSET_CACHE_FORMAT_VERSION: u32 = 11;
+pub const ASSET_CACHE_FORMAT_VERSION: u32 = 12;
 
 /// Payload revision of a scene interchange package.
 ///
+/// v4: every atlas sprite is padded (replicated edges), matching asset-cache v12.
 /// v3: unified manifest; the continuous visual entity payload is gone.
 /// v2: removed the continuous visual entity payload.
-pub const SCENE_PACKAGE_FORMAT_VERSION: u32 = 3;
+pub const SCENE_PACKAGE_FORMAT_VERSION: u32 = 4;
 
 /// Capability flags a package may advertise.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

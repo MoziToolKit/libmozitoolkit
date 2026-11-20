@@ -96,12 +96,11 @@ pub fn build_scene_atlas_and_models(
     let mut mini_atlas_textures = Vec::new();
     let mut first_chunk_dims = [0u32, 0u32];
 
-    let atlas_cfg = AtlasBuilderConfig {
-        max_width: config.max_atlas_size,
-        max_height: config.max_atlas_size,
-        mip_level: config.mip_level,
-        padding: 0,
-    };
+    let atlas_cfg = AtlasBuilderConfig::production(
+        config.max_atlas_size,
+        config.max_atlas_size,
+        config.mip_level,
+    );
     let atlas_builder = AtlasBuilder::new(atlas_cfg);
 
     let decoded_sprites: Vec<DecodedSprite> = crops.iter().map(|c| c.sprite.clone()).collect();

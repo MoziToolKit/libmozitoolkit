@@ -136,18 +136,22 @@ fn test_uv_coordinate_formula_orientation() {
 
     let loc_stone = AtlasSpriteLocation {
         chunk_id: 0,
-        pixel_rect: [0, 0, 16, 16],
+        pixel_rect: [0, 16, 16, 16],
         ..Default::default()
     };
     source_map
         .sprites
         .insert(ResourceLocation::new("minecraft", "block/stone"), loc_stone);
 
+    // Vertical asymmetry: a crop that flipped rows would pick the red half instead of the blue.
+    let mut sheet = RgbaBuffer::solid(32, 32, 200, 40, 40, 255);
+    for y in 16..32 {
+        for x in 0..32 {
+            sheet.set_pixel(x, y, [40, 40, 200, 255]);
+        }
+    }
     let mut source_images = HashMap::new();
-    source_images.insert(
-        "blocks_chunk_001.png".to_string(),
-        RgbaBuffer::solid(32, 32, 100, 100, 100, 255),
-    );
+    source_images.insert("blocks_chunk_001.png".to_string(), sheet);
 
     let mut source_models = BakedModelDatabase::new();
     source_models.insert(
@@ -171,20 +175,63 @@ fn test_uv_coordinate_formula_orientation() {
     })
     .expect("Build scene interchange");
 
+    let chunk = result
+        .mini_atlas_map
+        .chunks
+        .iter()
+        .find(|chunk| chunk.chunk_id == 0)
+        .expect("mini atlas chunk");
+    let (cw, ch) = (chunk.width as f32, chunk.height as f32);
+    let padding = mtk_texture::AtlasBuilderConfig::padding_for_mip(config.mip_level);
+
     let fallback_loc = result.mini_atlas_map.lookup_str("mozi:fallback").unwrap();
-    assert_eq!(fallback_loc.frame_0_uv_bounds[0], 0.0);
-    assert_eq!(fallback_loc.frame_0_uv_bounds[1], 0.0);
-    assert_eq!(fallback_loc.frame_0_uv_bounds[2], 0.5);
-    assert_eq!(fallback_loc.frame_0_uv_bounds[3], 1.0);
+    // The fallback sprite is pinned to the first slot, so its rect starts at the padding offset.
+    assert_eq!(fallback_loc.pixel_rect[0], padding);
+    assert_eq!(fallback_loc.pixel_rect[1], padding);
 
     let loc = result
         .mini_atlas_map
         .lookup_str("minecraft:block/stone")
         .unwrap();
-    assert_eq!(loc.frame_0_uv_bounds[0], 0.5);
-    assert_eq!(loc.frame_0_uv_bounds[1], 0.0);
-    assert_eq!(loc.frame_0_uv_bounds[2], 1.0);
-    assert_eq!(loc.frame_0_uv_bounds[3], 1.0);
+    assert_ne!(
+        loc.pixel_rect, fallback_loc.pixel_rect,
+        "the two sprites must not share a slot"
+    );
+
+    for loc in [&fallback_loc, &loc] {
+        let [x, y, w, h] = loc.pixel_rect;
+        let [u_min, v_min, u_max, v_max] = loc.frame_0_uv_bounds;
+        // Rect -> UV with v flipped: the sprite's top row (smallest y) is the largest v.
+        assert!((u_min - x as f32 / cw).abs() < 1e-6, "u_min {u_min}");
+        assert!((u_max - (x + w) as f32 / cw).abs() < 1e-6, "u_max {u_max}");
+        assert!(
+            (v_max - (1.0 - y as f32 / ch)).abs() < 1e-6,
+            "v_max {v_max}"
+        );
+        assert!(
+            (v_min - (1.0 - (y + h) as f32 / ch)).abs() < 1e-6,
+            "v_min {v_min}"
+        );
+    }
+
+    // The stone source rect sits in the lower (blue) half of the sheet; a flipped crop would show
+    // the red half. This is the only assertion that actually proves the orientation end to end.
+    let sheet_png = result
+        .mini_atlas_textures
+        .iter()
+        .find(|(name, _)| name.starts_with("scene_chunk_001") && name.ends_with(".png"))
+        .expect("mini atlas sheet");
+    let mini_sheet = RgbaBuffer::from_png_bytes(&sheet_png.1).expect("decode mini atlas");
+    let [sx, sy, sw, sh] = loc.pixel_rect;
+    for py in sy..sy + sh {
+        for px in sx..sx + sw {
+            assert_eq!(
+                mini_sheet.get_pixel(px, py),
+                [40, 40, 200, 255],
+                "mini atlas texel ({px}, {py}) did not come from the source sprite rect"
+            );
+        }
+    }
 }
 
 #[test]

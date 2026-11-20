@@ -141,6 +141,7 @@ impl AtlasAddressMap {
 ---
 
 ### 2.3 图集构建器与配置 (`atlas/builder/`)
+
 ```rust
 pub struct AtlasBuilderConfig {
     pub max_width: u32,
@@ -148,7 +149,24 @@ pub struct AtlasBuilderConfig {
     pub mip_level: u32,
     pub padding: u32,
 }
+
+impl AtlasBuilderConfig {
+    /// 每个 mip 级别一个纹素，且至少 2 个纹素（双线性采样在 UV 边界会探到半个纹素之外）。
+    pub fn padding_for_mip(mip_level: u32) -> u32;
+    /// 生产配置：`padding = padding_for_mip(mip_level)`。预烘缓存与场景导出都从这里取。
+    pub fn production(max_width: u32, max_height: u32, mip_level: u32) -> Self;
+}
 ```
+
+**为什么必须有 padding**：精灵的 UV 矩形正好落在纹理边界上，双线性过滤（以及 mip 采样）会读到矩形外的
+纹素。没有 padding 时读到的是**相邻精灵**的颜色，表现为方块边缘的细线/渗色，HD 材质包尤其明显。
+padding 区域由 `apply_edge_clamping_padding` 用精灵自身边缘像素复制填充，因此 UV 无需内缩、精灵尺寸不变。
+
+实测代价（原版 + SPBR，5734 个精灵，4096² 图集）：chunk 数 17 → 17，图集面积 37.7 → 43.8 MiB，
+全量预编译 2016 → 2066 ms（+2.5%），`.mtkcache` 体积反而略小（重复边缘压缩率更高）。
+
+`AtlasBuilderConfig::default()` 等价于 `production(4096, 4096, 0)`——`padding: 0` 不再是默认值，
+只有显式构造才会得到无 padding 的布局（仅用于需要精确布局的测试）。
 
 ---
 
@@ -216,12 +234,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stack = ResourcePackStack::new();
     // 载入你的材质包...
 
-    let builder = AtlasBuilder::new(AtlasBuilderConfig {
-        max_width: 2048,
-        max_height: 2048,
-        mip_level: 0,
-        padding: 1, // 启用 1px 边缘抗渗色填充
-    });
+    // 生产配置：padding 自动取 padding_for_mip(mip_level)，mip 0 时为 2 个纹素
+    let builder = AtlasBuilder::new(AtlasBuilderConfig::production(2048, 2048, 0));
 
     // 烘焙 Blocks 类别图集
     let baked = builder.build_category(&stack, &AtlasCategory::Blocks)?;

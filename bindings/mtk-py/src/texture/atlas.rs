@@ -238,15 +238,16 @@ pub struct PyAtlasBuilder {
 
 #[pymethods]
 impl PyAtlasBuilder {
+    /// `padding` defaults to the production policy (two texels, or one per mip level when
+    /// larger). Pass an explicit value only to reproduce a legacy layout.
     #[new]
-    #[pyo3(signature = (max_width=4096, max_height=4096, mip_level=0, padding=0))]
-    pub fn new(max_width: u32, max_height: u32, mip_level: u32, padding: u32) -> Self {
+    #[pyo3(signature = (max_width=4096, max_height=4096, mip_level=0, padding=None))]
+    pub fn new(max_width: u32, max_height: u32, mip_level: u32, padding: Option<u32>) -> Self {
+        let config = AtlasBuilderConfig::production(max_width, max_height, mip_level);
         Self {
             config: AtlasBuilderConfig {
-                max_width,
-                max_height,
-                mip_level,
-                padding,
+                padding: padding.unwrap_or(config.padding),
+                ..config
             },
         }
     }

@@ -1033,3 +1033,82 @@ atlas_changed && (原有 atlas 存在 || 本次真的新增了动态精灵)
 | 3. `net` feature 默认关 + 清理空 `parallel` | ✅ §15 |
 | 4. 两处 `content_entries` 合一 | ✅ §16 |
 | 5. 依赖白名单门禁 | ✅ 本节 |
+
+---
+
+## 18. C-06：图集不渗色（padding 策略收敛）—— B4 第 1 步
+
+### 18.1 问题
+
+三处生产/诊断代码都写死 `padding: 0`（`prebake/engine.rs`、`scene/exporter/builder.rs`、
+`mtk-cli/{atlas,ctm}.rs`），而 `AtlasBuilderConfig { padding }` 的实现其实**早就支持** padding：
+slot 尺寸 = `sprite + 2*padding`、内容画在 `slot + padding`、外圈用
+`apply_edge_clamping_padding` 复制精灵自身边缘。也就是说这套机制从没在生产里跑过——
+`padding` 只有单元测试碰过。
+
+后果：每个精灵的 UV 矩形正好落在纹理边界（`u_min = x/W`），Blender 双线性采样在边界探到
+**相邻精灵**的纹素；`mip_level > 0` 时更糟。HD 材质包上方块边缘的细线就是这个。
+
+### 18.2 改法
+
+- `AtlasBuilderConfig::padding_for_mip(mip)` = `max(2, 1<<mip)`（`checked_shl`，不静默欠配）；
+- `AtlasBuilderConfig::production(max_w, max_h, mip)` —— 唯一的生产入口，`padding` 由 mip 推出；
+- `Default for AtlasBuilderConfig` 也走 `production(4096, 4096, 0)`：`padding: 0` 不再是能
+  "顺手拿到"的默认值，只有显式构造（测试固定布局）才会无 padding；
+- 5 个调用点收敛（预烘引擎、场景导出、`mtk atlas`×2、`mtk ctm`）；`PyAtlasBuilder` 的
+  `padding` 参数改为 `Option`，缺省取生产策略；
+- 缓存格式 `ASSET_CACHE_FORMAT_VERSION` 11→12、`SCENE_PACKAGE_FORMAT_VERSION` 3→4：
+  指纹只覆盖资源包内容，不覆盖烘焙配置，不 bump 就会把旧的无 padding 图集当有效缓存继续用。
+
+UV 矩形**没有**改：`uv_bounds`/`pixel_rect` 本来就取 `inner`（不含 padding），所以网格 UV、
+`pixel_rect`、Blender 侧材质绑定全部无需变动。
+
+### 18.3 代价（实测，非估算）
+
+图集层（`mtk-texture` 探针，13 个标准类别、5734 精灵、4096²）：
+
+| padding | chunk 数 | 图集面积 | 烘焙 |
+|---|---|---|---|
+| 0 | 17 | 37.7 MiB | 190 ms |
+| 1 | 17 | 39.8 MiB | 194 ms |
+| **2（选定）** | **17** | **43.8 MiB** | **216 ms** |
+| 4 | 17 | 47.9 MiB | 223 ms |
+
+全量预编译（真实 jar + Mojang 资源 + SPBR，best of 3，`precompile_all_assets`）：
+
+| | 耗时 | `.mtkcache` 字节 |
+|---|---|---|
+| padding 0 | 2016 ms | 24,329,279 |
+| padding 2 | **2066 ms (+2.5%)** | **24,309,310 (−20 KB)** |
+
+padding 让边缘整行整列重复，PNG/压缩反而更好，所以包体略小；chunk 数不变，宿主的纹理
+数量与显存分配不变（+6 MiB 图集面积，远低于 100 MB 预算）。
+运行时无变化：`mtk bench world`（624 sections / 335,641 quads / 8 线程）41.5 ms → 8.08M quads/s，
+与改动前的 40.7 ms 同噪声区间。
+
+### 18.4 测试（先红后绿）
+
+`crates/mtk-texture/tests/test_atlas_padding.rs`：
+
+1. `production_padding_covers_the_mip_level` —— padding ≥ 2^mip（mip 0..=8）；
+2. `neighbours_never_touch_a_sprite_edge` —— 两个纯色精灵，逐个检查 slot 内 padding 环的每个
+   像素都等于该精灵自身的颜色（padding 0 时这里读到的是邻居颜色）；
+3. `uv_bounds_exclude_the_padding` —— uv 矩形严格等于 `pixel_rect`，padding 不进 rect。
+
+红态证据：`production()` 先按原值（`padding: 0`）落地后运行，2 个断言失败；改成
+`padding_for_mip` 后全绿。
+
+顺带修了一个"用浮点数假装在验证方向"的测试：`libmtk` 的
+`test_uv_coordinate_formula_orientation` 原先断言 `0.0/0.5/1.0` 这些硬编码分数（等价于把
+padding 0 的布局抄了一遍）。现在改为：源图上半红下半蓝、精灵取下半区，断言迷你图集里该
+精灵矩形内**每个像素**都是蓝色（翻转就会变红），再断言 uv ↔ pixel_rect 的 v 翻转公式。
+
+### 18.5 连带的消费端改动
+
+`../MoziToolKit/tests/test_scene_interchange.py` 断言场景包 `format_version == 3` → `4`
+（与上次 2→3 同样的耦合方式）。
+
+### 18.6 B4 剩余
+
+2. K-04：`AtlasAddressMap` 的 `HashMap` 进 serde → 同输入两次烘焙字节不同；
+3. K-06 缓存读错误的回退、C-01 `.mcmeta.frames`、C-02 filter 顺序、biome 一致性测试等。

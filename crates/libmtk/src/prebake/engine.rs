@@ -244,12 +244,8 @@ fn precompile_all_assets_inner(
                 }
             }
 
-            let atlas_cfg = AtlasBuilderConfig {
-                max_width: config.max_atlas_width,
-                max_height: config.max_atlas_height,
-                mip_level: 0,
-                padding: 0,
-            };
+            let atlas_cfg =
+                AtlasBuilderConfig::production(config.max_atlas_width, config.max_atlas_height, 0);
             let atlas_builder = AtlasBuilder::new(atlas_cfg);
             let mut baked_atlas = p.measure("atlas_stitch", "bake", |_| {
                 atlas_builder.build_categories(stack, &def_list)

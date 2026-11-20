@@ -9,14 +9,38 @@ pub struct AtlasBuilderConfig {
     pub padding: u32,
 }
 
-impl Default for AtlasBuilderConfig {
-    fn default() -> Self {
+impl AtlasBuilderConfig {
+    /// Padding (in texels) a sprite needs so its edge texels cannot be sampled from a neighbour.
+    ///
+    /// One texel per mip level is the minimum for trilinear sampling, and two texels is the floor
+    /// for plain bilinear filtering: at mip level 0 a bilinear tap on the sprite's UV boundary
+    /// reaches half a texel outside the rect, which lands on the adjacent sprite when there is no
+    /// padding.
+    pub fn padding_for_mip(mip_level: u32) -> u32 {
+        // Saturate instead of clamping: an absurd mip level must not silently under-pad.
+        1u32.checked_shl(mip_level).unwrap_or(u32::MAX).max(2)
+    }
+
+    /// The configuration production bakes with (prebake cache and scene exporter).
+    ///
+    /// Single entry point on purpose: the two call sites used to hardcode `padding: 0`, so every
+    /// sprite's UV rect touched its neighbour's texels and HD packs bled at block edges. Measured
+    /// cost on vanilla + SPBR (5734 sprites, 4096² sheets): same 17 chunks, 37.7 → 43.8 MiB.
+    pub fn production(max_width: u32, max_height: u32, mip_level: u32) -> Self {
         Self {
-            max_width: 4096,
-            max_height: 4096,
-            mip_level: 0,
-            padding: 0,
+            max_width,
+            max_height,
+            mip_level,
+            padding: Self::padding_for_mip(mip_level),
         }
+    }
+}
+
+impl Default for AtlasBuilderConfig {
+    /// Same as [`Self::production`]: leaving `padding: 0` reachable through `default()` made the
+    /// bleeding fix opt-in, which is how it was missed for so long.
+    fn default() -> Self {
+        Self::production(4096, 4096, 0)
     }
 }
 

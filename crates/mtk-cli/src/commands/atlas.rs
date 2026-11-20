@@ -86,12 +86,11 @@ fn run_bake_vanilla(args: AtlasBakeVanillaArgs) -> Result<(), Box<dyn std::error
         t0.elapsed()
     );
 
-    let builder = AtlasBuilder::new(AtlasBuilderConfig {
-        max_width: args.max_size,
-        max_height: args.max_size,
-        mip_level: 0,
-        padding: 0,
-    });
+    let builder = AtlasBuilder::new(AtlasBuilderConfig::production(
+        args.max_size,
+        args.max_size,
+        0,
+    ));
 
     let t_bake = Instant::now();
     let baked = builder.build(&stack, &definition)?;
@@ -201,12 +200,11 @@ fn run_bake_all(args: AtlasBakeAllArgs) -> Result<(), Box<dyn std::error::Error>
         AtlasCategory::Entities,
     ];
 
-    let builder = AtlasBuilder::new(AtlasBuilderConfig {
-        max_width: args.max_size,
-        max_height: args.max_size,
-        mip_level: 0,
-        padding: 0,
-    });
+    let builder = AtlasBuilder::new(AtlasBuilderConfig::production(
+        args.max_size,
+        args.max_size,
+        0,
+    ));
 
     let mut global_address_map = AtlasAddressMap::new();
     let mut total_static_chunks = 0;
