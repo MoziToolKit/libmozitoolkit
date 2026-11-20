@@ -81,18 +81,20 @@ impl MeshData {
         #[cfg(feature = "parallel")]
         {
             use rayon::prelude::*;
-            self.indices.par_iter_mut().for_each(|idx| {
-                if let Some(&new_i) = remap.get(*idx as usize) {
-                    *idx = new_i;
-                }
-            });
-            if let Some(ref mut quads) = self.quad_indices {
-                quads.par_iter_mut().for_each(|idx| {
+            crate::threading::install(|| {
+                self.indices.par_iter_mut().for_each(|idx| {
                     if let Some(&new_i) = remap.get(*idx as usize) {
                         *idx = new_i;
                     }
                 });
-            }
+                if let Some(ref mut quads) = self.quad_indices {
+                    quads.par_iter_mut().for_each(|idx| {
+                        if let Some(&new_i) = remap.get(*idx as usize) {
+                            *idx = new_i;
+                        }
+                    });
+                }
+            });
         }
 
         #[cfg(not(feature = "parallel"))]

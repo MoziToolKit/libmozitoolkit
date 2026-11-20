@@ -26,7 +26,7 @@ LIB_ROOT = Path(__file__).resolve().parents[1]
 
 # Explicitly permitted `pub mod` declarations in crate roots:
 ALLOWED_PUB_MOD = {
-    "crates/mtk-core/src/lib.rs": {"constants"},
+    "crates/mtk-core/src/lib.rs": {"constants", "threading"},
     "crates/mtk-resource/src/lib.rs": {"banner", "skin"},
     "crates/mtk-sync/src/lib.rs": {"protocol", "server"},
 }

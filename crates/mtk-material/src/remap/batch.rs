@@ -330,24 +330,26 @@ fn remap_mesh_multi_uvs_impl(
         }
 
         #[cfg(feature = "parallel")]
-        let res: Vec<FaceOut> = (0..face_count)
-            .into_par_iter()
-            .zip(src_chunks.into_par_iter())
-            .zip(atlas_chunks.into_par_iter())
-            .zip(local_chunks.into_par_iter())
-            .map(|(((i, src), atlas_dst), local_dst)| {
-                remap_single_face_multi_uvs(
-                    get_mat(i),
-                    src,
-                    atlas_dst,
-                    local_dst,
-                    address_map,
-                    aliases,
-                    grid_atlas_spec,
-                    enable_animated_textures,
-                )
-            })
-            .collect();
+        let res: Vec<FaceOut> = mtk_core::threading::install(|| {
+            (0..face_count)
+                .into_par_iter()
+                .zip(src_chunks.into_par_iter())
+                .zip(atlas_chunks.into_par_iter())
+                .zip(local_chunks.into_par_iter())
+                .map(|(((i, src), atlas_dst), local_dst)| {
+                    remap_single_face_multi_uvs(
+                        get_mat(i),
+                        src,
+                        atlas_dst,
+                        local_dst,
+                        address_map,
+                        aliases,
+                        grid_atlas_spec,
+                        enable_animated_textures,
+                    )
+                })
+                .collect()
+        });
 
         #[cfg(not(feature = "parallel"))]
         let res: Vec<FaceOut> = (0..face_count)

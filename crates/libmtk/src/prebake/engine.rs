@@ -66,7 +66,7 @@ pub fn precompile_all_assets_with_progress(
     progress_callback: Option<ProgressCallback>,
 ) -> Result<PrecompileResult, MtkError> {
     let base_path = cache_dir_or_file.as_ref();
-    mtk_core::constants::concurrency::execute_parallel(config.num_threads, || {
+    mtk_core::threading::execute_parallel(config.num_threads, || {
         precompile_all_assets_inner(stack, base_path, config, progress_callback)
     })
     .map_err(MtkError::ThreadPool)?

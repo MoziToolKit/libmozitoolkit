@@ -122,11 +122,17 @@ bindings/
 它只在"使用点"报错，而不是"函数里出现过 detach 就放行"——这正是旧实现漏掉的那类 bug
 （同一函数里网格阶段 detach 了，加载阶段没有）。
 
-### 4.2 线程预算
+### 4.2 线程预算与池所有权
 
-- 默认：`max(1, available_parallelism() - 2)`。用户机器上通常还有浏览器/后台任务，
+策略与池都在 `mtk_core::threading` 一处：
+
+- **默认**：`max(1, available_parallelism() - 2)`。用户机器上通常还有浏览器/后台任务，
   给宿主主线程和系统留两个核；
-- 用户可在插件偏好里显式指定线程数，显式值优先；
-- 规划中（T-2）：`libmtk_py.set_thread_count(n)` 一次设定进程级策略，让所有 rayon 站点
-  （存档解码、图集烘焙、材质重映射、预烘）都听同一个值，而不是像现在只有 5 个
-  `execute_parallel` 站点生效。
+- **显式覆盖**：`libmtk_py.set_thread_count(n)`（`0` = 恢复默认），或插件偏好
+  `thread_count`。一次设定对**所有**并行入口生效（网格化、存档解码、图集烘焙、
+  材质重映射、预烘），不再有"只有部分站点听 num_threads"的情况；
+- **池复用**：`threading::install(…)` / `install_with(Some(n), …)` 按线程数缓存
+  `rayon::ThreadPool`（最多 4 个），不再每次调用 `ThreadPoolBuilder::build()`；
+  在已有并行区域内嵌套调用会直接内联执行，避免 `n × n` 线程爆炸；
+- **探测**：`libmtk_py.threading_info()` 返回 `{workers, override, available}`，宿主面板
+  与测试用它确认真正生效的值。

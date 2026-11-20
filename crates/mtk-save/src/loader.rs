@@ -246,10 +246,12 @@ impl SaveLoader {
         //    order-independent (chunk sections occupy disjoint coordinates).
         let decoded: Result<Vec<Vec<(IVec3, SectionStorage)>>, SaveError> = {
             use rayon::prelude::*;
-            plans
-                .par_iter()
-                .map(|plan| decode_region(plan, min_sec_y, max_sec_y, true_min, true_max))
-                .collect()
+            mtk_core::threading::install(|| {
+                plans
+                    .par_iter()
+                    .map(|plan| decode_region(plan, min_sec_y, max_sec_y, true_min, true_max))
+                    .collect()
+            })
         };
 
         let mut loaded_sections = 0usize;

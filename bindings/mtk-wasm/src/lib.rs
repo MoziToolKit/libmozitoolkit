@@ -7,7 +7,7 @@
 use js_sys::{Float32Array, Uint16Array, Uint32Array};
 use wasm_bindgen::prelude::*;
 
-use mtk_core::constants::concurrency;
+use mtk_core::threading;
 use mtk_core::Direction;
 use mtk_core::FaceAttributes;
 use mtk_core::MeshData;
@@ -34,13 +34,13 @@ pub fn version() -> String {
 /// Injects or configures the hardware concurrency count (e.g. from `navigator.hardwareConcurrency`).
 #[wasm_bindgen]
 pub fn set_hardware_concurrency(count: usize) {
-    concurrency::set_hardware_concurrency(count);
+    threading::set_hardware_concurrency(count);
 }
 
 /// Returns the detected or configured hardware concurrency count.
 #[wasm_bindgen]
 pub fn get_hardware_concurrency() -> usize {
-    concurrency::get_safe_hardware_concurrency()
+    threading::get_safe_hardware_concurrency()
 }
 
 // =============================================================================

@@ -154,10 +154,12 @@ pub(crate) fn prebake_all_models_with_progress(
     };
 
     #[cfg(feature = "parallel")]
-    let resolve_results: Vec<ResolveOutcome> = model_cache
-        .par_iter()
-        .map(|(id, model)| resolve_one(id, model))
-        .collect();
+    let resolve_results: Vec<ResolveOutcome> = mtk_core::threading::install(|| {
+        model_cache
+            .par_iter()
+            .map(|(id, model)| resolve_one(id, model))
+            .collect()
+    });
 
     #[cfg(not(feature = "parallel"))]
     let resolve_results: Vec<ResolveOutcome> = model_cache
@@ -205,54 +207,57 @@ pub(crate) fn prebake_all_models_with_progress(
     let baked_results: Vec<(
         Vec<(String, mtk_model::BakedVariantGroup)>,
         Vec<(String, &'static str)>,
-    )> = blockstate_defs
-        .par_iter()
-        .map(|(loc, def)| {
-            let states = def.enumerate_all_states(&loc.as_string());
-            let mut local_baker =
-                ModelBaker::with_shared_resolved(std::sync::Arc::clone(&shared_resolved));
-            let mut remap_cache: HashMap<String, Option<([f32; 4], u16, u32)>> = HashMap::new();
-            let mut pairs = Vec::new();
-            let mut failures: Vec<(String, &'static str)> = Vec::new();
-            for state_str in states {
-                let baked =
-                    local_baker.bake_blockstate_variants(&state_str, Some(def), |id| get_model(id));
-                let Ok(mut group) = baked else {
-                    failures.push((state_str, "bake_failed"));
-                    continue;
-                };
-                {
-                    if let Some(atlas) = atlas_map {
-                        group.remap_to_atlas_with(|tex| {
-                            if is_dynamic_entity_texture(tex) {
-                                return None;
-                            }
-                            if let Some(hit) = remap_cache.get(tex) {
-                                *hit
-                            } else {
-                                let resolved =
-                                    MaterialResolver::resolve(tex, None, atlas).map(|(_, sp)| {
-                                        (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id)
-                                    });
-                                remap_cache.insert(tex.to_string(), resolved);
-                                resolved
-                            }
-                        });
-                        group.update_cull_meta_with_atlas(|tex| {
-                            if is_dynamic_entity_texture(tex) {
-                                return None;
-                            }
-                            atlas.resolve_texture_key(tex).map(|sp| sp.is_opaque)
-                        });
+    )> = mtk_core::threading::install(|| {
+        blockstate_defs
+            .par_iter()
+            .map(|(loc, def)| {
+                let states = def.enumerate_all_states(&loc.as_string());
+                let mut local_baker =
+                    ModelBaker::with_shared_resolved(std::sync::Arc::clone(&shared_resolved));
+                let mut remap_cache: HashMap<String, Option<([f32; 4], u16, u32)>> = HashMap::new();
+                let mut pairs = Vec::new();
+                let mut failures: Vec<(String, &'static str)> = Vec::new();
+                for state_str in states {
+                    let baked = local_baker
+                        .bake_blockstate_variants(&state_str, Some(def), |id| get_model(id));
+                    let Ok(mut group) = baked else {
+                        failures.push((state_str, "bake_failed"));
+                        continue;
+                    };
+                    {
+                        if let Some(atlas) = atlas_map {
+                            group.remap_to_atlas_with(|tex| {
+                                if is_dynamic_entity_texture(tex) {
+                                    return None;
+                                }
+                                if let Some(hit) = remap_cache.get(tex) {
+                                    *hit
+                                } else {
+                                    let resolved = MaterialResolver::resolve(tex, None, atlas).map(
+                                        |(_, sp)| {
+                                            (sp.frame_0_uv_bounds, sp.chunk_id, sp.texture_id)
+                                        },
+                                    );
+                                    remap_cache.insert(tex.to_string(), resolved);
+                                    resolved
+                                }
+                            });
+                            group.update_cull_meta_with_atlas(|tex| {
+                                if is_dynamic_entity_texture(tex) {
+                                    return None;
+                                }
+                                atlas.resolve_texture_key(tex).map(|sp| sp.is_opaque)
+                            });
+                        }
+                        group.deduplicate_faces();
+                        pairs.push((state_str, group));
                     }
-                    group.deduplicate_faces();
-                    pairs.push((state_str, group));
                 }
-            }
-            throttler.inc();
-            (pairs, failures)
-        })
-        .collect();
+                throttler.inc();
+                (pairs, failures)
+            })
+            .collect()
+    });
 
     #[cfg(not(feature = "parallel"))]
     let baked_results: Vec<(
@@ -451,7 +456,7 @@ pub(crate) fn prebake_all_models_with_progress(
     #[cfg(feature = "parallel")]
     let item_results: Vec<
         Result<(Vec<String>, mtk_model::BakedModel), (String, &'static str)>,
-    > = item_model_locs.par_iter().map(bake_single_item).collect();
+    > = mtk_core::threading::install(|| item_model_locs.par_iter().map(bake_single_item).collect());
 
     #[cfg(not(feature = "parallel"))]
     let item_results: Vec<

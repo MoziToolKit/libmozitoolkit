@@ -14,6 +14,7 @@ mod profile;
 mod progress;
 mod random;
 mod subdivide;
+pub mod threading;
 mod uv;
 
 // 1. Mesh Attributes & Schema

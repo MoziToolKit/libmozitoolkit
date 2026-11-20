@@ -6,13 +6,13 @@ use crate::error::ModelError;
 use crate::parser::blockstate::{BlockState, BlockStateDefinition};
 use crate::parser::model_json::BlockModelJson;
 
-/// Calculates a conservative default thread count for parallel operations.
+/// Default thread budget for parallel baking.
 ///
-/// Strategy: min(4, max(1, available_parallelism / 2)).
-/// This leaves at least half of the CPU cores free for Blender UI, viewport rendering,
-/// or host system responsiveness.
+/// Follows the process-wide policy (`mtk_core::threading::resolved_threads`, i.e. all cores
+/// minus two unless the host set an explicit count) instead of the old fixed cap of four, so a
+/// host that configures its budget once gets the same answer from every entry point.
 pub fn determine_conservative_threads() -> usize {
-    mtk_core::constants::concurrency::determine_conservative_threads(4)
+    mtk_core::threading::resolved_threads()
 }
 
 /// Bakes a batch of BlockStates.
@@ -79,7 +79,7 @@ where
     SF: Fn(&str) -> Option<BlockStateDefinition> + Sync + Send,
     MF: Fn(&str) -> Option<BlockModelJson> + Sync + Send,
 {
-    mtk_core::constants::concurrency::execute_parallel(num_threads, || {
+    mtk_core::threading::execute_parallel(num_threads, || {
         bake_batch(states, state_loader, model_loader)
     })
     .map_err(ModelError::ThreadPoolError)?

@@ -85,7 +85,7 @@ impl SectionMesher {
     where
         F: Fn(&str) -> ModelSource<'a> + Sync + Send,
     {
-        mtk_core::constants::concurrency::execute_parallel(num_threads, || {
+        mtk_core::threading::execute_parallel(num_threads, || {
             Self::mesh_sections_with_source_and_progress(
                 sections,
                 culler,

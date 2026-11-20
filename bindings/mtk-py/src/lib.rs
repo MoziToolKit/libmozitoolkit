@@ -117,6 +117,8 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(probe_pack, m)?)?;
     m.add_function(wrap_pyfunction!(path_provides_vanilla_client, m)?)?;
     m.add_function(wrap_pyfunction!(evaluate_cache_status, m)?)?;
+    m.add_function(wrap_pyfunction!(threading::set_thread_count, m)?)?;
+    m.add_function(wrap_pyfunction!(threading::threading_info, m)?)?;
     m.add_function(wrap_pyfunction!(
         texture::batch_analyze_transparent_faces_f32,
         m

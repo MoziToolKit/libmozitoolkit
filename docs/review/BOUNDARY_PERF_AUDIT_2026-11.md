@@ -677,7 +677,7 @@ Python 后台线程（AsyncTask）
 | 步 | 内容 | 状态 |
 |---|---|---|
 | **T-1** | 门禁 + 绑定层边界 helper + 契约文档 | ✅ 本轮 |
-| **T-2** | `mtk-core::threading`（缓存池 + 进程级线程覆盖）+ 13 个 rayon 站点收敛 + `libmtk_py.set_thread_count/threading_info` | 待做 |
+| **T-2** | `mtk-core::threading`（缓存池 + 进程级线程覆盖）+ 13 个 rayon 站点收敛 + `libmtk_py.set_thread_count/threading_info` | ✅ 本轮 |
 | **T-3** | 三个回调入口的大负载线程亲和测试（save/mesh/prebake）+ 绑定契约测试 | 待做 |
 
 ### T-1 落地内容
@@ -698,3 +698,26 @@ Python 后台线程（AsyncTask）
 - 默认线程数 = `max(1, available_parallelism() - 2)`（给宿主与系统留两个核）；
 - 用户显式指定时以用户值为准（插件偏好 `thread_count`）；
 - 目标：一次 `set_thread_count` 让**所有** rayon 站点生效，而不是现在的 5/13。
+
+### T-2 落地内容（2026-11-20）
+
+**一处策略 + 一处池**：`mtk-core/src/threading.rs`（`constants::concurrency` 已删除并入）。
+
+- 默认线程数 `max(1, available_parallelism() - 2)`（用户决定，给宿主与后台程序留两核）；
+  `set_thread_override(n)` 覆盖，`0` 复位；`threading_info()` 可观测。
+- `install(…)` / `install_with(Some(n), …)` 按线程数缓存 `Arc<ThreadPool>`（上限 4），
+  `execute_parallel` 变成它的薄包装 —— 不再每次调用 `ThreadPoolBuilder::build()`
+  （实测单次建池 ~130 µs；一次世界重建原本要建两个）。
+- 嵌套保护：若当前已在 rayon 区域内（`current_thread_index().is_some()`）则直接内联执行，
+  避免 `prebake → bake_batch` 这类嵌套再建一个池造成的线程爆炸。
+- 收敛的站点：`mtk-voxel`(2)、`libmtk`(engine + models×3)、`mtk-model`、
+  `mtk-material`、`mtk-texture`(2)、`mtk-core/weld`、`mtk-voxel/dynamic_entities`、
+  `mtk-save`(存档解码) —— 13 个并行入口现在共享同一个预算。
+- `mtk-model` 的 `determine_conservative_threads()` 从"固定上限 4"改为跟随进程策略。
+- `bindings/mtk-py`：`set_thread_count(0=auto)`、`threading_info()`；`MoziToolKit` 在
+  addon `register()` 与偏好变更时各推一次（`bridge/engine.py::apply_thread_count`），
+  偏好描述与面板文案同步成"auto = cores - 2"。
+
+**实测**：本机 10 核（4P+6E）默认 8 workers。`mtk bench world` 默认策略下
+42.0 → **40.7 ms**（8.27M quads/s，反而比用满 10 核略快，P/E 混跑更少）；
+端到端 `scenario_bench` 130.6 ms，与 T-1 后持平。

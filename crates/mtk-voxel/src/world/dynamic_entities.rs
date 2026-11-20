@@ -415,18 +415,20 @@ impl VoxelWorld {
             #[cfg(feature = "parallel")]
             let fetched: Vec<(UnresolvedSkull, Option<Vec<u8>>)> = {
                 use rayon::prelude::*;
-                items
-                    .into_par_iter()
-                    .map(|item| {
-                        let res = resolver.resolve_skin_png(
-                            item.skin_url.as_deref(),
-                            item.uuid.as_deref(),
-                            item.name.as_deref(),
-                        );
-                        throttler.inc();
-                        (item, res)
-                    })
-                    .collect()
+                mtk_core::threading::install(|| {
+                    items
+                        .into_par_iter()
+                        .map(|item| {
+                            let res = resolver.resolve_skin_png(
+                                item.skin_url.as_deref(),
+                                item.uuid.as_deref(),
+                                item.name.as_deref(),
+                            );
+                            throttler.inc();
+                            (item, res)
+                        })
+                        .collect()
+                })
             };
 
             #[cfg(not(feature = "parallel"))]

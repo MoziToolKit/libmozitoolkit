@@ -121,12 +121,16 @@ pub fn batch_analyze_transparent_faces_f32(
     #[cfg(feature = "parallel")]
     {
         if faces_uvs.len() > 256 {
-            return faces_uvs
-                .par_iter()
-                .map(|uvs| {
-                    is_face_transparent_f32(uvs, width, height, pixels, mode, threshold, invert_y)
-                })
-                .collect();
+            return mtk_core::threading::install(|| {
+                faces_uvs
+                    .par_iter()
+                    .map(|uvs| {
+                        is_face_transparent_f32(
+                            uvs, width, height, pixels, mode, threshold, invert_y,
+                        )
+                    })
+                    .collect()
+            });
         }
     }
 

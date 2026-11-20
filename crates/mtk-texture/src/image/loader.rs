@@ -163,7 +163,9 @@ impl DecodedSprite {
         #[cfg(feature = "parallel")]
         {
             use rayon::prelude::*;
-            sprites.into_par_iter().map(Self::from_discovered).collect()
+            mtk_core::threading::install(|| {
+                sprites.into_par_iter().map(Self::from_discovered).collect()
+            })
         }
 
         #[cfg(not(feature = "parallel"))]

@@ -77,7 +77,7 @@ impl VoxelWorld {
         let padded_sections: Vec<_> = profiler
             .measure_with_count("extract_padded", "mesh", non_empty.len(), |_| {
                 use rayon::prelude::*;
-                mtk_core::constants::concurrency::execute_parallel(self.num_threads, || {
+                mtk_core::threading::execute_parallel(self.num_threads, || {
                     non_empty
                         .par_iter()
                         .map(|&coord| self.storage.get_section_padded_array(coord))
