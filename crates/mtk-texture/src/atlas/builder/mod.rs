@@ -14,7 +14,7 @@ pub(crate) use static_atlas::build_static_atlas_chunks;
 pub use types::*;
 
 use crate::error::TextureError;
-use crate::{AtlasAddressMap, DecodedSprite};
+use crate::{AtlasAddressMap, DecodedSprite, RgbaBuffer};
 use mtk_resource::{AtlasDefinition, ResourcePackStack};
 
 impl AtlasBuilder {
@@ -189,9 +189,121 @@ impl AtlasBuilder {
 }
 
 /// Helper function to separate sprites into static frame 0 representations and full animation strips.
+/// Rewrites animated sprite strips into `.mcmeta` playback order.
+///
+/// `frames` may reorder and repeat entries, so the played animation can be longer than the source
+/// image. The baked strip is what the host plays top to bottom, and the static slot must show the
+/// first *played* frame, so this runs before the static/animated split. The exported metadata then
+/// drops `frames`, because the strip already encodes the order.
+fn apply_animation_frame_order(sprites: Vec<DecodedSprite>) -> Vec<DecodedSprite> {
+    sprites
+        .into_iter()
+        .map(|mut sprite| {
+            let Some(order) = playback_order(&sprite) else {
+                return sprite;
+            };
+            let frame_height = sprite.frame_height;
+            let source_frames = sprite.frame_count;
+            if frame_height == 0 {
+                return sprite;
+            }
+
+            let is_identity = order.len() == source_frames as usize
+                && order
+                    .iter()
+                    .enumerate()
+                    .all(|(i, &index)| index == i as u32);
+            if !is_identity {
+                sprite.albedo = reorder_strip(&sprite.albedo, &order, frame_height);
+                sprite.normal = sprite
+                    .normal
+                    .as_ref()
+                    .map(|buf| reorder_companion(buf, &order, frame_height, source_frames));
+                sprite.specular = sprite
+                    .specular
+                    .as_ref()
+                    .map(|buf| reorder_companion(buf, &order, frame_height, source_frames));
+                sprite.overlay = sprite
+                    .overlay
+                    .as_ref()
+                    .map(|buf| reorder_companion(buf, &order, frame_height, source_frames));
+                sprite.emissive = sprite
+                    .emissive
+                    .as_ref()
+                    .map(|buf| reorder_companion(buf, &order, frame_height, source_frames));
+                sprite.normal_gl = sprite
+                    .normal_gl
+                    .as_ref()
+                    .map(|buf| reorder_companion(buf, &order, frame_height, source_frames));
+                sprite.orm = sprite
+                    .orm
+                    .as_ref()
+                    .map(|buf| reorder_companion(buf, &order, frame_height, source_frames));
+                sprite.aux = sprite
+                    .aux
+                    .as_ref()
+                    .map(|buf| reorder_companion(buf, &order, frame_height, source_frames));
+                sprite.frame_count = order.len() as u32;
+            }
+
+            if let Some(metadata) = sprite.metadata.as_mut() {
+                metadata.frames = None;
+            }
+            sprite
+        })
+        .collect()
+}
+
+/// Returns the frame indices to play, or `None` when the sprite keeps file order.
+///
+/// An out-of-range index invalidates the whole list: playing a truncated sequence would silently
+/// shorten the animation.
+fn playback_order(sprite: &DecodedSprite) -> Option<Vec<u32>> {
+    let frames = sprite.metadata.as_ref()?.frames.as_ref()?;
+    if frames.is_empty() || sprite.frame_count == 0 {
+        return None;
+    }
+    let order: Vec<u32> = frames.iter().map(|frame| frame.index()).collect();
+    if order.iter().any(|&index| index >= sprite.frame_count) {
+        return None;
+    }
+    Some(order)
+}
+
+fn reorder_strip(source: &RgbaBuffer, order: &[u32], frame_height: u32) -> RgbaBuffer {
+    let mut out = RgbaBuffer::new(source.width, frame_height * order.len() as u32);
+    for (destination, &frame) in order.iter().enumerate() {
+        out.blit(
+            source,
+            0,
+            frame * frame_height,
+            0,
+            destination as u32 * frame_height,
+            source.width,
+            frame_height,
+        );
+    }
+    out
+}
+
+/// Reorders a companion layer when it is a full strip; single-frame companions are tiled later.
+fn reorder_companion(
+    source: &RgbaBuffer,
+    order: &[u32],
+    frame_height: u32,
+    source_frames: u32,
+) -> RgbaBuffer {
+    if source.height == source_frames * frame_height {
+        reorder_strip(source, order, frame_height)
+    } else {
+        source.clone()
+    }
+}
+
 fn separate_static_and_anim_sprites(
     sprites: Vec<DecodedSprite>,
 ) -> (Vec<DecodedSprite>, Vec<DecodedSprite>) {
+    let sprites = apply_animation_frame_order(sprites);
     let mut static_sprites = Vec::with_capacity(sprites.len());
     let mut anim_sprites = Vec::new();
 

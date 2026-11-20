@@ -101,9 +101,14 @@ pub struct AnimationMetadata {
     pub interpolate: bool,
     pub width: Option<u32>,
     pub height: Option<u32>,
+    /// 播放顺序。可重排、可重复，帧数因此可以多于图片内的帧数。
+    /// 图集烘焙会把它折叠进条带顺序，导出的地址表里该字段为 `None`。
     pub frames: Option<Vec<AnimationFrame>>,
 }
 ```
+
+`AnimationFrame::Detailed { time }` 只做格式兼容：所有帧都按 `frametime` 播放（逐帧时长尚未进入
+宿主动画驱动）。
 
 ---
 

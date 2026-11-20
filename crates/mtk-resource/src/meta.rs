@@ -7,6 +7,8 @@ pub enum AnimationFrame {
     Index(u32),
     Detailed {
         index: u32,
+        /// Per-frame duration. Parsed for format compatibility; the atlas bake plays every frame
+        /// for `frametime` ticks, so the host never sees a per-frame duration.
         #[serde(default = "default_frametime")]
         time: u32,
     },
@@ -17,13 +19,6 @@ impl AnimationFrame {
         match self {
             AnimationFrame::Index(idx) => *idx,
             AnimationFrame::Detailed { index, .. } => *index,
-        }
-    }
-
-    pub fn time(&self, default_time: u32) -> u32 {
-        match self {
-            AnimationFrame::Index(_) => default_time,
-            AnimationFrame::Detailed { time, .. } => *time,
         }
     }
 }

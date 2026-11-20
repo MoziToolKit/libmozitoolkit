@@ -93,6 +93,8 @@ pub struct AtlasSpriteLocation {
     pub strip_pixel_rect: [u32; 4],
     pub frame_size: [u32; 2],
     pub frame_count: u32,
+    /// 调度元数据。`frames` 在烘焙后恒为 `None`：条带已按 `.mcmeta` 的播放顺序排好，
+    /// 宿主按 `frame_count` 顺序播放即可（详见 §2.3 下方说明）。
     pub animation: Option<AnimationMetadata>,
     pub has_normal: bool,
     pub has_specular: bool,
@@ -167,6 +169,11 @@ padding 区域由 `apply_edge_clamping_padding` 用精灵自身边缘像素复�
 
 `AtlasBuilderConfig::default()` 等价于 `production(4096, 4096, 0)`——`padding: 0` 不再是默认值，
 只有显式构造才会得到无 padding 的布局（仅用于需要精确布局的测试）。
+
+**动画帧顺序**：`.png.mcmeta` 的 `frames` 列表可以重排、重复帧，播放帧数因此可以与图片内的帧数
+不同（原版 `lava_still` 是 20 帧图片、38 帧序列；`prismarine` 22 帧）。烘焙时条带按 `frames`
+重排/重复，静态 sheet 取"第一个播放的帧"，随后把导出的 `animation.frames` 清空——否则宿主会把
+顺序应用两次。逐帧 `time` 只解析不消费：宿主按统一 `frametime` 播放。
 
 ---
 

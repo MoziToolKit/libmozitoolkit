@@ -1166,3 +1166,53 @@ map 编码都是 `len + 条目`），所以旧包照常反序列化——已用�
 ### 19.5 B4 剩余
 
 3. K-06 缓存读错误静默回退、C-01 `.mcmeta.frames`、C-02 filter 顺序、biome 常量一致性等。
+
+---
+
+## 20. C-01：`.mcmeta` 的 `frames` 真正参与烘焙 —— B4 第 3 步
+
+### 20.1 问题
+
+`AnimationMetadata.frames` 解析得很完整（`Index` / `Detailed{index,time}`，允许重排与重复），
+但烘焙只用了 `frametime`/`interpolate`：条带永远是图片里的文件顺序。原版自己就在用这个特性：
+
+| 纹理 | 图片帧数 | `frames` 条目 | 后果（改前） |
+|---|---|---|---|
+| `lava_still` | 20 | 38（0..19 再 18..1 乒乓） | 只播 20 帧、没有回弹段 |
+| `prismarine` | 4 | 22（大量重复） | 只播 4 帧、闪烁节奏错 |
+| `magma` | 3? | 3 | 顺序相同，无影响 |
+
+也就是说这不是"将来可能有用"，而是**当前原版岩浆/海晶石动画就播错**。
+
+### 20.2 改法
+
+`apply_animation_frame_order`（`mtk-texture/src/atlas/builder/mod.rs`）在**静态/动画分流之前**
+执行，因此一次解决三件事：
+
+1. 动画条带按 `frames` 重排、重复 → `frame_count` 变成 `frames.len()`；
+2. 静态 sheet 的 Frame 0 自动取"第一个播放的帧"（原来取文件第 0 行）；
+3. 导出的 `animation.frames` 清空 —— 条带已经是播放顺序，留着会让宿主应用两次
+   （`frametime` 保留）。
+
+PBR 伴随层同步重排（仅当它本身也是整条条带；单帧伴随层继续由 `blit_sprite_layers` 平铺）。
+`frames` 里出现越界索引时**整表忽略**（继续用文件顺序），因为截断播放会悄悄缩短动画。
+
+缓存 `ASSET_CACHE_FORMAT_VERSION` 12→13、场景包 `SCENE_PACKAGE_FORMAT_VERSION` 4→5：
+条带内容与地址表元数据都变了，不 bump 会继续吃旧图集。
+
+顺带删除零消费者的 `AnimationFrame::time()`（逐帧时长从未进入宿主动画驱动），在文档里写明
+该限制。
+
+### 20.3 验证
+
+- 新测试 `mtk-texture/tests/test_animation_frames.rs`（5 个）：显式顺序烘出 `[蓝,红,绿]`、
+  重复帧扩长条带（4 帧条目 over 3 帧图片）、无 `frames` 保持文件序、静态 sheet 取首播帧、
+  导出元数据 `frames == None`。红态：4 个失败（唯一通过的是"无 frames 保持文件序"）。
+- 真资产（原版 + Mojang 资源）：63 个动画精灵，`lava_still` `frame_count = 38`（原本 20）、
+  `prismarine` 22、`magma` 3，且**没有任何**导出精灵仍带 `frames`——这条不变量写进了
+  `libmtk/tests/test_package_determinism.rs` 的真资产测试。
+- 全量烘焙仍逐块确定性（同测试的另一半）。
+
+### 20.4 B4 剩余
+
+4. K-06 缓存读错误静默回退（需要 fallible pack API）；C-02 filter 顺序；biome 常量一致性测试。

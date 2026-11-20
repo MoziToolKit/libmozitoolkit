@@ -4,7 +4,7 @@
 //! `HashMap` iteration order is randomized per map instance, so any map that is serialized in
 //! place makes those artefacts differ between runs even though the inputs are identical.
 
-use libmtk::{precompile_all_assets, PrecompileConfig};
+use libmtk::{precompile_all_assets, AssetCacheReader, PrecompileConfig};
 use mtk_resource::{MemoryPack, ResourcePackStack};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -172,6 +172,32 @@ fn a_real_pack_stack_bakes_deterministically() {
         }
         assert!(a == b, "chunk `{id}` differs between two real bakes");
     }
+
+    // `.mcmeta` frame lists are baked into the strip, so the exported metadata must not list them
+    // again. Vanilla exercises this heavily (lava_still lists 38 entries over a 20-frame image).
+    let mapping = AssetCacheReader::open(&first)
+        .expect("reader")
+        .load_atlas_mapping()
+        .expect("atlas mapping");
+    for (id, loc) in mapping.sprites.iter().chain(mapping.anim_sprites.iter()) {
+        if let Some(animation) = loc.animation.as_ref() {
+            assert!(
+                animation.frames.is_none(),
+                "{id}: baked strips must not re-export `frames`"
+            );
+        }
+    }
+    let lava = mapping
+        .lookup_animated(
+            &mtk_resource::ResourceLocation::parse("minecraft:block/lava_still").expect("id"),
+        )
+        .expect("lava_still in the vanilla atlas");
+    assert!(
+        lava.frame_count > 20,
+        "lava_still's mcmeta lists more frames than its 20-frame image (ping-pong), so the baked \
+         strip must be longer than file order would give; got {}",
+        lava.frame_count
+    );
 
     let _ = fs::remove_dir_all(first.parent().unwrap_or(Path::new(".")));
     let _ = fs::remove_dir_all(second.parent().unwrap_or(Path::new(".")));
