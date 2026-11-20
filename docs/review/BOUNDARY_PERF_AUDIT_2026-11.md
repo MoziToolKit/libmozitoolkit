@@ -916,7 +916,7 @@ atlas_changed && (原有 atlas 存在 || 本次真的新增了动态精灵)
 
 2. ✅ `mtk-resource` 的 `net` feature 默认关 + 清理空的 `parallel` feature（见 §15）；
 3. ✅ 两处 `content_entries` 目录遍历合一（见 §16）；
-4. `ci_guardrails` 依赖白名单。
+4. ✅ `ci_guardrails` 依赖白名单（见 §17）。
 
 ---
 
@@ -957,7 +957,7 @@ atlas_changed && (原有 atlas 存在 || 本次真的新增了动态精灵)
 ### 15.4 B3 剩余
 
 3. ✅ 两处 `content_entries` 目录遍历合一（见 §16）；
-4. `ci_guardrails` 依赖白名单。
+4. ✅ `ci_guardrails` 依赖白名单（见 §17）。
 
 ---
 
@@ -993,4 +993,43 @@ atlas_changed && (原有 atlas 存在 || 本次真的新增了动态精灵)
 
 ### 16.4 B3 剩余
 
-4. `ci_guardrails` 依赖白名单。
+4. ✅ `ci_guardrails` 依赖白名单（见 §17）。
+
+---
+
+## 17. B3 第 5 步：把分层变成门禁（2026-11-20）
+
+### 17.1 问题
+
+`ARCHITECTURE_2.0` 的 L0–L3 表一直是**散文**。第 1 步修的正是它失效的后果：`mtk-voxel` 悄悄长出了
+皮肤 HTTP、磁盘缓存、旗帜烘焙与动态图集，没有任何机械手段阻止下一次。
+
+### 17.2 改法
+
+`tools/ci_guardrails.py::check_internal_dependency_layering()`：
+
+- 通过 `cargo metadata --no-deps` 读取工作区真实的 normal 依赖（dev/build 依赖不参与，
+  dev-dependency 允许成环）；
+- 每个 crate 只允许 `_INTERNAL_DEP_WHITELIST` 中列出的内部 crate；
+  `mtk-cli` / `mtk-py` 这类工具与绑定层用 `"*"`；
+- 白名单里写清规则来源：`mtk-core` 无内部依赖、`mtk-voxel` **不允许**依赖
+  `mtk-block-entity-textures`（否则 HTTP/烘焙就回到 L0）、`mtk-resource` 不得反向依赖上层等；
+- `cargo` 不存在时跳过（打印提示），`cargo metadata` 失败时**报错而不是跳过**——否则
+  依赖成环这类问题会让检查静默失效。
+
+### 17.3 验证
+
+- 当前树：0 violations（同时跑在 CI lint job 的 `Architectural guardrails` 步骤）。
+- 反向验证：临时给 `mtk-save` 加 `mtk-texture` 依赖 → 报
+  `mtk-save: depends on mtk-texture, which the layering whitelist forbids`；还原后通过。
+- 白名单同时是文档：改分层必须同一提交内更新它。
+
+### 17.4 B3 完成状态
+
+| 项 | 状态 |
+|---|---|
+| 1. `mtk-voxel` 去实体化 | ✅ §13 |
+| 2. `mtk-cli` 去自带资产读取器 | ✅ §14 |
+| 3. `net` feature 默认关 + 清理空 `parallel` | ✅ §15 |
+| 4. 两处 `content_entries` 合一 | ✅ §16 |
+| 5. 依赖白名单门禁 | ✅ 本节 |

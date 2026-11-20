@@ -437,6 +437,123 @@ def check_threaded_bindings_detach() -> list[str]:
     return errors
 
 
+# ---------------------------------------------------------------------------
+# Layering guardrail: internal dependency whitelist
+# ---------------------------------------------------------------------------
+
+# Allowed normal (non-dev/build) dependencies between workspace crates. This encodes the layering
+# in `docs/ARCHITECTURE_2.0.md`, which prose alone has already failed to protect once: the voxel
+# core used to own the skin resolver / banner baker / dynamic atlas that now live in
+# `mtk-block-entity-textures`.
+#
+# `*` means "this layer may depend on any internal crate" (tool and binding crates, which are the
+# top of the graph by design).
+_INTERNAL_DEP_WHITELIST = {
+    # L0: no internal dependencies at all.
+    "mtk-core": set(),
+    # L0/L1 primitives.
+    "mtk-cull": {"mtk-core"},
+    "mtk-package": set(),
+    "mtk-resource": {"mtk-core"},
+    "mtk-texture": {"mtk-core", "mtk-resource"},
+    "mtk-material": {"mtk-core", "mtk-resource", "mtk-texture"},
+    "mtk-model": {"mtk-core", "mtk-cull", "mtk-material", "mtk-resource"},
+    # L0 voxel: consumes block-entity textures through a host-injected trait only. It must never
+    # depend on `mtk-block-entity-textures` (that would put HTTP + baking back inside L0), nor on
+    # `mtk-sync` / `libmtk`.
+    "mtk-voxel": {
+        "mtk-core",
+        "mtk-cull",
+        "mtk-material",
+        "mtk-model",
+        "mtk-resource",
+        "mtk-texture",
+    },
+    # L1/L2.
+    "mtk-block-entity-textures": {
+        "mtk-core",
+        "mtk-model",
+        "mtk-resource",
+        "mtk-texture",
+        "mtk-voxel",
+    },
+    "mtk-save": {"mtk-core", "mtk-model", "mtk-voxel"},
+    "mtk-sync": {
+        "mtk-core",
+        "mtk-cull",
+        "mtk-model",
+        "mtk-voxel",
+        "mtk-block-entity-textures",
+    },
+    # L2 facade.
+    "libmtk": {
+        "mtk-core",
+        "mtk-cull",
+        "mtk-material",
+        "mtk-model",
+        "mtk-package",
+        "mtk-resource",
+        "mtk-save",
+        "mtk-texture",
+        "mtk-voxel",
+    },
+    # L3 hosts / tools / bindings.
+    "mtk-cli": {"*"},
+    "mtk-testkit": set(),
+    "mtk-py": {"*"},
+    "mtk-jni": {"mtk-model", "mtk-sync"},
+    "mtk-wasm": {"mtk-core", "mtk-cull", "mtk-material", "mtk-model", "mtk-voxel"},
+    "mtk-host-memory": set(),
+    "mtk-blender-dna": {"mtk-host-memory"},
+    "mtk-blender-dna-py": {"mtk-blender-dna"},
+}
+
+
+def check_internal_dependency_layering() -> list[str]:
+    """Rejects workspace-crate dependencies outside the layering whitelist."""
+    errors: list[str] = []
+    import subprocess
+
+    try:
+        metadata = subprocess.run(
+            ["cargo", "metadata", "--no-deps", "--format-version", "1"],
+            cwd=LIB_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except FileNotFoundError:
+        # No cargo in this environment: nothing to inspect. CI and the local gate always have it.
+        print("[ci_guardrails] skipping layering check: cargo not found")
+        return errors
+    except subprocess.CalledProcessError as exc:
+        # Any other failure means the workspace itself is unreadable (e.g. a dependency cycle).
+        # Skipping here would silently disable the check.
+        return [f"cargo metadata failed ({exc}); the layering check cannot run"]
+
+
+    packages = json.loads(metadata.stdout)["packages"]
+    internal = {package["name"] for package in packages}
+
+    for package in sorted(packages, key=lambda item: item["name"]):
+        name = package["name"]
+        allowed = _INTERNAL_DEP_WHITELIST.get(name)
+        if allowed is None:
+            continue  # a workspace member we are not policing yet
+        for dep in package["dependencies"]:
+            if dep["kind"] is not None:
+                continue  # dev/build dependencies may diverge (dev-deps may even cycle)
+            if dep["name"] not in internal:
+                continue
+            if "*" in allowed or dep["name"] in allowed:
+                continue
+            errors.append(
+                f"{name}: depends on `{dep['name']}`, which the layering whitelist forbids "
+                "(see docs/ARCHITECTURE_2.0.md; update tools/ci_guardrails.py when the layer changes)"
+            )
+    return errors
+
+
 def check_docs_drift() -> list[str]:
     errors: list[str] = []
     doc_files = [
@@ -472,6 +589,7 @@ def main() -> int:
     errors.extend(check_dead_rust_exports())
     errors.extend(check_unwrap_expect_in_bindings_and_adapters())
     errors.extend(check_threaded_bindings_detach())
+    errors.extend(check_internal_dependency_layering())
     errors.extend(check_docs_drift())
 
     if args.json:

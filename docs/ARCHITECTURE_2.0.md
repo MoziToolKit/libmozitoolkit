@@ -13,6 +13,10 @@
 | L2 同步 | `mtk-sync` | 协议 v4：体素 + 方块实体流（0x11/0x12） | 0x13/0x14（为实体包保留） |
 | L3 宿主 | `libmtk` / `bindings` / Blender | 装配、材质、图集、UI | 绕过 L1 直接解释 NBT |
 
+> 上表的禁止依赖由 `tools/ci_guardrails.py::check_internal_dependency_layering()` 机械校验：
+> 每个 crate 只允许依赖 `_INTERNAL_DEP_WHITELIST` 中列出的内部 crate（`mtk-cli` / `mtk-py`
+> 这类工具与绑定层使用 `"*"`）。改动分层时必须同一提交内更新白名单，否则门禁失败。
+
 ## 命名规则（强制）
 
 - **禁止单独使用 `entity`**。一律写成 `block_entity` 或 `continuous_entity`。
