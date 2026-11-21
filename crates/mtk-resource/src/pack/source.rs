@@ -336,17 +336,20 @@ impl ResourcePack for DirectoryPack {
         };
         // Overlays first (last declared wins), then the pack root.
         for layer in self.layers() {
-            match fs::read(layer.join(&norm)) {
+            let candidate = layer.join(&norm);
+            match fs::read(&candidate) {
                 Ok(bytes) => return Ok(Some(bytes)),
                 // Not a readable file in this layer: keep looking.
-                // `IsADirectory` covers `assets/.../stone.png` being a directory inside the pack.
+                // `IsADirectory` (Unix) and `PermissionDenied` on a directory (Windows ERROR_ACCESS_DENIED)
+                // cover `assets/.../stone.png` being a directory inside the pack; unreadable files still fail.
                 Err(err)
                     if matches!(
                         err.kind(),
                         std::io::ErrorKind::NotFound
                             | std::io::ErrorKind::NotADirectory
                             | std::io::ErrorKind::IsADirectory
-                    ) => {}
+                    ) || (err.kind() == std::io::ErrorKind::PermissionDenied
+                        && candidate.is_dir()) => {}
                 Err(err) => {
                     return Err(ResourceError::ReadFailed {
                         pack: self.name.clone(),

@@ -56,6 +56,7 @@ jobs:
           mkdir -p "$work"
           jar_ok=0
           pack_ok=0
+          save_ok=0
           if curl -fL --retry 3 -o "$work/mc.jar" "$MTK_CI_ASSETS_BASE/26.2-Fabric.jar"; then
             mkdir -p "$work/mc"
             unzip -q "$work/mc.jar" -d "$work/mc"
@@ -71,9 +72,20 @@ jobs:
           else
             echo "::warning::External resource pack unavailable; companion-pack tests will be skipped."
           fi
+          if curl -fL --retry 3 -o "$work/mtk-save-world.tar.gz" "$MTK_CI_ASSETS_BASE/mtk-save-world.tar.gz"; then
+            tar -xzf "$work/mtk-save-world.tar.gz" -C "$work"
+            if [ -d "$work/mtk-save-world" ]; then
+              echo "MTK_TEST_SAVE=$work/mtk-save-world" >> "$GITHUB_ENV"
+              save_ok=1
+            else
+              echo "::warning::Sample save world archive missing expected directory; save tests may skip."
+            fi
+          else
+            echo "::warning::Sample save world unavailable; save tests will skip if not present."
+          fi
           # Only demand full coverage when the full asset set really is present: from here on a
           # test that would skip for missing assets fails instead, so a green run proves coverage.
-          if [ "$jar_ok" = "1" ] && [ "$pack_ok" = "1" ]; then
+          if [ "$jar_ok" = "1" ] && [ "$pack_ok" = "1" ] && [ "$save_ok" = "1" ]; then
             echo "MTK_REQUIRE_REAL_ASSETS=1" >> "$GITHUB_ENV"
           fi
       - name: cargo test --workspace

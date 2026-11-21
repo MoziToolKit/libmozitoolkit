@@ -2,7 +2,7 @@ use std::path::Path;
 
 use mtk_core::Direction;
 use mtk_model::{BakedModel, BlockModelJson, BlockStateDefinition, ModelBaker};
-use mtk_testkit::{blockstate_json_path, model_json_path, require_assets};
+use mtk_testkit::{blockstate_json_path, model_json_path, require_assets, require_real_assets};
 
 /// Reads a vanilla blockstate definition through the shared `mtk-testkit` asset resolver.
 fn read_vanilla_blockstate(root: &Path, block_id: &str) -> Option<BlockStateDefinition> {
@@ -1435,7 +1435,7 @@ fn vanilla_euler_rotation_model_parses_and_bakes() {
 /// to parse and the block silently produced no geometry.
 #[test]
 fn vanilla_hanging_sign_bakes_with_euler_rotations() {
-    let root = require_assets!();
+    let root = require_real_assets!();
     let blockstate = "minecraft:oak_hanging_sign[facing=north,rotation=0,waterlogged=false]";
     let def = read_vanilla_blockstate(&root, "oak_hanging_sign");
     let loader = vanilla_model_loader(&root);
