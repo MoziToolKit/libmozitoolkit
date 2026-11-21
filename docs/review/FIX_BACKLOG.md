@@ -140,7 +140,7 @@ P0 = 崩溃/数据错/安全；P1 = 用户可见错误或确定性；P2 = 边界
 
 | ID | P | 位置 | 现象 | 修法 |
 |---|---|---|---|---|
-| **A-03** | P1 | `mtk-voxel/src/storage/world/debug.rs:21` | 进程级 `static CACHED_DEBUG_STORAGE` + 公开 `clear_*`；core 读 `MTK_TEST_ASSETS` | 缓存改为实例内/调用方传入；env 只在测试 |
+| **A-03** | `mtk-voxel` 不再有环境探测与进程级调试世界缓存：删除 `VoxelStorage::create_debug_world()` / `CACHED_DEBUG_STORAGE` / `store_debug_world` / `clear_debug_world_cache`，核心只接受调用方传入的 states/pack stack/model db/dir；`ci_guardrails` 新增"核心 crate 不得读宿主环境变量"检查；删掉永远 skip 的 `test_debug_world_golden.rs`，换成结构不变量测试 | `tools/ci_guardrails.py`、`mtk-voxel/src/storage/world/debug.rs`、`tests/test_debug_world_layout.rs`、`bindings/mtk-py`（Py 入口改为显式输入）、MoziToolKit `bridge/debug.py`；审计 §28 |
 | **A-04** | P1 | `mtk-voxel/src/world/dynamic_entities.rs:130`（async）vs `:268`（sync） | skull/banner 扫描+解析两份实现、5 个公开入口 | 收敛一份 + 一个入口（与"voxel 去实体化"一起做，见审计 §5.1） |
 | **A-05** | P1 | `mtk-save/src/loader.rs:181,194` | 两个近似入口（`load_box_into_storage` / `_with_progress`） | 保留一个 + 显式配置 |
 | **A-06** | P1 | `bindings/mtk-py/src/voxel/storage.rs:39-96` | `create_debug_world*` 5 个入口 | 收敛成一个 |

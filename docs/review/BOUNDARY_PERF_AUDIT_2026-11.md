@@ -1719,3 +1719,72 @@ Blender 套件 591 passed、真实存档顶点数回到 334,954。
   顶点数），而不是追求数据的理论完备。
 - 审计条目里的"某下游会错"如果不指明具体调用点，默认视为**未证实**，动手前先检索消费者。
 
+---
+
+## 28. A-03：核心 crate 里的环境假设与进程级缓存
+
+### 28.1 问题
+
+`mtk-voxel/src/storage/world/debug.rs` 同时藏了三样东西：
+
+1. **进程级缓存** `static CACHED_DEBUG_STORAGE: RwLock<Option<VoxelStorage>>`；
+2. **环境探测**：依次读 `MC_ASSETS_DIR` / `MC_DIR` / `MTK_TEST_ASSETS`、`MTK_TEST_JAR` / `MC_JAR`；
+3. 为了让缓存可清，再把 `clear_debug_world_cache()` 暴露给宿主。
+
+后果不是抽象洁癖，而是行为不可预测：
+
+- 核心 crate 的行为取决于**谁启动了进程**（Blender、pytest、CLI 的环境不同）；
+- 缓存一旦填充，**宿主换资产包后仍然返回旧世界**，除非它恰好知道要调用 `clear_debug_world_cache()`
+  （MoziToolKit 在三处调用了它，`dev/loader.py`、`dev/api.py` ×2——这本身就是味道）；
+- 测试互相污染：`mtk-voxel` 自己的缓存测试要靠 `clear_debug_world_cache()` 抢先清空；
+- 顺带发现 **`test_debug_world_golden.rs` 永远 skip**：它调用环境驱动的入口，在没有
+  `MC_ASSETS_DIR` 时直接失败并 `return`，等于一条永远不执行的断言。
+
+### 28.2 改法
+
+- **核心只做纯函数**：保留 `create_debug_world_from_states` / `_from_pack_stack` / `_from_model_db`
+  / `_from_dir`，删除 `create_debug_world()`、`CACHED_DEBUG_STORAGE`、`store_debug_world()`、
+  `clear_debug_world_cache()`；`VoxelWorld` 侧删掉无参入口，改为
+  `create_debug_world_from_model_db(db, config, culler, threads)`；
+- **绑定层承担宿主策略**：`PyVoxelStorage::create_debug_world(...)` / `PyVoxelWorld::create_debug_world(...)`
+  必须收到 `states` / `stack` / `path` / `model_db` 之一，否则 `ValueError` 说明原因；
+  `clear_debug_world_cache` 从 Py 面消失；
+- **插件层（MoziToolKit）**：`bridge/debug.py` 删掉 `clear_debug_world_cache` 与环境回退分支，
+  拿不到缓存/包栈时直接报错（它本来就已经优先用 `.mtkcache` 的模型库或配置好的包栈）；
+  `dev/api.py`、`dev/loader.py`、`bridge/assets/cache.py` 里的三处清理调用一并删除。
+  实测重新生成 20k 方块状态约 **29 ms**，不值得为此维护跨模块缓存。
+
+### 28.3 机械门禁（防复发）
+
+`tools/ci_guardrails.py::check_core_crates_do_not_read_host_env()`：`crates/*/src/**/*.rs` 里任何
+`env::var` / `env::var_os` 都失败，只有 `mtk-testkit`（共享测试脚手架）例外。
+
+红态证据（改前）：
+
+```
+crates/mtk-voxel/src/storage/world/debug.rs:196: core crate `mtk-voxel` reads a host environment variable
+crates/mtk-voxel/src/storage/world/debug.rs:209: core crate `mtk-voxel` reads a host environment variable
+```
+
+### 28.4 测试
+
+- 删除 `tests/test_debug_world_golden.rs`（永远 skip 的哈希测试）；
+- 新增 `tests/test_debug_world_layout.rs`（4 个，**真的会跑**）：
+  1. 小规模状态列表的网格公式（`(2i+1, 70, 2j+1)`、1 格间隔、bounds 公式）；
+  2. 空气状态跳过但保留网格槽位；
+  3. 生成是纯函数（同输入两次 → 同 bounds/同 section 集）；
+  4. 真实原版方块状态集（缺失资产时 skip）：单平面 y=70、全部落在奇数坐标网格、网格填充率 >90%、
+     上下层为空。
+- `mtk-voxel` 单元测试把"缓存克隆 <50 ms"换成"生成确定性"。
+
+### 28.5 顺带修掉的测试 flake（K-04 遗留）
+
+跑门禁时 `test_package_determinism` 偶发失败：合成用例把 `manifest` 块也逐字节比较，而它含
+`created_at_epoch_secs`，满负载下两次烘焙会跨秒。改为跳过时间戳字段、比较其余全部字段
+（比整体跳过更强）。
+
+### 28.6 结果
+
+全仓测试 0 失败 0 SKIP、`cargo build-all-py`、Blender 套件 591 passed。核心 crate 现在没有任何
+`env::var`，夹具/资产路径一律由调用方传入。
+

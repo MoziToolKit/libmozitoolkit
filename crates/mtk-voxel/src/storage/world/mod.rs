@@ -12,3 +12,4 @@ mod padded;
 mod snapshot;
 
 pub use container::*;
+pub use debug::DEBUG_WORLD_Y;

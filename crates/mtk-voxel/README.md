@@ -128,7 +128,7 @@ pub struct VoxelStorage {
 - **选区裁剪与接缝脏标记**：调用 `set_bounds(...)` 自动修剪越界区块，并将边界接缝处的区块自动加入 `dirty_sections` 以便更新交界面遮挡。
 - **派生群系元数据唯一入口**：`finalize_biome_metadata()` 从 Section 级 4×4×4 数据重建地表列群系 `biome_column_map` 与主导 `primary_biome`。存档导入、实时同步 baseline、点云重建三条 ingest 路径都必须走这里，禁止各自再实现一份；逐方块 `biome_map` 覆盖层已删除（Section 数据已完整，删除后实测 `get_biome` 与平滑列零差异）。
 - **快照与增量更新**：`set_full_snapshot`、`set_section_snapshot`、`apply_delta_update`。
-- **纯代码调试世界生成器**：`create_debug_world() -> Result<Self, VoxelError>`、`create_debug_world_from_states(...)`、`create_debug_world_from_pack_stack(...)` 采用与原版 Minecraft `DebugLevelSource` 严格一致的网格公式进行暴力展开，彻底摒弃硬编码体素快照，支持模组方块动态展开，内部采用 `OnceLock` 线程安全懒加载缓存，后续调用克隆仅需 <1ms。
+- **纯代码调试世界生成器**：`create_debug_world_from_states(...)` / `create_debug_world_from_pack_stack(...)` / `create_debug_world_from_model_db(...)` / `create_debug_world_from_dir(...)` 采用与原版 Minecraft `DebugLevelSource` 严格一致的网格公式展开，支持模组方块。**没有环境探测入口**：资产路径由调用方传入（宿主解析自己的资产根），因此不存在进程级缓存、没有 `clear_*_cache`，生成是输入的纯函数（20k 方块状态约 30 ms）。
 
 #### `VoxelPointCloud` 与 `PointCloudVoxelSource`
 全量无剔除的体素点云数据结构，专用于持久化场景存储、Blender 点网格属性桥接与用户交互式雕刻挖洞重构：

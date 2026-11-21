@@ -509,6 +509,45 @@ _INTERNAL_DEP_WHITELIST = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Layering guardrail: core crates must not read host environment variables
+# ---------------------------------------------------------------------------
+
+# Reading `MC_ASSETS_DIR` / `MTK_TEST_ASSETS` / `MC_JAR` belongs to the host layer (bindings, the
+# Blender add-on), which knows where the user's assets live. A core crate that probes the
+# environment behaves differently depending on who launched it, cannot be pointed at a given asset
+# set by a caller, and picks up stale process-global state (the debug world used to memoize a
+# storage built from whichever directory the environment named first).
+_ENV_READERS_ALLOWED = {"mtk-testkit"}  # the shared test harness is the one place that may look
+_ENV_ACCESS_RE = re.compile(r"\benv::var(?:_os)?\s*\(")
+
+
+def check_core_crates_do_not_read_host_env() -> list[str]:
+    """Rejects `std::env::var` in any workspace crate except the test harness."""
+    errors: list[str] = []
+    for crate_dir in sorted((LIB_ROOT / "crates").iterdir()):
+        if not crate_dir.is_dir():
+            continue
+        crate_name = crate_dir.name
+        if crate_name in _ENV_READERS_ALLOWED:
+            continue
+        src = crate_dir / "src"
+        if not src.is_dir():
+            continue
+        for path in sorted(src.rglob("*.rs")):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for lineno, line in enumerate(text.splitlines(), start=1):
+                if line.lstrip().startswith("//"):
+                    continue
+                if _ENV_ACCESS_RE.search(line):
+                    errors.append(
+                        f"{path.relative_to(LIB_ROOT)}:{lineno}: core crate `{crate_name}` reads a "
+                        "host environment variable; pass the path in from the caller instead "
+                        "(env belongs to the bindings/host layer)"
+                    )
+    return errors
+
+
 def check_internal_dependency_layering() -> list[str]:
     """Rejects workspace-crate dependencies outside the layering whitelist."""
     errors: list[str] = []
@@ -590,6 +629,7 @@ def main() -> int:
     errors.extend(check_unwrap_expect_in_bindings_and_adapters())
     errors.extend(check_threaded_bindings_detach())
     errors.extend(check_internal_dependency_layering())
+    errors.extend(check_core_crates_do_not_read_host_env())
     errors.extend(check_docs_drift())
 
     if args.json:

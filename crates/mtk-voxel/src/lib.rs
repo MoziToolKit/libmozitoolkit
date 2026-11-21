@@ -24,6 +24,7 @@ pub use source::{ingest_from_source, VoxelReader, VoxelSource, VoxelWriter};
 pub use storage::{
     block_index, BlockEntityData, PaddedVoxelArray, PointCloudVoxelSource, SectionBiomes,
     SectionStorage, SparseVoxelColumns, SparseVoxelPayload, VoxelPointCloud, VoxelStorage,
+    DEBUG_WORLD_Y,
 };
 pub use types::{CoordinateSystem, MesherConfig, UnknownBlockStrategy, VoxelError};
 pub use world::{

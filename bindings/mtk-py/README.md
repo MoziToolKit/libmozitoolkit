@@ -85,13 +85,13 @@ Python 模块名：`libmtk_py`
 - **`VoxelStorage` (`PyVoxelStorage`)**：16x16x16 稀疏 Chunk Section 体素容器，带脏标记追踪。
   - `to_point_cloud(config=None) -> VoxelPointCloud`, `load_from_point_cloud(cloud)`
   - `bounds` (getter), `get_visual_entities_palette()`, `set_visual_entities_palette(palette)`
-  - `create_debug_world(states=None, stack=None, path=None, model_db=None)`：加载或生成原版调试世界，支持从 states、model_db、pack_stack 或环境资产生成。
+  - `create_debug_world(states=None, stack=None, path=None, model_db=None)`：从显式输入生成调试世界；四者都不给时报 `ValueError`（核心不再探测 `MC_ASSETS_DIR`/`MTK_*`）。
   - `create_debug_world_from_states(states)`、`create_debug_world_from_model_db(model_db)`、`create_debug_world_from_pack_stack(stack)`
   - `set_bounds(min_x, min_y, min_z, size_x, size_y, size_z)`, `set_block(x, y, z, state, tint)`
 - **`VoxelWorld` (`PyVoxelWorld`)**：统一 3D 场景引擎，支持增量区块缓存与全量世界网格管理。
   - `to_point_cloud() -> VoxelPointCloud`
   - `from_storage(storage, config=None, culler=None, model_db=None, num_threads=None)`
-  - `create_debug_world(config=None, culler=None, model_db=None, num_threads=None)`
+  - `create_debug_world(config=None, culler=None, model_db=None, num_threads=None, states=None, stack=None)`：至少给 `states`、`stack` 或 `model_db` 之一。
   - `rebuild_all() -> MeshData`, `rebuild_dirty() -> Dict`, `get_world_mesh() -> MeshData`, `sync_from_storage(storage)`, `clear_cache()`, `hot_reload(config=None, model_db=None)`, `num_threads` (getter)
 - **`MesherConfig` (`PyMesherConfig`)**：网格化配置（AO 开关、平滑生物群系过渡 `smooth_biome_blend`、流体曲面、坐标系转换、线程数、顶点焊接）。
 - **`LiveSyncSession` (`PyLiveSyncSession`)**：原生 WebSocket 实时协同客户端。

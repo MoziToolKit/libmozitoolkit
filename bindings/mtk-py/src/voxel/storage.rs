@@ -52,7 +52,10 @@ impl PyVoxelStorage {
         } else if let Some(p) = path {
             VoxelStorage::create_debug_world_from_dir(p)
         } else {
-            VoxelStorage::create_debug_world()
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "create_debug_world needs one of: states, stack, path, model_db (the core no longer \
+                 probes MC_ASSETS_DIR/MC_DIR/MTK_* itself; the host passes its asset root)",
+            ));
         }
         .map_err(map_voxel_err)?;
 
@@ -85,12 +88,6 @@ impl PyVoxelStorage {
         let storage = VoxelStorage::create_debug_world_from_pack_stack(&stack.inner)
             .map_err(map_voxel_err)?;
         Ok(Self { inner: storage })
-    }
-
-    /// Clears the internally cached debug storage (useful during live pack reload or tests).
-    #[staticmethod]
-    pub fn clear_debug_world_cache() {
-        VoxelStorage::clear_debug_world_cache();
     }
 
     /// Sets the active 3D selection bounding box with incremental section pruning.

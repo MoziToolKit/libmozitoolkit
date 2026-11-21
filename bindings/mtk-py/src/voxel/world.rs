@@ -86,8 +86,13 @@ impl PyVoxelWorld {
             mtk_voxel::VoxelWorld::create_debug_world_from_pack_stack(
                 &s.inner, cfg, cul, mdb, threads,
             )
+        } else if let Some(ref db) = mdb {
+            mtk_voxel::VoxelWorld::create_debug_world_from_model_db(db, cfg, cul, threads)
         } else {
-            mtk_voxel::VoxelWorld::create_debug_world_with_threads(cfg, cul, mdb, threads)
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "create_debug_world needs states, stack or model_db; the core no longer probes the \
+                 host environment",
+            ));
         }
         .map_err(map_voxel_err)?;
 

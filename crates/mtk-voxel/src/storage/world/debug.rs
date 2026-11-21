@@ -10,15 +10,12 @@
 #[cfg(feature = "serde")]
 use std::collections::HashSet;
 use std::path::Path;
-use std::sync::RwLock;
 
 use crate::storage::VoxelStorage;
 use crate::types::VoxelError;
 
 /// Canonical Minecraft debug world block plane elevation.
 pub const DEBUG_WORLD_Y: i32 = 70;
-
-static CACHED_DEBUG_STORAGE: RwLock<Option<VoxelStorage>> = RwLock::new(None);
 
 /// Returns true if the blockstate string represents any variant of air.
 #[inline]
@@ -171,74 +168,6 @@ impl VoxelStorage {
         stack.append_pack(Box::new(pack));
         Self::create_debug_world_from_pack_stack(&stack)
     }
-
-    /// Default entry point: loads or generates the canonical Minecraft debug world.
-    ///
-    /// Checks in order:
-    /// 1. Memoized in-memory cache;
-    /// 2. `MC_ASSETS_DIR` / `MC_DIR` host environment overrides (unpacked vanilla assets).
-    ///
-    /// Results are memoized for sub-millisecond cloning on repeat requests. Hosts that
-    /// reload resource packs at runtime can invalidate the cache via
-    /// [`VoxelStorage::clear_debug_world_cache`].
-    ///
-    /// # Gate
-    /// Rejects generation if no valid vanilla Minecraft client base pack is found.
-    pub fn create_debug_world() -> Result<Self, VoxelError> {
-        if let Ok(guard) = CACHED_DEBUG_STORAGE.read() {
-            if let Some(cached) = guard.as_ref() {
-                return Ok(cached.clone());
-            }
-        }
-
-        // 1. Host-level asset root override (CI / custom unpack locations)
-        for env_key in &["MC_ASSETS_DIR", "MC_DIR", "MTK_TEST_ASSETS"] {
-            if let Ok(env_path) = std::env::var(env_key) {
-                let p = Path::new(&env_path);
-                if p.join("assets").exists() {
-                    if let Ok(storage) = Self::create_debug_world_from_dir(p) {
-                        Self::store_debug_world(storage.clone());
-                        return Ok(storage);
-                    }
-                }
-            }
-        }
-
-        // 2. Host-level archive override (JAR / ZIP)
-        for env_key in &["MTK_TEST_JAR", "MC_JAR"] {
-            if let Ok(env_path) = std::env::var(env_key) {
-                let p = Path::new(&env_path);
-                if p.exists() && p.is_file() {
-                    let mut stack = mtk_resource::ResourcePackStack::new();
-                    if let Ok(pack) = mtk_resource::ZipPack::from_file("VanillaJar", p) {
-                        stack.append_pack(Box::new(pack));
-                        if let Ok(storage) = Self::create_debug_world_from_pack_stack(&stack) {
-                            Self::store_debug_world(storage.clone());
-                            return Ok(storage);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Rejection gate: no vanilla assets available
-        Err(VoxelError::MissingVanillaBasePack(
-            "Cannot generate debug world: no vanilla Minecraft client base pack available in environment or cache".into(),
-        ))
-    }
-
-    fn store_debug_world(storage: VoxelStorage) {
-        if let Ok(mut guard) = CACHED_DEBUG_STORAGE.write() {
-            *guard = Some(storage);
-        }
-    }
-
-    /// Clears the internally cached debug storage (useful during live pack reload or tests).
-    pub fn clear_debug_world_cache() {
-        if let Ok(mut guard) = CACHED_DEBUG_STORAGE.write() {
-            *guard = None;
-        }
-    }
 }
 
 #[cfg(test)]
@@ -310,32 +239,21 @@ mod tests {
         assert!(matches!(res_db, Err(VoxelError::MissingAssets(_))));
     }
 
+    /// Generation is a pure function of the inputs; there is no process-global cache to keep in
+    /// sync with the caller's asset set (that was A-03).
     #[test]
-    fn test_debug_world_clone_is_cached_and_fast() {
-        VoxelStorage::clear_debug_world_cache();
-        let first = match VoxelStorage::create_debug_world() {
-            Ok(s) => s,
-            Err(_) => {
-                // If environment assets are unavailable, synthesize a valid cached storage from sample states
-                let sample_states = vec![
-                    "minecraft:stone".to_string(),
-                    "minecraft:granite".to_string(),
-                ];
-                let s = VoxelStorage::create_debug_world_from_states(&sample_states).unwrap();
-                VoxelStorage::store_debug_world(s.clone());
-                s
-            }
-        };
+    fn test_debug_world_generation_is_deterministic() {
+        let sample_states = vec![
+            "minecraft:stone".to_string(),
+            "minecraft:granite".to_string(),
+        ];
+        let first = VoxelStorage::create_debug_world_from_states(&sample_states).unwrap();
+        let second = VoxelStorage::create_debug_world_from_states(&sample_states).unwrap();
 
-        // Test repeat cloning speed
-        let start = std::time::Instant::now();
-        let cloned = VoxelStorage::create_debug_world().expect("Should return cached clone");
-        let elapsed = start.elapsed();
-
+        assert_eq!(first.get_bounds(), second.get_bounds());
         assert_eq!(
-            cloned.get_all_non_empty_sections().len(),
-            first.get_all_non_empty_sections().len()
+            first.get_all_non_empty_sections(),
+            second.get_all_non_empty_sections()
         );
-        assert!(elapsed.as_millis() < 50, "Cached clone should take <50ms");
     }
 }
