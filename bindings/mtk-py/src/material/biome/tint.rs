@@ -227,7 +227,13 @@ pub fn compute_mesh_biome_attributes_from_storage(
                 mtk_voxel::get_point_column_biome(b_name, bx, bz)
             };
 
-            let tint_info = res_ref.get_tint_info(key, None, None);
+            let block_state = storage.inner.get_block(bx, by, bz);
+            let block_opt = if block_state.is_empty() || block_state == "minecraft:air" {
+                None
+            } else {
+                Some(block_state)
+            };
+            let tint_info = res_ref.get_tint_info(key, block_opt, None);
             let tt = tint_info.tint_type;
             // One implementation of the tint table, shared with the mesher: it applies
             // `grass_color_modifier` (dark_forest transform / swamp noise) too.

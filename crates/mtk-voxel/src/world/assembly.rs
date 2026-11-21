@@ -51,14 +51,20 @@ impl VoxelWorld {
         &mut self,
         mut profiler: Option<&mut mtk_core::ExecutionProfiler>,
     ) {
+        let collect_sorted_refs = || -> Vec<&MeshData> {
+            let mut entries: Vec<(&glam::IVec3, &MeshData)> =
+                self.section_mesh_cache.iter().collect();
+            entries.sort_unstable_by_key(|(c, _)| (c.x, c.y, c.z));
+            entries.into_iter().map(|(_, m)| m).collect()
+        };
         let meshes: Vec<&MeshData> = match profiler.as_deref_mut() {
             Some(p) => p.measure_with_count(
                 "collect_refs",
                 "mesh",
                 self.section_mesh_cache.len(),
-                |_| self.section_mesh_cache.values().collect(),
+                |_| collect_sorted_refs(),
             ),
-            None => self.section_mesh_cache.values().collect(),
+            None => collect_sorted_refs(),
         };
 
         let weld = self.config.weld_vertices;
