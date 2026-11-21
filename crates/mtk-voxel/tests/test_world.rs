@@ -30,9 +30,8 @@ fn test_voxel_world_lifecycle_and_used_chunks() {
     let updated_mesh = world.get_world_mesh().unwrap();
     assert!(!updated_mesh.is_empty());
 
-    // Test compact materials
-    let mapping = world.compact_world_mesh_materials();
-    assert_eq!(mapping, vec![0]);
+    // Verify used chunk IDs remain intact after incremental delta rebuild
+    assert_eq!(world.used_chunk_ids(), &[0]);
 }
 
 #[test]

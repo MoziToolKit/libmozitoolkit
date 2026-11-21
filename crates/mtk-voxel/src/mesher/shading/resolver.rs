@@ -313,7 +313,7 @@ pub fn sample_column_tint_color(
 }
 
 /// Samples per-column/3D quart biome tint colors based on face tint configuration.
-pub fn sample_biome_tint(
+fn sample_biome_tint(
     biome_data: Option<&[SmoothedBiomeColumn]>,
     lx: usize,
     ly: usize,
@@ -325,7 +325,6 @@ pub fn sample_biome_tint(
     if tint_data[2] <= 0.0 {
         return (tint_data, default_tint_color);
     }
-    let effective_cms: Option<&mtk_material::VanillaColormaps> = colormaps;
 
     if let Some(biome_cols) = biome_data {
         let col_idx = if biome_cols.len() == 1024 {
@@ -334,11 +333,10 @@ pub fn sample_biome_tint(
         } else {
             (lx & 15) * 16 + (lz & 15)
         };
-        if col_idx < biome_cols.len() && tint_data[2] > 0.0 {
+        if col_idx < biome_cols.len() {
             let col = &biome_cols[col_idx];
             let tt = tint_data[3] as u8;
-            let (c, has_custom) =
-                sample_column_tint_color(col, tt, effective_cms, default_tint_color);
+            let (c, has_custom) = sample_column_tint_color(col, tt, colormaps, default_tint_color);
             if has_custom {
                 tint_data[3] = mtk_material::TINT_TYPE_HARDCODED as f32;
             }

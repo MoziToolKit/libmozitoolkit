@@ -209,40 +209,6 @@ impl VoxelWorld {
         self.storage.set_block(x, y, z, state, biome)
     }
 
-    /// Ingests a full snapshot packet and invalidates existing section meshes.
-    pub fn set_full_snapshot(
-        &mut self,
-        min_x: i32,
-        min_y: i32,
-        min_z: i32,
-        size_x: i32,
-        size_y: i32,
-        size_z: i32,
-        palette: &[String],
-        grid_indices: &[u16],
-        biome_palette: Option<&[String]>,
-        biome_indices: Option<&[u16]>,
-    ) {
-        self.storage.set_full_snapshot(
-            min_x,
-            min_y,
-            min_z,
-            size_x,
-            size_y,
-            size_z,
-            palette,
-            grid_indices,
-            biome_palette,
-            biome_indices,
-        );
-        if self.config.origin_centered {
-            self.config.selection_bounds = Some(([min_x, min_y, min_z], [size_x, size_y, size_z]));
-        }
-        self.section_mesh_cache.clear();
-        self.world_mesh = None;
-        self.used_chunk_ids.clear();
-    }
-
     /// Ingests a single 16x16x16 chunk section snapshot.
     pub fn set_section_snapshot(
         &mut self,
@@ -345,18 +311,6 @@ impl VoxelWorld {
     /// Returns the exact slice of Atlas Chunk IDs actually referenced by the current world mesh.
     pub fn used_chunk_ids(&self) -> &[u32] {
         &self.used_chunk_ids
-    }
-
-    /// Compacts `world_mesh` material indices into contiguous `0..N-1` and returns the
-    /// mapping of original Atlas Chunk IDs.
-    pub fn compact_world_mesh_materials(&mut self) -> Vec<u16> {
-        if let Some(ref mut m) = self.world_mesh {
-            let mapping = m.compact_materials();
-            self.used_chunk_ids = mapping.iter().map(|&id| id as u32).collect();
-            mapping
-        } else {
-            Vec::new()
-        }
     }
 
     /// Extracts an unculled point cloud representation of the current world geometry.

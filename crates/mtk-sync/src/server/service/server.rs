@@ -400,7 +400,7 @@ impl LiveSyncServer {
         }
     }
 
-    /// Broadcasts an incremental Delta or Visual Entity packet to all connected clients.
+    /// Broadcasts an incremental Delta packet to all connected clients.
     pub fn broadcast_delta(&self, delta_packet: &Packet) -> Result<(), ProtocolError> {
         let bytes = encode_packet(delta_packet)?;
         let clients = lock_unpoisoned(&self.inner.clients);

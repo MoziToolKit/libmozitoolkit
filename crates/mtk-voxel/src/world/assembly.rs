@@ -86,7 +86,7 @@ impl VoxelWorld {
         // `merged.face_materials` intentionally stays as raw atlas chunk IDs (not compacted to
         // `0..N-1` slots), because `used_materials()`, `has_dynamic_entity_chunks()`, and host
         // `mtk_atlas_chunk_id` remapping all read raw chunk IDs from it.
-        let compact = |this: &mut Self, merged: MeshData| {
+        let finalize_world_mesh = |this: &mut Self, merged: MeshData| {
             this.used_chunk_ids = merged
                 .used_materials()
                 .into_iter()
@@ -95,8 +95,10 @@ impl VoxelWorld {
             this.world_mesh = Some(merged);
         };
         match profiler {
-            Some(p) => p.measure("compact_material_slots", "mesh", |_| compact(self, merged)),
-            None => compact(self, merged),
+            Some(p) => p.measure("record_used_chunks", "mesh", |_| {
+                finalize_world_mesh(self, merged)
+            }),
+            None => finalize_world_mesh(self, merged),
         }
     }
 }

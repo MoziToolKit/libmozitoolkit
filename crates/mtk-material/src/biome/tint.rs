@@ -48,26 +48,24 @@ pub fn compute_face_tint(
     let tt = info.tint_type;
     let is_hc = info.is_hardcoded;
 
-    let effective_cms: Option<&VanillaColormaps> = colormaps;
-
     let packed_data = [bw, ow, tw, tt as f32];
     let final_col = match tt {
         TINT_TYPE_GRASS => {
-            if let Some(cms) = effective_cms {
+            if let Some(cms) = colormaps {
                 cms.sample_grass_linear(default_pal.temperature, default_pal.humidity)
             } else {
                 default_pal.grass_linear()
             }
         }
         TINT_TYPE_FOLIAGE => {
-            if let Some(cms) = effective_cms {
+            if let Some(cms) = colormaps {
                 cms.sample_foliage_linear(default_pal.temperature, default_pal.humidity)
             } else {
                 default_pal.foliage_linear()
             }
         }
         TINT_TYPE_DRY_FOLIAGE => {
-            if let Some(cms) = effective_cms {
+            if let Some(cms) = colormaps {
                 cms.sample_dry_foliage_linear(default_pal.temperature, default_pal.humidity)
             } else {
                 default_pal.dry_foliage_linear()
