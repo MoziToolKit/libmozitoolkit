@@ -42,6 +42,8 @@ pub struct SmoothedBiomeColumn {
     pub has_custom_grass: bool,
     pub has_custom_foliage: bool,
     pub has_custom_dry_foliage: bool,
+    /// `effects.grass_color_modifier` of the dominant biome.
+    pub grass_color_modifier: mtk_material::GrassColorModifier,
 }
 
 impl Default for SmoothedBiomeColumn {
@@ -56,6 +58,7 @@ impl Default for SmoothedBiomeColumn {
             has_custom_grass: pal.has_custom_grass,
             has_custom_foliage: pal.has_custom_foliage,
             has_custom_dry_foliage: pal.has_custom_dry_foliage,
+            grass_color_modifier: pal.grass_color_modifier,
         }
     }
 }
@@ -63,8 +66,7 @@ impl Default for SmoothedBiomeColumn {
 /// Computes unsmoothed single-point biome colors and colormap UVs at `(x, z)` (preserving swamp Perlin noise).
 pub fn get_point_column_biome(biome: &str, x: i32, z: i32) -> SmoothedBiomeColumn {
     let pal = mtk_material::get_biome_palette(biome);
-    let is_swamp = pal.id == "swamp" || pal.id == "mangrove_swamp";
-    let grass_color = if is_swamp {
+    let grass_color = if pal.grass_color_modifier.is_swamp() {
         mtk_material::get_swamp_grass_color(x as f32, z as f32)
     } else {
         pal.grass_linear()
@@ -78,6 +80,7 @@ pub fn get_point_column_biome(biome: &str, x: i32, z: i32) -> SmoothedBiomeColum
         has_custom_grass: pal.has_custom_grass,
         has_custom_foliage: pal.has_custom_foliage,
         has_custom_dry_foliage: pal.has_custom_dry_foliage,
+        grass_color_modifier: pal.grass_color_modifier,
     }
 }
 
@@ -90,7 +93,7 @@ struct ResolvedBiomeTint {
     foliage: [f32; 4],
     dry_foliage: [f32; 4],
     water: [f32; 4],
-    is_swamp: bool,
+    grass_modifier: mtk_material::GrassColorModifier,
 }
 
 /// Reusable biome -> color resolver for one section's sampling pass.
@@ -127,7 +130,7 @@ impl BiomeTintScratch {
             foliage: palette.foliage_linear(),
             dry_foliage: palette.dry_foliage_linear(),
             water: palette.water_linear(),
-            is_swamp: palette.id == "swamp" || palette.id == "mangrove_swamp",
+            grass_modifier: palette.grass_color_modifier,
         };
         self.entries.push((biome.to_string(), resolved));
         resolved
@@ -150,6 +153,10 @@ pub(crate) struct BiomeColumnSums {
     any_custom_grass: bool,
     any_custom_foliage: bool,
     any_custom_dry_foliage: bool,
+    /// Modifier of the highest-weight biome seen in the kernel (dark_forest/swamp are whole-biome).
+    grass_modifier: mtk_material::GrassColorModifier,
+    /// Weight that selected `grass_modifier`, so the dominant biome wins.
+    modifier_weight: f32,
 }
 
 impl BiomeColumnSums {
@@ -168,6 +175,12 @@ impl BiomeColumnSums {
         if palette.has_custom_grass {
             self.any_custom_grass = true;
         }
+        if palette.grass_color_modifier != mtk_material::GrassColorModifier::None
+            && weight >= self.modifier_weight
+        {
+            self.modifier_weight = weight;
+            self.grass_modifier = palette.grass_color_modifier;
+        }
         if palette.has_custom_foliage {
             self.any_custom_foliage = true;
         }
@@ -180,7 +193,7 @@ impl BiomeColumnSums {
         self.sum_v += resolved.colormap_uv[1] * weight;
 
         // Swamp grass keeps a position-dependent Perlin modulation on top of the biome color.
-        let grass = if resolved.is_swamp {
+        let grass = if resolved.grass_modifier.is_swamp() {
             mtk_material::get_swamp_grass_color(x as f32, z as f32)
         } else {
             resolved.grass
@@ -206,6 +219,7 @@ impl BiomeColumnSums {
             has_custom_grass: self.any_custom_grass,
             has_custom_foliage: self.any_custom_foliage,
             has_custom_dry_foliage: self.any_custom_dry_foliage,
+            grass_color_modifier: self.grass_modifier,
         }
     }
 }

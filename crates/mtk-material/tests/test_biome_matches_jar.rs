@@ -233,6 +233,27 @@ fn derived_colours_match_the_colormap() {
     }
 }
 
+/// `has_custom_grass` means exactly "the biome declares `effects.grass_color`".
+#[test]
+fn the_custom_grass_flag_means_explicit_not_modifier() {
+    let Some(jar) = jar_biomes() else { return };
+    for (id, value) in &jar {
+        let Some(pal) = palette(id) else { continue };
+        let explicit = !value["effects"]["grass_color"].is_null();
+        assert_eq!(
+            pal.has_custom_grass, explicit,
+            "{id}: has_custom_grass must only be true when effects.grass_color is declared"
+        );
+        let expected = match value["effects"]["grass_color_modifier"].as_str() {
+            Some("dark_forest") => mtk_material::GrassColorModifier::DarkForest,
+            Some("swamp") => mtk_material::GrassColorModifier::Swamp,
+            None => mtk_material::GrassColorModifier::None,
+            Some(other) => panic!("{id}: unknown grass_color_modifier {other}"),
+        };
+        assert_eq!(pal.grass_color_modifier, expected, "{id}: modifier");
+    }
+}
+
 /// The three biomes with a `grass_color_modifier` follow its rule, and no other biome declares one.
 #[test]
 fn grass_colour_modifiers_match_the_jar() {

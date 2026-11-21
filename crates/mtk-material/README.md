@@ -320,3 +320,8 @@ fn main() {
 派生色的计算必须按 Minecraft 的规则：`ClimateSettings` 用 float 存温度/湿度（`1.0 - 0.6f`
 不是 0.4），索引是 `y << 8 | x`；`grass_color_modifier = dark_forest` 走 packed ARGB 变换，
 `swamp` 取高噪声固定色 `#6A7039`（逐方块的低/高选择由 `get_swamp_grass_color` 负责）。
+
+`BiomePalette.grass_color_modifier` 区分 `None` / `DarkForest` / `Swamp`：`has_custom_grass` 只表示
+"该生物群系自己声明了 `effects.grass_color`"，modifier 由渲染期应用（`GrassColorModifier::apply_linear`
+在 packed ARGB 上执行 dark_forest 变换）。导出给宿主的 tint type 对这三类仍是 `TINT_TYPE_HARDCODED`，
+因为宿主没有 modifier 逻辑。

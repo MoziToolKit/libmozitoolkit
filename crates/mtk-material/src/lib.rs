@@ -18,8 +18,8 @@ pub use biome::{
     compute_face_tint, compute_mesh_biome_attributes_paletted_flat, get_biome_palette,
     get_colormap_uv, get_default_colormaps, get_swamp_grass_color, get_unit_cube_tint_indices,
     hex_to_linear_rgba, reapply_uniform_biome_tint_flat, resolve_biome_color_set_with_colormaps,
-    BiomeColorSet, BiomePalette, BiomeResolver, CustomBiomeSettings, VanillaColormaps,
-    CANONICAL_BIOMES, TINT_TYPE_DRY_FOLIAGE, TINT_TYPE_FOLIAGE, TINT_TYPE_GRASS,
+    BiomeColorSet, BiomePalette, BiomeResolver, CustomBiomeSettings, GrassColorModifier,
+    VanillaColormaps, CANONICAL_BIOMES, TINT_TYPE_DRY_FOLIAGE, TINT_TYPE_FOLIAGE, TINT_TYPE_GRASS,
     TINT_TYPE_HARDCODED, TINT_TYPE_NONE, TINT_TYPE_WATER,
 };
 pub use error::MaterialError;

@@ -10,6 +10,16 @@ pub(crate) fn srgb_to_linear(c: f32) -> f32 {
     }
 }
 
+/// Convert a Linear RGB component (0.0 .. 1.0) back to sRGB.
+#[inline]
+pub(crate) fn linear_to_srgb(c: f32) -> f32 {
+    if c <= 0.003_130_8 {
+        c * 12.92
+    } else {
+        1.055 * c.powf(1.0 / 2.4) - 0.055
+    }
+}
+
 /// Parse a hex color string (e.g. "#91BD59" or "91BD59") into sRGB float components `[r, g, b, a]`.
 pub(crate) fn hex_to_srgb(hex: &str) -> [f32; 4] {
     let clean = hex.trim().trim_start_matches('#');
@@ -49,6 +59,54 @@ pub fn get_colormap_uv(temperature: f32, humidity: f32) -> [f32; 2] {
     [1.0 - t, h]
 }
 
+/// Minecraft's `BiomeSpecialEffects.GrassColorModifier`.
+///
+/// `dark_forest` applies a fixed transform to the colormap sample, `swamp` replaces the colour with
+/// one of two position-dependent values. Modelling it explicitly keeps `has_custom_grass` meaning
+/// what its name says: the biome declares `effects.grass_color` itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum GrassColorModifier {
+    #[default]
+    None,
+    DarkForest,
+    Swamp,
+}
+
+impl GrassColorModifier {
+    /// True for the position-dependent swamp variants (`swamp`, `mangrove_swamp`).
+    #[inline]
+    pub fn is_swamp(self) -> bool {
+        matches!(self, GrassColorModifier::Swamp)
+    }
+
+    /// Applies [`GrassColorModifier.DARK_FOREST`] to a linear RGBA colour.
+    ///
+    /// Minecraft does this on the packed ARGB value:
+    /// `((base & 0x00FEFEFE) + 0x0028340A) >> 1` — note the per-channel offsets differ, so it
+    /// cannot be expressed channel-wise in linear space. Other modifiers return `linear` unchanged
+    /// (swamp is handled where the position noise is available).
+    ///
+    /// [`GrassColorModifier.DARK_FOREST`]: https://minecraft.wiki/w/Java_Edition_data_values
+    pub fn apply_linear(self, linear: [f32; 4]) -> [f32; 4] {
+        if self != GrassColorModifier::DarkForest {
+            return linear;
+        }
+        let channel =
+            |value: f32| -> u32 { (linear_to_srgb(value).clamp(0.0, 1.0) * 255.0).round() as u32 };
+        let packed = 0xFF00_0000
+            | (channel(linear[0]) << 16)
+            | (channel(linear[1]) << 8)
+            | channel(linear[2]);
+        let packed = ((packed & 0x00FE_FEFE) + 0x0028_340A) >> 1;
+        [
+            srgb_to_linear(((packed >> 16) & 0xFF) as f32 / 255.0),
+            srgb_to_linear(((packed >> 8) & 0xFF) as f32 / 255.0),
+            srgb_to_linear((packed & 0xFF) as f32 / 255.0),
+            linear[3],
+        ]
+    }
+}
+
 /// Canonical metadata and color definition for a single Minecraft biome.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BiomePalette {
@@ -60,9 +118,12 @@ pub struct BiomePalette {
     pub water_hex: &'static str,
     pub temperature: f32,
     pub humidity: f32,
+    /// `effects.grass_color` is declared by the biome itself.
     pub has_custom_grass: bool,
     pub has_custom_foliage: bool,
     pub has_custom_dry_foliage: bool,
+    /// `effects.grass_color_modifier`, applied on top of the colormap sample.
+    pub grass_color_modifier: GrassColorModifier,
 }
 
 use std::sync::LazyLock;

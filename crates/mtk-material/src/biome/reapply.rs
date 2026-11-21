@@ -7,7 +7,7 @@ use super::color_set::BiomeColorSet;
 use super::hardcoded::{
     TINT_TYPE_DRY_FOLIAGE, TINT_TYPE_FOLIAGE, TINT_TYPE_GRASS, TINT_TYPE_HARDCODED, TINT_TYPE_WATER,
 };
-use super::palettes::get_biome_palette;
+use super::palettes::{get_biome_palette, GrassColorModifier};
 use super::resolver::BiomeResolver;
 
 /// Flat float buffers produced by the instant uniform-biome recolor path.
@@ -144,7 +144,10 @@ pub fn compute_mesh_biome_attributes_paletted_flat(
                     dry_foliage: pal.dry_foliage_linear(),
                     water: pal.water_linear(),
                 },
-                pal.has_custom_grass,
+                // A `grass_color_modifier` biome has a fixed grass colour too: the host must not
+                // re-sample the colormap, because it cannot apply the modifier (dark_forest) and
+                // must not lose the swamp noise.
+                pal.has_custom_grass || pal.grass_color_modifier != GrassColorModifier::None,
                 pal.has_custom_foliage,
                 pal.has_custom_dry_foliage,
             )

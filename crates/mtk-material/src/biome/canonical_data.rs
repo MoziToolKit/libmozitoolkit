@@ -5,7 +5,7 @@
 //! `crates/mtk-material/tests/test_biome_matches_jar.rs` fails when this table disagrees with
 //! the assets, and the generator is the only supported way to refresh it.
 
-use super::BiomePalette;
+use super::{BiomePalette, GrassColorModifier};
 
 pub static CANONICAL_BIOMES: &[BiomePalette] = &[
     BiomePalette {
@@ -20,6 +20,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: true,
         has_custom_foliage: true,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "bamboo_jungle",
@@ -33,6 +34,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "basalt_deltas",
@@ -46,6 +48,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "beach",
@@ -59,6 +62,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "birch_forest",
@@ -72,6 +76,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "cherry_grove",
@@ -85,6 +90,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: true,
         has_custom_foliage: true,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "cold_ocean",
@@ -98,6 +104,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "crimson_forest",
@@ -111,6 +118,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "dark_forest",
@@ -121,9 +129,10 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         water_hex: "#3F76E4",
         temperature: 0.7,
         humidity: 0.8,
-        has_custom_grass: true,
+        has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: true,
+        grass_color_modifier: GrassColorModifier::DarkForest,
     },
     BiomePalette {
         id: "deep_cold_ocean",
@@ -137,6 +146,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "deep_dark",
@@ -150,6 +160,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "deep_frozen_ocean",
@@ -163,6 +174,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "deep_lukewarm_ocean",
@@ -176,6 +188,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "deep_ocean",
@@ -189,6 +202,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "desert",
@@ -202,6 +216,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "dripstone_caves",
@@ -215,6 +230,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "end_barrens",
@@ -228,6 +244,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "end_highlands",
@@ -241,6 +258,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "end_midlands",
@@ -254,6 +272,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "eroded_badlands",
@@ -267,6 +286,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: true,
         has_custom_foliage: true,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "flower_forest",
@@ -280,6 +300,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "forest",
@@ -293,6 +314,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "frozen_ocean",
@@ -306,6 +328,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "frozen_peaks",
@@ -319,6 +342,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "frozen_river",
@@ -332,6 +356,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "grove",
@@ -345,6 +370,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "ice_spikes",
@@ -358,6 +384,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "jagged_peaks",
@@ -371,6 +398,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "jungle",
@@ -384,6 +412,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "lukewarm_ocean",
@@ -397,6 +426,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "lush_caves",
@@ -410,6 +440,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "mangrove_swamp",
@@ -420,9 +451,10 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         water_hex: "#3A7A6A",
         temperature: 0.8,
         humidity: 0.9,
-        has_custom_grass: true,
+        has_custom_grass: false,
         has_custom_foliage: true,
         has_custom_dry_foliage: true,
+        grass_color_modifier: GrassColorModifier::Swamp,
     },
     BiomePalette {
         id: "meadow",
@@ -436,6 +468,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "mushroom_fields",
@@ -449,6 +482,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "nether_wastes",
@@ -462,6 +496,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "ocean",
@@ -475,6 +510,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "old_growth_birch_forest",
@@ -488,6 +524,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "old_growth_pine_taiga",
@@ -501,6 +538,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "old_growth_spruce_taiga",
@@ -514,6 +552,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "pale_garden",
@@ -527,6 +566,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: true,
         has_custom_foliage: true,
         has_custom_dry_foliage: true,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "plains",
@@ -540,6 +580,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "river",
@@ -553,6 +594,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "savanna",
@@ -566,6 +608,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "savanna_plateau",
@@ -579,6 +622,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "small_end_islands",
@@ -592,6 +636,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "snowy_beach",
@@ -605,6 +650,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "snowy_plains",
@@ -618,6 +664,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "snowy_slopes",
@@ -631,6 +678,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "snowy_taiga",
@@ -644,6 +692,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "soul_sand_valley",
@@ -657,6 +706,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "sparse_jungle",
@@ -670,6 +720,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "stony_peaks",
@@ -683,6 +734,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "stony_shore",
@@ -696,6 +748,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "sulfur_caves",
@@ -709,6 +762,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: true,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "sunflower_plains",
@@ -722,6 +776,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "swamp",
@@ -732,9 +787,10 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         water_hex: "#617B64",
         temperature: 0.8,
         humidity: 0.9,
-        has_custom_grass: true,
+        has_custom_grass: false,
         has_custom_foliage: true,
         has_custom_dry_foliage: true,
+        grass_color_modifier: GrassColorModifier::Swamp,
     },
     BiomePalette {
         id: "taiga",
@@ -748,6 +804,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "the_end",
@@ -761,6 +818,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "the_void",
@@ -774,6 +832,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "warm_ocean",
@@ -787,6 +846,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "warped_forest",
@@ -800,6 +860,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "windswept_forest",
@@ -813,6 +874,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "windswept_gravelly_hills",
@@ -826,6 +888,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "windswept_hills",
@@ -839,6 +902,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "windswept_savanna",
@@ -852,6 +916,7 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: false,
         has_custom_foliage: false,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
     BiomePalette {
         id: "wooded_badlands",
@@ -865,5 +930,6 @@ pub static CANONICAL_BIOMES: &[BiomePalette] = &[
         has_custom_grass: true,
         has_custom_foliage: true,
         has_custom_dry_foliage: false,
+        grass_color_modifier: GrassColorModifier::None,
     },
 ];

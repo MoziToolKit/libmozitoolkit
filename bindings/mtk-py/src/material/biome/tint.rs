@@ -215,82 +215,29 @@ pub fn compute_mesh_biome_attributes_from_storage(
             let by = block_ys.get(i).copied().unwrap_or(0);
             let bz = block_zs.get(i).copied().unwrap_or(0);
 
-            let (col, has_cg, has_cf, has_cdf) = if smooth {
-                let sm = mtk_voxel::get_smoothed_column_biome(
+            let col = if smooth {
+                mtk_voxel::get_smoothed_column_biome(
                     |x, y, z| storage.inner.get_biome(x, y, z),
                     bx,
                     by,
                     bz,
-                );
-                (
-                    sm,
-                    sm.has_custom_grass,
-                    sm.has_custom_foliage,
-                    sm.has_custom_dry_foliage,
                 )
             } else {
                 let b_name = storage.inner.get_biome(bx, by, bz);
-                let sm = mtk_voxel::get_point_column_biome(b_name, bx, bz);
-                (
-                    sm,
-                    sm.has_custom_grass,
-                    sm.has_custom_foliage,
-                    sm.has_custom_dry_foliage,
-                )
+                mtk_voxel::get_point_column_biome(b_name, bx, bz)
             };
 
             let tint_info = res_ref.get_tint_info(key, None, None);
             let tt = tint_info.tint_type;
-            let (c, has_custom) = match tt {
-                mtk_material::TINT_TYPE_GRASS => {
-                    if has_cg {
-                        (col.grass_color, true)
-                    } else {
-                        (
-                            effective_cms
-                                .sample_grass_linear_uv(col.colormap_uv[0], col.colormap_uv[1]),
-                            false,
-                        )
-                    }
-                }
-                mtk_material::TINT_TYPE_FOLIAGE => {
-                    if has_cf {
-                        (col.foliage_color, true)
-                    } else {
-                        (
-                            effective_cms
-                                .sample_foliage_linear_uv(col.colormap_uv[0], col.colormap_uv[1]),
-                            false,
-                        )
-                    }
-                }
-                mtk_material::TINT_TYPE_DRY_FOLIAGE => {
-                    if has_cdf {
-                        (col.dry_foliage_color, true)
-                    } else {
-                        (
-                            effective_cms.sample_dry_foliage_linear_uv(
-                                col.colormap_uv[0],
-                                col.colormap_uv[1],
-                            ),
-                            false,
-                        )
-                    }
-                }
-                mtk_material::TINT_TYPE_WATER => (col.water_color, false),
-                mtk_material::TINT_TYPE_HARDCODED => (
-                    tint_info.hardcoded_color.unwrap_or([1.0, 1.0, 1.0, 1.0]),
-                    true,
-                ),
-                _ => (
-                    if tint_info.is_hardcoded {
-                        tint_info.hardcoded_color.unwrap_or([1.0, 1.0, 1.0, 1.0])
-                    } else {
-                        [1.0, 1.0, 1.0, 1.0]
-                    },
-                    false,
-                ),
-            };
+            // One implementation of the tint table, shared with the mesher: it applies
+            // `grass_color_modifier` (dark_forest transform / swamp noise) too.
+            let default_tint_color = tint_info.hardcoded_color.unwrap_or([1.0, 1.0, 1.0, 1.0]);
+            let (c, has_custom) = mtk_voxel::sample_column_tint_color(
+                &col,
+                tt,
+                Some(effective_cms),
+                default_tint_color,
+            );
 
             let tint_type_val = if tint_info.is_hardcoded || has_custom {
                 mtk_material::TINT_TYPE_HARDCODED as f32

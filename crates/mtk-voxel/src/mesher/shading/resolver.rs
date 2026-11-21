@@ -268,15 +268,18 @@ pub fn sample_column_tint_color(
 ) -> ([f32; 4], bool) {
     match tint_type {
         mtk_material::TINT_TYPE_GRASS => {
-            if col.has_custom_grass {
+            // Swamp replaces the colour entirely (position-dependent noise), `dark_forest` samples
+            // and then transforms. Both are exact colours the host cannot reproduce - it has no
+            // modifier logic - so they are reported as overrides and shipped as TINT_TYPE_HARDCODED.
+            let modifier = col.grass_color_modifier;
+            let is_modifier = modifier != mtk_material::GrassColorModifier::None;
+            if modifier.is_swamp() || col.has_custom_grass {
                 (col.grass_color, true)
             } else if let Some(cms) = colormaps {
-                (
-                    cms.sample_grass_linear_uv(col.colormap_uv[0], col.colormap_uv[1]),
-                    false,
-                )
+                let sampled = cms.sample_grass_linear_uv(col.colormap_uv[0], col.colormap_uv[1]);
+                (modifier.apply_linear(sampled), is_modifier)
             } else {
-                (col.grass_color, false)
+                (col.grass_color, is_modifier)
             }
         }
         mtk_material::TINT_TYPE_FOLIAGE => {
@@ -576,5 +579,82 @@ mod tests {
         );
         assert_eq!(td4, tint_data_hardcoded);
         assert_eq!(corners4, [default_color; 4]);
+    }
+
+    /// `GrassColorModifier.DARK_FOREST` darkens the colormap sample; sampling alone is too bright.
+    fn dark_forest_packed(sample: [f32; 3]) -> [f32; 3] {
+        let bytes = sample.map(|channel| (channel.clamp(0.0, 1.0) * 255.0).round() as u32);
+        let packed = 0xFF00_0000 | (bytes[0] << 16) | (bytes[1] << 8) | bytes[2];
+        let packed = ((packed & 0x00FE_FEFE) + 0x0028_340A) >> 1;
+        [
+            ((packed >> 16) & 0xFF) as f32 / 255.0,
+            ((packed >> 8) & 0xFF) as f32 / 255.0,
+            (packed & 0xFF) as f32 / 255.0,
+        ]
+    }
+
+    fn sampled_grass(
+        colormaps: &mtk_material::VanillaColormaps,
+        column: &SmoothedBiomeColumn,
+    ) -> [f32; 3] {
+        colormaps.sample_grass_srgb_uv(column.colormap_uv[0], column.colormap_uv[1])
+    }
+
+    /// The sRGB transfer function, spelled out so the expectation does not reuse the code under test.
+    fn to_linear(channel: f32) -> f32 {
+        if channel <= 0.04045 {
+            channel / 12.92
+        } else {
+            ((channel + 0.055) / 1.055).powf(2.4)
+        }
+    }
+
+    #[test]
+    fn dark_forest_grass_is_darkened_after_sampling() {
+        let colormaps = mtk_material::VanillaColormaps::load_embedded();
+        let column = crate::biome::get_point_column_biome("minecraft:dark_forest", 0, 0);
+        assert!(
+            !column.has_custom_grass,
+            "dark_forest has no explicit grass_color; it uses a modifier"
+        );
+
+        let (color, is_override) = sample_column_tint_color(
+            &column,
+            mtk_material::TINT_TYPE_GRASS,
+            Some(&colormaps),
+            [1.0, 1.0, 1.0, 1.0],
+        );
+        assert!(
+            is_override,
+            "the host cannot apply the modifier, so the colour must be shipped as an override"
+        );
+
+        let expected_srgb = dark_forest_packed(sampled_grass(&colormaps, &column));
+        let expected: Vec<f32> = expected_srgb
+            .iter()
+            .map(|channel| to_linear(*channel))
+            .collect();
+        for (channel, want) in color[..3].iter().zip(expected.iter()) {
+            assert!(
+                (channel - want).abs() < 1.0 / 255.0,
+                "dark_forest grass {channel} should be the darkened sample {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn swamp_grass_ignores_the_colormap_and_keeps_its_noise_colour() {
+        let colormaps = mtk_material::VanillaColormaps::load_embedded();
+        let column = crate::biome::get_point_column_biome("minecraft:swamp", 0, 0);
+        let (color, _) = sample_column_tint_color(
+            &column,
+            mtk_material::TINT_TYPE_GRASS,
+            Some(&colormaps),
+            [1.0, 1.0, 1.0, 1.0],
+        );
+        assert_eq!(
+            color, column.grass_color,
+            "swamp grass must stay the position-dependent colour"
+        );
     }
 }

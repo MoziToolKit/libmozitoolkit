@@ -27,6 +27,9 @@ from pathlib import Path
 # high-noise one (`get_swamp_grass_color` picks between them per block).
 SWAMP_HIGH_HEX = "#6A7039"
 
+# `effects.grass_color_modifier` value -> `GrassColorModifier` variant.
+MODIFIER_RUST = {"none": "None", "dark_forest": "DarkForest", "swamp": "Swamp"}
+
 
 def read_png(path: Path) -> tuple[int, int, int, bytes]:
     """Minimal PNG reader for the 8-bit, non-interlaced colormaps Mojang ships."""
@@ -149,13 +152,11 @@ def generate(assets: Path) -> str:
         has_custom_grass = grass_hex is not None
         if grass_hex is None:
             if modifier == "dark_forest":
+                # The table value is the fallback used when no colormap is available; at render
+                # time the modifier transforms the sampled colour instead.
                 grass_hex = to_hex(dark_forest(sample(grass, temp, downfall)))
-                # The modifier keeps the colour fixed, so the palette marks it custom too; the
-                # dedicated C-10 item will separate "explicit" from "modifier" in the data model.
-                has_custom_grass = True
             elif modifier == "swamp":
                 grass_hex = SWAMP_HIGH_HEX
-                has_custom_grass = True
             else:
                 grass_hex = to_hex(sample(grass, temp, downfall))
 
@@ -175,6 +176,7 @@ def generate(assets: Path) -> str:
                 has_custom_grass=has_custom_grass,
                 has_custom_foliage=effects.get("foliage_color") is not None,
                 has_custom_dry_foliage=effects.get("dry_foliage_color") is not None,
+                modifier=modifier or "none",
             )
         )
 
@@ -186,7 +188,7 @@ def generate(assets: Path) -> str:
         "//! `crates/mtk-material/tests/test_biome_matches_jar.rs` fails when this table disagrees with",
         "//! the assets, and the generator is the only supported way to refresh it.",
         "",
-        "use super::BiomePalette;",
+        "use super::{BiomePalette, GrassColorModifier};",
         "",
         "pub static CANONICAL_BIOMES: &[BiomePalette] = &[",
     ]
@@ -205,6 +207,7 @@ def generate(assets: Path) -> str:
                 f'        has_custom_grass: {str(entry["has_custom_grass"]).lower()},',
                 f'        has_custom_foliage: {str(entry["has_custom_foliage"]).lower()},',
                 f'        has_custom_dry_foliage: {str(entry["has_custom_dry_foliage"]).lower()},',
+                f'        grass_color_modifier: GrassColorModifier::{MODIFIER_RUST[entry["modifier"]]},',
                 "    },",
             ]
         )

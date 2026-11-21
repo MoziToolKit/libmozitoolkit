@@ -1607,3 +1607,66 @@ MC：`pack.mcmeta` 的 `filter.block` 是 `IdentifierPattern` 列表（与 atlas
 生成后 `crates/mtk-material/src/biome/canonical_data.rs` 的 diff 仅 31 行：11 处颜色值 ±1~4、
 `sparce_jungle` 删除、`sulfur_caves` 新增。全仓测试、`cargo build-all-py`、Blender 套件 591 passed
 均通过（Blender 侧 PSNR 门限不受 1 个色阶影响）。
+
+---
+
+## 26. C-10：`grass_color_modifier` 数据化，删掉两处硬编码补丁
+
+### 26.1 问题（C-09 的收尾）
+
+C-09 把生物群系表变成"从数据生成"，但当时刻意保留了两处补丁（否则会改变行为）：
+
+1. **`dark_forest` 的草色从未变暗**：全仓没有 `grass_color_modifier` 的实现。运行期
+   `sample_column_tint_color` 对非自定义草色的生物群系直接返回 colormap 采样值，而 Minecraft 的
+   `GrassColorModifier.DARK_FOREST` 会做 `((base & 0x00FEFEFE) + 0x0028340A) >> 1`。
+2. **`has_custom_grass` 一布尔两义**：既表示"jar 声明了 `effects.grass_color`"，又被当成
+   "这是固定色（modifier 派生）"来用；`swamp`/`mangrove_swamp` 另有一份
+   `pal.id == "swamp" || pal.id == "mangrove_swamp"` 的硬编码判断。
+
+### 26.2 改法
+
+- `BiomePalette` 新增 `grass_color_modifier: GrassColorModifier`（`None` / `DarkForest` / `Swamp`），
+  由 `tools/gen_biome_palettes.py` 从 JSON 写入；`has_custom_grass` 回归本义（只有显式
+  `effects.grass_color` 才为 true）；
+- `GrassColorModifier::apply_linear`：在 **packed ARGB** 上执行 dark_forest 变换（三个通道的偏移
+  不同：0x28/0x34/0x0A，不能逐通道在 linear 空间做），其余 modifier 原样返回；
+- `mtk-voxel`：`SmoothedBiomeColumn.is_swamp: bool` → `grass_color_modifier`；`BiomeColumnSums` 用
+  "核内权重最大的 modifier"（dark_forest/swamp 都是整群系属性）；`sample_column_tint_color` 的
+  GRASS 分支：swamp → 噪声色、dark_forest → 采样后变换、显式 → 表内色、其余 → 采样；
+- **宿主契约不变**：dark_forest/swamp 的颜色宿主无法自行复现（宿主没有 modifier 逻辑），所以这两类
+  仍然以 `TINT_TYPE_HARDCODED` 导出精确颜色。`compute_mesh_biome_attributes_paletted_flat` 与
+  `resolve_biome_color_set_with_colormaps` 相应地把"固定草色"判定改为
+  `has_custom_grass || modifier != None`。
+
+### 26.3 顺带删掉的重复实现
+
+`bindings/mtk-py/src/material/biome/tint.rs::compute_mesh_biome_attributes_from_storage` 里复制了
+一整份 tint 分派表（GRASS/FOLIAGE/DRY/WATER/HARDCODED），且只看 `has_custom_grass`——这正是
+"dark_forest 变不回 HARDCODED"的直接原因，也违反"绑定层不得复制核心逻辑"。现在导出
+`mtk_voxel::sample_column_tint_color`，绑定直接调用，约 60 行重复逻辑消失。
+
+### 26.4 测试
+
+- `mtk-voxel` 单元测试（新 2 个）：
+  - `dark_forest_grass_is_darkened_after_sampling`：断言 `has_custom_grass == false`、返回颜色等于
+    "采样后 packed 变换"（期望值在测试里独立按 sRGB 传输函数计算，不复用被测代码）、且
+    **返回 override = true**（宿主契约）；
+  - `swamp_grass_ignores_the_colormap_and_keeps_its_noise_colour`：swamp 必须用噪声色而不是 colormap。
+- `mtk-material/tests/test_biome_matches_jar.rs` 增加 `the_custom_grass_flag_means_explicit_not_modifier`：
+  `has_custom_grass == (jar 声明 effects.grass_color)` 且 `grass_color_modifier` 与 JSON 一致；
+  原来对 modifier 生物群系的"carve-out"删除。
+- 红态：改前 `dark_forest_grass_is_darkened_after_sampling` 在第一条断言（`has_custom_grass == false`）
+  失败；Blender 侧 `test_3d_biome_tinting` 的两条断言（dark_forest 应为 HARDCODED=4）也失败。
+
+### 26.5 验证
+
+- `MTK_REQUIRE_REAL_ASSETS=1 cargo test --workspace`：0 失败 0 SKIP；
+- `cargo build-all-py` + Blender 套件 **591 passed**，包括 `test_3d_biome_tinting` 的
+  dark_forest 变暗与 swamp 噪声两条行为断言；
+- 生成器重跑后 `canonical_data.rs` 只多出 66 行 `grass_color_modifier` 字段与 3 处语义修正。
+
+### 26.6 剩余（不在本簇）
+
+多生物群系 uniform 混合路径（`resolve_biome_color_set_with_colormaps` 的 `multi_biomes` 分支）
+仍返回 `has_custom_*=false` 但给出混合后的固定色；这一路径没有测试覆盖，等有消费方时再定语义。
+

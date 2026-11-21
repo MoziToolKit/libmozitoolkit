@@ -90,11 +90,16 @@ pub fn resolve_biome_color_set_with_colormaps(
     let pal = get_biome_palette(biome_name);
     let default_cms = super::colormap::get_default_colormaps();
     let cms = colormaps.unwrap_or(&default_cms);
-    let grass = if !pal.has_custom_grass {
-        cms.sample_grass_linear(pal.temperature, pal.humidity)
-    } else {
+    // Swamp replaces the colour outright (the per-block noise is not available here), dark_forest
+    // transforms the colormap sample; both are fixed for this biome, so the host must not sample.
+    let grass = if pal.has_custom_grass || pal.grass_color_modifier.is_swamp() {
         pal.grass_linear()
+    } else {
+        pal.grass_color_modifier
+            .apply_linear(cms.sample_grass_linear(pal.temperature, pal.humidity))
     };
+    let grass_is_fixed = pal.has_custom_grass
+        || pal.grass_color_modifier != super::palettes::GrassColorModifier::None;
     let foliage = if !pal.has_custom_foliage {
         cms.sample_foliage_linear(pal.temperature, pal.humidity)
     } else {
@@ -112,7 +117,7 @@ pub fn resolve_biome_color_set_with_colormaps(
             dry_foliage,
             water: pal.water_linear(),
         },
-        pal.has_custom_grass,
+        grass_is_fixed,
         pal.has_custom_foliage,
         pal.has_custom_dry_foliage,
     )
