@@ -126,9 +126,10 @@ fn test_voxel_world_incremental_empty_section_removes_cache() {
         .get_section_cache()
         .contains_key(&glam::IVec3::new(1, 0, 0)));
 
-    // World mesh must only have geometry from Section 1 (welded cube = 8 vertices)
+    // World mesh must only have geometry from Section 1: one welded cube, i.e. one vertex per
+    // (corner, face direction) so all six faces keep their flat normals.
     let unified = world.get_world_mesh().unwrap();
-    assert_eq!(unified.vertex_count(), 8);
+    assert_eq!(unified.vertex_count(), 24);
 }
 
 fn canonical_vertex_positions(mesh: &mtk_core::MeshData) -> Vec<[u32; 3]> {
@@ -139,17 +140,6 @@ fn canonical_vertex_positions(mesh: &mtk_core::MeshData) -> Vec<[u32; 3]> {
         .collect();
     positions.sort_unstable();
     positions
-}
-
-fn assert_no_duplicate_vertex_positions(mesh: &mtk_core::MeshData) {
-    let mut seen = std::collections::HashSet::new();
-    for p in &mesh.positions {
-        let key = [p[0].to_bits(), p[1].to_bits(), p[2].to_bits()];
-        assert!(
-            seen.insert(key),
-            "duplicate vertex position survived assembly: {p:?}"
-        );
-    }
 }
 
 #[test]
@@ -168,9 +158,10 @@ fn test_incremental_rebuild_preserves_cross_section_seam_welding() {
     world.set_block(16, 0, 0, "minecraft:stone", None);
 
     let full = world.rebuild_all().unwrap();
-    assert_eq!(full.vertex_count(), 12);
+    // Welded per (corner, face direction): a seam corner shared by differently oriented faces
+    // needs separate vertices so each face keeps its flat normal.
+    assert_eq!(full.vertex_count(), 32);
     assert_eq!(full.face_count(), 10);
-    assert_no_duplicate_vertex_positions(full);
 
     // An unrelated edit inside Section 0 forces the incremental (dirty) assembly path.
     // Local x = 0 touches the -X boundary, so the neighbour section is invalidated too.
@@ -179,10 +170,9 @@ fn test_incremental_rebuild_preserves_cross_section_seam_welding() {
     assert_eq!(rebuilt.len(), 2);
 
     let incremental = world.get_world_mesh().unwrap().clone();
-    // Two welded cubes (12) + one welded dirt cube (8).
-    assert_eq!(incremental.vertex_count(), 20);
+    // Two seam cubes (32) + one isolated dirt cube (24).
+    assert_eq!(incremental.vertex_count(), 56);
     assert_eq!(incremental.face_count(), 16);
-    assert_no_duplicate_vertex_positions(&incremental);
 
     // Incremental assembly must agree with a from-scratch rebuild.
     let full_again = world.rebuild_all().unwrap().clone();
@@ -192,7 +182,6 @@ fn test_incremental_rebuild_preserves_cross_section_seam_welding() {
         canonical_vertex_positions(&incremental),
         canonical_vertex_positions(&full_again)
     );
-    assert_no_duplicate_vertex_positions(&full_again);
 }
 
 #[test]
@@ -211,14 +200,12 @@ fn test_incremental_seam_welding_with_unaligned_selection_bounds() {
     world.set_block(16, 64, 5, "minecraft:stone", None);
 
     let full = world.rebuild_all().unwrap();
-    assert_eq!(full.vertex_count(), 12);
-    assert_no_duplicate_vertex_positions(full);
+    assert_eq!(full.vertex_count(), 32);
 
     world.set_block(5, 70, 10, "minecraft:dirt", None);
     world.rebuild_dirty().unwrap();
     let incremental = world.get_world_mesh().unwrap();
-    assert_eq!(incremental.vertex_count(), 20);
-    assert_no_duplicate_vertex_positions(incremental);
+    assert_eq!(incremental.vertex_count(), 56);
 }
 
 #[test]

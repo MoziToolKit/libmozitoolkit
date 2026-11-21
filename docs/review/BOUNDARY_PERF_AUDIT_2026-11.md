@@ -1670,3 +1670,72 @@ C-09 把生物群系表变成"从数据生成"，但当时刻意保留了两处�
 多生物群系 uniform 混合路径（`resolve_biome_color_set_with_colormaps` 的 `multi_biomes` 分支）
 仍返回 `has_custom_*=false` 但给出混合后的固定色；这一路径没有测试覆盖，等有消费方时再定语义。
 
+---
+
+## 27. V-02：焊接丢弃法线
+
+### 27.1 问题
+
+顶点焊接有三处，全部只按位置建键：
+
+| 位置 | 作用 |
+|---|---|
+| `mtk-voxel/src/mesher/grid_pool.rs` | Section 内单位立方体角点池（`(gx*17+gy)*17+gz`） |
+| `mtk-core/src/mesh/weld.rs::weld_vertices` | 模型几何（楼梯/台阶/模型元素）的原地焊接 |
+| `mtk-core/src/mesh/merge.rs::merge_welded_sections_with` | 跨 Section 缝合 |
+
+法线只写在**新分配**顶点上，命中已有槽位时直接返回旧索引。于是被三个面共享的角点只保留最先
+写入的那个面法线——Blender 平着色下看不出问题，但任何读法线的消费方（glTF 导出、smooth shading、
+法线可视化）都会看到一个面以外的法线是错的。红态实测：
+
+```
+single welded cube: vertex 4 at [1.0, 2.0, 1.0] carries normal [-1.0, 0.0, 0.0]
+                    but its quad faces [0.0, 1.0, 0.0]
+```
+
+### 27.2 改法
+
+**一个策略，不是开关**：审计给了"键加 6 向法线索引"或"加 `weld_normals` 开关"两条路。选了前者，
+因为"坐标相同但法线不同"本来就不是同一个顶点；带开关会让默认路径继续产出错误法线。
+
+- 网格池：槽位从 4,913 扩到 `4,913 × 6`，槽号 = `(角点) * 6 + Direction::to_index()`；
+- `MeshData::weld_vertices` 与跨 Section 缝合：键变成 `(位置, 量化法线)`，
+  `weld_normal_key` 以 1/1024 量化（精确相等会把插值误差当成不同法线）；
+- 网格池顺带改为**线程内复用 + epoch 戳**：118 KiB 的表若每段重建并清零，624 段就是 73 MB 的
+  memset/churn；`with_thread_pool(|pool| ...)` 让每个 rayon worker 复用自己的池，`begin_mesh()`
+  只递增 epoch，旧槽位读取时自动视为空闲（`forbid(unsafe_code)` 下用 `RefCell` 闭包借用）。
+
+### 27.3 语义变化（已写进 crate README）
+
+"焊接 = 没有重复坐标"不再成立：一个立方体在焊接后仍有 24 个顶点（8 角 × 3 个暴露朝向）。
+受影响的断言都改成"增量路径 == 全量重建"这种与策略无关的形式：
+
+- `mtk-sync/tests/test_delta_seam_welding.rs`：原来断言"没有重复位置"，改为比较
+  delta 网格与全量重建的 `(位置, 法线)` 集合；
+- `mtk-voxel/tests/test_world.rs`：删除 `assert_no_duplicate_vertex_positions`，保留并强化
+  `canonical_vertex_positions` 的全量对比；
+- 各顶点计数断言：单立方体 8 → 24、两立方体 12 → 32、（两立方 + 独立立方）20 → 56、CTM 14 面 40；
+- `../MoziToolKit` 侧 `test_voxel_welding_origin.py`、`test_item_generator_bridge.py` 同步（剑 140 → 396）。
+
+### 27.4 代价（同机 A/B，真实存档 335,641 quads / 624 sections）
+
+| 指标 | 改前 | 改后 |
+|---|---|---|
+| 顶点数 | 334,954 | **354,122（+5.7%）** |
+| `mtk bench world` best | 42.7 ms | 44.3 ms（+1.6 ms，+3.7%） |
+| Blender 注入 | 27.1 ms | 27.2 ms（无变化） |
+| 端到端（scenario bench） | 136.1 ms | 139.4 ms（+2-3 ms，噪声区间边缘） |
+
+顶点只多 5.7% 是因为大多数角点只与少数面共享，且图元数量由面数决定。
+
+### 27.5 测试
+
+`crates/mtk-voxel/tests/test_vertex_normals.rs`（2 个，红→绿）：
+
+1. `a_welded_cube_keeps_per_face_normals`：每个 quad 的每个顶点法线必须等于该 quad 的几何法线；
+2. `seam_welding_keeps_per_face_normals`：两个位于不同 Section 的方块，跨缝合后同样成立
+   （覆盖 `merge_welded_sections_with`）。
+
+红态：改前两条都以"vertex N carries normal … but its quad faces …"失败。
+
+全仓测试 0 失败 0 SKIP、`cargo build-all-py`、Blender 套件 591 passed。

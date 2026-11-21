@@ -19,10 +19,13 @@ impl MeshData {
 
         let per_loop = self.uv_layout == UvLayout::PerLoop;
         let inv_dist = 1.0 / tolerance;
-        let mut coord_map = rustc_hash::FxHashMap::<[i32; 3], u32>::with_capacity_and_hasher(
-            self.positions.len(),
-            Default::default(),
-        );
+        // The key carries the normal: a shared position with a different face orientation must
+        // stay a separate vertex, otherwise the welded vertex keeps the wrong normal.
+        let mut coord_map =
+            rustc_hash::FxHashMap::<([i32; 3], [i16; 3]), u32>::with_capacity_and_hasher(
+                self.positions.len(),
+                Default::default(),
+            );
         let mut remap: Vec<u32> = Vec::with_capacity(self.positions.len());
         let mut new_positions: Vec<[f32; 3]> = Vec::with_capacity(self.positions.len());
         let mut new_normals: Vec<[f32; 3]> = Vec::with_capacity(self.normals.len());
@@ -33,11 +36,14 @@ impl MeshData {
 
         for i in 0..self.positions.len() {
             let p = self.positions[i];
-            let key = [
+            let position_key = [
                 (p[0] * inv_dist).round() as i32,
                 (p[1] * inv_dist).round() as i32,
                 (p[2] * inv_dist).round() as i32,
             ];
+            let normal_key =
+                super::weld_normal_key(self.normals.get(i).copied().unwrap_or([0.0, 0.0, 1.0]));
+            let key = (position_key, normal_key);
 
             if let Some(&existing_idx) = coord_map.get(&key) {
                 let uv_matches = per_loop || self.uvs.is_empty() || {

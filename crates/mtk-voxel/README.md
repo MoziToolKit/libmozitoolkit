@@ -76,6 +76,7 @@
 | **`mesher`**                | 高性能区块网格化器 (`SectionMesher`)、增量网格化器 (`DeltaMesher`) 与模型数据源枚举 (`ModelSource`)。 |
 | **`fluid`**                 | 流体类型枚举 (`FluidType`) 与流体 UV 修复算子 (`repair_quad_fluid_uv`, `batch_repair_fluid_uv`, `repair_mesh_fluid_uv_inplace`, `get_fluid_top_uvs`, `get_fluid_side_uvs`)。 |
 | **`biome`**                 | 5×5 (R=2) 盒式平滑生物群系柱计算 (`SmoothedBiomeColumn`)、`get_smoothed_column_biome` 与 `get_point_column_biome`。 |
+| **焊接语义**                | 顶点焊接的键是 `(位置, 法线)`：一个被三个面共享的角点需要三个顶点才能各带各的面法线（Blender 平着色看不出来，glTF/法线着色会错）。因此"焊接"不再等于"没有重复坐标"。Section 内的单位立方体池按 `(角点, 面朝向)` 建槽，跨 Section 缝合与模型几何焊接则把量化后的法线并入哈希键。 |
 | **`world`**                 | 统一 3D 场景引擎 (`VoxelWorld`)，封装存储管理、Rayon 并行重建、物理进度实时汇报 (`rebuild_all_with_progress`)、显式线程池配置 (`num_threads`)、单阶段流式跨区块缝合 (`merge_welded_sections`)、增量重建的 Section 边界缝合 (`merge_welded_sections_filtered`，保证 `rebuild_dirty` 与 `rebuild_all` 拓扑一致)、Section 增量网格缓存与清空 (`clear_cache`)、动态资产热重载 (`hot_reload_assets`)、使用图集 Chunk 追踪 (`used_chunk_ids`) 与多源摄取。 |
 | **`types`**                 | 配置参数 `MesherConfig`、坐标系枚举 `CoordinateSystem` 与错误类型 `VoxelError`。 |
 
@@ -198,7 +199,7 @@ pub trait VoxelSource {
 pub struct MesherConfig {
     pub coordinate_system: CoordinateSystem, // Minecraft / ZUpRightHanded / YUpRightHanded
     pub origin_centered: bool,               // 是否将原点居中到底部中心
-    pub weld_vertices: bool,                 // 是否合并共面/重合顶点形成流形拓扑
+    pub weld_vertices: bool,                 // 是否合并"同位置 + 同面朝向"的顶点（见下）
     pub selection_bounds: Option<([i32; 3], [i32; 3])>,
     pub enable_ao: bool,                     // 是否计算 4 顶点 AO 遮蔽
     pub exclude_hidden_volume: bool,         // 是否剔除复杂模型内部遮挡面

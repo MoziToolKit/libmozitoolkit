@@ -114,7 +114,7 @@ P0 = 崩溃/数据错/安全；P1 = 用户可见错误或确定性；P2 = 边界
 
 | ID | P | 位置 | 现象 | 修法 | 验证 |
 |---|---|---|---|---|---|
-| **V-02** | P1 | `mtk-voxel/src/mesher/grid_pool.rs:57` | 顶点去重键只有坐标，`normals` 取先到者 → 共享角 3 个面只有 1 个法线正确（Blender 平着色下不可见，glTF/smooth 会错） | key 加 6 向法线索引，或加 `weld_normals` 开关并显式记录取舍 | 非 1.0/多向法线用例：每个面法线 == 几何法线 |
+| **V-02** | 三处焊接（网格池、`MeshData::weld_vertices`、跨 Section 缝合）的键都补上"面朝向/量化法线"；网格池改为 `(角点, 6 向)` 槽位 + 线程内复用（epoch 复用免清零） | `mtk-voxel/src/mesher/grid_pool.rs`、`mtk-core/src/mesh/{weld,merge}.rs`、`mtk-voxel/tests/test_vertex_normals.rs`（2 个）与既有顶点计数断言更新；审计 §27 |
 | **V-07** | P2 | `mtk-voxel/src/fluid/height.rs:85` vs `:252` | 两套流体高度公式，waterlogged 分支不一致 | 收敛成一份（`get_fluid_base_height` 调用 `calculate_fluid_corner_heights`） | 同一批 waterlogged 状态两函数结果一致 |
 | **V-08** | P2 | `mtk-voxel/src/mesher/section_mesher.rs:42` | `padded.is_empty` 早退 → 全空气段里的方块实体（悬挂告示牌/头颅）无几何 | 早退条件加上 `block_entities.is_empty()` | 空气段放一个方块实体，断言有面 |
 | **C-03** | P2 | `collector.rs:13-46` + `ctm/solver.rs:136` | CTM 同优先级排序依赖文件枚举序 | 稳定排序（pack 序 + 文件名） | 打乱目录枚举起始位置后结果不变 |

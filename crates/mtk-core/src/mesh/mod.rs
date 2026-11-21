@@ -22,6 +22,21 @@ mod weld;
 pub use greedy::{greedy_mesh_2d_mask, greedy_mesh_2d_values, greedy_span_1d, GreedyRect};
 pub use topology::analyze_hard_edges;
 
+/// Quantized normal used as part of every weld key.
+///
+/// Welding by position alone merges vertices that belong to differently oriented faces, so one of
+/// them ends up with the other's normal. Flat-shaded consumers (Blender) hide it; anything that
+/// reads normals (glTF, smooth shading) does not. Quantization at 1/1024 keeps identical normals
+/// together and — unlike an exact float compare — tolerates interpolation round-off.
+#[inline]
+pub(crate) fn weld_normal_key(normal: [f32; 3]) -> [i16; 3] {
+    [
+        (normal[0] * 1024.0).round().clamp(-32_767.0, 32_767.0) as i16,
+        (normal[1] * 1024.0).round().clamp(-32_767.0, 32_767.0) as i16,
+        (normal[2] * 1024.0).round().clamp(-32_767.0, 32_767.0) as i16,
+    ]
+}
+
 /// Explicit interpretation of the `uvs` buffer.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

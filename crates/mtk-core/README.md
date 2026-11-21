@@ -68,7 +68,7 @@
 | `calculate_face_target_grid` | `(&uvs, tex_w, tex_h, pixels_per_face, max_subdivisions) -> (u32, u32)`：根据 UV 坐标与贴图尺寸推算最优细分列数和行数。 |
 | `calculate_pixel_grid_cut_factors` | `(&uvs, tex_w, tex_h, pixels_per_face, max_subdivisions) -> (Vec<f32>, Vec<f32>)`：计算四边形在纹理整数像素边界上的归一化切分参数因子。 |
 | `adaptive_pixel_split_mesh` | `(mesh, face_resolutions, default_res, pixels_per_face, max_subdiv, weld_dist) -> MeshData`：全网格批量自适应像素细分，支持多边形属性双线性插值与顶点焊接。 |
-| `MeshData::weld_vertices` | `(&mut MeshData, tolerance: f32)`：基于 `uv_layout` 选择逐 loop 或逐顶点属性策略的原地顶点焊接。 |
+| `MeshData::weld_vertices` | `(&mut MeshData, tolerance: f32)`：基于 `uv_layout` 选择逐 loop 或逐顶点属性策略的原地顶点焊接；**焊接键包含量化法线**，否则共享位置的异向面会被合并成同一个顶点、只保留先到者的法线。 |
 
 ### 2.4 智能挤出与 UV 修复 (`extrude`)
 

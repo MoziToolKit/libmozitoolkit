@@ -89,7 +89,9 @@ tiles=0-3
     let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
 
     assert!(!mesh.positions.is_empty());
-    assert_eq!(mesh.positions.len(), 16); // 2 connected cubes welded vertices
+    // CTM splits the 10 visible faces into 14 tiles; welding keeps one vertex per
+    // (corner, face direction), so 56 loop corners collapse to 40.
+    assert_eq!(mesh.positions.len(), 40);
     assert_eq!(mesh.uvs.len(), 56); // 14 quads * 4 loop corner UVs
                                     // All face materials should be chunk_id = 0
     assert!(mesh.face_materials.iter().all(|&mat| mat == 0));

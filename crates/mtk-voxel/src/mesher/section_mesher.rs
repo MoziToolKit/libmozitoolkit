@@ -45,9 +45,43 @@ impl SectionMesher {
     pub(crate) fn mesh_section_with_cache<'a, F>(
         padded: &PaddedVoxelArray,
         culler: &FaceCuller,
+        get_model_source: F,
+        config: &MesherConfig,
+        palette_cache: Option<&std::collections::HashMap<&str, Arc<ResolvedPaletteEntry>>>,
+    ) -> MeshData
+    where
+        F: FnMut(&str) -> ModelSource<'a>,
+    {
+        if config.weld_vertices {
+            super::grid_pool::with_thread_pool(|pool| {
+                Self::mesh_section_inner(
+                    padded,
+                    culler,
+                    get_model_source,
+                    config,
+                    palette_cache,
+                    Some(pool),
+                )
+            })
+        } else {
+            Self::mesh_section_inner(
+                padded,
+                culler,
+                get_model_source,
+                config,
+                palette_cache,
+                None,
+            )
+        }
+    }
+
+    fn mesh_section_inner<'a, F>(
+        padded: &PaddedVoxelArray,
+        culler: &FaceCuller,
         mut get_model_source: F,
         config: &MesherConfig,
         palette_cache: Option<&std::collections::HashMap<&str, Arc<ResolvedPaletteEntry>>>,
+        mut grid_pool: Option<&mut super::grid_pool::GridVertexPool>,
     ) -> MeshData
     where
         F: FnMut(&str) -> ModelSource<'a>,
@@ -78,11 +112,6 @@ impl SectionMesher {
         let world_offset_z = (padded.coord.z * 16) as f32;
         let world_origin = glam::Vec3::new(world_offset_x, world_offset_y, world_offset_z);
 
-        let mut grid_pool = if config.weld_vertices {
-            Some(super::grid_pool::GridVertexPool::new())
-        } else {
-            None
-        };
         let mut has_non_grid_geometry = false;
 
         let is_solid_opaque_fn = |px: usize, py: usize, pz: usize| -> bool {
@@ -417,7 +446,7 @@ impl SectionMesher {
                                 );
 
                             let grid_ctx = grid_pool
-                                .as_mut()
+                                .as_deref_mut()
                                 .map(|pool| (pool, [lx, ly, lz], world_origin));
 
                             emit_unit_cube_face(

@@ -167,6 +167,7 @@ pub fn emit_unit_cube_face(
                 local_pos[1] + corners[0][1],
                 local_pos[2] + corners[0][2],
                 n,
+                dir_idx as u8,
             );
             let idx1 = pool.get_or_create(
                 mesh,
@@ -176,6 +177,7 @@ pub fn emit_unit_cube_face(
                 local_pos[1] + corners[1][1],
                 local_pos[2] + corners[1][2],
                 n,
+                dir_idx as u8,
             );
             let idx2 = pool.get_or_create(
                 mesh,
@@ -185,6 +187,7 @@ pub fn emit_unit_cube_face(
                 local_pos[1] + corners[2][1],
                 local_pos[2] + corners[2][2],
                 n,
+                dir_idx as u8,
             );
             let idx3 = pool.get_or_create(
                 mesh,
@@ -194,6 +197,7 @@ pub fn emit_unit_cube_face(
                 local_pos[1] + corners[3][1],
                 local_pos[2] + corners[3][2],
                 n,
+                dir_idx as u8,
             );
             (idx0, idx1, idx2, idx3)
         } else {
