@@ -15,7 +15,7 @@ use crate::server::baseline::{encode_baseline_from_raw, BaselineEncoderConfig, B
 use crate::server::delta::encode_delta_op;
 
 use super::config::{generate_unique_server_uuid, ServerCommand, ServerConfig, ServerEvent};
-use super::state::{ClientHandle, PaletteState, SelectionContext, ServerInner};
+use super::state::{lock_unpoisoned, ClientHandle, PaletteState, SelectionContext, ServerInner};
 use super::worker::run_client_worker;
 
 /// The Native Live Sync WebSocket Server instance.
@@ -52,7 +52,7 @@ impl LiveSyncServer {
             })?;
 
         let inner = Arc::new(ServerInner::new(config.server_uuid));
-        *inner.local_addr.lock().unwrap() = Some(local_addr);
+        *lock_unpoisoned(&inner.local_addr) = Some(local_addr);
 
         let inner_clone = inner.clone();
         let config_clone = config.clone();
@@ -63,10 +63,7 @@ impl LiveSyncServer {
             while inner_clone.is_running() {
                 match listener.accept() {
                     Ok((stream, addr)) => {
-                        let mut clients = match inner_clone.clients.lock() {
-                            Ok(c) => c,
-                            Err(_) => break,
-                        };
+                        let mut clients = lock_unpoisoned(&inner_clone.clients);
 
                         if clients.len() >= config_clone.max_connections {
                             drop(stream);
@@ -113,7 +110,8 @@ impl LiveSyncServer {
     pub fn stop(&self) {
         self.inner.running.store(false, Ordering::Relaxed);
 
-        if let Ok(mut clients) = self.inner.clients.lock() {
+        {
+            let mut clients = lock_unpoisoned(&self.inner.clients);
             for client in clients.values() {
                 let _ = client.tx.send(ServerCommand::Close);
             }
@@ -122,18 +120,10 @@ impl LiveSyncServer {
 
         self.inner.epoch.fetch_add(1, Ordering::Relaxed);
         self.inner.sequence.store(1, Ordering::Relaxed);
-        if let Ok(mut pal) = self.inner.palette.lock() {
-            *pal = PaletteState::default();
-        }
-        if let Ok(mut sel) = self.inner.selection.lock() {
-            *sel = None;
-        }
+        *lock_unpoisoned(&self.inner.palette) = PaletteState::default();
+        *lock_unpoisoned(&self.inner.selection) = None;
 
-        let listener_thread = self
-            .listener_thread
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take();
+        let listener_thread = lock_unpoisoned(&self.listener_thread).take();
         if let Some(handle) = listener_thread {
             let _ = handle.join();
         }
@@ -151,17 +141,17 @@ impl LiveSyncServer {
 
     /// Returns the number of currently connected clients.
     pub fn client_count(&self) -> usize {
-        self.inner.clients.lock().map(|c| c.len()).unwrap_or(0)
+        lock_unpoisoned(&self.inner.clients).len()
     }
 
     /// Returns the bound local socket address.
     pub fn local_addr(&self) -> Option<SocketAddr> {
-        *self.inner.local_addr.lock().unwrap()
+        *lock_unpoisoned(&self.inner.local_addr)
     }
 
     /// Sets the active selection bounding box.
     pub fn set_selection(&self, min_pos: IVec3, size: IVec3, dimension: String) {
-        let mut sel = self.inner.selection.lock().unwrap();
+        let mut sel = lock_unpoisoned(&self.inner.selection);
         let existing_hash = sel.as_ref().map(|s| s.state_hash).unwrap_or(0);
         *sel = Some(SelectionContext {
             min_pos,
@@ -174,7 +164,7 @@ impl LiveSyncServer {
 
     /// Clears the active selection bounding box and broadcasts a Cancel frame.
     pub fn clear_selection(&self) {
-        let mut sel = self.inner.selection.lock().unwrap();
+        let mut sel = lock_unpoisoned(&self.inner.selection);
         *sel = None;
         let epoch = self.inner.epoch.load(Ordering::Relaxed);
         let cancel_pkt = Packet::Cancel {
@@ -218,7 +208,7 @@ impl LiveSyncServer {
 
         // Update selection context with computed state_hash
         {
-            let mut sel = self.inner.selection.lock().unwrap();
+            let mut sel = lock_unpoisoned(&self.inner.selection);
             *sel = Some(SelectionContext {
                 min_pos,
                 size,
@@ -229,7 +219,7 @@ impl LiveSyncServer {
 
         // Initialize authoritative palette from baseline
         {
-            let mut pal = self.inner.palette.lock().unwrap();
+            let mut pal = lock_unpoisoned(&self.inner.palette);
             pal.lookup = block_palette
                 .iter()
                 .enumerate()
@@ -273,16 +263,15 @@ impl LiveSyncServer {
 
     /// Broadcasts a pre-encoded raw RFC frame to all connected clients.
     pub fn broadcast_packet_bytes(&self, bytes: Vec<u8>) {
-        if let Ok(clients) = self.inner.clients.lock() {
-            for client in clients.values() {
-                let _ = client.tx.send(ServerCommand::SendPacket(bytes.clone()));
-            }
+        let clients = lock_unpoisoned(&self.inner.clients);
+        for client in clients.values() {
+            let _ = client.tx.send(ServerCommand::SendPacket(bytes.clone()));
         }
     }
 
     /// Sends a pre-encoded raw RFC frame to a specific connected client.
     pub fn send_packet_bytes(&self, client_id: u64, bytes: Vec<u8>) -> Result<(), ProtocolError> {
-        let clients = self.inner.clients.lock().unwrap();
+        let clients = lock_unpoisoned(&self.inner.clients);
         if let Some(client) = clients.get(&client_id) {
             let _ = client.tx.send(ServerCommand::SendPacket(bytes));
             Ok(())
@@ -305,7 +294,7 @@ impl LiveSyncServer {
         let mut changes = Vec::with_capacity(rel_coords.len());
 
         {
-            let mut pal = self.inner.palette.lock().unwrap();
+            let mut pal = lock_unpoisoned(&self.inner.palette);
             for (i, coord) in rel_coords.iter().enumerate() {
                 let state = &block_states[i];
                 let state_id = if let Some(&id) = pal.lookup.get(state) {
@@ -375,10 +364,9 @@ impl LiveSyncServer {
     /// Broadcasts an arbitrary RFC packet to all connected clients.
     pub fn broadcast_packet(&self, packet: &Packet) -> Result<(), ProtocolError> {
         let bytes = encode_packet(packet)?;
-        if let Ok(clients) = self.inner.clients.lock() {
-            for client in clients.values() {
-                let _ = client.tx.send(ServerCommand::SendPacket(bytes.clone()));
-            }
+        let clients = lock_unpoisoned(&self.inner.clients);
+        for client in clients.values() {
+            let _ = client.tx.send(ServerCommand::SendPacket(bytes.clone()));
         }
         Ok(())
     }
@@ -389,7 +377,7 @@ impl LiveSyncServer {
         client_id: u64,
         stream: &BaselineStream,
     ) -> Result<(), ProtocolError> {
-        let clients = self.inner.clients.lock().unwrap();
+        let clients = lock_unpoisoned(&self.inner.clients);
         if client_id == 0 {
             for client in clients.values() {
                 for pkt in &stream.packets {
@@ -415,7 +403,7 @@ impl LiveSyncServer {
     /// Broadcasts an incremental Delta or Visual Entity packet to all connected clients.
     pub fn broadcast_delta(&self, delta_packet: &Packet) -> Result<(), ProtocolError> {
         let bytes = encode_packet(delta_packet)?;
-        let clients = self.inner.clients.lock().unwrap();
+        let clients = lock_unpoisoned(&self.inner.clients);
         for client in clients.values() {
             let _ = client.tx.send(ServerCommand::SendPacket(bytes.clone()));
         }

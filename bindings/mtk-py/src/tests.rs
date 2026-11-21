@@ -161,7 +161,7 @@ fn test_python_live_sync_session_and_protocol() {
 
 #[test]
 fn test_python_api_version() {
-    assert_eq!(api_version(), 2);
+    assert_eq!(api_version(), 3);
 }
 
 #[test]

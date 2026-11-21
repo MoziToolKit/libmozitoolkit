@@ -17,7 +17,7 @@
 
 use std::collections::HashMap;
 
-use crate::builtin::generators::cube::{visible_faces_except, CubeSpec};
+use crate::builtin::generators::cube::{CubeSpec, CUBE_FACES};
 use crate::parser::blockstate::BlockState;
 use crate::parser::model_json::{
     BlockModelJson, BuiltinTransform, ElementJson, FaceJson, TextureValue,
@@ -218,7 +218,7 @@ pub(crate) fn build_chest_model(blockstate: &BlockState) -> Option<BlockModelJso
             ];
             let cube = CubeSpec::new(spec.tex_offs, spec.min, dimensions);
             let mut faces = HashMap::new();
-            for face in visible_faces_except(&[]) {
+            for face in CUBE_FACES {
                 let uv = cube.model_face_uvs(face);
                 let scale = 16.0 / CHEST_TEXTURE_SIZE;
                 faces.insert(

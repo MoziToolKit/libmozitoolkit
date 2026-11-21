@@ -104,7 +104,7 @@ fn collect_unique_states<'s>(
 ) -> std::collections::HashSet<&'s str> {
     let mut unique_states: std::collections::HashSet<&'s str> = std::collections::HashSet::new();
     for sec in sections {
-        if !sec.is_empty {
+        if !sec.is_empty || !sec.block_entities.is_empty() {
             for st in &sec.palette {
                 unique_states.insert(st.as_str());
             }

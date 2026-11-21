@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crossbeam_channel::{Receiver, Sender};
 use glam::IVec3;
@@ -39,6 +39,12 @@ impl Default for PaletteState {
             list: vec!["minecraft:air".to_string()],
         }
     }
+}
+
+/// Acquires a mutex even if a previous holder panicked while keeping invariants intact.
+#[inline]
+pub(crate) fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 pub(crate) struct ServerInner {
@@ -90,9 +96,8 @@ impl ServerInner {
     }
 
     pub(crate) fn remove_client(&self, client_id: u64) {
-        if let Ok(mut clients) = self.clients.lock() {
-            clients.remove(&client_id);
-        }
+        let mut clients = lock_unpoisoned(&self.clients);
+        clients.remove(&client_id);
     }
 
     pub(crate) fn get_handshake_context(
@@ -100,7 +105,7 @@ impl ServerInner {
         config: &ServerConfig,
         addr: SocketAddr,
     ) -> HandshakeContext {
-        let selection_opt = self.selection.lock().unwrap().clone();
+        let selection_opt = lock_unpoisoned(&self.selection).clone();
         let (min_pos, size, dimension, state_hash) = match selection_opt {
             Some(s) => (s.min_pos, s.size, s.dimension, s.state_hash),
             None => (
@@ -155,6 +160,7 @@ pub(crate) fn snapshot_uuid_for(counter: u64, server_uuid: [u8; 16]) -> [u8; 16]
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     #[test]
     fn snapshot_ids_are_unique_per_baseline() {
@@ -188,5 +194,32 @@ mod tests {
             b[8..],
             "counter neighbours must not share the hash half"
         );
+    }
+
+    #[test]
+    fn handshake_context_recovers_after_selection_mutex_poisoning() {
+        let inner = Arc::new(ServerInner::new([0x44; 16]));
+        {
+            let mut sel = lock_unpoisoned(&inner.selection);
+            *sel = Some(SelectionContext {
+                min_pos: IVec3::new(1, 2, 3),
+                size: IVec3::new(4, 5, 6),
+                dimension: "minecraft:overworld".to_string(),
+                state_hash: 0xDEAD_BEEF,
+            });
+        }
+
+        let poison_target = Arc::clone(&inner);
+        let handle = std::thread::spawn(move || {
+            let _guard = lock_unpoisoned(&poison_target.selection);
+            panic!("simulated panic while holding selection lock");
+        });
+        assert!(handle.join().is_err());
+        assert!(inner.selection.is_poisoned());
+
+        let ctx = inner
+            .get_handshake_context(&ServerConfig::default(), "127.0.0.1:12345".parse().unwrap());
+        assert_eq!(ctx.min_pos, IVec3::new(1, 2, 3));
+        assert_eq!(ctx.state_hash, 0xDEAD_BEEF);
     }
 }

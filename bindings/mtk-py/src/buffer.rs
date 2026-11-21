@@ -8,14 +8,11 @@ use pyo3::prelude::*;
 use pyo3::types::PyMemoryView;
 use std::os::raw::{c_int, c_void};
 
-#[allow(dead_code)]
 enum BufferStorage {
-    Parent(Py<PyAny>),
-    Bytes(Vec<u8>),
-    F32(Vec<f32>),
-    I32(Vec<i32>),
-    U32(Vec<u32>),
-    U16(Vec<u16>),
+    Parent { _parent: Py<PyAny> },
+    F32 { _data: Vec<f32> },
+    I32 { _data: Vec<i32> },
+    U32 { _data: Vec<u32> },
 }
 
 /// 16-byte aligned static dummy memory for zero-length buffers to prevent null pointer dereferences.
@@ -139,7 +136,9 @@ pub fn create_zerocopy_typed_memoryview<'py>(
             byte_shape: [total_bytes as ffi::Py_ssize_t],
             byte_strides: [1],
             readonly: true,
-            _storage: BufferStorage::Parent(parent.clone().unbind()),
+            _storage: BufferStorage::Parent {
+                _parent: parent.clone().unbind(),
+            },
         },
     )?;
     unsafe {
@@ -310,7 +309,7 @@ pub fn create_owned_f32_memoryview<'py>(
             byte_shape: [total_bytes as ffi::Py_ssize_t],
             byte_strides: [1],
             readonly: true,
-            _storage: BufferStorage::F32(vec),
+            _storage: BufferStorage::F32 { _data: vec },
         },
     )?;
     unsafe {
@@ -348,7 +347,7 @@ pub fn create_owned_u32_memoryview<'py>(
             byte_shape: [total_bytes as ffi::Py_ssize_t],
             byte_strides: [1],
             readonly: true,
-            _storage: BufferStorage::U32(vec),
+            _storage: BufferStorage::U32 { _data: vec },
         },
     )?;
     unsafe {
@@ -386,7 +385,7 @@ pub fn create_owned_i32_memoryview<'py>(
             byte_shape: [total_bytes as ffi::Py_ssize_t],
             byte_strides: [1],
             readonly: true,
-            _storage: BufferStorage::I32(vec),
+            _storage: BufferStorage::I32 { _data: vec },
         },
     )?;
     unsafe {

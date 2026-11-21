@@ -17,7 +17,7 @@ def quad_mesh():
 
 class TestLibMtkPy(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(libmtk_py.api_version(), 2)
+        self.assertEqual(libmtk_py.api_version(), 3)
         self.assertTrue(len(libmtk_py.version()) > 0)
         self.assertEqual(libmtk_py.version(), libmtk_py.__version__)
 
@@ -54,8 +54,12 @@ class TestLibMtkPy(unittest.TestCase):
         mesh = quad_mesh()
         mesh.add_string_attribute("mtk_source_texture", "face", ["minecraft:block/dirt"])
         mesh.add_attribute_from_buffer(
-            "mtk_emission", "face", "float", bytes([0, 0, 128, 63])
+            "mtk_emission", "face", "float", np.array([1.0], dtype=np.float32)
         )
+        with self.assertRaises(ValueError):
+            mesh.add_attribute_from_buffer(
+                "mtk_bad_emission", "face", "float", bytes([0, 0, 128, 63])
+            )
 
         self.assertIn("mtk_source_texture", mesh.attribute_names())
         self.assertIn("mtk_emission", mesh.attribute_names())

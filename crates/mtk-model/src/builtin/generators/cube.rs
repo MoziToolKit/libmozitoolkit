@@ -2,17 +2,16 @@
 //!
 //! Transcribed from the client's `ModelPart.Cube` / `CubeDefinition` / `CubeListBuilder` so a
 //! procedural generator can describe geometry the way the vanilla renderer does — boxes with a
-//! texture offset, optional mirroring and a visible-face mask — instead of a bespoke JSON dialect.
+//! texture offset — instead of a bespoke JSON dialect.
 //!
 //! Conventions:
 //! - Coordinates are in `[0, 16]` block units, **y up**, +z south — the block-model space our
 //!   baker uses. The client's `ModelPart` space is y *down* (the renderer applies
-//!   `scale(-1, -1, 1)`), so a box transcribed from a `*Model` class must be flipped on y and its
-//!   face UVs permuted; [`CubeSpec::model_face_uvs`] does the UV part, [`flip_y`] the geometry.
+//!   `scale(-1, -1, 1)`), so a box transcribed from a `*Model` class must be flipped on y via
+//!   [`model_corners`] and its face UVs permuted via [`CubeSpec::model_face_uvs`].
 //! - `origin` is the box's minimum corner; `dimensions` are its extents.
 //! - UVs are returned in texture *pixels*; the caller divides by `texture_size / 16` to reach the
 //!   `[0, 16]` model space used by `BlockModelJson`.
-//! - Only the faces in `visible` are emitted, matching `CubeListBuilder.addBox(..., visibleFaces)`.
 
 use mtk_core::Direction;
 
@@ -25,8 +24,6 @@ pub struct CubeSpec {
     pub dimensions: [f32; 3],
     /// Texture offset in texels (`texOffs(u, v)`).
     pub tex_offs: [f32; 2],
-    /// Mirrors the box across its own x axis, as `CubeListBuilder.mirror()` does.
-    pub mirror: bool,
 }
 
 impl CubeSpec {
@@ -36,7 +33,6 @@ impl CubeSpec {
             origin,
             dimensions,
             tex_offs,
-            mirror: false,
         }
     }
 
@@ -110,18 +106,6 @@ pub fn model_corners(min: [f32; 3], max: [f32; 3]) -> ([f32; 3], [f32; 3]) {
     ([max[0], max[1], min[2]], [min[0], min[1], max[2]])
 }
 
-/// Faces of a box that are visible from outside, i.e. `allOfEnumExcept(hidden)`.
-///
-/// Vanilla uses this to drop the shared face of paired models; the corresponding texture region is
-/// blank (verified for `entity/chest/normal_left.png`: the west panel rect is fully transparent),
-/// so keeping the face would only add a transparent quad.
-pub fn visible_faces_except(hidden: &[Direction]) -> Vec<Direction> {
-    CUBE_FACES
-        .into_iter()
-        .filter(|face| !hidden.contains(face))
-        .collect()
-}
-
 /// All six faces in the order the client emits them (`Cube` constructor order).
 pub const CUBE_FACES: [Direction; 6] = [
     Direction::Down,
@@ -155,14 +139,6 @@ mod tests {
             [up[0] / 4.0, up[1] / 4.0, up[2] / 4.0, up[3] / 4.0],
             [7.0, 8.25, 10.5, 4.75]
         );
-    }
-
-    #[test]
-    fn visible_face_mask_drops_only_the_requested_faces() {
-        let faces = visible_faces_except(&[Direction::East]);
-        assert_eq!(faces.len(), 5);
-        assert!(!faces.contains(&Direction::East));
-        assert!(faces.contains(&Direction::West));
     }
 
     /// The corner order the baker expects: x/y from the maximum, z from the minimum.

@@ -42,7 +42,7 @@ impl DeltaMesher {
         let mut results = Vec::with_capacity(padded_sections.len());
 
         for (&coord, padded) in dirty_coords.iter().zip(&padded_sections) {
-            if !padded.is_empty {
+            if !padded.is_empty || !padded.block_entities.is_empty() {
                 let mesh = SectionMesher::mesh_section_with_cache(
                     padded,
                     culler,

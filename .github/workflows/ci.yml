@@ -135,10 +135,12 @@ jobs:
           maturin build --release --out dist -m adapters/blender/mtk-blender-dna-py/Cargo.toml
       - name: Verify wheel imports
         run: |
+          python -m pip install --upgrade pip pytest numpy
           python -m pip install dist/*.whl
           python -c "import libmtk_py; print('libmtk_py', libmtk_py.version(), 'api', libmtk_py.api_version())"
           python -c "import libmtk_blender_dna; print('libmtk_blender_dna', libmtk_blender_dna.api_version())"
-          python -m unittest discover -s adapters/blender/mtk-blender-dna-py/tests -q
+          pytest bindings/mtk-py/tests/ -q
+          pytest adapters/blender/mtk-blender-dna-py/tests/ -q
       - name: Smoke check JNI dynamic library (Linux)
         run: |
           cargo build -p mtk-jni --release

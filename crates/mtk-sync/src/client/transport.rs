@@ -119,6 +119,15 @@ impl SyncClient {
         }
     }
 
+    fn drain_stale_commands(cmd_receiver: &Receiver<ClientCommand>) -> bool {
+        while let Ok(cmd) = cmd_receiver.try_recv() {
+            if matches!(cmd, ClientCommand::Stop) {
+                return true;
+            }
+        }
+        false
+    }
+
     fn run_loop(
         url_str: String,
         msg_sender: Sender<ClientMessage>,
@@ -142,6 +151,11 @@ impl SyncClient {
 
             match tungstenite::connect(&url_str) {
                 Ok((mut socket, _response)) => {
+                    if Self::drain_stale_commands(&cmd_receiver) {
+                        let _ = socket.close(None);
+                        let _ = msg_sender.send(ClientMessage::Disconnected);
+                        return;
+                    }
                     attempts = 0;
                     let _ = msg_sender.send(ClientMessage::Status("CONNECTED".to_string()));
 
@@ -244,6 +258,11 @@ impl SyncClient {
                         *guard = None;
                     }
 
+                    if Self::drain_stale_commands(&cmd_receiver) {
+                        let _ = msg_sender.send(ClientMessage::Disconnected);
+                        return;
+                    }
+
                     if running.load(Ordering::Relaxed) && auto_reconnect {
                         let _ = msg_sender.send(ClientMessage::ConnectionLost);
                     }
@@ -293,5 +312,100 @@ impl SyncClient {
 impl Drop for SyncClient {
     fn drop(&mut self) {
         self.stop();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::TcpListener;
+    use std::sync::mpsc;
+    use std::time::Instant;
+
+    #[test]
+    fn reconnect_drains_stale_commands_queued_while_disconnected() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind ephemeral port");
+        let addr = listener.local_addr().expect("local addr");
+        let (allow_second_tx, allow_second_rx) = mpsc::channel::<()>();
+        let (received_tx, received_rx) = mpsc::channel::<Vec<u8>>();
+
+        let server_thread = thread::spawn(move || {
+            // 1. Accept first connection and immediately close it to trigger reconnect.
+            let (stream1, _) = listener.accept().expect("accept conn 1");
+            let mut ws1 = tungstenite::accept(stream1).expect("ws accept 1");
+            let _ = ws1.close(None);
+            drop(ws1);
+
+            // Wait until the test finishes queueing a stale command while disconnected.
+            allow_second_rx.recv().expect("gate for conn 2");
+
+            // 2. Accept second connection and capture the first binary frame sent on it.
+            let (stream2, _) = listener.accept().expect("accept conn 2");
+            let mut ws2 = tungstenite::accept(stream2).expect("ws accept 2");
+            let _ = ws2.get_mut().set_read_timeout(Some(Duration::from_secs(3)));
+            loop {
+                match ws2.read() {
+                    Ok(Message::Binary(bin)) => {
+                        let _ = received_tx.send(bin.to_vec());
+                        break;
+                    }
+                    Ok(Message::Close(_)) => break,
+                    Ok(_) => {}
+                    Err(e) => panic!("unexpected ws2 read error: {e}"),
+                }
+            }
+        });
+
+        let (msg_tx, msg_rx) = crossbeam_channel::unbounded();
+        let mut client =
+            SyncClient::connect(format!("ws://{addr}"), msg_tx, true, 5).expect("connect");
+        let cmd_tx = client.get_cmd_sender();
+
+        // Wait for ConnectionLost from connection 1.
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let mut saw_lost = false;
+        while Instant::now() < deadline {
+            if let Ok(ClientMessage::ConnectionLost) =
+                msg_rx.recv_timeout(Duration::from_millis(50))
+            {
+                saw_lost = true;
+                break;
+            }
+        }
+        assert!(saw_lost, "expected ConnectionLost after conn 1 closed");
+
+        // Queue a stale command while disconnected, then allow conn 2 to accept.
+        cmd_tx
+            .send(ClientCommand::Send(b"STALE".to_vec()))
+            .expect("send stale");
+        allow_second_tx.send(()).expect("unlock conn 2");
+
+        // Wait for CONNECTED on connection 2, then send a fresh command.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut saw_connected_2 = false;
+        while Instant::now() < deadline {
+            if let Ok(ClientMessage::Status(s)) = msg_rx.recv_timeout(Duration::from_millis(50)) {
+                if s == "CONNECTED" {
+                    saw_connected_2 = true;
+                    break;
+                }
+            }
+        }
+        assert!(saw_connected_2, "expected CONNECTED on conn 2");
+
+        cmd_tx
+            .send(ClientCommand::Send(b"FRESH".to_vec()))
+            .expect("send fresh");
+
+        let first_frame = received_rx
+            .recv_timeout(Duration::from_secs(3))
+            .expect("conn 2 must receive a frame");
+        assert_eq!(
+            first_frame, b"FRESH",
+            "stale command queued while disconnected leaked into the new connection"
+        );
+
+        client.stop();
+        server_thread.join().expect("server thread join");
     }
 }

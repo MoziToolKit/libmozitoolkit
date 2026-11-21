@@ -97,3 +97,54 @@ fn duplicate_failure_reports_keep_the_first_reason() {
     assert_eq!(db.bake_failures().len(), 1);
     assert_eq!(db.bake_failures()[0].reason, "invalid_model_json");
 }
+
+#[test]
+fn mod_namespace_model_never_falls_back_to_vanilla_short_name() {
+    let mut pack = MemoryPack::new("NamespaceIsolation");
+
+    // Vanilla stone exists with a full cube model, plus an unqualified blockstate ref.
+    pack.insert(
+        "assets/minecraft/models/block/stone.json",
+        br##"{ "elements": [{ "from": [0, 0, 0], "to": [16, 16, 16], "faces": { "up": { "texture": "#all" } } }], "textures": { "all": "minecraft:block/stone" } }"##.to_vec(),
+    );
+    pack.insert(
+        "assets/minecraft/blockstates/unqualified_stone.json",
+        br#"{ "variants": { "": { "model": "block/stone" } } }"#.to_vec(),
+    );
+
+    // Mod block references `mymod:block/stone`, which does NOT exist in the pack,
+    // plus a child model whose missing parent is `mymod:block/stone`.
+    pack.insert(
+        "assets/mymod/blockstates/stone.json",
+        br#"{ "variants": { "": { "model": "mymod:block/stone" } } }"#.to_vec(),
+    );
+    pack.insert(
+        "assets/mymod/models/block/child.json",
+        br#"{ "parent": "mymod:block/stone" }"#.to_vec(),
+    );
+    pack.insert(
+        "assets/mymod/blockstates/child.json",
+        br#"{ "variants": { "": { "model": "mymod:block/child" } } }"#.to_vec(),
+    );
+
+    let mut stack = ResourcePackStack::new();
+    stack.push_pack(Box::new(pack));
+    let db = libmtk::prebake_all_models(&stack, None).expect("prebake");
+
+    let vanilla = db
+        .get("minecraft:unqualified_stone")
+        .expect("unqualified vanilla reference must still resolve to minecraft:block/stone");
+    assert_eq!(vanilla.elements.len(), 1);
+
+    let mod_stone_elems = db.get("mymod:stone").map_or(0, |m| m.elements.len());
+    assert_eq!(
+        mod_stone_elems, 0,
+        "missing mymod:block/stone must NOT silently resolve to minecraft:block/stone"
+    );
+
+    let mod_child_elems = db.get("mymod:child").map_or(0, |m| m.elements.len());
+    assert_eq!(
+        mod_child_elems, 0,
+        "parent lookup for mymod:block/stone must NOT silently resolve to minecraft:block/stone"
+    );
+}

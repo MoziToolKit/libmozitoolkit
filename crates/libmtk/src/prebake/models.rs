@@ -107,10 +107,7 @@ pub(crate) fn prebake_all_models_with_progress(
             }
             match serde_json::from_slice::<BlockModelJson>(&bytes) {
                 Ok(model) => {
-                    model_cache.insert(canon.clone(), model.clone());
-                    if loc.namespace == "minecraft" {
-                        model_cache.insert(loc.path.clone(), model.clone());
-                    }
+                    model_cache.insert(canon.clone(), model);
                     if loc.path.starts_with("item/") && seen_items.insert(canon) {
                         item_model_locs.push(loc);
                     }
@@ -132,10 +129,7 @@ pub(crate) fn prebake_all_models_with_progress(
         }
         for path in ResourceLocation::model_candidate_asset_paths(model_id) {
             if let Some(loc) = ResourceLocation::from_asset_path(&path, "models", "json") {
-                if let Some(m) = model_cache
-                    .get(&loc.as_string())
-                    .or_else(|| model_cache.get(&loc.path))
-                {
+                if let Some(m) = model_cache.get(&loc.as_string()) {
                     return Some(m.clone());
                 }
             }

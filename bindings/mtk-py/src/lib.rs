@@ -29,7 +29,13 @@ mod unstable;
 use pyo3::prelude::*;
 
 /// Integer API version understood by this native extension.
-pub const API_VERSION: u32 = 2;
+///
+/// v3: dropped the continuous visual entity surface (`build_entity_render_plan`,
+///     `supported_visual_entity_ids`, visual-entity palette methods), tightened
+///     `add_attribute_from_buffer` dtype/itemsize checks, and added
+///     `set_thread_count` / `threading_info` / `newest_cache_package` /
+///     `MeshData.materials_are_slots`.
+pub const API_VERSION: u32 = 3;
 
 pub(crate) use ctm::PyCtmSolver;
 pub(crate) use cull::PyFaceCuller;

@@ -52,7 +52,7 @@ impl SectionMesher {
     where
         F: FnMut(&str) -> ModelSource<'a>,
     {
-        if padded.is_empty {
+        if padded.is_empty && padded.block_entities.is_empty() {
             return MeshData::new();
         }
 
@@ -488,4 +488,43 @@ fn pre_resolve_block_entities(
         }
     }
     entity_meshing_entries
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::padded_index;
+    use mtk_core::constants::voxel::PADDED_VOLUME;
+
+    #[test]
+    fn empty_flagged_section_with_block_entity_still_emits_geometry() {
+        let mut padded_voxels = vec![0u16; PADDED_VOLUME];
+        // Place a decorated pot at local (0, 0, 0) -> padded (1, 1, 1) while `is_empty` is set.
+        padded_voxels[padded_index(1, 1, 1)] = 1;
+        let mut block_entities = HashMap::new();
+        block_entities.insert(
+            0u16,
+            mtk_model::BlockEntityData::new_decorated_pot([None, None, None, None]),
+        );
+
+        let padded = PaddedVoxelArray {
+            coord: IVec3::ZERO,
+            palette: vec![
+                "minecraft:air".to_string(),
+                "minecraft:decorated_pot".to_string(),
+            ],
+            padded_voxels,
+            is_empty: true,
+            biome_data: None,
+            block_entities,
+        };
+
+        let culler = FaceCuller::default();
+        let config = MesherConfig::default();
+        let mesh = SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &config);
+        assert!(
+            !mesh.is_empty(),
+            "section with block entities must not short-circuit even when is_empty is true"
+        );
+    }
 }

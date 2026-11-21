@@ -26,7 +26,12 @@ impl ModelBaker {
         // Fast path: check shared pre-resolved cache and local cache (only when no entity data)
         if !is_bell && !has_entity {
             if let Some(ref shared) = self.shared_resolved {
-                if let Some(r) = shared.get(model_id) {
+                let hit = shared.get(model_id).or_else(|| {
+                    (!model_id.contains(':'))
+                        .then(|| format!("minecraft:{model_id}"))
+                        .and_then(|canon| shared.get(&canon))
+                });
+                if let Some(r) = hit {
                     if !r.elements.is_empty() {
                         return Ok(std::sync::Arc::clone(r));
                     }
