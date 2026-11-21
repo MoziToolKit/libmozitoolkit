@@ -6,6 +6,7 @@
 use alloc::format;
 use alloc::string::String;
 use core::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
 
 /// Snapshot of an active task execution milestone with exact physical counters.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,7 +60,12 @@ pub struct ProgressThrottler<'a> {
     total: usize,
     step: usize,
     completed: AtomicUsize,
-    last_reported: AtomicUsize,
+    /// Last *delivered* report, guarded so callbacks are delivered in non-decreasing order.
+    ///
+    /// Workers finish in arbitrary order: two threads can obtain `current = 10` and `current = 11`
+    /// and then race to invoke the callback. A host that draws the later value first would see the
+    /// bar jump backwards, and `current - last` on a stale `last` underflows (a debug-build panic).
+    last_reported: Mutex<usize>,
     callback: Option<ProgressCallback<'a>>,
     description_prefix: Option<&'static str>,
 }
@@ -74,7 +80,7 @@ impl<'a> ProgressThrottler<'a> {
             total,
             step,
             completed: AtomicUsize::new(0),
-            last_reported: AtomicUsize::new(0),
+            last_reported: Mutex::new(0),
             callback,
             description_prefix: None,
         }
@@ -102,9 +108,14 @@ impl<'a> ProgressThrottler<'a> {
     pub fn inc_by(&self, n: usize) -> usize {
         let current = self.completed.fetch_add(n, Ordering::SeqCst) + n;
         if let Some(cb) = self.callback {
-            let last = self.last_reported.load(Ordering::Relaxed);
-            if current >= self.total || current - last >= self.step {
-                self.last_reported.store(current, Ordering::Relaxed);
+            // The gate is held while the callback runs: that is what makes delivery ordered. A
+            // stale (higher) report is dropped instead of being replayed out of order.
+            let mut last = self
+                .last_reported
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if current >= self.total || current.saturating_sub(*last) >= self.step {
+                *last = current;
                 let msg = match self.description_prefix {
                     Some(prefix) => format!("{prefix} ({current}/{})", self.total),
                     None => format!("{}: ({current}/{})", self.stage, self.total),
@@ -161,5 +172,53 @@ mod tests {
         assert_eq!(throttler.current(), 100);
         // Step is 10, total is 100 => called ~10 times
         assert!(call_count.load(Ordering::SeqCst) >= 9);
+    }
+
+    /// Callbacks must arrive in non-decreasing order even when workers finish out of order.
+    ///
+    /// Two threads can compute `current = 10` and `current = 11` and then race to invoke the
+    /// callback; a host drawing the later value first would watch its progress bar jump backwards.
+    #[test]
+    fn reports_never_go_backwards_under_parallel_progress() {
+        use std::sync::Mutex;
+
+        let observed: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+        let callback = |report: ProgressReport| {
+            observed.lock().expect("observed").push(report.current);
+        };
+
+        const THREADS: usize = 8;
+        const PER_THREAD: usize = 400;
+        let total = THREADS * PER_THREAD;
+        let throttler =
+            ProgressThrottler::new("parallel_progress", total, Some(&callback)).with_step(1);
+
+        std::thread::scope(|scope| {
+            for _ in 0..THREADS {
+                scope.spawn(|| {
+                    for _ in 0..PER_THREAD {
+                        throttler.inc();
+                    }
+                });
+            }
+        });
+
+        let observed = observed.into_inner().expect("observed");
+        // Out-of-order reports are dropped (a stale, lower value would move the bar backwards), so
+        // the count is below `total`; ordering and the final 100% are what matter.
+        assert_eq!(
+            observed.last().copied(),
+            Some(total),
+            "the last report must be the completed total"
+        );
+        for window in observed.windows(2) {
+            assert!(
+                window[0] <= window[1],
+                "progress went backwards: {} then {} (full sequence head: {:?})",
+                window[0],
+                window[1],
+                &observed[..observed.len().min(16)]
+            );
+        }
     }
 }
