@@ -1672,70 +1672,50 @@ C-09 把生物群系表变成"从数据生成"，但当时刻意保留了两处�
 
 ---
 
-## 27. V-02：焊接丢弃法线
+## 27. V-02 复查：撤回 —— 焊接必须保持"仅位置"
 
-### 27.1 问题
+> 本节编号占 27（原先的"V-02：焊接丢弃法线"已随撤回一并删除）。
 
-顶点焊接有三处，全部只按位置建键：
+### 28.1 我改了什么、为什么现在撤回
 
-| 位置 | 作用 |
-|---|---|
-| `mtk-voxel/src/mesher/grid_pool.rs` | Section 内单位立方体角点池（`(gx*17+gy)*17+gz`） |
-| `mtk-core/src/mesh/weld.rs::weld_vertices` | 模型几何（楼梯/台阶/模型元素）的原地焊接 |
-| `mtk-core/src/mesh/merge.rs::merge_welded_sections_with` | 跨 Section 缝合 |
+改动把三处焊接的键都加上了面朝向/量化法线（`(位置, 法线)`），理由是"共享角点只保留一个面
+的法线，glTF/smooth shading 会错"。实现、测试、性能 A/B 都做了，提交是 `54e6b2b`。
 
-法线只写在**新分配**顶点上，命中已有槽位时直接返回旧索引。于是被三个面共享的角点只保留最先
-写入的那个面法线——Blender 平着色下看不出问题，但任何读法线的消费方（glTF 导出、smooth shading、
-法线可视化）都会看到一个面以外的法线是错的。红态实测：
+**这个取舍是错的。** 复核后发现：
 
-```
-single welded cube: vertex 4 at [1.0, 2.0, 1.0] carries normal [-1.0, 0.0, 0.0]
-                    but its quad faces [0.0, 1.0, 0.0]
-```
+1. **仓库里没有任何消费者**。`MoziToolKit/bridge/mesh/dna.py::inject_vertex_normals_dna` 是显式
+   stub（注释写明 Blender 4.2+ 的点法线由求值图动态产生、不可写），standard 路径写的是
+   `mesh.vertices.normal`（只读派生属性，`foreach_set` 静默无效；本机 Blender 5.2 也没有
+   `normal` 属性层）。也就是说 `MeshData.normals` **从未进入 Blender 渲染**；
+   "glTF 导出"在仓库里也不存在（检索到的 `normal_gl` 是 PBR 贴图通道，不是导出器）。
+   唯一读它的是 `mtk-cli export` 的 OBJ `vn` 行（开发用工具）。
+2. **代价是真实的**：
+   - 顶点数 +5.7%（334,954 → 354,122，真实存档 335,641 quads）；
+   - 焊接拓扑被打断：90° 拐角处两个面不再共享顶点，Blender 侧表现为分离几何。带次表面散射
+     （SSS）的方块在该处出现**黑边**——用户实测。SSS 需要连续/连通几何，分离顶点会在每个拐角
+     形成边界，散射在那里断掉。
+3. 原审计的验收标准（"每个面法线 == 几何法线"）本身服务的是一个不存在的消费者，属于**为正确性
+   而正确性**，而不是为产品的实际行为。
 
-### 27.2 改法
+### 28.2 撤回后的约定（写进 README）
 
-**一个策略，不是开关**：审计给了"键加 6 向法线索引"或"加 `weld_normals` 开关"两条路。选了前者，
-因为"坐标相同但法线不同"本来就不是同一个顶点；带开关会让默认路径继续产出错误法线。
+- 焊接键 = **仅位置**：一个立方体一个角点一个顶点，8 顶点（单块）、12（两块相邻），保持流形、
+  连续几何，SSS 无黑边；顶点数回到 334,954。
+- `MeshData.normals` 仍然生成并随网格合并（OBJ 开发导出会用到），但**不参与宿主渲染**；共享角点上
+  它的取值是"先写者的面法线"，属于**已知且不影响产品**的信息损失，不再当成 bug。
+- 如果将来真的出现读法线的消费者（glTF 导出、法线可视化），正确做法不是拆分顶点，而是
+  **在焊接时把顶点法线取为入射面法线的归一化平均**（流形 + 连续场），或在该消费者侧做
+  split-normals 转换。这两条都写在这里备查。
 
-- 网格池：槽位从 4,913 扩到 `4,913 × 6`，槽号 = `(角点) * 6 + Direction::to_index()`；
-- `MeshData::weld_vertices` 与跨 Section 缝合：键变成 `(位置, 量化法线)`，
-  `weld_normal_key` 以 1/1024 量化（精确相等会把插值误差当成不同法线）；
-- 网格池顺带改为**线程内复用 + epoch 戳**：118 KiB 的表若每段重建并清零，624 段就是 73 MB 的
-  memset/churn；`with_thread_pool(|pool| ...)` 让每个 rayon worker 复用自己的池，`begin_mesh()`
-  只递增 epoch，旧槽位读取时自动视为空闲（`forbid(unsafe_code)` 下用 `RefCell` 闭包借用）。
+### 28.3 撤回方式
 
-### 27.3 语义变化（已写进 crate README）
+`git revert 54e6b2b`（libmozitoolkit）与 `git revert e20cc1b`（MoziToolKit）——测试、计数断言、
+README、Blender 侧期望值全部回到改动前，并重新验证：全仓测试 0 失败 0 SKIP、`cargo build-all-py`、
+Blender 套件 591 passed、真实存档顶点数回到 334,954。
 
-"焊接 = 没有重复坐标"不再成立：一个立方体在焊接后仍有 24 个顶点（8 角 × 3 个暴露朝向）。
-受影响的断言都改成"增量路径 == 全量重建"这种与策略无关的形式：
+### 28.4 教训（写进本审计，避免下次重复）
 
-- `mtk-sync/tests/test_delta_seam_welding.rs`：原来断言"没有重复位置"，改为比较
-  delta 网格与全量重建的 `(位置, 法线)` 集合；
-- `mtk-voxel/tests/test_world.rs`：删除 `assert_no_duplicate_vertex_positions`，保留并强化
-  `canonical_vertex_positions` 的全量对比；
-- 各顶点计数断言：单立方体 8 → 24、两立方体 12 → 32、（两立方 + 独立立方）20 → 56、CTM 14 面 40；
-- `../MoziToolKit` 侧 `test_voxel_welding_origin.py`、`test_item_generator_bridge.py` 同步（剑 140 → 396）。
+- "正确性"必须有**本仓库的消费者**作为依据；没有消费者时，优先保证**产品可见行为**（流形、SSS、
+  顶点数），而不是追求数据的理论完备。
+- 审计条目里的"某下游会错"如果不指明具体调用点，默认视为**未证实**，动手前先检索消费者。
 
-### 27.4 代价（同机 A/B，真实存档 335,641 quads / 624 sections）
-
-| 指标 | 改前 | 改后 |
-|---|---|---|
-| 顶点数 | 334,954 | **354,122（+5.7%）** |
-| `mtk bench world` best | 42.7 ms | 44.3 ms（+1.6 ms，+3.7%） |
-| Blender 注入 | 27.1 ms | 27.2 ms（无变化） |
-| 端到端（scenario bench） | 136.1 ms | 139.4 ms（+2-3 ms，噪声区间边缘） |
-
-顶点只多 5.7% 是因为大多数角点只与少数面共享，且图元数量由面数决定。
-
-### 27.5 测试
-
-`crates/mtk-voxel/tests/test_vertex_normals.rs`（2 个，红→绿）：
-
-1. `a_welded_cube_keeps_per_face_normals`：每个 quad 的每个顶点法线必须等于该 quad 的几何法线；
-2. `seam_welding_keeps_per_face_normals`：两个位于不同 Section 的方块，跨缝合后同样成立
-   （覆盖 `merge_welded_sections_with`）。
-
-红态：改前两条都以"vertex N carries normal … but its quad faces …"失败。
-
-全仓测试 0 失败 0 SKIP、`cargo build-all-py`、Blender 套件 591 passed。

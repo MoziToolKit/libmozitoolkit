@@ -84,9 +84,7 @@ fn test_python_voxel_storage_and_world_mesher() {
         let mut world = PyVoxelWorld::from_storage(&storage, Some(&config), None, None, None);
         let mesh = world.rebuild_all(py, None).unwrap();
         assert!(!mesh.is_empty());
-        // 8 corners x 3 exposed faces: welding keeps one vertex per (corner, face direction) so
-        // every face keeps its own flat normal.
-        assert_eq!(mesh.vertex_count(), 24);
+        assert_eq!(mesh.vertex_count(), 8); // 8 vertices for welded unit cube
 
         // Verify execution profile attached to mesh and world
         assert!(mesh.profile().is_some());

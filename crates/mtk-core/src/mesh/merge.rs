@@ -344,13 +344,11 @@ impl MeshData {
         let has_custom_attrs = pre.has_custom_attrs;
 
         let inv_dist = 1.0 / tolerance;
-        // Spatial hash map mapping (grid position, quantized normal) to the merged vertex index.
-        // The normal is part of the key so seam welding cannot merge two differently oriented faces.
-        let mut coord_map =
-            rustc_hash::FxHashMap::<([i32; 3], [i16; 3]), u32>::with_capacity_and_hasher(
-                (total_verts / 4).max(64),
-                Default::default(),
-            );
+        // Spatial hash map mapping discrete grid position [i32; 3] to global vertex index in merged.positions.
+        let mut coord_map = rustc_hash::FxHashMap::<[i32; 3], u32>::with_capacity_and_hasher(
+            (total_verts / 4).max(64),
+            Default::default(),
+        );
 
         let mut local_remap = Vec::with_capacity(2048);
 
@@ -363,16 +361,13 @@ impl MeshData {
             local_remap.reserve(m.positions.len());
 
             for (i, &p) in m.positions.iter().enumerate() {
-                let position_key = [
+                let key = [
                     (p[0] * inv_dist).round() as i32,
                     (p[1] * inv_dist).round() as i32,
                     (p[2] * inv_dist).round() as i32,
                 ];
-                let normal_key =
-                    super::weld_normal_key(m.normals.get(i).copied().unwrap_or([0.0, 0.0, 1.0]));
 
-                if is_weld_candidate(position_key) {
-                    let key = (position_key, normal_key);
+                if is_weld_candidate(key) {
                     if let Some(&existing_idx) = coord_map.get(&key) {
                         local_remap.push(existing_idx);
                         continue;

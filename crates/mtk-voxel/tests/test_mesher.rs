@@ -25,9 +25,7 @@ fn test_solid_cube_culling_in_mesher() {
     // Two touching cubes have 2 * 6 - 2 = 10 visible faces = 20 triangles
     assert_eq!(mesh.face_count(), 10);
     assert_eq!(mesh.triangle_count(), 20);
-    // Welded per (corner, face direction): a corner shared by three faces needs three vertices to
-    // carry three flat normals, otherwise two of the faces render with a wrong normal.
-    assert_eq!(mesh.vertex_count(), 32);
+    assert_eq!(mesh.vertex_count(), 12); // Welded: 12 vertices
 
     let unwelded_config = MesherConfig {
         weld_vertices: false,

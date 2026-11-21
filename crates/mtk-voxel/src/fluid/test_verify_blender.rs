@@ -309,12 +309,10 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
         let welded_mesh =
             SectionMesher::mesh_section(&padded, &culler, |_| ModelSource::None, &welded_config);
         if tc.name == "single_cube_mesh" {
-            // 8 corners x 3 exposed faces: welding is per (corner, face direction) so each face
-            // keeps its own flat normal.
             assert_eq!(
                 welded_mesh.vertex_count(),
-                24,
-                "Welded single cube must have 24 vertices (one per corner and face direction)"
+                8,
+                "Welded single cube must have 8 vertices"
             );
         }
     }
