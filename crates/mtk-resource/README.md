@@ -87,6 +87,11 @@ pub struct ResourcePackStack {
 `ResourcePackStack::open_asset_raw` / `open_texture_raw` / `open_model_raw` / `resolve_pbr_companions`
 都遵循这个契约。
 
+**`pack.mcmeta` 的 `filter.block`**：`IdentifierPattern` 列表（与 atlas filter 同一套正则语义）。
+命中的资源对**该包自身以及所有更低优先级包**不可见——`getResource` 先查本包资源、再判 `isFiltered`
+并停止查找；列表则按 `filterAll` 剪掉低优先级包已贡献的条目。因此"只隐藏自己"是不存在的，包想
+保留自己的副本就必须真的提供该文件。
+
 **`pack.mcmeta` 的 `overlays`**：多版本材质包可以声明按格式适用的 overlay 目录，适用的目录作为更高
 层参与查找（声明越靠后优先级越高，最后才是包根），`list_files` 里不暴露 overlay 目录名本身。
 适用性按**当前客户端资源包格式**判定（`CURRENT_CLIENT_RESOURCE_FORMAT`，26.2 = 88，来自
@@ -133,7 +138,7 @@ pub enum AtlasSource {
     Directory { source: String, prefix: String },
     Single { resource: ResourceLocation, sprite: Option<ResourceLocation> },
     /// `{"type":"…filter","pattern":{"namespace"?: <regex>, "path"?: <regex>}}`
-    Filter { pattern: AtlasFilterPattern },
+    Filter { pattern: IdentifierPattern },
     Unstitch { resource: ResourceLocation, divisor_x: f64, divisor_y: f64, regions: Vec<UnstitchRegion> },
     PalettedPermutations {
         palette_key: ResourceLocation,
@@ -145,7 +150,7 @@ pub enum AtlasSource {
 /// 与 Minecraft 的 `IdentifierPattern` 一致：两个字段各自是 Java 正则，用 `find()`（子串）匹配，
 /// 缺省字段匹配一切；`filter` 只删除**它之前**已收集的精灵（源码 `SpriteSourceList.list`）。
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-pub struct AtlasFilterPattern {
+pub struct IdentifierPattern {
     pub namespace: Option<FilterPattern>,
     pub path: Option<FilterPattern>,
 }
@@ -227,7 +232,8 @@ pub struct CtmSolver {
 | :--- | :--- |
 | `push_pack(pack: Box<dyn ResourcePack>)` | 推入高优先级资源包（栈顶）。 |
 | `append_pack(pack: Box<dyn ResourcePack>)` | 追加低优先级兜底资源包（栈底）。 |
-| `open_asset_raw(asset_path: &str) -> Result<Option<Vec<u8>>, ResourceError>` | 按优先级自顶向下读取原始资产字节；`Ok(None)`=没有，`Err`=读不出（不回退）。 |
+| `open_asset_raw(asset_path: &str) -> Result<Option<Vec<u8>>, ResourceError>` | 按优先级自顶向下读取；`Ok(None)`=没有，`Err`=读不出（不回退）；包的 `filter.block` 命中时停止查找。 |
+| `list_asset_files(prefix: &str) -> Vec<String>` | 合并所有包的列表并按 `pack.mcmeta` `filter.block` 剪枝（含排序去重）。 |
 | `open_texture_raw(loc: &ResourceLocation) -> Result<Option<Vec<u8>>, ResourceError>` | 读取指定纹理的原始 PNG 字节。 |
 | `load_atlas_definition(loc: &ResourceLocation) -> Result<AtlasDefinition, ResourceError>` | 合并**所有**包的同名 `atlases/*.json`（低→高优先级拼接，对齐 MC 的 `getResourceStack`）。 |
 | `load_atlas_category(cat: &AtlasCategory) -> Result<AtlasDefinition, ResourceError>` | 加载类别图集；只有"没有任何包提供该文件"才回退到内置默认，解析/读取失败报错。 |

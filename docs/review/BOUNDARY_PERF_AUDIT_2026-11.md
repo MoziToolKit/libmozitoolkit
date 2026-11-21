@@ -1505,13 +1505,34 @@ overlay 里的文件在列表里带 `overlay_1/` 前缀）。
 另在 `test_pack_fingerprint.rs` 补两条：带 overlay 的目录包"路径指纹 == 加载栈指纹"；
 `CURRENT_CLIENT_RESOURCE_FORMAT` 与 `version.json` 一致。
 
-### 24.3 C-08c：`filter.block`（待实现）
+### 24.3 C-08c：`filter.block`
 
 MC：`pack.mcmeta` 的 `filter.block` 是 `IdentifierPattern` 列表（与 atlas filter 同一套正则）。
 `FallbackResourceManager.getResource` 先查该包自己的资源，再判 `isFiltered`——命中就
 **停止**向低优先级包查找（`LOGGER.warn` + `Optional.empty()`）；`listResources` 里
 `entry.filterAll(已收集集合)` 会剪掉低优先级包已贡献的条目。也就是说：过滤不是"本包看不见"，
-而是"从这里往下都看不见"。
+而是"从这里往下都看不见"，而且包自己的副本永远优先。
+
+实现：
+
+- `identifier_pattern.rs`：把 atlas filter 的 `AtlasFilterPattern` 提升为 MC 同名的
+  `IdentifierPattern`（`{namespace?, path?}`，`FilterPattern` 保存原文 + 编译后的正则），
+  atlas `filter` 与 `pack.mcmeta` `filter.block` 共用；`ResourceFilterSection` = `{block: [...]}`；
+- 包层：`DirectoryPack` / `ZipPack` 从各自的 `pack.mcmeta` 解析 `filter`，通过
+  `ResourcePack::filter()` 暴露（默认 `None`）；
+- 栈层：`open_asset_raw` 按"本包资源 → 本包 filter 命中即停"的顺序；新增
+  `list_asset_files(prefix)` 复刻 `listResources` 的
+  `filterAll(已收集) → 加本包条目`（BTreeMap 排序去重）；
+- 把四处"逐包 listing"改成合并列表：`collect_sprites_for_atlas` 的 directory 源、
+  `load_ctm_rules`、`libmtk` 的模型扫描、`BannerBaker`、`BiomeResolver::load_from_pack_stack`。
+  顺带修掉 `BiomeResolver` 逐包遍历时**低优先级覆盖高优先级**的问题。
+
+测试 `test_pack_filter.rs`（7 个）：filter 隐藏低优先级包的同名资源（读取与列表都隐藏）、
+过滤包自己的副本仍然生效、更高优先级包的资源不受影响、无关路径不受影响、正则与 namespace
+模式、zip 包同样生效、无 filter 的包行为不变。
+
+红态证据：临时去掉两处 filter 钩子后 3 条失败（`a_filter_hides_a_lower_packs_resource`、
+`unrelated_paths_are_unaffected`、`regex_and_namespace_patterns_work`），恢复后 7 条全绿。
 
 ### 24.4 明确 VOID 的两条
 

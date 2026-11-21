@@ -136,23 +136,21 @@ impl BannerBaker {
         }
 
         // List files in packs
-        for pack in stack.packs() {
-            for file in pack.list_files("assets/") {
-                let is_banner_path = file.contains("textures/entity/banner/")
-                    || file.contains("textures/entity/banner_patterns/");
-                if is_banner_path && file.ends_with(".png") {
-                    let stem = file
-                        .split('/')
-                        .next_back()
-                        .and_then(|s| s.strip_suffix(".png"))
-                        .unwrap_or_default();
-                    if stem == "base" || stem == "banner_base" {
-                        continue;
-                    }
-                    if let Some(bytes) = pack.open(&file)? {
-                        if self.register_pattern_png_bytes(stem, &bytes).is_ok() {
-                            loaded_count += 1;
-                        }
+        for file in stack.list_asset_files("assets/") {
+            let is_banner_path = file.contains("textures/entity/banner/")
+                || file.contains("textures/entity/banner_patterns/");
+            if is_banner_path && file.ends_with(".png") {
+                let stem = file
+                    .split('/')
+                    .next_back()
+                    .and_then(|s| s.strip_suffix(".png"))
+                    .unwrap_or_default();
+                if stem == "base" || stem == "banner_base" {
+                    continue;
+                }
+                if let Some(bytes) = stack.open_asset_raw(&file)? {
+                    if self.register_pattern_png_bytes(stem, &bytes).is_ok() {
+                        loaded_count += 1;
                     }
                 }
             }

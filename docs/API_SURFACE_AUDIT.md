@@ -498,7 +498,7 @@ PYTHONPATH=../MoziToolKit/dev/lib uv run --directory ../MoziToolKit pytest ../li
 `BaselineAckResult`, `BaselineAssembler`, `CancelReason`, `ClientCommand`, `ClientMessage`, `DeltaStagingBuffer`, `ErrorCode`, `Opcode`, `PROTOCOL_MAGIC`, `PROTOCOL_VERSION`, `ProtocolError`, `ResyncReason`, `SyncClient`, `SyncLifecycle`
 
 ### `mtk-resource` (16)
-`AnimationFrame`, `AtlasFilterPattern`, `BlockMatch`, `CTM_47_LOOKUP`, `ConnectLogic`, `CtmMethod`, `CtmSymmetry`, `DEFAULT_NAMESPACE`, `MemoryPack`, `OVERLAY_17_LOOKUP`, `PbrCompanions`, `TextureMetadata`, `UnstitchRegion`, `coordinate_random`, `get_face_tangents`, `is_companion_asset_path`
+`AnimationFrame`, `BlockMatch`, `CTM_47_LOOKUP`, `ConnectLogic`, `CtmMethod`, `CtmSymmetry`, `DEFAULT_NAMESPACE`, `FilterPattern`, `IdentifierPattern`, `MemoryPack`, `OVERLAY_17_LOOKUP`, `PbrCompanions`, `TextureMetadata`, `UnstitchRegion`, `coordinate_random`, `get_face_tangents`, `is_companion_asset_path`
 
 ### `mtk-texture` (18)
 `DYNAMIC_CHUNK_END`, `DynamicAtlasChunk`, `DynamicSlotInfo`, `MAX_DYNAMIC_CHUNKS`, `SpriteKind`, `StitchedAtlas`, `StitchedChunk`, `StitchedSlot`, `Stitcher`, `StitcherHolder`, `StitcherRegion`, `apply_edge_clamping_padding`, `bake_paletted_permutation`, `batch_analyze_transparent_faces_u8`, `extract_palette_colors`, `is_face_transparent_u8`, `sample_alpha_u8`, `smallest_encompassing_power_of_two`

@@ -224,12 +224,7 @@ impl BiomeResolver {
             if file.ends_with(".json") {
                 if let Some(bytes) = pack.open(&file)? {
                     if let Ok(val) = serde_json::from_slice::<Value>(&bytes) {
-                        let stem = Path::new(&file)
-                            .file_stem()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("");
-                        self.models.insert(format!("block/{}", stem), val.clone());
-                        self.models.insert(stem.to_string(), val);
+                        self.insert_block_model(&file, val);
                     }
                 }
             }
@@ -240,13 +235,37 @@ impl BiomeResolver {
     }
 
     /// Parse block models across all layers of a `ResourcePackStack`.
+    ///
+    /// One merged listing keeps pack priority (higher packs win) and honours each pack's
+    /// `pack.mcmeta` filter; iterating the packs individually would let a lower pack's model
+    /// overwrite a higher one's.
     pub fn load_from_pack_stack(
         &mut self,
         stack: &mtk_resource::ResourcePackStack,
     ) -> Result<(), mtk_resource::ResourceError> {
-        for pack in stack.packs() {
-            self.load_from_pack(pack.as_ref())?;
+        for file in stack.list_asset_files("assets/minecraft/models/block/") {
+            if !file.ends_with(".json") {
+                continue;
+            }
+            let Some(bytes) = stack.open_asset_raw(&file)? else {
+                continue;
+            };
+            if let Ok(val) = serde_json::from_slice::<Value>(&bytes) {
+                self.insert_block_model(&file, val);
+            }
         }
+        self.update_models_index();
+        self.analyze_models();
         Ok(())
+    }
+
+    /// Records one block model discovered through the stack.
+    fn insert_block_model(&mut self, file: &str, val: Value) {
+        let stem = Path::new(file)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
+        self.models.insert(format!("block/{stem}"), val.clone());
+        self.models.insert(stem.to_string(), val);
     }
 }

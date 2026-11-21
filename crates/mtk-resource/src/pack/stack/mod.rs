@@ -7,7 +7,7 @@ use crate::atlas::AtlasDefinition;
 use crate::error::ResourceError;
 use crate::identifier::ResourceLocation;
 use crate::pack::source::ResourcePack;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 use xxhash_rust::xxh64::Xxh64;
 
@@ -49,20 +49,13 @@ impl ResourcePackStack {
     /// Returns true if the stack contains at least one pack providing vanilla minecraft client assets
     /// (e.g. `assets/minecraft/textures/` or `assets/minecraft/blockstates/` or `assets/minecraft/models/`).
     pub fn has_vanilla_client_base(&self) -> bool {
-        if self.packs.is_empty() {
-            return false;
-        }
-        for pack in &self.packs {
-            for file in pack.list_files("assets/minecraft/") {
-                if file.starts_with("assets/minecraft/textures/")
+        self.list_asset_files("assets/minecraft/")
+            .iter()
+            .any(|file| {
+                file.starts_with("assets/minecraft/textures/")
                     || file.starts_with("assets/minecraft/blockstates/")
                     || file.starts_with("assets/minecraft/models/")
-                {
-                    return true;
-                }
-            }
-        }
-        false
+            })
     }
 
     /// Returns the slice of active resource packs in priority order.
@@ -74,13 +67,42 @@ impl ResourcePackStack {
     ///
     /// A pack that holds the file but cannot read it aborts the lookup: continuing would serve a
     /// lower-priority pack's bytes and hide the failure from the user.
+    ///
+    /// `pack.mcmeta`'s `filter.block` stops the lookup the way
+    /// `FallbackResourceManager.getResource` does: the pack's own resource wins, then its filter
+    /// hides the path from every lower pack.
     pub fn open_asset_raw(&self, asset_path: &str) -> Result<Option<Vec<u8>>, ResourceError> {
         for pack in &self.packs {
             if let Some(bytes) = pack.open(asset_path)? {
                 return Ok(Some(bytes));
             }
+            if let Some(filter) = pack.filter() {
+                if is_filtered_asset_path(filter, asset_path) {
+                    return Ok(None);
+                }
+            }
         }
         Ok(None)
+    }
+
+    /// List asset paths under `prefix`, with every pack's `filter.block` applied.
+    ///
+    /// Mirrors `FallbackResourceManager.listResources`: packs are visited lowest priority first, a
+    /// pack's filter prunes what the packs below it contributed, and then its own entries are
+    /// added. The result is sorted and de-duplicated.
+    pub fn list_asset_files(&self, prefix: &str) -> Vec<String> {
+        let mut accumulated: BTreeMap<String, ()> = BTreeMap::new();
+        for pack in self.packs.iter().rev() {
+            if let Some(filter) = pack.filter() {
+                if filter.is_active() {
+                    accumulated.retain(|path, _| !is_filtered_asset_path(filter, path));
+                }
+            }
+            for path in pack.list_files(prefix) {
+                accumulated.insert(path, ());
+            }
+        }
+        accumulated.into_keys().collect()
     }
 
     /// Open a specific categorized asset (e.g. category `"textures"`, ext `"png"`).
@@ -97,15 +119,13 @@ impl ResourcePackStack {
         let mut seen = HashSet::new();
         let mut results = Vec::new();
 
-        for pack in &self.packs {
-            for file in pack.list_files("assets/") {
-                if !file.ends_with(".json") {
-                    continue;
-                }
-                if let Some(loc) = ResourceLocation::from_asset_path(&file, "blockstates", "json") {
-                    if seen.insert(loc.clone()) {
-                        results.push(loc);
-                    }
+        for file in self.list_asset_files("assets/") {
+            if !file.ends_with(".json") {
+                continue;
+            }
+            if let Some(loc) = ResourceLocation::from_asset_path(&file, "blockstates", "json") {
+                if seen.insert(loc.clone()) {
+                    results.push(loc);
                 }
             }
         }
@@ -118,15 +138,13 @@ impl ResourcePackStack {
         let mut seen = HashSet::new();
         let mut results = Vec::new();
 
-        for pack in &self.packs {
-            for file in pack.list_files("assets/") {
-                if !file.ends_with(".json") {
-                    continue;
-                }
-                if let Some(loc) = ResourceLocation::from_asset_path(&file, "atlases", "json") {
-                    if seen.insert(loc.clone()) {
-                        results.push(loc);
-                    }
+        for file in self.list_asset_files("assets/") {
+            if !file.ends_with(".json") {
+                continue;
+            }
+            if let Some(loc) = ResourceLocation::from_asset_path(&file, "atlases", "json") {
+                if seen.insert(loc.clone()) {
+                    results.push(loc);
                 }
             }
         }
@@ -275,6 +293,23 @@ impl ResourcePackStack {
         }
         format!("mtk_fp_{:016x}", hasher.digest())
     }
+}
+
+/// Maps an asset path to the resource id `pack.mcmeta` filters are written against.
+///
+/// `assets/minecraft/textures/block/stone.png` -> `minecraft:textures/block/stone.png`.
+fn asset_path_location(asset_path: &str) -> Option<ResourceLocation> {
+    let rest = asset_path.strip_prefix("assets/")?;
+    let (namespace, path) = rest.split_once('/')?;
+    Some(ResourceLocation::new(namespace, path))
+}
+
+/// Whether `filter` hides `asset_path` (paths outside `assets/` are never filtered).
+fn is_filtered_asset_path(
+    filter: &crate::identifier_pattern::ResourceFilterSection,
+    asset_path: &str,
+) -> bool {
+    asset_path_location(asset_path).is_some_and(|location| filter.is_filtered(&location))
 }
 
 /// Domain separator: bump when the fingerprint's meaning changes, so old caches stop matching.

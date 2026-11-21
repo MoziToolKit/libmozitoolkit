@@ -5,6 +5,7 @@
 //! section's display fields are irrelevant to us, and `formats` compatibility is a UI concern in
 //! Minecraft, not a reading one.
 
+use crate::identifier_pattern::ResourceFilterSection;
 use serde::Deserialize;
 
 /// Client resource-pack format this crate targets.
@@ -20,6 +21,9 @@ pub const CURRENT_CLIENT_RESOURCE_FORMAT: u32 = 88;
 pub struct PackMetaFile {
     #[serde(default)]
     pub overlays: Option<OverlayMetadata>,
+    /// `filter.block`: locations this pack hides from itself and everything below it.
+    #[serde(default)]
+    pub filter: Option<ResourceFilterSection>,
 }
 
 /// `pack.mcmeta` -> `overlays`.

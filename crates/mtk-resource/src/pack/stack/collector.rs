@@ -9,35 +9,28 @@ impl ResourcePackStack {
     /// Scan all active resource packs and load all OptiFine / Continuity CTM rules.
     pub fn load_ctm_rules(&self) -> Result<Vec<crate::ctm::CtmRule>, ResourceError> {
         let mut rules = Vec::new();
-        let mut seen_paths = HashSet::new();
 
-        for pack in &self.packs {
-            for file in pack.list_files("assets/") {
-                if !file.ends_with(".properties") {
-                    continue;
-                }
-                if !file.contains("/optifine/ctm/") && !file.contains("/textures/") {
-                    continue;
-                }
-                if seen_paths.contains(&file) {
-                    continue;
-                }
-                seen_paths.insert(file.clone());
+        for file in self.list_asset_files("assets/") {
+            if !file.ends_with(".properties") {
+                continue;
+            }
+            if !file.contains("/optifine/ctm/") && !file.contains("/textures/") {
+                continue;
+            }
 
-                if let Some(bytes) = pack.open(&file)? {
-                    if let Ok(content) = std::str::from_utf8(&bytes) {
-                        let parts: Vec<&str> = file.split('/').collect();
-                        let namespace = if parts.len() > 1 {
-                            parts[1]
-                        } else {
-                            crate::identifier::DEFAULT_NAMESPACE
-                        };
-                        let rel_path = parts[2..].join("/");
-                        if let Some(rule) =
-                            crate::CtmRule::parse_properties(&rel_path, namespace, content)
-                        {
-                            rules.push(rule);
-                        }
+            if let Some(bytes) = self.open_asset_raw(&file)? {
+                if let Ok(content) = std::str::from_utf8(&bytes) {
+                    let parts: Vec<&str> = file.split('/').collect();
+                    let namespace = if parts.len() > 1 {
+                        parts[1]
+                    } else {
+                        crate::identifier::DEFAULT_NAMESPACE
+                    };
+                    let rel_path = parts[2..].join("/");
+                    if let Some(rule) =
+                        crate::CtmRule::parse_properties(&rel_path, namespace, content)
+                    {
+                        rules.push(rule);
                     }
                 }
             }
@@ -67,25 +60,23 @@ impl ResourcePackStack {
                     prefix,
                 } => {
                     let mut found_paths = HashSet::new();
-                    // Scan all packs in stack
-                    for pack in &self.packs {
-                        for file in pack.list_files("assets/") {
-                            if !file.ends_with(".png") {
-                                continue;
-                            }
-                            // Companion textures (_n, _s, _overlay) must never become standalone sprites
-                            if is_companion_asset_path(&file) {
-                                continue;
-                            }
+                    // One merged, filter-aware listing: a pack's `filter.block` hides lower packs.
+                    for file in self.list_asset_files("assets/") {
+                        if !file.ends_with(".png") {
+                            continue;
+                        }
+                        // Companion textures (_n, _s, _overlay) must never become standalone sprites
+                        if is_companion_asset_path(&file) {
+                            continue;
+                        }
 
-                            if let Some(loc) =
-                                ResourceLocation::from_asset_path(&file, "textures", "png")
+                        if let Some(loc) =
+                            ResourceLocation::from_asset_path(&file, "textures", "png")
+                        {
+                            if loc.path == *dir_src
+                                || loc.path.starts_with(&format!("{}/", dir_src))
                             {
-                                if loc.path == *dir_src
-                                    || loc.path.starts_with(&format!("{}/", dir_src))
-                                {
-                                    found_paths.insert(loc);
-                                }
+                                found_paths.insert(loc);
                             }
                         }
                     }

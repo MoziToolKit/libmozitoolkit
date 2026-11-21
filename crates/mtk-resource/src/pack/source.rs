@@ -1,5 +1,6 @@
 use super::mcmeta::{PackMetaFile, CURRENT_CLIENT_RESOURCE_FORMAT};
 use crate::error::ResourceError;
+use crate::identifier_pattern::ResourceFilterSection;
 use std::collections::HashMap;
 use std::fs;
 #[cfg(feature = "zip")]
@@ -58,6 +59,15 @@ pub trait ResourcePack: Send + Sync {
     /// List all relative paths starting with the given prefix.
     fn list_files(&self, prefix: &str) -> Vec<String>;
 
+    /// Locations this pack hides, from itself and from every lower-priority pack
+    /// (`pack.mcmeta`'s `filter.block`).
+    ///
+    /// The stack stops looking when it reaches the filtering pack, exactly like
+    /// `FallbackResourceManager.getResource`.
+    fn filter(&self) -> Option<&ResourceFilterSection> {
+        None
+    }
+
     /// Cheap, deterministic identity of the pack's *content*.
     ///
     /// The stack fingerprint feeds cache invalidation, so it must change when a pack is edited in
@@ -112,16 +122,20 @@ pub struct DirectoryPack {
     /// Applicable overlay directories from `pack.mcmeta`, in declaration order (later = higher
     /// priority, as in `CompositePackResources`).
     overlays: Vec<PathBuf>,
+    /// `pack.mcmeta`'s `filter.block`.
+    filter: Option<ResourceFilterSection>,
 }
 
 impl DirectoryPack {
     pub fn new(name: impl Into<String>, root_dir: impl AsRef<Path>) -> Self {
         let root_dir = root_dir.as_ref().to_path_buf();
         let overlays = Self::load_overlays(&root_dir);
+        let filter = load_directory_meta(&root_dir).and_then(|meta| meta.filter);
         Self {
             name: name.into(),
             root_dir,
             overlays,
+            filter,
         }
     }
 
@@ -239,15 +253,19 @@ pub(crate) fn directory_content_entries(root: &Path) -> Vec<PackContentEntry> {
     out
 }
 
+/// Reads and parses a directory pack's optional `pack.mcmeta`.
+///
+/// Missing or malformed metadata is ignored: it is optional, and Minecraft only logs it.
+fn load_directory_meta(root: &Path) -> Option<PackMetaFile> {
+    let bytes = fs::read(root.join("pack.mcmeta")).ok()?;
+    PackMetaFile::parse_json(&bytes)
+}
+
 /// Resolved overlay directories of a directory pack, in declaration order.
 fn load_directory_overlays(root: &Path) -> Vec<PathBuf> {
-    let Ok(bytes) = fs::read(root.join("pack.mcmeta")) else {
-        return Vec::new();
-    };
-    let Some(meta) = PackMetaFile::parse_json(&bytes) else {
-        return Vec::new();
-    };
-    meta.applicable_overlays(CURRENT_CLIENT_RESOURCE_FORMAT)
+    load_directory_meta(root)
+        .map(|meta| meta.applicable_overlays(CURRENT_CLIENT_RESOURCE_FORMAT))
+        .unwrap_or_default()
         .into_iter()
         .map(|directory| root.join(directory))
         .collect()
@@ -293,6 +311,10 @@ pub(crate) fn content_entries_from_dir(root: &Path) -> Vec<PackContentEntry> {
 impl ResourcePack for DirectoryPack {
     fn name(&self) -> &str {
         &self.name
+    }
+
+    fn filter(&self) -> Option<&ResourceFilterSection> {
+        self.filter.as_ref()
     }
 
     fn source_label(&self) -> String {
@@ -425,6 +447,8 @@ pub struct ZipPack {
     /// Applicable overlay entry prefixes from `pack.mcmeta`, in declaration order (later = higher
     /// priority, as in `CompositePackResources`).
     overlay_prefixes: Vec<String>,
+    /// `pack.mcmeta`'s `filter.block`.
+    filter: Option<ResourceFilterSection>,
 }
 
 #[cfg(feature = "zip")]
@@ -450,12 +474,14 @@ impl ZipPack {
             .to_string();
 
         let overlay_prefixes = Self::load_overlays(&file_map);
+        let filter = Self::load_filter(&file_map);
         Ok(Self {
             name: name.into(),
             file_map,
             archive_meta,
             source_label: Some(label),
             overlay_prefixes,
+            filter,
         })
     }
 
@@ -466,12 +492,14 @@ impl ZipPack {
         let file_map = Self::load_archive(&mut archive)?;
 
         let overlay_prefixes = Self::load_overlays(&file_map);
+        let filter = Self::load_filter(&file_map);
         Ok(Self {
             name: name.into(),
             file_map,
             archive_meta: None,
             source_label: None,
             overlay_prefixes,
+            filter,
         })
     }
 
@@ -489,6 +517,11 @@ impl ZipPack {
             .into_iter()
             .map(|directory| format!("{directory}/"))
             .collect()
+    }
+
+    /// Reads `pack.mcmeta`'s `filter.block` out of the archive.
+    fn load_filter(file_map: &HashMap<String, Vec<u8>>) -> Option<ResourceFilterSection> {
+        PackMetaFile::parse_json(file_map.get("pack.mcmeta")?)?.filter
     }
 
     /// Entry prefixes to consult, highest priority first: overlays (last declared first), then the
@@ -547,6 +580,10 @@ impl ZipPack {
 impl ResourcePack for ZipPack {
     fn name(&self) -> &str {
         &self.name
+    }
+
+    fn filter(&self) -> Option<&ResourceFilterSection> {
+        self.filter.as_ref()
     }
 
     fn source_label(&self) -> String {

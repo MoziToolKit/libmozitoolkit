@@ -90,33 +90,32 @@ pub(crate) fn prebake_all_models_with_progress(
     // Diagnostics collected during indexing; reported through `bake_failures` at the end.
     let mut discovery_failures: Vec<(String, &'static str)> = Vec::new();
 
-    for pack in stack.packs().iter().rev() {
-        for file in pack.list_files("assets/") {
-            if file.ends_with(".json") && file.contains("/models/") {
-                let Some(bytes) = pack.open(&file)? else {
-                    continue;
-                };
-                let Some(loc) = ResourceLocation::from_asset_path(&file, "models", "json") else {
-                    continue;
-                };
-                let canon = loc.as_string();
-                // Zero-length model files exist as intentional placeholders in some packs
-                // (the model is provided by a resource pack lower in the stack).
-                if bytes.iter().all(u8::is_ascii_whitespace) {
-                    continue;
-                }
-                match serde_json::from_slice::<BlockModelJson>(&bytes) {
-                    Ok(model) => {
-                        model_cache.insert(canon.clone(), model.clone());
-                        if loc.namespace == "minecraft" {
-                            model_cache.insert(loc.path.clone(), model.clone());
-                        }
-                        if loc.path.starts_with("item/") && seen_items.insert(canon) {
-                            item_model_locs.push(loc);
-                        }
+    // One merged listing: pack priority and `pack.mcmeta` filters are applied by the stack.
+    for file in stack.list_asset_files("assets/") {
+        if file.ends_with(".json") && file.contains("/models/") {
+            let Some(bytes) = stack.open_asset_raw(&file)? else {
+                continue;
+            };
+            let Some(loc) = ResourceLocation::from_asset_path(&file, "models", "json") else {
+                continue;
+            };
+            let canon = loc.as_string();
+            // Zero-length model files exist as intentional placeholders in some packs
+            // (the model is provided by a resource pack lower in the stack).
+            if bytes.iter().all(u8::is_ascii_whitespace) {
+                continue;
+            }
+            match serde_json::from_slice::<BlockModelJson>(&bytes) {
+                Ok(model) => {
+                    model_cache.insert(canon.clone(), model.clone());
+                    if loc.namespace == "minecraft" {
+                        model_cache.insert(loc.path.clone(), model.clone());
                     }
-                    Err(_) => discovery_failures.push((canon, "invalid_model_json")),
+                    if loc.path.starts_with("item/") && seen_items.insert(canon) {
+                        item_model_locs.push(loc);
+                    }
                 }
+                Err(_) => discovery_failures.push((canon, "invalid_model_json")),
             }
         }
     }

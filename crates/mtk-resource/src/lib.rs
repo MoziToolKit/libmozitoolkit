@@ -9,20 +9,20 @@ pub mod banner;
 mod ctm;
 mod error;
 mod identifier;
+mod identifier_pattern;
 mod meta;
 mod pack;
 mod probe;
 pub mod skin;
 mod texture_key;
 
-pub use atlas::{
-    AtlasCategory, AtlasDefinition, AtlasFilterPattern, AtlasSource, FilterPattern, UnstitchRegion,
-};
+pub use atlas::{AtlasCategory, AtlasDefinition, AtlasSource, UnstitchRegion};
 pub use ctm::{
     extract_block_name, BlockMatch, ConnectLogic, CtmMethod, CtmRule, CtmSolver, CtmSymmetry,
 };
 pub use error::ResourceError;
 pub use identifier::ResourceLocation;
+pub use identifier_pattern::{FilterPattern, IdentifierPattern, ResourceFilterSection};
 pub use meta::{AnimationFrame, AnimationMetadata};
 #[cfg(feature = "zip")]
 pub use pack::ZipPack;
