@@ -318,3 +318,108 @@ fn test_allow_network_preserved_across_set_skin_cache_dir() {
 
     let _ = std::fs::remove_dir_all(&temp_dir);
 }
+
+#[test]
+fn test_dynamic_atlas_survives_set_config_and_hot_reload_assets() {
+    let textures = BlockEntityTextures::default();
+    let hash = "5813943ca53225ee0ee814321cba1e420ea21f7c55f2998f9306cfad6655f69e";
+    let img = image::RgbaImage::from_pixel(64, 64, image::Rgba([64, 128, 255, 255]));
+    let mut png_buf = std::io::Cursor::new(Vec::new());
+    img.write_to(&mut png_buf, image::ImageFormat::Png)
+        .expect("PNG encoding should succeed");
+    textures.register_memory_skin(hash, png_buf.into_inner());
+
+    let mut base_map = mtk_texture::AtlasAddressMap::new();
+    let banner_base_id =
+        mtk_resource::ResourceLocation::parse("minecraft:entity/banner/banner_base").unwrap();
+    base_map.sprites.insert(
+        banner_base_id,
+        mtk_texture::AtlasSpriteLocation {
+            chunk_id: 0,
+            category: "banner_patterns".to_string(),
+            is_animated: false,
+            sprite_kind: mtk_texture::SpriteKind::StaticAtlas,
+            texture_id: 0,
+            uv_bounds: [0.0, 0.0, 0.5, 0.5],
+            frame_0_uv_bounds: [0.0, 0.0, 0.5, 0.5],
+            local_uv_bounds: [0.0, 0.0, 1.0, 1.0],
+            frame_uv_step: [0.0, 0.0],
+            pixel_rect: [0, 0, 64, 64],
+            strip_pixel_rect: [0, 0, 64, 64],
+            frame_size: [64, 64],
+            frame_count: 1,
+            animation: None,
+            has_normal: false,
+            has_specular: false,
+            has_overlay: false,
+            average_color: None,
+            slot_index: None,
+            ..Default::default()
+        },
+    );
+
+    let initial_map = std::sync::Arc::new(base_map.clone());
+    let config = MesherConfig {
+        atlas_address_map: Some(initial_map),
+        ..Default::default()
+    };
+    let mut world = VoxelWorld::new(Some(config), None, None);
+    world.set_block_entity_textures(Some(Box::new(textures)));
+
+    world.set_block(1, 1, 1, "minecraft:white_banner[rotation=0]", None);
+    let skull_entity = mtk_model::BlockEntityData::new_skull(
+        mtk_model::skull::SkullKind::Player,
+        Some(0),
+        Some(mtk_model::skull::PlayerProfileData::new(
+            Some("Steve".to_string()),
+            Some("00000000-0000-0000-0000-000000000000".to_string()),
+            Some(format!("http://textures.minecraft.net/texture/{}", hash)),
+            None,
+        )),
+    );
+    world.set_block(2, 1, 2, "minecraft:player_head[rotation=0]", None);
+    let sec_coord = IVec3::new(0, 0, 0);
+    let sec = world.storage.sections.get_mut(&sec_coord).unwrap();
+    sec.set_block_entity(block_index(2, 1, 2) as u16, Some(skull_entity));
+
+    let dynamic_chunk = mtk_texture::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
+
+    let mesh1 = world.rebuild_all().expect("Initial rebuild must succeed");
+    assert!(mesh1.face_materials.contains(&dynamic_chunk));
+    assert!(world.has_dynamic_entity_chunks());
+
+    // Replacing MesherConfig (as LiveSyncSession::hot_reload does) supplies a fresh
+    // AtlasAddressMap without dynamic slots; the provider must re-register them.
+    let reloaded_cfg = MesherConfig {
+        atlas_address_map: Some(std::sync::Arc::new(base_map.clone())),
+        ..Default::default()
+    };
+    world.set_config(reloaded_cfg);
+    world.clear_cache();
+
+    let mesh2 = world
+        .rebuild_all()
+        .expect("Rebuild after set_config must succeed");
+    assert!(
+        mesh2.face_materials.contains(&dynamic_chunk),
+        "face_materials must keep 0xFFF0 after set_config"
+    );
+    assert!(
+        world.has_dynamic_entity_chunks(),
+        "Dynamic entity chunks must survive set_config"
+    );
+
+    // hot_reload_assets also swaps atlas_address_map with a fresh map.
+    world.hot_reload_assets(None, Some(std::sync::Arc::new(base_map)), None);
+    let mesh3 = world
+        .rebuild_all()
+        .expect("Rebuild after hot_reload_assets must succeed");
+    assert!(
+        mesh3.face_materials.contains(&dynamic_chunk),
+        "face_materials must keep 0xFFF0 after hot_reload_assets"
+    );
+    assert!(
+        world.has_dynamic_entity_chunks(),
+        "Dynamic entity chunks must survive hot_reload_assets"
+    );
+}

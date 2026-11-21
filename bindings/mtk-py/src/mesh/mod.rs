@@ -28,10 +28,12 @@ pub struct PyMeshData {
     pub dynamic_entity_atlases: Option<std::collections::HashMap<u16, Vec<u8>>>,
     /// Dynamic entity slots keyed by skin/entity key (`{"player_Alex": (0xFFF0, 0), ...}`).
     pub dynamic_entity_slots: Option<std::collections::HashMap<String, (u16, u16)>>,
-    /// True when `face_materials` was compacted to `0..N-1` slot indices (`compact_material_slots`).
+    /// True only when `face_materials` was actually compacted to `0..N-1` slot indices
+    /// (`MeshData::compact_materials`).
     ///
-    /// Only assembled world meshes are compacted; per-section meshes keep raw atlas chunk ids.
-    /// Hosts need this to know whether an injected `material_index` already addresses slots.
+    /// Assembled `VoxelWorld` meshes intentionally keep raw atlas chunk IDs in `face_materials`
+    /// (so this is `false`), matching per-section meshes. Hosts must remap non-contiguous chunk
+    /// IDs (e.g. chest/shulker/pot/banner/dynamic chunks) into Blender material slots.
     pub materials_are_slots: bool,
 }
 
@@ -122,10 +124,11 @@ impl PyMeshData {
         self.profile.clone().map(Into::into)
     }
 
-    /// Whether `face_materials` (and therefore the injected `material_index`) are slot indices.
+    /// Whether `face_materials` (and therefore the injected `material_index`) are pre-compacted
+    /// `0..N-1` slot indices.
     ///
-    /// True for assembled world meshes (`compact_material_slots` ran) and false for per-section
-    /// meshes, which keep raw atlas chunk ids.
+    /// Returns `true` only when `face_materials` was compacted via `compact_materials`; assembled
+    /// `VoxelWorld` and per-section meshes keep raw atlas chunk IDs and report `false`.
     #[getter]
     pub fn materials_are_slots(&self) -> bool {
         self.materials_are_slots

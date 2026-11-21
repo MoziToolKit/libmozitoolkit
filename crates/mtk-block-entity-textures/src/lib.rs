@@ -402,4 +402,8 @@ impl BlockEntityTextureProvider for BlockEntityTextures {
     fn set_skin_resolved_callback(&mut self, callback: SkinResolvedCallback) {
         BlockEntityTextures::set_skin_resolved_callback(self, callback);
     }
+
+    fn invalidate_atlas_registration(&mut self) {
+        self.registered = false;
+    }
 }

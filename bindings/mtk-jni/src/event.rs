@@ -6,7 +6,18 @@ use jni::objects::{JClass, JValue};
 use jni::sys::{jlong, jobjectArray};
 use jni::JNIEnv;
 
-use mtk_sync::server::{LiveSyncServer, ServerEvent};
+use mtk_sync::server::ServerEvent;
+
+use crate::server::SERVERS;
+
+fn poll_server_events(handle: jlong) -> Option<Vec<ServerEvent>> {
+    if handle <= 0 {
+        return None;
+    }
+    SERVERS
+        .get(handle as u64)
+        .map(|server| server.poll_events())
+}
 
 /// Polls pending server events and returns an array of NativeSync.ServerEvent.
 #[no_mangle]
@@ -15,11 +26,9 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerP
     _class: JClass,
     handle: jlong,
 ) -> jobjectArray {
-    if handle == 0 {
+    let Some(events) = poll_server_events(handle) else {
         return std::ptr::null_mut();
-    }
-    let server = unsafe { &*(handle as *const LiveSyncServer) };
-    let events = server.poll_events();
+    };
 
     let event_class = match env.find_class("com/mozi1924/yefira/encoder/NativeSync$ServerEvent") {
         Ok(c) => c,
@@ -93,4 +102,40 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerP
     }
 
     result_arr.into_raw()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mtk_sync::server::{LiveSyncServer, ServerConfig};
+    use std::time::Duration;
+
+    #[test]
+    fn poll_server_events_rejects_invalid_and_retired_handles() {
+        assert!(poll_server_events(0).is_none());
+        assert!(poll_server_events(-1).is_none());
+
+        let config = ServerConfig {
+            bind_address: "127.0.0.1:0".to_string(),
+            auth_token: None,
+            allow_loopback_without_token: true,
+            server_uuid: [0u8; 16],
+            max_connections: 8,
+            handshake_timeout: Duration::from_millis(5000),
+            ping_interval: Duration::from_millis(5000),
+        };
+        let server = LiveSyncServer::start(config).expect("server must bind 127.0.0.1:0");
+        let handle = SERVERS.insert(server) as jlong;
+
+        let events = poll_server_events(handle);
+        assert!(events.is_some(), "active handle must poll events safely");
+
+        if let Some(removed) = SERVERS.remove(handle as u64) {
+            removed.stop();
+        }
+        assert!(
+            poll_server_events(handle).is_none(),
+            "retired handle must return None instead of dereferencing freed memory"
+        );
+    }
 }

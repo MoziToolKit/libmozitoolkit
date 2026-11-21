@@ -31,6 +31,13 @@ impl PyLiveSyncSession {
         let session = LiveSyncSession::new(cfg, cul, mdb);
         if let Some(cfg) = config {
             session.set_allow_network(cfg.allow_network);
+            if let Some(ref baker) = cfg.banner_baker {
+                let mut w = match session.world.write() {
+                    Ok(guard) => guard,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+                w.set_banner_baker((**baker).clone());
+            }
         }
         Self { inner: session }
     }
@@ -54,6 +61,13 @@ impl PyLiveSyncSession {
             config.map(|c| c.inner.clone()),
             model_db.map(|db| db.inner.clone()),
         );
+        if let Some(baker) = config.and_then(|cfg| cfg.banner_baker.as_ref()) {
+            let mut w = match self.inner.world.write() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            w.set_banner_baker((**baker).clone());
+        }
     }
 
     /// Meshes the entire active VoxelStorage volume and returns a unified `MeshData`.
@@ -67,7 +81,7 @@ impl PyLiveSyncSession {
             profile,
             dynamic_entity_atlases,
             dynamic_entity_slots,
-            materials_are_slots: true,
+            materials_are_slots: false,
 
             views: Default::default(),
         }
@@ -237,7 +251,7 @@ impl PyLiveSyncSession {
                         profile,
                         dynamic_entity_atlases: dyn_atlases,
                         dynamic_entity_slots: dyn_slots,
-                        materials_are_slots: true,
+                        materials_are_slots: false,
 
                         views: Default::default(),
                     };

@@ -87,6 +87,10 @@ pub trait BlockEntityTextureProvider: Send + Sync {
     /// Registers a callback fired when a background skin download completes.
     fn set_skin_resolved_callback(&mut self, callback: SkinResolvedCallback);
 
+    /// Marks previously merged atlas entries as stale so the next [`prepare`](Self::prepare)
+    /// re-registers the provider's dynamic slots into a replacement `AtlasAddressMap`.
+    fn invalidate_atlas_registration(&mut self) {}
+
     /// Owned copy of [`Self::atlases`], for hosts that need to hand the pixels over.
     fn atlases_owned(&self) -> HashMap<u16, Vec<u8>> {
         self.atlases()

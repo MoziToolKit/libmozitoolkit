@@ -14,7 +14,7 @@ use super::convert::{extract_int_array, extract_optional_string_array, extract_s
 use crate::handle::HandleTable;
 
 /// Live native server instances, keyed by the opaque handle handed to the JVM.
-static SERVERS: HandleTable<LiveSyncServer> = HandleTable::new();
+pub(crate) static SERVERS: HandleTable<LiveSyncServer> = HandleTable::new();
 
 /// Starts a native LiveSync WebSocket server. Returns an opaque handle (jlong) or 0 on error.
 #[no_mangle]

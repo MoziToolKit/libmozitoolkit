@@ -161,6 +161,9 @@ impl VoxelWorld {
     /// Updates mesher configuration.
     pub fn set_config(&mut self, config: MesherConfig) {
         self.config = config;
+        if let Some(textures) = self.block_textures.as_mut() {
+            textures.invalidate_atlas_registration();
+        }
     }
 
     /// Sets the active 3D selection bounding box.
@@ -392,6 +395,9 @@ impl VoxelWorld {
         self.model_db = model_db;
         self.config.atlas_address_map = atlas_map;
         self.config.biome_resolver = biome_resolver;
+        if let Some(textures) = self.block_textures.as_mut() {
+            textures.invalidate_atlas_registration();
+        }
         self.clear_cache();
     }
 

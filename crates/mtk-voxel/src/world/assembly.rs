@@ -76,6 +76,10 @@ impl VoxelWorld {
         };
         prune_static_animation_attributes(&mut merged);
 
+        // `assemble_world_mesh` only records the raw atlas chunk IDs used by the merged mesh;
+        // `merged.face_materials` intentionally stays as raw atlas chunk IDs (not compacted to
+        // `0..N-1` slots), because `used_materials()`, `has_dynamic_entity_chunks()`, and host
+        // `mtk_atlas_chunk_id` remapping all read raw chunk IDs from it.
         let compact = |this: &mut Self, merged: MeshData| {
             this.used_chunk_ids = merged
                 .used_materials()

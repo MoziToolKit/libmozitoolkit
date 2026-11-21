@@ -239,6 +239,85 @@ class TestLibMtkPy(unittest.TestCase):
         cfg_offline = libmtk_py.MesherConfig(allow_network=False)
         self.assertFalse(cfg_offline.allow_network)
 
+    def test_world_mesh_keeps_raw_chunk_ids_and_reports_materials_are_slots_false(self):
+        import json
+        import numpy as np
+
+        mapping = {
+            "format_version": 1,
+            "category": "blocks",
+            "chunks": [
+                {
+                    "chunk_id": 0,
+                    "category": "blocks",
+                    "category_chunk_index": 1,
+                    "width": 1024,
+                    "height": 1024,
+                    "is_animated": False,
+                    "has_normal": False,
+                    "has_specular": False,
+                    "has_overlay": False,
+                },
+                {
+                    "chunk_id": 6,
+                    "category": "chests",
+                    "category_chunk_index": 1,
+                    "width": 1024,
+                    "height": 1024,
+                    "is_animated": False,
+                    "has_normal": False,
+                    "has_specular": False,
+                    "has_overlay": False,
+                },
+            ],
+            "sprites": {
+                "minecraft:block/stone": {
+                    "chunk_id": 0,
+                    "texture_id": 1,
+                    "uv_bounds": [0.0, 0.0, 0.5, 0.5],
+                    "frame_0_uv_bounds": [0.0, 0.0, 0.5, 0.5],
+                    "pixel_rect": [0, 0, 16, 16],
+                    "frame_size": [16, 16],
+                    "frame_count": 1,
+                    "is_animated": False,
+                    "has_normal": False,
+                    "has_specular": False,
+                    "has_overlay": False,
+                },
+                "minecraft:block/water_still": {
+                    "chunk_id": 6,
+                    "texture_id": 2,
+                    "uv_bounds": [0.0, 0.0, 0.5, 0.5],
+                    "frame_0_uv_bounds": [0.0, 0.0, 0.5, 0.5],
+                    "pixel_rect": [0, 0, 16, 16],
+                    "frame_size": [16, 16],
+                    "frame_count": 1,
+                    "is_animated": False,
+                    "has_normal": False,
+                    "has_specular": False,
+                    "has_overlay": False,
+                },
+            },
+        }
+        atlas = libmtk_py.BakedAtlas.from_mapping_json(json.dumps(mapping))
+        storage = libmtk_py.VoxelStorage()
+        storage.set_bounds(0, 0, 0, 4, 4, 4)
+        storage.set_block(0, 0, 0, "minecraft:stone")
+        storage.set_block(2, 0, 0, "minecraft:water")
+
+        cfg = libmtk_py.MesherConfig(atlas=atlas)
+        world = libmtk_py.VoxelWorld.from_storage(storage, config=cfg)
+
+        rebuilt = world.rebuild_all()
+        self.assertFalse(rebuilt.materials_are_slots)
+        self.assertEqual(sorted(rebuilt.used_materials()), [0, 6])
+        fm = np.frombuffer(rebuilt.face_materials_memoryview(), dtype=np.uint16)
+        self.assertEqual(sorted(set(fm.tolist())), [0, 6])
+
+        fetched = world.get_world_mesh()
+        self.assertFalse(fetched.materials_are_slots)
+        self.assertEqual(sorted(fetched.used_materials()), [0, 6])
+
 
 if __name__ == "__main__":
     unittest.main()
