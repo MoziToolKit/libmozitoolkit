@@ -1538,3 +1538,72 @@ MC：`pack.mcmeta` 的 `filter.block` 是 `IdentifierPattern` 列表（与 atlas
 
 - `.png.mcmeta` 的 `texture.blur` / `clamp`：只在运行时采样生效，烘焙期不采样，我们没有消费者；
 - 包 `formats` 的兼容性判定（`isCompatible`）：MC 用它决定 UI 里能否勾选，不影响读取。
+
+---
+
+## 25. C-09：生物群系表改为"从数据生成 + 对照测试"
+
+### 25.1 为什么这块一直很乱
+
+盘点后的实际分层（也是"补丁叠补丁"的来源）：
+
+| 层 | 内容 | 问题 |
+|---|---|---|
+| `canonical_data.rs`（864 行） | 66 个 `BiomePalette`：id/name/四个 hex/温度/湿度/三个 `has_custom_*` | **手工抄写**。派生色（colormap 采样结果）也被抄进来，逐渐漂移 |
+| `palettes.rs` | `CANONICAL_LINEAR_COLORS` 预计算、`is_swamp` 相关查找、hex→linear | 依赖上面的表 |
+| `hardcoded.rs`（470 行） | 方块 → tint 层注册表、`get_swamp_grass_color`（重实现 Perlin 噪声） | 与表里的 swamp 颜色并存 |
+| `resolver/*` | 扫描包内模型 JSON 的 tintindex/overlay 关系 | 与表无关，独立 |
+| `mtk-voxel/biome/color.rs` | `is_swamp = pal.id == "swamp" \|\| "mangrove_swamp"` | 硬编码 id，无视 `grass_color_modifier` |
+
+### 25.2 对照结果（改前）
+
+`jar` 侧有 66 个 `data/minecraft/worldgen/biome/*.json`。逐项对比后：
+
+- **id 集合错了**：多一个 `sparce_jungle`（拼写错误的幽灵条目，jar 里不存在），少一个 `sulfur_caves`（26.2 新增，带显式 `grass_color #aba64f`、`water_color #34bf89`）——
+  命中 `sulfur_caves` 的存档会因为查不到 palette 而回退到 plains 配色；
+- **派生色漂移**：11 处 ±1~4（如 `birch_forest` `#88BB67` vs 实际 `#88BB66`；`windswept_hills` 的 dry foliage `#957853` vs `#967753`）；
+- 温度/湿度/水色/显式色**全部正确**。
+
+### 25.3 一个精度陷阱（解释漂移来源之一）
+
+`ColorMapColorUtil.get` 的索引是 `(int)((1.0 - temp) * 255.0)`。Minecraft 的 `ClimateSettings`
+把温度/湿度存成 **float**，`1.0 - 0.6f = 0.3999999761581421` → 索引落在 101，而用 double 算
+`0.6` 会落到 102。Rust 侧 `BiomePalette.temperature: f32` 转 `f64` 恰好复刻了 Java 的加宽，
+所以**我们的采样是对的**；如果生成器用 Python double 直接算，就会偏一个纹素。生成器
+（`tools/gen_biome_palettes.py`）因此显式做 `as_f32()` 舍入——这正是那条 1 个色阶漂移的来源。
+
+### 25.4 改法
+
+- 新增 `tools/gen_biome_palettes.py`：读 66 个 biome JSON + 三张 colormap PNG（自带最小 PNG 解码器，
+  不引入 Pillow 依赖），按 MC 规则算出全部字段，生成 `canonical_data.rs`；文件头写明"生成物，
+  别手改"；
+- 生成规则与 MC 一致：`effects.*_color` 优先；无显式色时采样 colormap（f32 舍入、`y<<8|x` 索引）；
+  `grass_color_modifier = dark_forest` 用 packed ARGB 变换 `((base & 0x00FEFEFE) + 0x0028340A) >> 1`；
+  `swamp` 取 `#6A7039`（高噪声色，逐方块由 `get_swamp_grass_color` 在低/高之间选择）；
+- 新增 `crates/mtk-material/tests/test_biome_matches_jar.rs`（5 个），真资产缺失时 `skip`：
+  1. id 集合与 jar 完全一致、无重复、条目数相等；
+  2. 温度/湿度/`water_color` 逐项相等；
+  3. 显式 `effects.{grass,foliage,dry_foliage}_color` ↔ `has_custom_*` + hex 相等（修饰符生物群系
+     暂按"固定色"处理，见 C-10）；
+  4. 派生色必须等于 colormap 采样值（逐字节，不留容差）；
+  5. `grass_color_modifier` 恰好出现在 `dark_forest`/`swamp`/`mangrove_swamp`，且 dark_forest 的表值
+     等于 packed 变换结果、swamp 系等于 `#6A7039`。
+
+红态证据：改前 5 条里 4 条失败——缺 `sulfur_caves`、`sparce_jungle` 多出、`dark_forest` 的表值
+（当时也是对的，是我的测试公式写成逐通道少算了 0x28/0x34）、`birch_forest` 派生色偏 1。
+
+### 25.5 顺带确认的两个真实渲染缺陷（记为 C-10）
+
+1. **`dark_forest` 的草色从未变暗**：全仓没有 `grass_color_modifier` 的实现，运行期对
+   `dark_forest` 直接返回 colormap 采样值。深色森林的草因此偏亮（MC 会乘上固定变换）。
+2. **`is_swamp` 是硬编码 id 判断**（`pal.id == "swamp" || "mangrove_swamp"`），而 `has_custom_grass`
+   被当成"固定色"复用：真正语义应是 `effects.grass_color` 显式声明。两者混在同一个布尔上，
+   导致下次新增/改名沼泽系生物群系就会静默失效。
+
+这两项属于行为改动（需要独立测试 + 全套件验证），拆成 C-10 单独做。
+
+### 25.6 影响面
+
+生成后 `crates/mtk-material/src/biome/canonical_data.rs` 的 diff 仅 31 行：11 处颜色值 ±1~4、
+`sparce_jungle` 删除、`sulfur_caves` 新增。全仓测试、`cargo build-all-py`、Blender 套件 591 passed
+均通过（Blender 侧 PSNR 门限不受 1 个色阶影响）。

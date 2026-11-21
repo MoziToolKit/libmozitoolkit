@@ -309,3 +309,14 @@ fn main() {
 
 本项目遵循 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](../../LICENSE) 开源协议。
 
+---
+
+## 生物群系调色板（`biome/canonical_data.rs`）
+
+`CANONICAL_BIOMES` 由 `tools/gen_biome_palettes.py` 从游戏数据生成，**不要手改**：
+`crates/mtk-material/tests/test_biome_matches_jar.rs` 会逐项对照 jar 里的
+`data/minecraft/worldgen/biome/*.json` 与三张 colormap 纹理，生成器是唯一支持的刷新方式。
+
+派生色的计算必须按 Minecraft 的规则：`ClimateSettings` 用 float 存温度/湿度（`1.0 - 0.6f`
+不是 0.4），索引是 `y << 8 | x`；`grass_color_modifier = dark_forest` 走 packed ARGB 变换，
+`swamp` 取高噪声固定色 `#6A7039`（逐方块的低/高选择由 `get_swamp_grass_color` 负责）。

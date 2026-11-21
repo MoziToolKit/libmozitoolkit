@@ -133,6 +133,9 @@ P0 = 崩溃/数据错/安全；P1 = 用户可见错误或确定性；P2 = 边界
 | **K-11** | P2 | `libmtk/src/scene/metadata.rs:20-56` | 清单字段全 `#[serde(default)]` → 缺字段被当 false/0 | 必需字段不给 default | 删字段后反序列化失败 |
 | **K-12** | P2 | `libmtk/src/scene/package/validator.rs:35`、`exporter/source.rs:165-200` | 仍读 `biome/resolver` 旧键，写入方只写 `biome/mapping` → 死分支 | 删除旧读 | `rg biome/resolver` 零生产引用 |
 
+| **C-09** | `CANONICAL_BIOMES` 改为由 `tools/gen_biome_palettes.py` 从 jar 数据生成，并新增 `test_biome_matches_jar.rs` 五项对照（id 集合、温度/湿度/水色、显式 `effects.*_color`、派生色 == colormap 采样、`grass_color_modifier` 规则）。修掉：`sparce_jungle` 幽灵条目（拼写错误，jar 里不存在）、缺失的 `sulfur_caves`、11 处派生色 ±1~4 漂移 | `tools/gen_biome_palettes.py`、`crates/mtk-material/src/biome/canonical_data.rs`、`crates/mtk-material/tests/test_biome_matches_jar.rs`；审计 §25 |
+| **C-10** | P1 | `grass_color_modifier` 语义被压成 `has_custom_grass`：`dark_forest` 在**运行期完全没实现**（直接采样 colormap，草地偏亮），`swamp`/`mangrove_swamp` 靠 `pal.id == "swamp"` 硬编码判断；`has_custom_grass=true` 同时表示"jar 显式声明"与"modifier 派生固定色" | `BiomePalette` 增加 `grass_color_modifier` 字段（由生成器写入）；`sample_column_tint_color` 按 modifier 分支（dark_forest 采样后做 packed 变换、swamp 用噪声色），删除 mtk-voxel 里的 id 判断 | 见审计 §25.5 |
+
 ### B-架构边界
 
 | ID | P | 位置 | 现象 | 修法 |

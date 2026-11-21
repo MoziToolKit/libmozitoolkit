@@ -351,8 +351,8 @@ mod palette_lookup_tests {
     fn every_canonical_biome_resolves_to_itself() {
         for b in CANONICAL_BIOMES {
             assert_eq!(get_biome_palette(b.id).id, b.id);
-            // Display names are not unique (`sparce_jungle` / `sparse_jungle` share
-            // "Sparse Jungle"), so only require the resolved display name to match.
+            // Display names are derived from ids but are still matched case-insensitively, so
+            // require the resolved display name to match rather than the id.
             assert_eq!(
                 get_biome_palette(b.name).name.to_ascii_lowercase(),
                 b.name.to_ascii_lowercase()
