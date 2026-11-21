@@ -124,10 +124,7 @@ weight=10
 
     assert_eq!(rule.name, "stone_ctm");
     assert_eq!(rule.priority, 10);
-    assert_eq!(
-        rule.method,
-        mtk_resource::CtmMethod::Full { inner_seams: false }
-    );
+    assert_eq!(rule.method, mtk_resource::CtmMethod::Full);
     assert_eq!(rule.tiles.len(), 47);
     assert_eq!(
         rule.tiles[0],

@@ -1788,3 +1788,65 @@ crates/mtk-voxel/src/storage/world/debug.rs:209: core crate `mtk-voxel` reads a 
 全仓测试 0 失败 0 SKIP、`cargo build-all-py`、Blender 套件 591 passed。核心 crate 现在没有任何
 `env::var`，夹具/资产路径一律由调用方传入。
 
+---
+
+## 29. CTM 解码器对照 Continuity 的核查与修复
+
+### 29.1 参考物
+
+`../Continuity`（Fabric 模组，正是这套 `.properties` CTM 格式的现行实现）：
+`ContinuityClient`（method 注册表与每种方法的 tile 数量）、`BaseCtmProperties` 及子类（解析）、
+`CtmSpriteProvider`（47 方法 + 连接位 + 256 项索引表）、`CompactCtmQuadProcessor`（5 方法）、
+`DirectionMaps`/`OrientationMode`（面朝向）、`ConnectionPredicate`（innerSeams）、
+`CtmPropertiesLoader`（排序）、`StandardOverlayQuadProcessor`（覆盖层）。
+
+### 29.2 已经对齐的部分（机械验证，无需改动）
+
+- **47 方法索引表**：我们的 `CTM_47_LOOKUP[256]` 与 `CtmSpriteProvider.SPRITE_INDEX_MAP` **逐位相同**
+  （脚本比对 256/256 相等），`TILE_TO_CONNECTION_DATA[47]` 正是它的逆表；
+- **连接位布局**：`bit(2i)` = 第 i 条边连通，`bit(2i+1)` = 第 i 与第 i+1 条边之间的角连通；
+  角位只在两侧都连通时参与查表（我们的退化表与之等价）；
+- 温度/湿度、`tiles` 的 `0-46` 范围展开、`<skip>`/`<default>` 语义方向一致。
+
+### 29.3 本轮修复（先红后绿，`tests/test_ctm_continuity_parity.rs` 8 个用例）
+
+| # | 偏差 | Continuity 的行为 | 我们之前 | 现在 |
+|---|---|---|---|---|
+| 1 | method 别名缺失 | `bookshelf`→horizontal，`h+v`/`v+h` 是 7 格网格别名 | 未知 → 回退 **Full**（错算法） | 按别名映射 |
+| 2 | 未知 method | 记录错误并**丢弃规则** | 回退 Full，静默套错算法 | 丢弃 |
+| 3 | 缺 `tiles` | 丢弃规则 | 容忍（解析出空 tile 表，方法永远返回 None） | 丢弃 |
+| 4 | tile 数量 | `TileAmountValidator`：ctm≥47、compact≥5、horizontal/vertical=4、h+v/v+h=7、top/fixed=1、overlay≥17、overlay_ctm≥47 | 不校验（4 个 tile 的 ctm 规则静默无效） | 逐方法校验 |
+| 5 | `tiles` 语法 | 按 `[ ,]` 分割；接受 `<skip>.png`/`<default>.png`；`a-b` 解析失败时按路径处理 | 只按空格；带 `.png` 的哨兵不识别；范围解析失败会**吞掉**该 tile（后续索引整体前移） | 全部对齐 |
+| 6 | `biomes=!a b` | `!` 前缀表示**排除** | 当成字面量 biome id，规则永不命中 | 支持取反 |
+| 7 | `faces` 全部未知 | 抛错并丢规则；`all` 短路为全部面 | 静默当作 `all` | 丢弃 / 短路 |
+| 8 | `innerSeams` | `connect(n) && (!innerSeams || !connect(n+face))` | **反了**：只在 `innerSeams=false` 时额外探测 `n+face` 并置位 | 按模组语义 |
+
+红态证据：8 条用例在改前全部失败（`bookshelf`/`h+v` 落到 Full、未知 method 被接受、逗号 tile 只解析出 1 个、
+`biomes=!` 永不命中、`faces=sideways` 变成全脸、`innerSeams` 无法区分薄壳与厚墙）。
+
+顺带被新校验抓出的两处**测试夹具**错误：`method=full`（不是 Continuity 的方法名）与
+`method=horizontal` 只给 1 个 tile，都已修正为合法规则。
+
+**真实资源包未受影响**：现网 35 个 `method=ctm` 规则全部仍有 ≥47 tile，修复后仍解析出 35 条
+（`ResourcePackStack.get_ctm_rule_count() == 35`）。
+
+缓存格式递增（asset-cache 13→14、scene 5→6）：`CtmRule` 的 JSON 形状变了（`inner_seams`/`biomes_negated`
+提升为顶层字段，方法枚举不再携带 `inner_seams`）。
+
+### 29.4 明确未做（记入 backlog）
+
+- **C-11 覆盖层方法**：`overlay*` 需要额外一层混合四边形（`tintIndex`/`layer`/AO/17 格索引），
+  我们目前没有该输出路径。现在**丢弃这些规则**，因为把它们映射成基础方法会静默替换贴图（视觉更差）。
+- **C-12 `connect=tile` / `connectTiles`**：需要邻居在**同一面**上的贴图。`CtmSolver` 的回调只拿到状态
+  字符串，mesher 的 `PaletteMeshingData` 已有每面贴图，但需要扩回调签名——属于接口改动。
+- **C-13 `random`/`repeat`/`top`/规则排序**：
+  - `random`：Continuity 用 Minecraft `RandomSource` + 整数权重 + `linked`（邻居一致）+ `randomLoops` +
+    `symmetry`；我们用 OptiFine 式坐标哈希 + 浮点权重；
+  - `repeat`：Continuity 逐面 `x/y/z` 公式（含 `-1` 偏移）后再按 `orientation` 旋转，我们按切向量取模，
+    相位与旋转都不同；
+  - `top`：Continuity 用方块 `AXIS` 属性选轴（默认 Y），我们固定按上方；
+  - 规则排序：Continuity 按 `prioritized`（默认 = 是否给了 `matchTiles`）→ 包优先级 → resourceId；
+    我们按 `weight` 数值排序，而 `weight` 在 Continuity 里只是 `random` 的权重。
+
+这三项都不是"改一行"，需要各自的红态测试与接口调整，已记录为独立条目。
+

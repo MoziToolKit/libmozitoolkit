@@ -27,9 +27,9 @@ impl CtmSymmetry {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum CtmMethod {
     /// 47-tile full connected textures
-    Full { inner_seams: bool },
+    Full,
     /// 5-tile compact connected textures
-    Compact { inner_seams: bool },
+    Compact,
     /// 4-tile horizontal connection (e.g. bookshelves, logs)
     Horizontal,
     /// 4-tile vertical connection (e.g. pillars, pillars)
@@ -154,7 +154,14 @@ pub struct CtmRule {
     pub match_tiles: Vec<ResourceLocation>,
     pub connect_logic: ConnectLogic,
     pub faces: DirMask,
+    /// `innerSeams=true`: connect only when the block *behind* the neighbour does not connect.
+    ///
+    /// Continuity: `if shouldConnect(other) { if innerSeams { move(other, face); return
+    /// !shouldConnect(other) } return true } return false` (`ConnectionPredicate`).
+    pub inner_seams: bool,
     pub biomes: Option<Vec<String>>,
+    /// `biomes=!...`: the listed biomes are excluded instead of selected.
+    pub biomes_negated: bool,
     pub height_ranges: Option<Vec<(i32, i32)>>,
     pub tint_index: Option<i32>,
     pub tint_block: Option<String>,
@@ -206,15 +213,17 @@ impl CtmRule {
             }
         }
         if let Some(ref biomes) = self.biomes {
-            if let Some(b) = biome {
-                let canonical_b = if b.contains(':') {
+            let listed = biome.is_some_and(|b| {
+                let canonical = if b.contains(':') {
                     b.to_string()
                 } else {
                     format!("{}:{}", DEFAULT_NAMESPACE, b)
                 };
-                if !biomes.contains(&canonical_b) {
-                    return false;
-                }
+                biomes.contains(&canonical)
+            });
+            // `biomes=!a b` excludes the listed biomes; a plain list selects them.
+            if listed == self.biomes_negated {
+                return false;
             }
         }
         if !self.match_blocks.is_empty() && !self.match_blocks.iter().any(|m| m.matches(state)) {

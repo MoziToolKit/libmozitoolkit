@@ -24,7 +24,9 @@ impl CtmRule {
         F: Fn(IVec3) -> Option<S>,
         S: AsRef<str>,
     {
-        let check_connect = |offset: IVec3| -> bool {
+        let inner_seams = self.inner_seams;
+        let face_offset = face.offset();
+        let check_neighbor = |offset: IVec3| -> bool {
             let n_pos = world_pos + offset;
             if let Some(neighbor_state) = get_block(n_pos) {
                 let n_str = neighbor_state.as_ref();
@@ -51,13 +53,26 @@ impl CtmRule {
             }
         };
 
+        // `innerSeams=true`: a neighbour connects only when the block behind it does not, so the
+        // seam is interior to a thick wall rather than on its surface (Continuity
+        // `ConnectionPredicate.shouldConnect`).
+        let check_connect = |offset: IVec3| -> bool {
+            if !check_neighbor(offset) {
+                return false;
+            }
+            if inner_seams {
+                !check_neighbor(offset + face_offset)
+            } else {
+                true
+            }
+        };
+
         match &self.method {
-            CtmMethod::Full { inner_seams } => {
-                let tile_idx =
-                    solve_full_ctm_with_tangents(face, tangents, *inner_seams, &check_connect);
+            CtmMethod::Full => {
+                let tile_idx = solve_full_ctm_with_tangents(face, tangents, &check_connect);
                 self.tiles.get(tile_idx).and_then(|t| t.clone())
             }
-            CtmMethod::Compact { .. } => {
+            CtmMethod::Compact => {
                 let tile_idx = solve_compact_ctm_with_tangents(face, tangents, &check_connect);
                 self.tiles.get(tile_idx).and_then(|t| t.clone())
             }
@@ -307,7 +322,7 @@ mod tests {
 
     #[test]
     fn applies_to_state_matches_tile_rules_through_the_mesher_base_tile() {
-        let solver = solver("matchTiles=glass\nmethod=full\ntiles=0-46\n");
+        let solver = solver("matchTiles=glass\nmethod=ctm\ntiles=0-46\n");
         assert!(solver.applies_to_state("minecraft:glass"));
         assert!(!solver.applies_to_state("minecraft:black_stained_glass"));
         // The mesher derives `block/<clean block id>`, not the real texture of every model, so a

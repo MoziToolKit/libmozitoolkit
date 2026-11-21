@@ -26,7 +26,8 @@ pub(crate) fn parse_ctm_properties(
         ""
     };
 
-    // 1. Method
+    // 1. Method — Continuity's registry (`ContinuityClient`). An unknown method drops the rule;
+    // silently falling back to 47-tile CTM applies the wrong algorithm.
     let method_str = props.get("method").map(|s| s.as_str()).unwrap_or("ctm");
     let inner_seams = props
         .get("innerseams")
@@ -34,14 +35,14 @@ pub(crate) fn parse_ctm_properties(
         .unwrap_or(false);
 
     let method = match method_str {
-        "ctm" | "overlay_ctm" => CtmMethod::Full { inner_seams },
-        "ctm_compact" => CtmMethod::Compact { inner_seams },
-        "horizontal" => CtmMethod::Horizontal,
+        "ctm" => CtmMethod::Full,
+        "ctm_compact" => CtmMethod::Compact,
+        "horizontal" | "bookshelf" => CtmMethod::Horizontal,
         "vertical" => CtmMethod::Vertical,
-        "horizontal+vertical" => CtmMethod::HorizontalVertical,
-        "vertical+horizontal" => CtmMethod::VerticalHorizontal,
+        "horizontal+vertical" | "h+v" => CtmMethod::HorizontalVertical,
+        "vertical+horizontal" | "v+h" => CtmMethod::VerticalHorizontal,
         "top" => CtmMethod::Top,
-        "repeat" | "overlay_repeat" => {
+        "repeat" => {
             let width = props.get("width").and_then(|w| w.parse().ok()).unwrap_or(2);
             let height = props
                 .get("height")
@@ -49,7 +50,7 @@ pub(crate) fn parse_ctm_properties(
                 .unwrap_or(2);
             CtmMethod::Repeat { width, height }
         }
-        "random" | "overlay_random" => {
+        "random" => {
             let symmetry = props
                 .get("symmetry")
                 .map(|s| CtmSymmetry::parse(s))
@@ -58,13 +59,30 @@ pub(crate) fn parse_ctm_properties(
                 .get("linked")
                 .map(|s| s.eq_ignore_ascii_case("true"))
                 .unwrap_or(false);
+            // Continuity parses integer weights separated by `[ ,]` and expands `a-b` ranges;
+            // non-positive values are rejected.
             let mut weights = Vec::new();
             let mut total_weight = 0.0f32;
             if let Some(w_str) = props.get("weights") {
-                for token in w_str.split_whitespace() {
-                    if let Ok(val) = token.parse::<f32>() {
-                        weights.push(val);
-                        total_weight += val;
+                for token in w_str.split([' ', ',']).filter(|t| !t.is_empty()) {
+                    let mut push = |weight: u32| {
+                        weights.push(weight as f32);
+                        total_weight += weight as f32;
+                    };
+                    if let Some((min_s, max_s)) = token.split_once('-') {
+                        if let (Ok(min), Ok(max)) = (min_s.parse::<u32>(), max_s.parse::<u32>()) {
+                            for weight in min..=max {
+                                if weight > 0 {
+                                    push(weight);
+                                }
+                            }
+                            continue;
+                        }
+                    }
+                    if let Ok(weight) = token.parse::<u32>() {
+                        if weight > 0 {
+                            push(weight);
+                        }
                     }
                 }
             }
@@ -75,29 +93,58 @@ pub(crate) fn parse_ctm_properties(
                 linked,
             }
         }
-        "fixed" | "overlay_fixed" => CtmMethod::Fixed,
-        "overlay" => CtmMethod::Overlay,
-        _ => CtmMethod::Full { inner_seams: false },
+        "fixed" => CtmMethod::Fixed,
+        // Overlay methods need an extra blended layer, which this decoder does not emit yet
+        // (backlog C-11). Treating them as their base method silently *replaces* the texture.
+        _ => return None,
     };
 
-    // 2. Tiles
+    // Continuity's `TileAmountValidator`: a 47-tile method with four tiles is a broken rule.
+    let requires: Option<(u32, bool)> = match &method {
+        CtmMethod::Full => Some((47, true)),
+        CtmMethod::Compact => Some((5, true)),
+        CtmMethod::Horizontal | CtmMethod::Vertical => Some((4, false)),
+        CtmMethod::HorizontalVertical | CtmMethod::VerticalHorizontal => Some((7, false)),
+        CtmMethod::Top | CtmMethod::Fixed => Some((1, false)),
+        CtmMethod::Overlay => Some((17, true)),
+        CtmMethod::Random { .. } | CtmMethod::Repeat { .. } => None,
+    };
+
+    // 2. Tiles — Continuity requires the property, splits on `[ ,]`, understands `<skip>`,
+    // `<default>`, `a-b` ranges and `namespace:path` / relative / absolute spellings.
     let mut tiles: Vec<Option<ResourceLocation>> = Vec::new();
-    if let Some(tiles_str) = props.get("tiles") {
-        for token in tiles_str.split_whitespace() {
-            if token.eq_ignore_ascii_case("<skip>") || token.eq_ignore_ascii_case("<default>") {
+    {
+        let tiles_str = props.get("tiles")?;
+        for token in tiles_str
+            .split([' ', ','])
+            .filter(|token| !token.is_empty())
+        {
+            if token.ends_with("<skip>") || token.ends_with("<skip>.png") {
                 tiles.push(None);
-            } else if token.contains('-') {
-                // Range, e.g. 0-46
-                if let Some((start_s, end_s)) = token.split_once('-') {
-                    if let (Ok(start), Ok(end)) = (start_s.parse::<u32>(), end_s.parse::<u32>()) {
-                        for i in start..=end {
-                            let tile_path = format!("{}{}", parent_dir, i);
-                            tiles.push(Some(ResourceLocation::new(namespace, tile_path)));
-                        }
+                continue;
+            }
+            if token.ends_with("<default>") || token.ends_with("<default>.png") {
+                tiles.push(None);
+                continue;
+            }
+
+            let mut handled = false;
+            if let Some((start_s, end_s)) = token.split_once('-') {
+                if let (Ok(start), Ok(end)) = (start_s.parse::<u32>(), end_s.parse::<u32>()) {
+                    for index in start..=end {
+                        tiles.push(Some(ResourceLocation::new(
+                            namespace,
+                            format!("{parent_dir}{index}"),
+                        )));
                     }
+                    handled = true;
                 }
-            } else if token.contains(':') {
-                // Explicit namespace in tile: "modid:path"
+            }
+            if handled {
+                continue;
+            }
+
+            if token.contains(':') {
                 if let Ok(loc) = ResourceLocation::parse_texture_path(token) {
                     tiles.push(Some(loc));
                 } else if let Ok(loc) = ResourceLocation::parse(token) {
@@ -111,9 +158,24 @@ pub(crate) fn parse_ctm_properties(
                 ));
             } else {
                 let clean_token = token.strip_suffix(".png").unwrap_or(token);
-                let tile_path = format!("{}{}", parent_dir, clean_token);
-                tiles.push(Some(ResourceLocation::new(namespace, tile_path)));
+                tiles.push(Some(ResourceLocation::new(
+                    namespace,
+                    format!("{parent_dir}{clean_token}"),
+                )));
             }
+        }
+    }
+
+    // Continuity's `TileAmountValidator`: reject rules whose tile count the method cannot use.
+    if let Some((amount, at_least)) = requires {
+        let count = tiles.len() as u32;
+        let ok = if at_least {
+            count >= amount
+        } else {
+            count == amount
+        };
+        if !ok {
+            return None;
         }
     }
 
@@ -185,7 +247,7 @@ pub(crate) fn parse_ctm_properties(
             .collect();
         ConnectLogic::BlockNames(list)
     } else if let Some(conn) = props.get("connect") {
-        match conn.as_str() {
+        match conn.trim().to_lowercase().as_str() {
             "tile" => ConnectLogic::SameTile,
             "state" => ConnectLogic::SameState,
             _ => ConnectLogic::SameBlock,
@@ -196,13 +258,18 @@ pub(crate) fn parse_ctm_properties(
         ConnectLogic::SameBlock
     };
 
-    // 5. Faces
+    // 5. Faces — Continuity: unknown tokens are skipped, an empty result invalidates the rule,
+    // and `all` covers every face even when mixed with other tokens.
     let mut faces = DirMask::all();
     if let Some(faces_str) = props.get("faces") {
         let mut custom_faces = DirMask::empty();
-        for f in faces_str.split_whitespace() {
+        let mut saw_all = false;
+        for f in faces_str.split([' ', ',']).filter(|f| !f.is_empty()) {
             match f.to_lowercase().as_str() {
-                "all" => custom_faces |= DirMask::all(),
+                "all" => {
+                    saw_all = true;
+                    break;
+                }
                 "sides" => {
                     custom_faces |= DirMask::NORTH | DirMask::SOUTH | DirMask::EAST | DirMask::WEST
                 }
@@ -215,7 +282,10 @@ pub(crate) fn parse_ctm_properties(
                 _ => {}
             }
         }
-        if !custom_faces.is_empty() {
+        if !saw_all {
+            if custom_faces.is_empty() {
+                return None;
+            }
             faces = custom_faces;
         }
     }
@@ -227,17 +297,31 @@ pub(crate) fn parse_ctm_properties(
         .unwrap_or(0);
 
     // 7. Biomes & Heights
-    let biomes = props.get("biomes").map(|b| {
-        b.split_whitespace()
-            .map(|s| {
-                if s.contains(':') {
-                    s.to_string()
-                } else {
-                    format!("{}:{}", DEFAULT_NAMESPACE, s)
-                }
-            })
-            .collect()
-    });
+    // `biomes=!a b` excludes the listed biomes (Continuity's `parseBiomes`).
+    let (biomes, biomes_negated) = match props.get("biomes") {
+        Some(raw) => {
+            let trimmed = raw.trim();
+            let (negated, list) = match trimmed.strip_prefix('!') {
+                Some(rest) => (true, rest.trim()),
+                None => (false, trimmed),
+            };
+            let entries: Vec<String> = list
+                .split_whitespace()
+                .map(|b| {
+                    if b.contains(':') {
+                        b.to_string()
+                    } else {
+                        format!("{}:{}", DEFAULT_NAMESPACE, b)
+                    }
+                })
+                .collect();
+            if entries.is_empty() && !negated {
+                return None;
+            }
+            (Some(entries), negated)
+        }
+        None => (None, false),
+    };
 
     let height_ranges = props.get("heights").map(|h| {
         let mut ranges = Vec::new();
@@ -266,7 +350,9 @@ pub(crate) fn parse_ctm_properties(
         match_tiles,
         connect_logic,
         faces,
+        inner_seams,
         biomes,
+        biomes_negated,
         height_ranges,
         tint_index,
         tint_block,

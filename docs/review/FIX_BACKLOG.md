@@ -121,6 +121,10 @@ P0 = 崩溃/数据错/安全；P1 = 用户可见错误或确定性；P2 = 边界
 | **C-04** | P2 | `libmtk/src/prebake/engine.rs:204-206` | 请求 `blocks` 分类仍烘全部图集 | 按分类过滤 | 只请求 blocks 时 manifest 的 atlas 分类只有 blocks |
 | **C-05** | P2 | `libmtk/src/prebake/engine.rs:308-311` | 进度 total 与 `inc()` 次数不同源 → 百分比 >100% | 用同一计数源 | 进度回调断言 `current <= total` |
 
+| **C-11** | P1 | `mtk-resource/src/ctm/parser.rs` | 覆盖层方法（`overlay`/`overlay_ctm`/`overlay_random`/`overlay_repeat`/`overlay_fixed`/`overlay_horizontal`…）目前一律丢弃：解码器不产出额外的混合层，映射到基础方法会**静默替换**贴图（比不做更差） | 需要 mesher 支持附加四边形 + `tintIndex`/`layer`/AO + 17 格索引（Continuity `StandardOverlayQuadProcessor`/`SimpleOverlayQuadProcessor`） | 见审计 §29.4 |
+| **C-12** | P1 | `mtk-resource/src/ctm/solver.rs` | `connect=tile` 实际等价于 `connect=block`；`connectTiles=`/`connectBlocks=` 列表在连接判断中被忽略（Continuity：状态相等 **或** 邻居该面贴图集合包含本面贴图） | 把邻居的面贴图传进 `check_connect`（mesher 侧已解析 `PaletteMeshingData`，需扩 `resolve_face_with_tangents` 的回调签名） | 见审计 §29.4 |
+| **C-13** | P2 | `mtk-resource/src/ctm/{parser,solver,algorithms}.rs` | `random` 用 OptiFine 式坐标哈希 + 浮点权重（Continuity：Minecraft `RandomSource` + 整数权重 + `linked`/`randomLoops`/`symmetry`）；`repeat` 相位公式与 `orientation` 旋转不同（Continuity 逐面 `x/y/z` 公式含 `-1` 偏移）；`top` 未按 `AXIS` 属性选轴；规则排序按 `weight` 数值（Continuity：`prioritized` 布尔 → 包优先级 → resourceId） | 逐项对照重写 | 见审计 §29.4 |
+
 ### B-缓存与确定性
 
 | ID | P | 位置 | 现象 | 修法 | 验证 |

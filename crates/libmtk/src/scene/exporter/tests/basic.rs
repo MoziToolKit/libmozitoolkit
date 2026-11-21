@@ -694,7 +694,7 @@ fn test_scene_export_ctm_rules_and_subtiles_roundtrip() {
         },
     );
 
-    let ctm_props = "matchBlocks=glass\nmethod=horizontal\ntiles=0";
+    let ctm_props = "matchBlocks=glass\nmethod=horizontal\ntiles=0-3";
     let rule = CtmRule::parse_properties(
         "optifine/ctm/glass/glass.properties",
         "minecraft",
