@@ -62,6 +62,16 @@ blender --background --python ../MoziToolKit/tests/run_tests.py -- -rs -q
 | **K-04** | 新增 `mtk_core::serialize_sorted_map`（排序后仍以 map 编码，线上格式不变）；接入 11 处 HashMap 序列化（`AtlasAddressMap`×3、模型库 payload×2 与 `BakedElement.faces`、`BiomeResolver`×5、`ResolverOverrides`×2、`extra_props`）；场景包 `entity/slots` 与横幅图案块改 `BTreeMap` | `crates/mtk-core/src/serde_util.rs`、`mtk-texture/tests/test_address_map_determinism.rs`、`libmtk/tests/test_package_determinism.rs`（合成 + 真资产两组）；审计 §19 |
 | **C-06** | 生产配置收敛到 `AtlasBuilderConfig::production()`：`padding = max(2, 2^mip)`（mip 0 时为 2），`default()` 也走生产策略；预烘/场景导出/CTM/atlas CLI/`PyAtlasBuilder` 全部改用；缓存格式 v11→12、场景包 v3→v4 | `mtk-texture/src/atlas/builder/types.rs`、`tests/test_atlas_padding.rs`（3 个新测试）、`libmtk/src/scene/exporter/tests/basic.rs`（改为像素级 crop 方向断言）；审计 §18 |
 | **quart 契约** | `SectionBiomes::is_fully_assigned()` 现在把单元素调色板视为权威（`uniform`/2D 存档/单 biome 流），不再把"合法的单 biome 段"误判成占位泄漏 | `mtk-voxel/src/storage/biome.rs` + 重新启用的 `mtk-sync/tests/test_save_alignment.rs::test_real_save_import_and_live_sync_align`（此前一直被跳过） |
+| **Y-07** | `server/service/{state.rs,server.rs}` 全面改用 `lock_unpoisoned()`（`PoisonError::into_inner`），持锁 panic 后握手线程与服务端恢复正常运行 | `mtk-sync/src/server/service/state.rs` + 单测 `handshake_context_recovers_after_selection_mutex_poisoning` |
+| **Y-08** | `mtk-sync/src/client/transport.rs` 新增 `drain_stale_commands()`，在建连发送 `CONNECTED` 前与断线时清空残留命令队列 | `mtk-sync/src/client/transport.rs` + 单测 `reconnect_drains_stale_commands_queued_while_disconnected` |
+| **K-05** | `model_cache` 仅存全限定 `loc.as_string()`，删除 `.or_else(\|\| model_cache.get(&loc.path))` 跨命名空间回退，仅对无冒号原版短名补 `minecraft:` | `libmtk/src/prebake/models.rs`、`mtk-model/src/baker/model_baker/resolver.rs` + 单测 `mod_namespace_model_never_falls_back_to_vanilla_short_name` |
+| **V-08** | 全空section早退改为 `padded.is_empty && block_entities.is_empty()`，全空气段中的方块实体可正常烘焙 | `mtk-voxel/src/mesher/{section_mesher.rs,batch.rs,delta_mesher.rs}` + 单测 `empty_flagged_section_with_block_entity_still_emits_geometry` |
+| **A-11 / mtk-py CI** | 清理 `buffer.rs` `#[allow(dead_code)]` 与死枚举变体；修复 `bindings/mtk-py/tests/` 并接入 `.github/workflows/ci.yml`；`API_VERSION` 升至 `3` | `bindings/mtk-py/src/{lib.rs,buffer.rs}`、`bindings/mtk-py/tests/test_bindings.py`、`.github/workflows/ci.yml` |
+| **A-16** | 删除 `../MoziToolKit/utils/assets/cache_utils.py` 兼容再导出 shim，将宿主 OS 缓存统计/清理拆分至 `utils/assets/cache_ops.py` | `../MoziToolKit/utils/assets/cache_ops.py`、`rg cache_utils ../MoziToolKit` 为 0 |
+| **H-05 / H-06** | `utils/assets/guard.py` 缺失原生核心时返回 `"NO_NATIVE"`（不返回 `"MISSING"`）；`ensure_pipeline_assets_ready_sync` 与 `run_task_with_asset_guard` 改为显式白名单状态才放行（fail-closed） | `../MoziToolKit/utils/assets/{guard.py,guard_eval.py}`、`../MoziToolKit/tests/test_asset_bake_guard.py::test_status_no_native_and_fail_closed_guard` |
+| **H-07** | 修复 `open_active_asset_cache` 包堆栈变更盲区（`_ACTIVE_CACHE_PACK_SIG`），将 `load_*_inner` 的缓存键获取移至打开缓存之后，并同步修复材质构建链路向 `get_or_create_image` 透传 `prefs` | `../MoziToolKit/bridge/assets/{cache.py,readers.py}`、`../MoziToolKit/utils/materials/builder/`、`../MoziToolKit/tests/test_asset_cache_invalidation.py` |
+| **H-10** | 删除 `bridge/engine.py`、`bridge/assets/{cache.py,pack.py}`、`bridge/sync/session.py`、`bridge/progress.py` 中对 `API_VERSION=3` 的 `hasattr`/`except TypeError` 运行时探测 | `../MoziToolKit/bridge/`、`../MoziToolKit/tests/test_live_sync_reconnect_state.py` |
+| **T-09** | 测试前置注册 `MOZI_AddonPreferences` 条目并优化 `bridge/prefs.py` 类型解析，消除 5 条 `AddonPreferences not available` 跳过（含 `--factory-startup`） | `../MoziToolKit/tests/conftest.py`、`../MoziToolKit/bridge/prefs.py`、`test_dna_bridge.py` + `test_launcher_scan.py` 0 skipped |
 
 ### D1–D5 期间落地、本轮未逐行复核（按记录保留，不算 OPEN）
 
@@ -103,8 +113,6 @@ P0 = 崩溃/数据错/安全；P1 = 用户可见错误或确定性；P2 = 边界
 |---|---|---|---|---|---|
 | **S-13** | P0 | `bindings/mtk-jni/src/server.rs`（8 处 `if handle == 0`） | 句柄只校验非零，无句柄表/关闭态原子标志；关闭竞态下 poller 线程读已释放对象 | 句柄表 + `AtomicBool`/代际号，关闭后所有入口返回错误 | JNI 侧并发关闭测试（或 Rust 单测句柄生命周期） |
 | **Y-06** | P0 | `mtk-sync/src/server/service/server.rs:175` | `snapshot_uuid: [0u8; 16]` —— 所有 baseline 共用同一 UUID，旧 chunk 会被新流接受 | 用进程内自增/真随机 16 字节并随每次 baseline 变化 | 两次 baseline 的 UUID 必须不同；混入旧 chunk 必须被拒 |
-| **Y-07** | P1 | `server/service/server.rs` 7 处 `.lock().unwrap()` | 任一持锁 panic 后握手线程永久 panic | 去毒化（`PoisonError::into_inner`）或 `parking_lot` | 让持锁线程 panic 后再握手 |
-| **Y-08** | P1 | `mtk-sync/src/client/transport.rs:79,163` | `cmd_receiver` 跨重连复用，断开时不清队列 → 旧连接的 ACK/RESYNC 发给新连接 | 连接建立/断开时 drain 命令队列 | 断线期间塞命令，重连后断言不被发送 |
 | **Y-10** | P2 | `mtk-sync/src/server/baseline.rs:389` | `space_left.max(biome_len)` 恒等于全长 → `max_chunk_size` 失效、续块分支死代码 | 改 `min` | 大 baseline 产生多块（现有 loopback 基线） |
 | **Y-11** | P2 | `server/service/server.rs:331,335` | `block_states[i]` 无长度校验（panic）；palette > 65535 时 `as u16` 静默回绕 | 校验长度 + 超限报错（或升 u32） | 构造超长/超量 palette |
 | **Y-13** | P2 | `server/service/server.rs:237,324` | `sequence.fetch_add` 与 `broadcast_packet` 不在同一临界区 → 并发提交序号乱序 | 序号+广播同临界区 | 并发提交压力测试后客户端无 `SequenceGap` |
@@ -116,7 +124,6 @@ P0 = 崩溃/数据错/安全；P1 = 用户可见错误或确定性；P2 = 边界
 |---|---|---|---|---|---|
 | **V-02** | VOID | 焊接键加面朝向/法线：仓库内**无消费者**（Blender 的 `inject_vertex_normals_dna` 是 stub，`MeshData.normals` 不进渲染；无 glTF 导出器），而拆分顶点会让 90° 拐角失去焊接、SSS 出黑边、顶点 +5.7%。已撤回（`git revert`），焊接键保持"仅位置" | 审计 §27 |
 | **V-07** | P2 | `mtk-voxel/src/fluid/height.rs:85` vs `:252` | 两套流体高度公式，waterlogged 分支不一致 | 收敛成一份（`get_fluid_base_height` 调用 `calculate_fluid_corner_heights`） | 同一批 waterlogged 状态两函数结果一致 |
-| **V-08** | P2 | `mtk-voxel/src/mesher/section_mesher.rs:42` | `padded.is_empty` 早退 → 全空气段里的方块实体（悬挂告示牌/头颅）无几何 | 早退条件加上 `block_entities.is_empty()` | 空气段放一个方块实体，断言有面 |
 | **C-03** | P2 | `collector.rs:13-46` + `ctm/solver.rs:136` | CTM 同优先级排序依赖文件枚举序 | 稳定排序（pack 序 + 文件名） | 打乱目录枚举起始位置后结果不变 |
 | **C-04** | P2 | `libmtk/src/prebake/engine.rs:204-206` | 请求 `blocks` 分类仍烘全部图集 | 按分类过滤 | 只请求 blocks 时 manifest 的 atlas 分类只有 blocks |
 | **C-05** | P2 | `libmtk/src/prebake/engine.rs:308-311` | 进度 total 与 `inc()` 次数不同源 → 百分比 >100% | 用同一计数源 | 进度回调断言 `current <= total` |
@@ -129,7 +136,6 @@ P0 = 崩溃/数据错/安全；P1 = 用户可见错误或确定性；P2 = 边界
 
 | ID | P | 位置 | 现象 | 修法 | 验证 |
 |---|---|---|---|---|---|
-| **K-05** | P1 | `libmtk/src/prebake/models.rs:99-103` | 原版命名空间的模型同时插短名 `block/stone` 并可被回退查找 → 模组 `mymod:block/stone` 命中原版 | 只保留全限定名 | 模组命名空间模型解析测试 |
 | **K-03** | P2 | `libmtk/src/prebake/resolver.rs:24-37,63-77` | Rust API 在 `fingerprint=None` 时仍返回"最新包"（主机侧已不再这样调用，且注释写明仅供内省） | 让 `resolve_active_cache_package` 要求指纹；内省走 `newest_cache_package` | 单测：None 指纹返回 None |
 | **K-08** | P2 | `mtk-package/src/writer.rs:260,330-355` | `sync_all` 失败被吞；目录不 fsync → 崩溃留下 0 字节包 | 失败即报错 + 目录 fsync | 注入写失败 |
 | **K-09** | P2 | `libmtk/src/prebake/reader.rs:28-45` | 非 `mtk_fp_<hex>` 指纹被截断 16 字节 → 前缀相同即相等 | 严格格式校验 | 非法/短指纹被拒 |
@@ -152,12 +158,10 @@ P0 = 崩溃/数据错/安全；P1 = 用户可见错误或确定性；P2 = 边界
 | **A-08** | P2 | `bindings/mtk-py/src/scene/exporter.rs:20-46` | `**kwargs` 吞未知键 | 显式参数，未知键报错 |
 | **A-09** | P2 | `bindings/mtk-py/src/uv/fluid.rs:41-170` | 一个能力 3 个入口 + 4 段类型探测 | 一个入口 + 类型校验 |
 | **A-10** | P2 | `bindings/mtk-py/src/voxel/world.rs:159` | `get_world_mesh()` 未 meshed 时返回空 `MeshData` | 返回 `Option`/`Err` |
-| **A-11** | P2 | `bindings/mtk-py/src/buffer.rs:11` | `#[allow(dead_code)]` 藏在绑定层 | 删死代码 |
 | **A-12** | P2 | `mtk-voxel/src/fluid/test_verify_blender.rs` | 测试模块住在 `src/`，4 个字段从不读取 | 移到 `tests/` |
 | **A-13** | P2 | `bindings/mtk-py/src/texture/atlas.rs:266-279`、`uv/extrude.rs:40-45` | 未知 `category`/`uv_mode` 静默回落 | 报错 |
 | **A-14** | P2 | `mtk-save/src/error.rs:31` | `UnsupportedDataVersion` 从不构造；1.17 存档静默 `Ok(0 sections)` | 加载时校验 `DataVersion` |
 | **A-15** | P2 | `mtk-save/src/entity.rs` | 已随 2.0 删除 entity 扫描 → **待复核是否仍存在** | 若已删则转 DONE/VOID |
-| **A-16** | P2 | `../MoziToolKit/utils/assets/cache_utils.py` | 兼容再导出 shim | 删除，改调用点 |
 | **A-17** | P2 | `bindings/mtk-py/src/mesh/mod.rs:6-8,78-86` | `pub mod` + `pub` 字段 + `inner()/inner_mut()` 泄漏到 crate 外 | 收成 `pub(crate)` |
 
 ### B-测试体系
@@ -169,19 +173,14 @@ P0 = 崩溃/数据错/安全；P1 = 用户可见错误或确定性；P2 = 边界
 | **T-05** | P1 | 同上 | 原生模块缺失时 `skipTest` | 缺原生模块直接 fail |
 | **T-06** | P1 | 全仓 | 没有"损坏输入"回归套件 | 每个 S-xx 项自带一个（S-01/S-02/S-05/S-14/S-15 已有，补 S-13/包/TOC） |
 | **T-07** | P2 | `../MoziToolKit/tests/test_api_surface_contract.py` | 只断言符号存在 | 补行为断言 |
-| **T-09** | P1 | `../MoziToolKit/tests/{test_dna_bridge.py:208,test_launcher_scan.py:273,337,558,677}` | Blender 套件仍有 6 个 `skip`（Preferences not registered / AddonPreferences not available），违反"0 skipped"门禁；`test_live_minecraft_e2e` 的跳过属显式 opt-in，可保留 | 测试内自行注册 `MOZI_AddonPreferences`，或让 `get_prefs()` 在 headless 下强制注册；`-rs` 运行时把这 5 条变成失败 |
 
 ### B-消费端（Blender 插件）
 
 | ID | P | 位置 | 现象 | 修法 |
 |---|---|---|---|---|
 | **H-04** | P1 | `bridge/assets/readers.py:167` | biome resolver 缺失时静默用默认 66 色表 → 全图 Plains 染色 | 报错或明确降级标记 |
-| **H-05** | P1 | `utils/assets/guard.py:275` | 未知缓存状态直接 `return True` | 白名单状态才放行 |
-| **H-06** | P1 | `utils/assets/guard.py:171` | 原生模块没加载被报成 `"MISSING"` 缓存 | 单独状态 `NO_NATIVE` |
-| **H-07** | P1 | `bridge/assets/cache.py:389-410` | 模型库 memo key 用打开缓存**之前**的全局 | 用打开后的路径/mtime |
 | **H-08** | P1 | `utils/materials/builder/world_binding.py:196-206` | 单 chunk 快路径把全部多边形塞进同一槽 | 用面属性 |
 | **H-09** | P1 | `utils/save/hierarchy.py:195-201` | 世界 bounds 由 Python min/max 重算 → 实体偏移 | 用 `storage.bounds` |
-| **H-10** | P1 | `bridge/sync/session.py:193`、`bridge/progress.py:55` | `except TypeError` 能力探测 → 掩盖真实 TypeError | 删探测 |
 
 > 本轮实测还发现一条新的插件侧性能缺陷（不属于正确性，见审计 §2.1-3/4）：
 > `ensure_world_materials` 每次注入都重写 33.6 万面的 `material_index`；且指纹缺失时
