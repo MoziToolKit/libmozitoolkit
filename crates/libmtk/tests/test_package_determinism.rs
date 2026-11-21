@@ -120,6 +120,25 @@ fn identical_stacks_produce_identical_package_payloads() {
         let b = second_reader
             .read_chunk_decompressed(&id)
             .unwrap_or_else(|e| panic!("read {id} from second package: {e}"));
+        if id == "manifest" {
+            // The manifest carries the creation timestamp; under load the two bakes can straddle a
+            // second boundary. Every other field is an input and must match.
+            let strip = |bytes: &[u8]| -> serde_json::Value {
+                let mut value: serde_json::Value =
+                    serde_json::from_slice(bytes).expect("manifest must be JSON");
+                value
+                    .as_object_mut()
+                    .expect("manifest object")
+                    .remove("created_at_epoch_secs");
+                value
+            };
+            assert_eq!(
+                strip(&a),
+                strip(&b),
+                "manifest differs beyond its timestamp"
+            );
+            continue;
+        }
         assert!(
             a == b,
             "chunk `{id}` differs between two bakes of the same stack ({} vs {} bytes)",
