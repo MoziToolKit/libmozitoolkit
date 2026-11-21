@@ -37,7 +37,7 @@ impl AtlasBuilder {
         stack: &ResourcePackStack,
         category: &mtk_resource::AtlasCategory,
     ) -> Result<BakedAtlas, TextureError> {
-        let definition = stack.load_atlas_category(category);
+        let definition = stack.load_atlas_category(category)?;
         self.build_with_category(stack, &definition, category.as_str())
     }
 

@@ -1294,7 +1294,7 @@ fixture 测试仍通过；恢复实现后三个全绿。
 
 ### 21.6 B4 剩余
 
-5. ✅ C-02 atlas `filter`（见 §22）；✅ C-07 图集定义按 stack 合并（见 §23）；biome 常量与 jar 一致性测试仍在。
+5. ✅ C-02 atlas `filter`（见 §22）；✅ C-07 图集定义按 stack 合并（见 §23）；C-08 拆成 a/b/c 三项（见 §24）；biome 常量与 jar 一致性测试仍在。
 
 ---
 
@@ -1454,3 +1454,45 @@ fallback。实测（红态）只有 `["minecraft:custom/glow"]`，`block/stone`�
    我们完全没实现——被材质包过滤掉的资源在我们这里依然可见。
 
 两项都记入 backlog C-08（P2），不在本项处理。
+
+---
+
+## 24. C-08：`pack.mcmeta` 与定义错误可见性
+
+前几项（K-06 / C-02 / C-07 / C-06 / K-04 / C-01）都是"资源读取与烘焙对 MC 的忠实度"，
+C-08 收尾同一簇的最后三处。全部依据 `Minecraft_Source` 逐行核对。
+
+### 24.1 C-08a：atlas 定义解析失败不再静默回退
+
+`load_atlas_category` 原本是 `load_atlas_definition(..).unwrap_or_else(|_| category.default_definition())`，
+把"没有包提供该文件"和"文件坏了"混成一条路径。红态证据：
+
+```
+a pack shipped a broken blocks.json, yet the result is byte-identical to the built-in default
+```
+
+现在只有 `NotFound` 回退到内置默认（MC 客户端永远自带原版 `blocks.json`，内置默认是它的等价物），
+读取失败与解析失败原样上抛，错误信息里带包名与路径。
+
+`mtk-resource/tests/test_atlas_definition_errors.rs`（4 个）：坏 JSON 报错且含文件名/包名、
+缺失仍回退内置定义、无权限报错、类别后处理（end portal 注入）仍生效。
+
+### 24.2 C-08b：`overlays`（待实现）
+
+MC：`pack.mcmeta` 的 `overlays.entries[].{formats, directory}`；`formats` 是 `PackFormat` 区间
+（26.2 客户端资源包格式 = `version.json` 的 `pack_version.resource_major` = **88**）。适用性命中的
+overlay 目录被包装成独立 `PackResources`，`CompositePackResources` 的顺序是
+`reverse(overlays) + primary`，即**声明越靠后的 overlay 优先级越高**，最后才是包根。
+
+### 24.3 C-08c：`filter.block`（待实现）
+
+MC：`pack.mcmeta` 的 `filter.block` 是 `IdentifierPattern` 列表（与 atlas filter 同一套正则）。
+`FallbackResourceManager.getResource` 先查该包自己的资源，再判 `isFiltered`——命中就
+**停止**向低优先级包查找（`LOGGER.warn` + `Optional.empty()`）；`listResources` 里
+`entry.filterAll(已收集集合)` 会剪掉低优先级包已贡献的条目。也就是说：过滤不是"本包看不见"，
+而是"从这里往下都看不见"。
+
+### 24.4 明确 VOID 的两条
+
+- `.png.mcmeta` 的 `texture.blur` / `clamp`：只在运行时采样生效，烘焙期不采样，我们没有消费者；
+- 包 `formats` 的兼容性判定（`isCompatible`）：MC 用它决定 UI 里能否勾选，不影响读取。

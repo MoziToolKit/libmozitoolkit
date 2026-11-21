@@ -204,7 +204,7 @@ fn precompile_all_assets_inner(
                 && !config.atlas_category.is_empty()
             {
                 let cat = AtlasCategory::parse(&config.atlas_category);
-                let def = stack.load_atlas_category(&cat);
+                let def = stack.load_atlas_category(&cat)?;
                 def_list.push((cat.as_str().to_string(), def));
             } else {
                 // Canonical priority: standard categories are always processed first in canonical
@@ -212,7 +212,7 @@ fn precompile_all_assets_inner(
                 for standard_cat in &AtlasCategory::ALL_STANDARD {
                     let cat_name = standard_cat.as_str().to_string();
                     if seen_cats.insert(cat_name.clone()) {
-                        let def = stack.load_atlas_category(standard_cat);
+                        let def = stack.load_atlas_category(standard_cat)?;
                         def_list.push((cat_name, def));
                     }
                 }

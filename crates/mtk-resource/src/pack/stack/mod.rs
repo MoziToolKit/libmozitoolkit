@@ -181,12 +181,22 @@ impl ResourcePackStack {
         merged.ok_or_else(|| ResourceError::NotFound(format!("Atlas definition not found: {path}")))
     }
 
-    /// Read and parse an atlas definition for a category, falling back to standard default if not found.
-    pub fn load_atlas_category(&self, category: &crate::atlas::AtlasCategory) -> AtlasDefinition {
+    /// Read and parse an atlas definition for a category.
+    ///
+    /// No pack shipping the file is the one case that falls back to the category's built-in
+    /// definition (Minecraft's client always has the vanilla file, so the built-in list is our
+    /// equivalent). A file that exists but cannot be read or parsed is returned as an error:
+    /// swallowing it would discard every pack's sources and render the atlas without them.
+    pub fn load_atlas_category(
+        &self,
+        category: &crate::atlas::AtlasCategory,
+    ) -> Result<AtlasDefinition, ResourceError> {
         let loc = category.atlas_location();
-        let mut def = self
-            .load_atlas_definition(&loc)
-            .unwrap_or_else(|_| category.default_definition());
+        let mut def = match self.load_atlas_definition(&loc) {
+            Ok(definition) => definition,
+            Err(ResourceError::NotFound(_)) => category.default_definition(),
+            Err(err) => return Err(err),
+        };
 
         if matches!(category, crate::atlas::AtlasCategory::Blocks) {
             let end_portal_loc = ResourceLocation::vanilla("entity/end_portal/end_portal");
@@ -218,7 +228,7 @@ impl ResourcePackStack {
             }
         }
 
-        def
+        Ok(def)
     }
 
     /// Open a model JSON by its identifier, resolving standard candidate asset paths.

@@ -223,7 +223,7 @@ pub struct CtmSolver {
 | `open_asset_raw(asset_path: &str) -> Result<Option<Vec<u8>>, ResourceError>` | 按优先级自顶向下读取原始资产字节；`Ok(None)`=没有，`Err`=读不出（不回退）。 |
 | `open_texture_raw(loc: &ResourceLocation) -> Result<Option<Vec<u8>>, ResourceError>` | 读取指定纹理的原始 PNG 字节。 |
 | `load_atlas_definition(loc: &ResourceLocation) -> Result<AtlasDefinition, ResourceError>` | 合并**所有**包的同名 `atlases/*.json`（低→高优先级拼接，对齐 MC 的 `getResourceStack`）。 |
-| `load_atlas_category(cat: &AtlasCategory) -> AtlasDefinition` | 加载或自动回退至默认类别图集定义。 |
+| `load_atlas_category(cat: &AtlasCategory) -> Result<AtlasDefinition, ResourceError>` | 加载类别图集；只有"没有任何包提供该文件"才回退到内置默认，解析/读取失败报错。 |
 | `resolve_pbr_companions(loc: &ResourceLocation) -> Result<PbrCompanions, ResourceError>` | 跨包细粒度聚合 Albedo/Normal/Specular/Overlay/MCMETA。 |
 | `collect_sprites_for_atlas(def: &AtlasDefinition) -> Result<Vec<DiscoveredSprite>, ResourceError>` | 展开图集定义并提取所有待缝合精灵数据。 |
 | `collect_sprites_including_ctm(def: &AtlasDefinition) -> Result<Vec<DiscoveredSprite>, ResourceError>` | 展开图集定义并自动注入所有关联 CTM 子贴图精灵数据。 |
