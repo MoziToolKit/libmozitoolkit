@@ -1477,12 +1477,33 @@ a pack shipped a broken blocks.json, yet the result is byte-identical to the bui
 `mtk-resource/tests/test_atlas_definition_errors.rs`（4 个）：坏 JSON 报错且含文件名/包名、
 缺失仍回退内置定义、无权限报错、类别后处理（end portal 注入）仍生效。
 
-### 24.2 C-08b：`overlays`（待实现）
+### 24.2 C-08b：`overlays`
 
 MC：`pack.mcmeta` 的 `overlays.entries[].{formats, directory}`；`formats` 是 `PackFormat` 区间
 （26.2 客户端资源包格式 = `version.json` 的 `pack_version.resource_major` = **88**）。适用性命中的
 overlay 目录被包装成独立 `PackResources`，`CompositePackResources` 的顺序是
 `reverse(overlays) + primary`，即**声明越靠后的 overlay 优先级越高**，最后才是包根。
+
+实现：
+
+- `pack/mcmeta.rs`：`PackMetaFile` + `OverlayEntryFile`；`formats` 接受 int / `[min,max]` /
+  `{min_inclusive,max_inclusive}` 三种形状，`min_format`/`max_format`（int 或 `[major,minor]`）
+  优先于 `formats`，比较用 `(major, minor)` 元组（legacy `formats` 的上界覆盖整个 major）；
+  目录名按 MC 的 `[-_a-zA-Z0-9.]+` 校验，杜绝 overlay 逃逸包根；
+- `DirectoryPack` / `ZipPack` 各维护一份"适用 overlay，声明顺序"；查找顺序 = `overlays.rev()`
+  再接包根；`list_files` 在包根一层跳过 overlay 子树，并把 overlay 内的文件按普通资产路径列出
+  （不暴露 overlay 目录名）；`content_entries` 同样排除/合并，**路径指纹走同一个解析入口**
+  （`directory_content_entries`），否则主机用路径算的指纹会和加载后的栈指纹不一致；
+- `CURRENT_CLIENT_RESOURCE_FORMAT = 88` 是手写常量，因此加了一条测试直接读
+  `Minecraft_Source/version.json` 对照 `pack_version.resource_major`（缺资产时 skip）。
+
+测试 `test_pack_overlays.rs`（9 个）：适用 overlay 覆盖包根、声明靠后者优先、不适用被忽略、
+三种 `formats` 形状、列表里不暴露 overlay 前缀、overlay 编辑改变指纹、zip 包同样支持、
+无 overlays 的包行为不变、MemoryPack 不受影响。红态：5 条失败（目录包与 zip 包都读出包根内容，
+overlay 里的文件在列表里带 `overlay_1/` 前缀）。
+
+另在 `test_pack_fingerprint.rs` 补两条：带 overlay 的目录包"路径指纹 == 加载栈指纹"；
+`CURRENT_CLIENT_RESOURCE_FORMAT` 与 `version.json` 一致。
 
 ### 24.3 C-08c：`filter.block`（待实现）
 

@@ -28,6 +28,7 @@ pub use meta::{AnimationFrame, AnimationMetadata};
 pub use pack::ZipPack;
 pub use pack::{
     DirectoryPack, DiscoveredSprite, MemoryPack, PbrCompanions, ResourcePack, ResourcePackStack,
+    CURRENT_CLIENT_RESOURCE_FORMAT,
 };
 pub use probe::{path_provides_vanilla_client, probe_pack, AssetSummary, PackProbe};
 pub use texture_key::TextureKeyVariants;

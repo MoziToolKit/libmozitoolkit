@@ -1,3 +1,4 @@
+use super::mcmeta::{PackMetaFile, CURRENT_CLIENT_RESOURCE_FORMAT};
 use crate::error::ResourceError;
 use std::collections::HashMap;
 use std::fs;
@@ -108,19 +109,148 @@ pub struct PackContentEntry {
 pub struct DirectoryPack {
     name: String,
     root_dir: PathBuf,
+    /// Applicable overlay directories from `pack.mcmeta`, in declaration order (later = higher
+    /// priority, as in `CompositePackResources`).
+    overlays: Vec<PathBuf>,
 }
 
 impl DirectoryPack {
     pub fn new(name: impl Into<String>, root_dir: impl AsRef<Path>) -> Self {
+        let root_dir = root_dir.as_ref().to_path_buf();
+        let overlays = Self::load_overlays(&root_dir);
         Self {
             name: name.into(),
-            root_dir: root_dir.as_ref().to_path_buf(),
+            root_dir,
+            overlays,
         }
+    }
+
+    /// Reads `pack.mcmeta` and resolves the overlays that apply to the current client format.
+    ///
+    /// A missing or malformed `pack.mcmeta` is ignored: it is optional metadata, and Minecraft
+    /// treats it the same way (`Pack.readPackMetadata` logs `Failed to read ... metadata`).
+    fn load_overlays(root_dir: &Path) -> Vec<PathBuf> {
+        load_directory_overlays(root_dir)
+    }
+
+    /// Directories to consult, highest priority first: overlays (last declared first), then root.
+    fn layers(&self) -> impl Iterator<Item = &Path> {
+        self.overlays
+            .iter()
+            .rev()
+            .map(PathBuf::as_path)
+            .chain(std::iter::once(self.root_dir.as_path()))
+    }
+
+    /// Top-level directory names that belong to an overlay, so the root layer does not report them.
+    fn overlay_prefixes(&self) -> Vec<String> {
+        self.overlays
+            .iter()
+            .filter_map(|path| path.file_name())
+            .map(|name| format!("{}/", name.to_string_lossy()))
+            .collect()
     }
 
     fn normalize_path(path: &str) -> Option<PathBuf> {
         normalize_relative_path(path)
     }
+}
+
+/// Lists one layer's files under `prefix`, adding unseen relative paths to `results`.
+fn list_layer_files(
+    root: &Path,
+    prefix: &str,
+    skip_top: &[String],
+    seen: &mut std::collections::HashSet<String>,
+    results: &mut Vec<String>,
+) {
+    let target_dir = if let Some(p) = normalize_relative_path(prefix) {
+        let candidate = root.join(p);
+        if candidate.is_dir() {
+            candidate
+        } else {
+            root.to_path_buf()
+        }
+    } else {
+        root.to_path_buf()
+    };
+
+    fn walk(
+        root: &Path,
+        current: &Path,
+        prefix: &str,
+        skip_top: &[String],
+        seen: &mut std::collections::HashSet<String>,
+        results: &mut Vec<String>,
+    ) {
+        let Ok(entries) = fs::read_dir(current) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(root, &path, prefix, skip_top, seen, results);
+            } else if path.is_file() {
+                let Ok(rel) = path.strip_prefix(root) else {
+                    continue;
+                };
+                let rel_str = rel.to_string_lossy().replace('\\', "/");
+                if !prefix.is_empty() && !rel_str.starts_with(prefix) {
+                    continue;
+                }
+                if skip_top.iter().any(|skip| rel_str.starts_with(skip)) {
+                    continue;
+                }
+                if seen.insert(rel_str.clone()) {
+                    results.push(rel_str);
+                }
+            }
+        }
+    }
+
+    walk(root, &target_dir, prefix, skip_top, seen, results);
+}
+
+/// Content entries of a directory pack, overlays included.
+///
+/// Shared by [`DirectoryPack::content_entries`] and the path-only fingerprint fast path: the two
+/// must agree, or the host would resolve a cache key for a pack whose overlay directories it did
+/// not read the same way.
+pub(crate) fn directory_content_entries(root: &Path) -> Vec<PackContentEntry> {
+    let overlays = load_directory_overlays(root);
+    let overlay_prefixes: Vec<String> = overlays
+        .iter()
+        .filter_map(|path| path.file_name())
+        .map(|name| format!("{}/", name.to_string_lossy()))
+        .collect();
+
+    // The root walk would otherwise report the overlay directories as ordinary subtrees.
+    let mut out: Vec<PackContentEntry> = content_entries_from_dir(root)
+        .into_iter()
+        .filter(|entry| {
+            !overlay_prefixes
+                .iter()
+                .any(|prefix| entry.path.starts_with(prefix))
+        })
+        .collect();
+    for overlay in &overlays {
+        out.extend(content_entries_from_dir(overlay));
+    }
+    out
+}
+
+/// Resolved overlay directories of a directory pack, in declaration order.
+fn load_directory_overlays(root: &Path) -> Vec<PathBuf> {
+    let Ok(bytes) = fs::read(root.join("pack.mcmeta")) else {
+        return Vec::new();
+    };
+    let Some(meta) = PackMetaFile::parse_json(&bytes) else {
+        return Vec::new();
+    };
+    meta.applicable_overlays(CURRENT_CLIENT_RESOURCE_FORMAT)
+        .into_iter()
+        .map(|directory| root.join(directory))
+        .collect()
 }
 
 /// Walks `root` and reports one [`PackContentEntry`] per regular file.
@@ -175,68 +305,54 @@ impl ResourcePack for DirectoryPack {
     }
 
     fn content_entries(&self) -> Vec<PackContentEntry> {
-        content_entries_from_dir(&self.root_dir)
+        directory_content_entries(&self.root_dir)
     }
 
     fn open(&self, relative_path: &str) -> Result<Option<Vec<u8>>, ResourceError> {
         let Some(norm) = Self::normalize_path(relative_path) else {
             return Ok(None);
         };
-        match fs::read(self.root_dir.join(norm)) {
-            Ok(bytes) => Ok(Some(bytes)),
-            // Not a readable file in this pack at all: the stack may consult the next pack.
-            // `IsADirectory` covers `assets/.../stone.png` being a directory inside the pack.
-            Err(err)
-                if matches!(
-                    err.kind(),
-                    std::io::ErrorKind::NotFound
-                        | std::io::ErrorKind::NotADirectory
-                        | std::io::ErrorKind::IsADirectory
-                ) =>
-            {
-                Ok(None)
+        // Overlays first (last declared wins), then the pack root.
+        for layer in self.layers() {
+            match fs::read(layer.join(&norm)) {
+                Ok(bytes) => return Ok(Some(bytes)),
+                // Not a readable file in this layer: keep looking.
+                // `IsADirectory` covers `assets/.../stone.png` being a directory inside the pack.
+                Err(err)
+                    if matches!(
+                        err.kind(),
+                        std::io::ErrorKind::NotFound
+                            | std::io::ErrorKind::NotADirectory
+                            | std::io::ErrorKind::IsADirectory
+                    ) => {}
+                Err(err) => {
+                    return Err(ResourceError::ReadFailed {
+                        pack: self.name.clone(),
+                        path: relative_path.to_string(),
+                        source: err,
+                    })
+                }
             }
-            Err(err) => Err(ResourceError::ReadFailed {
-                pack: self.name.clone(),
-                path: relative_path.to_string(),
-                source: err,
-            }),
         }
+        Ok(None)
     }
 
     fn list_files(&self, prefix: &str) -> Vec<String> {
         let norm_prefix = prefix.replace('\\', "/");
+        let skip_top = self.overlay_prefixes();
         let mut results = Vec::new();
-        let target_dir = if let Some(p) = Self::normalize_path(&norm_prefix) {
-            let candidate = self.root_dir.join(p);
-            if candidate.is_dir() {
-                candidate
+        let mut seen = std::collections::HashSet::new();
+
+        // Highest priority first so a shadowed path is reported once, from the layer that wins.
+        for (index, layer) in self.layers().enumerate() {
+            // Only the pack root contains the overlay directories as ordinary subtrees.
+            let skip: &[String] = if index == self.overlays.len() {
+                &skip_top
             } else {
-                self.root_dir.clone()
-            }
-        } else {
-            self.root_dir.clone()
-        };
-
-        fn walk_dir(root: &Path, current: &Path, prefix_filter: &str, results: &mut Vec<String>) {
-            if let Ok(entries) = fs::read_dir(current) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.is_dir() {
-                        walk_dir(root, &path, prefix_filter, results);
-                    } else if path.is_file() {
-                        if let Ok(rel) = path.strip_prefix(root) {
-                            let rel_str = rel.to_string_lossy().replace('\\', "/");
-                            if rel_str.starts_with(prefix_filter) || prefix_filter.is_empty() {
-                                results.push(rel_str);
-                            }
-                        }
-                    }
-                }
-            }
+                &[]
+            };
+            list_layer_files(layer, &norm_prefix, skip, &mut seen, &mut results);
         }
-
-        walk_dir(&self.root_dir, &target_dir, &norm_prefix, &mut results);
         results
     }
 }
@@ -306,6 +422,9 @@ pub struct ZipPack {
     archive_meta: Option<(u64, i64)>,
     /// Absolute archive path, when it was loaded from disk.
     source_label: Option<String>,
+    /// Applicable overlay entry prefixes from `pack.mcmeta`, in declaration order (later = higher
+    /// priority, as in `CompositePackResources`).
+    overlay_prefixes: Vec<String>,
 }
 
 #[cfg(feature = "zip")]
@@ -330,11 +449,13 @@ impl ZipPack {
             .display()
             .to_string();
 
+        let overlay_prefixes = Self::load_overlays(&file_map);
         Ok(Self {
             name: name.into(),
             file_map,
             archive_meta,
             source_label: Some(label),
+            overlay_prefixes,
         })
     }
 
@@ -344,12 +465,40 @@ impl ZipPack {
         let mut archive = zip::ZipArchive::new(cursor)?;
         let file_map = Self::load_archive(&mut archive)?;
 
+        let overlay_prefixes = Self::load_overlays(&file_map);
         Ok(Self {
             name: name.into(),
             file_map,
             archive_meta: None,
             source_label: None,
+            overlay_prefixes,
         })
+    }
+
+    /// Reads `pack.mcmeta` out of the archive and resolves the applicable overlays.
+    ///
+    /// Missing or malformed metadata is ignored, matching `Pack.readPackMetadata`.
+    fn load_overlays(file_map: &HashMap<String, Vec<u8>>) -> Vec<String> {
+        let Some(bytes) = file_map.get("pack.mcmeta") else {
+            return Vec::new();
+        };
+        let Some(meta) = PackMetaFile::parse_json(bytes) else {
+            return Vec::new();
+        };
+        meta.applicable_overlays(CURRENT_CLIENT_RESOURCE_FORMAT)
+            .into_iter()
+            .map(|directory| format!("{directory}/"))
+            .collect()
+    }
+
+    /// Entry prefixes to consult, highest priority first: overlays (last declared first), then the
+    /// archive root (`""`).
+    fn layers(&self) -> impl Iterator<Item = &str> {
+        self.overlay_prefixes
+            .iter()
+            .rev()
+            .map(String::as_str)
+            .chain(std::iter::once(""))
     }
 
     fn load_archive<R: Read + std::io::Seek>(
@@ -435,15 +584,42 @@ impl ResourcePack for ZipPack {
             return Ok(None);
         }
         let clean = relative_path.replace('\\', "/");
-        Ok(self.file_map.get(&clean).cloned())
+        for prefix in self.layers() {
+            if let Some(bytes) = self.file_map.get(&format!("{prefix}{clean}")) {
+                return Ok(Some(bytes.clone()));
+            }
+        }
+        Ok(None)
     }
 
     fn list_files(&self, prefix: &str) -> Vec<String> {
         let norm_prefix = prefix.replace('\\', "/");
-        self.file_map
-            .keys()
-            .filter(|k| k.starts_with(&norm_prefix))
-            .cloned()
-            .collect()
+        let mut results = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+
+        for (index, layer) in self.layers().enumerate() {
+            // The archive root contains the overlay directories as ordinary entries.
+            let is_root = index == self.overlay_prefixes.len();
+            for key in self.file_map.keys() {
+                let Some(rel) = key.strip_prefix(layer) else {
+                    continue;
+                };
+                if is_root
+                    && self
+                        .overlay_prefixes
+                        .iter()
+                        .any(|overlay| key.starts_with(overlay.as_str()))
+                {
+                    continue;
+                }
+                if !norm_prefix.is_empty() && !rel.starts_with(&norm_prefix) {
+                    continue;
+                }
+                if seen.insert(rel.to_string()) {
+                    results.push(rel.to_string());
+                }
+            }
+        }
+        results
     }
 }

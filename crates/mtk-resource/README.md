@@ -87,6 +87,13 @@ pub struct ResourcePackStack {
 `ResourcePackStack::open_asset_raw` / `open_texture_raw` / `open_model_raw` / `resolve_pbr_companions`
 都遵循这个契约。
 
+**`pack.mcmeta` 的 `overlays`**：多版本材质包可以声明按格式适用的 overlay 目录，适用的目录作为更高
+层参与查找（声明越靠后优先级越高，最后才是包根），`list_files` 里不暴露 overlay 目录名本身。
+适用性按**当前客户端资源包格式**判定（`CURRENT_CLIENT_RESOURCE_FORMAT`，26.2 = 88，来自
+`version.json` 的 `pack_version.resource_major`），与 MC 的
+`Pack.readPackMetadata` -> `overlaysForVersion(currentPackVersion)` 一致。`pack.mcmeta` 缺失或
+损坏会被忽略——它是可选元数据，MC 同样只记一条日志。
+
 - `PbrCompanions`: 单一纹理对应的复合伴随数据（Albedo, Normal, Specular, Overlay, Emissive, MCMETA）。
 - `DiscoveredSprite`: 图集构建前收集的完整待解码精灵图描述。
 

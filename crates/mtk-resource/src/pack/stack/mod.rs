@@ -300,7 +300,7 @@ fn content_entries_from_path(path: &Path) -> Vec<crate::pack::source::PackConten
     if !meta.is_dir() {
         return Vec::new();
     }
-    crate::pack::source::content_entries_from_dir(path)
+    crate::pack::source::directory_content_entries(path)
 }
 
 /// Feeds one pack's identity and content into the fingerprint.

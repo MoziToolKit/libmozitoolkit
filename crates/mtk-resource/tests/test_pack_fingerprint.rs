@@ -139,3 +139,60 @@ fn path_fingerprint_matches_the_loaded_archive_stack() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// The host computes the fingerprint from paths before loading any pack, so the overlay handling
+/// (overlay subtrees hidden from the root listing, overlay files counted) must match the stack.
+#[test]
+fn path_fingerprint_matches_the_loaded_stack_for_overlay_packs() {
+    let dir = temp_dir("overlay_parity");
+    write(&dir, "assets/minecraft/textures/block/stone.png", b"root");
+    write(
+        &dir,
+        "pack.mcmeta",
+        format!(
+            r#"{{"overlays":{{"entries":[{{"formats":{},"directory":"overlay_1"}}]}}}}"#,
+            mtk_resource::CURRENT_CLIENT_RESOURCE_FORMAT
+        )
+        .as_bytes(),
+    );
+    write(
+        &dir,
+        "overlay_1/assets/minecraft/textures/block/stone.png",
+        b"overlay",
+    );
+
+    let mut stack = ResourcePackStack::new();
+    stack.push_pack(Box::new(DirectoryPack::new("overlay_parity", &dir)));
+
+    let from_paths = ResourcePackStack::compute_fingerprint_from_paths([dir.to_str().unwrap()]);
+    let loaded = stack.compute_stack_fingerprint();
+    let _ = fs::remove_dir_all(&dir);
+
+    assert_eq!(
+        from_paths, loaded,
+        "path-only and loaded-stack fingerprints must agree for packs with overlays too"
+    );
+}
+
+/// The constant is hand-written, so pin it to the shipped `version.json`.
+#[test]
+fn the_client_resource_format_matches_the_unpacked_jar() {
+    let Some(assets) = mtk_testkit::real_assets_root() else {
+        mtk_testkit::skip("no unpacked jar (set MTK_TEST_ASSETS or place ../Minecraft_Source)");
+        return;
+    };
+    let version_json = assets.join("version.json");
+    let Ok(bytes) = fs::read(&version_json) else {
+        mtk_testkit::skip("version.json not present in the assets root");
+        return;
+    };
+    let value: serde_json::Value = serde_json::from_slice(&bytes).expect("version.json");
+    let major = value["pack_version"]["resource_major"]
+        .as_u64()
+        .expect("pack_version.resource_major");
+    assert_eq!(
+        major as u32,
+        mtk_resource::CURRENT_CLIENT_RESOURCE_FORMAT,
+        "CURRENT_CLIENT_RESOURCE_FORMAT must track version.json's resource_major"
+    );
+}
