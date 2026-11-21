@@ -29,6 +29,7 @@ pub struct BlockEntityTextures {
     skin_resolver: SkinResolver,
     banner_baker: BannerBaker,
     on_resolved: Option<SkinResolvedCallback>,
+    allow_network: bool,
     /// Whether the current atlas allocation has been merged into the world's address map yet.
     /// Pinned banner slots exist from construction, so the first `prepare` must register them
     /// even when no new sprite was added.
@@ -45,6 +46,7 @@ impl Default for BlockEntityTextures {
             skin_resolver: SkinResolver::default(),
             banner_baker: baker,
             on_resolved: None,
+            allow_network: true,
             registered: false,
         }
     }
@@ -73,7 +75,13 @@ impl BlockEntityTextures {
 
     /// Sets the on-disk cache directory for downloaded player skins.
     pub fn set_skin_cache_dir(&mut self, cache_dir: Option<PathBuf>) {
-        self.skin_resolver = SkinResolver::new(cache_dir);
+        self.skin_resolver = SkinResolver::new(cache_dir).with_allow_network(self.allow_network);
+    }
+
+    /// Enables or disables outbound network requests for player head skins.
+    pub fn set_allow_network(&mut self, allow_network: bool) {
+        self.allow_network = allow_network;
+        self.skin_resolver.set_allow_network(allow_network);
     }
 
     /// Installs the procedural banner baker used for composite banners.
@@ -381,6 +389,10 @@ impl BlockEntityTextureProvider for BlockEntityTextures {
 
     fn set_skin_cache_dir(&mut self, cache_dir: Option<PathBuf>) {
         BlockEntityTextures::set_skin_cache_dir(self, cache_dir);
+    }
+
+    fn set_allow_network(&mut self, allow_network: bool) {
+        BlockEntityTextures::set_allow_network(self, allow_network);
     }
 
     fn set_banner_baker(&mut self, baker: BannerBaker) {

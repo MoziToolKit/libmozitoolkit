@@ -35,7 +35,8 @@ use pyo3::prelude::*;
 ///     `add_attribute_from_buffer` dtype/itemsize checks, and added
 ///     `set_thread_count` / `threading_info` / `newest_cache_package` /
 ///     `MeshData.materials_are_slots`.
-pub const API_VERSION: u32 = 3;
+/// v4: added `MesherConfig.allow_network` to gate outbound HTTP skin requests.
+pub const API_VERSION: u32 = 4;
 
 pub(crate) use ctm::PyCtmSolver;
 pub(crate) use cull::PyFaceCuller;

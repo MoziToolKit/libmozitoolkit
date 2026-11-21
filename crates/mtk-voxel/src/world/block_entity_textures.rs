@@ -78,6 +78,9 @@ pub trait BlockEntityTextureProvider: Send + Sync {
     /// Sets the on-disk cache directory used for downloaded player skins.
     fn set_skin_cache_dir(&mut self, cache_dir: Option<PathBuf>);
 
+    /// Enables or disables outbound network requests for block-entity textures.
+    fn set_allow_network(&mut self, allow_network: bool);
+
     /// Installs the procedural banner baker used for composite banner patterns.
     fn set_banner_baker(&mut self, baker: mtk_texture::BannerBaker);
 
@@ -163,6 +166,13 @@ impl VoxelWorld {
     pub fn set_skin_cache_dir(&mut self, cache_dir: Option<std::path::PathBuf>) {
         if let Some(textures) = self.block_textures.as_mut() {
             textures.set_skin_cache_dir(cache_dir);
+        }
+    }
+
+    /// Enables or disables outbound network requests for block-entity textures.
+    pub fn set_allow_network(&mut self, allow_network: bool) {
+        if let Some(textures) = self.block_textures.as_mut() {
+            textures.set_allow_network(allow_network);
         }
     }
 

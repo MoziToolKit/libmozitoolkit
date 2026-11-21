@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 
 #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
@@ -31,6 +32,7 @@ pub struct SkinResolver {
     timeout_secs: u64,
     validation_interval_secs: u64,
     negative_cache_ttl_secs: u64,
+    allow_network: Arc<AtomicBool>,
     #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     pub(crate) agent: Arc<ureq::Agent>,
 }
@@ -41,7 +43,8 @@ impl std::fmt::Debug for SkinResolver {
         d.field("cache_dir", &self.cache_dir)
             .field("timeout_secs", &self.timeout_secs)
             .field("validation_interval_secs", &self.validation_interval_secs)
-            .field("negative_cache_ttl_secs", &self.negative_cache_ttl_secs);
+            .field("negative_cache_ttl_secs", &self.negative_cache_ttl_secs)
+            .field("allow_network", &self.allow_network());
         #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
         d.field("circuit", &self.circuit);
         d.finish()
@@ -86,9 +89,29 @@ impl SkinResolver {
             timeout_secs,
             validation_interval_secs: 3600, // 1 hour validation TTL
             negative_cache_ttl_secs: 300,   // 5 minutes negative cache cooldown
+            allow_network: Arc::new(AtomicBool::new(true)),
             #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
             agent: Arc::new(Self::build_agent(timeout_secs)),
         }
+    }
+
+    /// Sets whether outbound network requests are permitted on construction.
+    #[must_use]
+    pub fn with_allow_network(self, allow_network: bool) -> Self {
+        self.allow_network.store(allow_network, Ordering::Relaxed);
+        self
+    }
+
+    /// Enables or disables outbound network requests on this resolver.
+    #[inline]
+    pub fn set_allow_network(&self, allow_network: bool) {
+        self.allow_network.store(allow_network, Ordering::Relaxed);
+    }
+
+    /// Returns true if outbound network requests are currently permitted.
+    #[inline]
+    pub fn allow_network(&self) -> bool {
+        self.allow_network.load(Ordering::Relaxed)
     }
 
     /// Returns true if the circuit breaker is currently tripped (fast-fail mode).
@@ -113,7 +136,7 @@ impl SkinResolver {
         }
     }
 
-    fn is_negative_cached(&self, key: &str, hash_opt: Option<&str>) -> bool {
+    pub(crate) fn is_negative_cached(&self, key: &str, hash_opt: Option<&str>) -> bool {
         if let Ok(failures) = self.failed_keys.read() {
             let now = current_unix_timestamp();
             if let Some(&fail_time) = failures.get(key) {
@@ -238,6 +261,10 @@ impl SkinResolver {
             return Some(bytes);
         }
 
+        if !self.allow_network() {
+            return None;
+        }
+
         // 2. Network resolution
         #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
         {
@@ -296,6 +323,10 @@ impl SkinResolver {
                 return;
             }
         }
+        if !self.allow_network() {
+            on_complete(key, None);
+            return;
+        }
         if self.is_negative_cached(&key, None) {
             on_complete(key, None);
             return;
@@ -332,6 +363,9 @@ impl SkinResolver {
     {
         #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
         {
+            if !self.allow_network() {
+                return;
+            }
             if uuid.is_none() && name.is_none() {
                 return;
             }

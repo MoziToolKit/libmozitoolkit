@@ -256,6 +256,12 @@ impl LiveSyncSession {
         w.set_skin_cache_dir(cache_dir);
     }
 
+    /// Enables or disables outbound network requests for block-entity textures.
+    pub fn set_allow_network(&self, allow_network: bool) {
+        let mut w = self.world.write().unwrap_or_else(|e| e.into_inner());
+        w.set_allow_network(allow_network);
+    }
+
     /// Returns a snapshot clone of the in-memory voxel storage.
     pub fn get_storage(&self) -> VoxelStorage {
         self.world

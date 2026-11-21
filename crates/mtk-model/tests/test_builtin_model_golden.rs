@@ -1,7 +1,7 @@
 //! Snapshots the builtin block-model output.
 //!
 //! The generators were converted family by family from the definition interpreter that used to
-//! serve them (see `docs/review/MIEX_REMOVAL_PLAN.md`), so this snapshot is the visual reference the
+//! serve them (see `docs/archive/review-2026-11/MIEX_REMOVAL_PLAN.md`), so this snapshot is the visual reference the
 //! conversion was verified against.
 //!
 //! Chest entries were updated once, on purpose: the interpreter handed the baker the client's

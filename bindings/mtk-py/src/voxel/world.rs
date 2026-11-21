@@ -21,6 +21,7 @@ pub(crate) fn attach_block_entity_textures(
     config: Option<&PyMesherConfig>,
 ) {
     let mut textures = mtk_block_entity_textures::BlockEntityTextures::default();
+    textures.set_allow_network(config.map(|cfg| cfg.allow_network).unwrap_or(true));
     if let Some(baker) = config.and_then(|cfg| cfg.banner_baker.as_ref()) {
         textures.set_banner_baker((**baker).clone());
     }
@@ -220,6 +221,7 @@ impl PyVoxelWorld {
     ) {
         if let Some(cfg) = config {
             self.inner.set_config(cfg.inner.clone());
+            self.inner.set_allow_network(cfg.allow_network);
         }
         if let Some(mdb) = model_db {
             self.inner.set_model_db(Some(mdb.inner.clone()));

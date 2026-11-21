@@ -3,7 +3,7 @@
 //! Each family gets one module that returns a `BlockModelJson`, so the ordinary model baker handles
 //! UVs, culling and atlas binding. Values are transcribed from the client's own model classes; the
 //! conversion rules (model space, plane/v conventions) are documented in
-//! `docs/review/MIEX_REMOVAL_PLAN.md`.
+//! `docs/archive/review-2026-11/MIEX_REMOVAL_PLAN.md`.
 
 pub(crate) mod banner;
 pub(crate) mod bell;

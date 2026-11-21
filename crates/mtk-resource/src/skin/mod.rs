@@ -328,4 +328,65 @@ mod tests {
         resolver.circuit.reset();
         assert!(!resolver.is_circuit_tripped());
     }
+
+    #[test]
+    fn test_allow_network_false_blocks_network_but_serves_cache() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "mtk_test_skin_offline_{}",
+            current_unix_timestamp()
+        ));
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let disk_png = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0xDE, 0xAD];
+        let disk_hash = compute_sha256_hex(&disk_png);
+        fs::write(temp_dir.join(format!("{}.png", disk_hash)), &disk_png).unwrap();
+
+        let resolver = SkinResolver::new(Some(temp_dir.clone())).with_allow_network(false);
+        assert!(!resolver.allow_network());
+
+        // Cached memory skin resolves even while offline.
+        let mem_png = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0xCA, 0xFE];
+        let mem_key = derive_skin_key(None, None, Some("offline_mem_player"));
+        resolver.register_memory_skin(&mem_key, mem_png.clone());
+        assert_eq!(
+            resolver.resolve_skin_png(None, None, Some("offline_mem_player")),
+            Some(mem_png)
+        );
+
+        // Cached disk skin resolves even while offline.
+        {
+            let mut idx = resolver.index.write().unwrap();
+            idx.record_mapping(&disk_hash, None, None, Some("OfflineDiskPlayer"), 1000);
+            idx.save_to_disk(&temp_dir).unwrap();
+        }
+        assert_eq!(
+            resolver.resolve_skin_png(None, None, Some("OfflineDiskPlayer")),
+            Some(disk_png)
+        );
+
+        // Uncached skin is blocked without tripping circuit breaker or negative cache.
+        let blocked_url = "http://127.0.0.1:59996/blocked.png";
+        assert!(resolver
+            .resolve_skin_png(Some(blocked_url), None, None)
+            .is_none());
+        assert!(!resolver.is_circuit_tripped());
+        let blocked_key = derive_skin_key(Some(blocked_url), None, None);
+        assert!(!resolver.is_negative_cached(&blocked_key, None));
+
+        // Background queue fires callback synchronously with None without spawning a thread.
+        let cb_result = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let cb_slot = cb_result.clone();
+        resolver.queue_fetch_background(
+            Some(blocked_url.to_string()),
+            None,
+            None,
+            move |k, png| {
+                *cb_slot.lock().unwrap() = Some((k, png));
+            },
+        );
+        assert_eq!(*cb_result.lock().unwrap(), Some((blocked_key, None)));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
 }

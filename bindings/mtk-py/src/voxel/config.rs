@@ -9,19 +9,32 @@ use std::sync::Arc;
 
 /// Mesher generation configuration.
 #[pyclass(name = "MesherConfig")]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct PyMesherConfig {
     pub(crate) inner: MesherConfig,
     pub(crate) num_threads: Option<usize>,
     /// Banner baker is a host concern: it is handed to the world's block-entity texture
     /// provider, not to the mesher config.
     pub(crate) banner_baker: Option<Arc<mtk_texture::BannerBaker>>,
+    /// Whether outbound network requests (e.g. online player skin fetching) are permitted.
+    pub(crate) allow_network: bool,
+}
+
+impl Default for PyMesherConfig {
+    fn default() -> Self {
+        Self {
+            inner: MesherConfig::default(),
+            num_threads: None,
+            banner_baker: None,
+            allow_network: true,
+        }
+    }
 }
 
 #[pymethods]
 impl PyMesherConfig {
     #[new]
-    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_vertices=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None, enable_alternate_blocks=true, enable_random_offsets=true, ctm_solver=None, enable_animated_textures=true, colormaps=None, unknown_block_strategy=None, smooth_biome_blend=true, coordinate_system=None))]
+    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_vertices=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None, enable_alternate_blocks=true, enable_random_offsets=true, ctm_solver=None, enable_animated_textures=true, colormaps=None, unknown_block_strategy=None, smooth_biome_blend=true, coordinate_system=None, allow_network=true))]
     pub fn new(
         enable_ao: bool,
         mesh_fluids: bool,
@@ -40,6 +53,7 @@ impl PyMesherConfig {
         unknown_block_strategy: Option<&str>,
         smooth_biome_blend: bool,
         coordinate_system: Option<&str>,
+        allow_network: bool,
     ) -> PyResult<Self> {
         let strategy = match unknown_block_strategy {
             Some("IGNORE_AS_AIR") | Some("ignore_as_air") | Some("air") => {
@@ -86,6 +100,7 @@ impl PyMesherConfig {
             inner: config,
             num_threads,
             banner_baker: atlas.and_then(|a| a.banner_baker.clone()),
+            allow_network,
         })
     }
 
@@ -167,6 +182,16 @@ impl PyMesherConfig {
     #[setter]
     pub fn set_smooth_biome_blend(&mut self, enabled: bool) {
         self.inner.smooth_biome_blend = enabled;
+    }
+
+    #[getter]
+    pub fn allow_network(&self) -> bool {
+        self.allow_network
+    }
+
+    #[setter]
+    pub fn set_allow_network(&mut self, value: bool) {
+        self.allow_network = value;
     }
 
     /// Transforms a 3D coordinate (e.g. entity world position) according to this config's coordinate system and centering.

@@ -132,7 +132,7 @@ pub enum MtkError {
 ---
 
 ### 2.6 资产预编译缓存格式规范 (`ASSET_CACHE_FORMAT_VERSION`)
-由 `libmtk::prebake` 产出的资产预编译缓存容器结构受全局版本号严格约束（当前：`ASSET_CACHE_FORMAT_VERSION = 14`，场景包：`SCENE_PACKAGE_FORMAT_VERSION = 6`，同步协议：`PROTOCOL_VERSION = 4`，Python 握手 API：`API_VERSION = 3`）：
+由 `libmtk::prebake` 产出的资产预编译缓存容器结构受全局版本号严格约束（当前：`ASSET_CACHE_FORMAT_VERSION = 14`，场景包：`SCENE_PACKAGE_FORMAT_VERSION = 6`，同步协议：`PROTOCOL_VERSION = 4`，Python 握手 API：`API_VERSION = 4`）：
 ```
 cache_output_dir/
 ├── cache_manifest.json     # 全局清单、时间戳、CRC 校验与版本号
@@ -165,6 +165,7 @@ cache_output_dir/
   - `ModelSource`: 统一表征单模型 (`Single`)、预烘焙变体组 (`Variant`) 或纯方块回退 (`None`)。
   - `MesherConfig.enable_alternate_blocks` (默认 `true`): 控制是否启用交替模型采样。
   - `MesherConfig.enable_random_offsets` (默认 `true`): 控制是否启用植物坐标抖动。
+  - `MesherConfig.allow_network` (默认 `true`, `mtk-py`): 控制是否允许在线拉取未缓存的玩家头颅皮肤（设为 `False` 时仅读取内存/磁盘缓存，拒绝发起外部 HTTP 请求）。
 
 ---
 

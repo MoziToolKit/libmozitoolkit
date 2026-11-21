@@ -17,7 +17,7 @@ def quad_mesh():
 
 class TestLibMtkPy(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(libmtk_py.api_version(), 3)
+        self.assertEqual(libmtk_py.api_version(), 4)
         self.assertTrue(len(libmtk_py.version()) > 0)
         self.assertEqual(libmtk_py.version(), libmtk_py.__version__)
 
@@ -229,6 +229,15 @@ class TestLibMtkPy(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             libmtk_py.VoxelStorage.create_debug_world(model_db=db)
         self.assertIn("baked model database is empty", str(ctx.exception))
+
+    def test_mesher_config_allow_network_property(self):
+        cfg_default = libmtk_py.MesherConfig()
+        self.assertTrue(cfg_default.allow_network)
+        cfg_default.allow_network = False
+        self.assertFalse(cfg_default.allow_network)
+
+        cfg_offline = libmtk_py.MesherConfig(allow_network=False)
+        self.assertFalse(cfg_offline.allow_network)
 
 
 if __name__ == "__main__":

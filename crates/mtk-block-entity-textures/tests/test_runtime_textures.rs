@@ -281,3 +281,40 @@ fn test_plain_banner_without_block_entity_meshing() {
         "Plain wall blue banner cloth must map to slot 11 on dynamic atlas"
     );
 }
+
+#[test]
+fn test_allow_network_preserved_across_set_skin_cache_dir() {
+    let temp_dir =
+        std::env::temp_dir().join(format!("mtk_test_runtime_offline_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let mut textures = BlockEntityTextures::default();
+    textures.set_allow_network(false);
+    textures.set_skin_cache_dir(Some(temp_dir.clone()));
+
+    let mut world = VoxelWorld::new(None, None, None);
+    world.set_block_entity_textures(Some(Box::new(textures)));
+
+    let uncached_entity = mtk_model::BlockEntityData::new_skull(
+        mtk_model::skull::SkullKind::Player,
+        Some(0),
+        Some(mtk_model::skull::PlayerProfileData::new(
+            Some("OfflineTest".to_string()),
+            Some("00000000-0000-0000-0000-000000000000".to_string()),
+            Some("http://127.0.0.1:59996/offline_test.png".to_string()),
+            None,
+        )),
+    );
+    world.set_block(1, 1, 1, "minecraft:player_head[rotation=0]", None);
+    let sec_coord = IVec3::new(0, 0, 0);
+    let sec = world.storage.sections.get_mut(&sec_coord).unwrap();
+    sec.set_block_entity(block_index(1, 1, 1) as u16, Some(uncached_entity));
+
+    // Blocking resolution must not allocate or fetch the uncached skull when allow_network=false.
+    let added = world.ensure_dynamic_entities_resolved_sync();
+    let _ = added;
+    assert_eq!(allocated_slot_count(&world), 16);
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}

@@ -29,6 +29,9 @@ impl PyLiveSyncSession {
         let cul = culler.map(|c| c.inner.clone());
         let mdb = model_db.map(|db| db.inner.clone());
         let session = LiveSyncSession::new(cfg, cul, mdb);
+        if let Some(cfg) = config {
+            session.set_allow_network(cfg.allow_network);
+        }
         Self { inner: session }
     }
 
@@ -44,6 +47,9 @@ impl PyLiveSyncSession {
         config: Option<&PyMesherConfig>,
         model_db: Option<&PyBakedModelDatabase>,
     ) {
+        if let Some(cfg) = config {
+            self.inner.set_allow_network(cfg.allow_network);
+        }
         self.inner.hot_reload(
             config.map(|c| c.inner.clone()),
             model_db.map(|db| db.inner.clone()),

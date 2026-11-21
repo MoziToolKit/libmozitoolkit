@@ -40,7 +40,7 @@
 Python 模块名：`libmtk_py`
 
 - `version() -> str`：原生扩展包语义版本（如 `"0.1.0"`，同时支持属性 `__version__`）。
-- `api_version() -> int`：与 Blender 胶水层握手的整数 API 版本（当前 `3`）。
+- `api_version() -> int`：与 Blender 胶水层握手的整数 API 版本（当前 `4`）。
 - `set_thread_count(threads: int) -> None`：设置进程级线程预算；`0` 恢复默认策略
   `max(1, cores - 2)`。一次调用对**所有**并行入口生效（网格化、存档解码、图集烘焙、
   材质重映射、预烘），宿主不需要再逐个传 `num_threads`。
@@ -93,7 +93,7 @@ Python 模块名：`libmtk_py`
   - `from_storage(storage, config=None, culler=None, model_db=None, num_threads=None)`
   - `create_debug_world(config=None, culler=None, model_db=None, num_threads=None, states=None, stack=None)`：至少给 `states`、`stack` 或 `model_db` 之一。
   - `rebuild_all() -> MeshData`, `rebuild_dirty() -> Dict`, `get_world_mesh() -> MeshData`, `sync_from_storage(storage)`, `clear_cache()`, `hot_reload(config=None, model_db=None)`, `num_threads` (getter)
-- **`MesherConfig` (`PyMesherConfig`)**：网格化配置（AO 开关、平滑生物群系过渡 `smooth_biome_blend`、流体曲面、坐标系转换、线程数、顶点焊接）。
+- **`MesherConfig` (`PyMesherConfig`)**：网格化配置（AO 开关、平滑生物群系过渡 `smooth_biome_blend`、流体曲面、坐标系转换、线程数、顶点焊接、`allow_network` 联网门禁开关）。
 - **`LiveSyncSession` (`PyLiveSyncSession`)**：原生 WebSocket 实时协同客户端。
   - `start(url, auto_reconnect=True, max_reconnect_attempts=5, auth_token=None)`, `stop()`
   - `auth_token` 会随默认 HELLO 发送（RFC v3.1 §4.1；Python 侧先 `strip()`；

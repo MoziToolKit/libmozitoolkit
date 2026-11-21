@@ -20,6 +20,9 @@ impl SkinResolver {
         uuid: Option<&str>,
         name: Option<&str>,
     ) -> Option<(Option<String>, Vec<u8>)> {
+        if !self.allow_network() {
+            return None;
+        }
         // Fast-fail if the circuit breaker is tripped (e.g. offline or DNS down)
         if self.circuit.is_tripped() {
             return None;
