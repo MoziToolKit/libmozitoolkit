@@ -1,18 +1,64 @@
 //! Fluid mesh geometry emission (top, bottom, and 4 sides).
 
+use std::sync::Arc;
+
 use glam::Vec3;
 use mtk_core::Direction;
 use mtk_core::MeshData;
-use mtk_cull::parse_block_name_and_props;
-use mtk_cull::FaceCuller;
+use mtk_cull::{parse_block_name_and_props, BlockCullMeta, CullCategory, FaceCuller};
 
 use crate::fluid::uv::{get_fluid_side_uvs, get_fluid_top_uvs};
 use crate::types::MesherConfig;
 
 pub(crate) use super::height::*;
 
+#[inline]
+fn resolve_fluid_cull_meta(
+    state_str: &str,
+    resolved: Option<Arc<BlockCullMeta>>,
+    culler: &FaceCuller,
+) -> Arc<BlockCullMeta> {
+    let fallback = culler.get_meta(state_str, None, None);
+    // Preserve vanilla parametric occlusion (e.g. slabs/stairs) when `culler` has a dedicated rule,
+    // but let real baked non-cube/OBJ models override the blind `SolidOpaque` fallback for modded blocks.
+    if fallback.category == CullCategory::SolidOpaque {
+        if let Some(meta) = resolved {
+            if meta.has_baked_model && !meta.is_full_cube {
+                return meta;
+            }
+        }
+    }
+    fallback
+}
+
+#[inline]
+fn probe_neighbor_fluid_cull_meta<'a, F, M>(
+    get_state: &mut F,
+    get_meta: &mut M,
+    culler: &FaceCuller,
+    nx: i32,
+    ny: i32,
+    nz: i32,
+) -> Option<Arc<BlockCullMeta>>
+where
+    F: FnMut(i32, i32, i32) -> &'a str,
+    M: FnMut(i32, i32, i32) -> Option<Arc<BlockCullMeta>>,
+{
+    let n_state = get_state(nx, ny, nz);
+    if !n_state.is_empty() && n_state != "minecraft:air" {
+        Some(resolve_fluid_cull_meta(
+            n_state,
+            get_meta(nx, ny, nz),
+            culler,
+        ))
+    } else {
+        None
+    }
+}
+
 /// Emits complete fluid geometry (top, bottom, and 4 sides) for a block into `MeshData`.
-pub(crate) fn emit_fluid_geometry<'a, F>(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn emit_fluid_geometry<'a, F, M>(
     mesh: &mut MeshData,
     x: i32,
     y: i32,
@@ -22,6 +68,7 @@ pub(crate) fn emit_fluid_geometry<'a, F>(
     wz: f32,
     state_str: &str,
     mut get_state: F,
+    mut get_meta: M,
     culler: &FaceCuller,
     config: &MesherConfig,
     material_slot: u16,
@@ -30,6 +77,7 @@ pub(crate) fn emit_fluid_geometry<'a, F>(
 ) -> usize
 where
     F: FnMut(i32, i32, i32) -> &'a str,
+    M: FnMut(i32, i32, i32) -> Option<Arc<BlockCullMeta>>,
 {
     let (_, props) = parse_block_name_and_props(state_str);
     let is_waterlogged = props.get("waterlogged").map(|v| v.as_str()) == Some("true");
@@ -62,7 +110,8 @@ where
     };
     let fluid_meta = culler.get_meta(fluid_state_str, None, None);
     // Vanilla self-occlusion only matters for the solid host state of waterlogged blocks.
-    let self_meta = is_waterlogged.then(|| culler.get_meta(state_str, None, None));
+    let self_meta =
+        is_waterlogged.then(|| resolve_fluid_cull_meta(state_str, get_meta(x, y, z), culler));
 
     // Vanilla corner heights used for per-face occlusion:
     // top = min of all four corners, each side = max of its two corners.
@@ -292,12 +341,8 @@ where
         };
 
     // 1. TOP FACE (UP)
-    let up_state = get_state(x, y + 1, z);
-    let up_meta = if !up_state.is_empty() && up_state != "minecraft:air" {
-        Some(culler.get_meta(up_state, None, None))
-    } else {
-        None
-    };
+    let up_meta =
+        probe_neighbor_fluid_cull_meta(&mut get_state, &mut get_meta, culler, x, y + 1, z);
 
     if culler.should_render_fluid_face(
         &fluid_meta,
@@ -316,12 +361,8 @@ where
     }
 
     // 2. BOTTOM FACE (DOWN)
-    let down_state = get_state(x, y - 1, z);
-    let down_meta = if !down_state.is_empty() && down_state != "minecraft:air" {
-        Some(culler.get_meta(down_state, None, None))
-    } else {
-        None
-    };
+    let down_meta =
+        probe_neighbor_fluid_cull_meta(&mut get_state, &mut get_meta, culler, x, y - 1, z);
 
     if culler.should_render_fluid_face(
         &fluid_meta,
@@ -341,12 +382,7 @@ where
 
     // 3. SIDE FACES (North, South, West, East)
     // North (-Z)
-    let n_state = get_state(x, y, z - 1);
-    let n_meta = if !n_state.is_empty() && n_state != "minecraft:air" {
-        Some(culler.get_meta(n_state, None, None))
-    } else {
-        None
-    };
+    let n_meta = probe_neighbor_fluid_cull_meta(&mut get_state, &mut get_meta, culler, x, y, z - 1);
     if culler.should_render_fluid_face(
         &fluid_meta,
         self_meta.as_deref(),
@@ -368,12 +404,7 @@ where
     }
 
     // South (+Z)
-    let s_state = get_state(x, y, z + 1);
-    let s_meta = if !s_state.is_empty() && s_state != "minecraft:air" {
-        Some(culler.get_meta(s_state, None, None))
-    } else {
-        None
-    };
+    let s_meta = probe_neighbor_fluid_cull_meta(&mut get_state, &mut get_meta, culler, x, y, z + 1);
     if culler.should_render_fluid_face(
         &fluid_meta,
         self_meta.as_deref(),
@@ -390,12 +421,7 @@ where
     }
 
     // West (-X)
-    let w_state = get_state(x - 1, y, z);
-    let w_meta = if !w_state.is_empty() && w_state != "minecraft:air" {
-        Some(culler.get_meta(w_state, None, None))
-    } else {
-        None
-    };
+    let w_meta = probe_neighbor_fluid_cull_meta(&mut get_state, &mut get_meta, culler, x - 1, y, z);
     if culler.should_render_fluid_face(
         &fluid_meta,
         self_meta.as_deref(),
@@ -417,12 +443,7 @@ where
     }
 
     // East (+X)
-    let e_state = get_state(x + 1, y, z);
-    let e_meta = if !e_state.is_empty() && e_state != "minecraft:air" {
-        Some(culler.get_meta(e_state, None, None))
-    } else {
-        None
-    };
+    let e_meta = probe_neighbor_fluid_cull_meta(&mut get_state, &mut get_meta, culler, x + 1, y, z);
     if culler.should_render_fluid_face(
         &fluid_meta,
         self_meta.as_deref(),

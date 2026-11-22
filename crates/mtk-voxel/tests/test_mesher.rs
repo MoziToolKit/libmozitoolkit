@@ -1876,3 +1876,98 @@ fn test_mesher_mixed_vanilla_quad_and_obj_triangle_section() {
         panic!("expected String palette");
     }
 }
+
+#[test]
+fn test_waterlogged_modded_obj_block_emits_all_six_fluid_faces_and_does_not_cull_adjacent_water() {
+    use mtk_model::{BakedModel, BakedObjFace};
+    use std::sync::Arc;
+
+    let make_track_model = |state: &str| {
+        let mut model = BakedModel {
+            block_state: state.to_string(),
+            obj_faces: vec![BakedObjFace {
+                direction: mtk_core::Direction::Up,
+                texture: "testmod:block/track".to_string(),
+                tint_index: -1,
+                vertices: vec![
+                    glam::Vec3::new(0.1, 0.1, 0.1),
+                    glam::Vec3::new(0.1, 0.1, 0.9),
+                    glam::Vec3::new(0.9, 0.1, 0.9),
+                ],
+                uvs: vec![
+                    glam::Vec2::new(0.0, 0.0),
+                    glam::Vec2::new(0.0, 1.0),
+                    glam::Vec2::new(1.0, 1.0),
+                ],
+                normal: glam::Vec3::Y,
+                atlas_uvs: None,
+                atlas_chunk_id: None,
+                atlas_texture_id: None,
+            }],
+            is_cube: false,
+            is_opaque: false,
+            ..Default::default()
+        };
+        model.rebuild_face_buckets();
+        Arc::new(model)
+    };
+
+    let culler = FaceCuller::default();
+    let config = MesherConfig {
+        weld_vertices: false,
+        ..Default::default()
+    };
+
+    // Case A: isolated waterlogged modded OBJ track in open air must emit all 6 fluid faces
+    // (12 triangles) + 1 OBJ track triangle = 13 triangles (not just 2 top-face triangles).
+    let wet_track = make_track_model("testmod:track[waterlogged=true]");
+    let mut sec_wet = SectionStorage::new(glam::IVec3::ZERO);
+    let pal_wet = sec_wet.palette.len() as u16;
+    sec_wet
+        .palette
+        .push("testmod:track[waterlogged=true]".to_string());
+    sec_wet.voxels[block_index(4, 4, 4)] = pal_wet;
+    sec_wet.non_air_count = 1;
+    let padded_wet = sec_wet.build_padded_array(|_, _, _| "minecraft:air");
+    let mesh_wet = SectionMesher::mesh_section(
+        &padded_wet,
+        &culler,
+        |st| {
+            if st == "testmod:track[waterlogged=true]" {
+                ModelSource::from(Some(wet_track.clone()))
+            } else {
+                ModelSource::None
+            }
+        },
+        &config,
+    );
+    assert_eq!(mesh_wet.triangle_count(), 13);
+
+    // Case B: water next to a dry modded OBJ track must NOT have its touching side culled.
+    let dry_track = make_track_model("testmod:track[waterlogged=false]");
+    let mut sec_adj = SectionStorage::new(glam::IVec3::ZERO);
+    let pal_water = sec_adj.palette.len() as u16;
+    sec_adj.palette.push("minecraft:water[level=0]".to_string());
+    let pal_dry = sec_adj.palette.len() as u16;
+    sec_adj
+        .palette
+        .push("testmod:track[waterlogged=false]".to_string());
+    sec_adj.voxels[block_index(4, 4, 4)] = pal_water;
+    sec_adj.voxels[block_index(5, 4, 4)] = pal_dry;
+    sec_adj.non_air_count = 2;
+    let padded_adj = sec_adj.build_padded_array(|_, _, _| "minecraft:air");
+    let mesh_adj = SectionMesher::mesh_section(
+        &padded_adj,
+        &culler,
+        |st| {
+            if st == "testmod:track[waterlogged=false]" {
+                ModelSource::from(Some(dry_track.clone()))
+            } else {
+                ModelSource::None
+            }
+        },
+        &config,
+    );
+    // 6 water faces (12 triangles) + 1 OBJ track triangle = 13 triangles.
+    assert_eq!(mesh_adj.triangle_count(), 13);
+}

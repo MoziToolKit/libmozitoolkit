@@ -288,10 +288,10 @@ impl BakedModel {
                 quads.push((self.faces[dir.to_index()].vertices, dir));
             }
         }
-        let quads_slice = if quads.is_empty() {
-            None
-        } else {
+        let quads_slice = if !quads.is_empty() || !self.obj_faces.is_empty() {
             Some(quads.as_slice())
+        } else {
+            None
         };
         mtk_cull::compute_block_cull_meta(&self.block_state, quads_slice, Some(self.is_opaque))
     }
@@ -388,10 +388,10 @@ impl BakedModel {
                         quads.push((self.faces[dir.to_index()].vertices, dir));
                     }
                 }
-                let quads_slice = if quads.is_empty() {
-                    None
-                } else {
+                let quads_slice = if !quads.is_empty() || !self.obj_faces.is_empty() {
                     Some(quads.as_slice())
+                } else {
+                    None
                 };
                 self.cull_meta = Some(mtk_cull::compute_block_cull_meta(
                     &self.block_state,

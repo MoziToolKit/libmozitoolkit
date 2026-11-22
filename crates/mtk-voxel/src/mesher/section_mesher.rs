@@ -147,6 +147,7 @@ impl SectionMesher {
                         emit_fluid_at(
                             &mut mesh,
                             padded,
+                            &palette_entries,
                             block_pos,
                             (px, py, pz),
                             (lx, ly, lz),

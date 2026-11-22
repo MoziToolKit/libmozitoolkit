@@ -147,7 +147,8 @@ impl BakedModelDatabase {
                 return Some(group);
             }
         }
-        None
+        self.get(state)
+            .and_then(|model| self.variant_groups.get(&model.block_state))
     }
 
     /// Eliminates overlapping, duplicate, and interior coplanar contacting faces

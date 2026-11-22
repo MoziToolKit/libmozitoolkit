@@ -151,6 +151,12 @@ impl BlockStateDefinition {
                     }
                 }
 
+                if let Some(collapsed) =
+                    super::collapse::collapse_invariant_variant_states(base_id, variants)
+                {
+                    return collapsed;
+                }
+
                 for key in variants.keys() {
                     let state_str = if key.is_empty() {
                         base_id.to_string()

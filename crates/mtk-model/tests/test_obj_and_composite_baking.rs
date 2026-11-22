@@ -380,3 +380,46 @@ fn test_deduplicate_faces_culls_back_to_back_obj_cards_only_when_same_texture() 
         "testmod:block/razor_wire_overlay"
     );
 }
+
+#[test]
+fn test_obj_only_baked_model_cull_meta_is_partial_and_non_opaque() {
+    use glam::Vec3;
+    use mtk_core::DirMask;
+    use mtk_cull::CullCategory;
+    use mtk_model::{BakedModel, BakedObjFace};
+
+    let baked = BakedModel {
+        block_state: "testmod:track[waterlogged=true]".to_string(),
+        obj_faces: vec![BakedObjFace {
+            direction: Direction::Up,
+            texture: "testmod:block/track".to_string(),
+            tint_index: -1,
+            vertices: vec![
+                Vec3::new(0.0, 0.1, 0.0),
+                Vec3::new(0.0, 0.1, 1.0),
+                Vec3::new(1.0, 0.1, 1.0),
+            ],
+            uvs: vec![
+                glam::Vec2::new(0.0, 0.0),
+                glam::Vec2::new(0.0, 1.0),
+                glam::Vec2::new(1.0, 1.0),
+            ],
+            normal: Vec3::Y,
+            atlas_uvs: None,
+            atlas_chunk_id: None,
+            atlas_texture_id: None,
+        }],
+        is_cube: false,
+        is_opaque: false,
+        ..Default::default()
+    };
+
+    let meta = baked.get_or_compute_cull_meta();
+    assert_eq!(meta.category, CullCategory::PartialShape);
+    assert!(!meta.is_full_cube);
+    assert!(!meta.is_opaque);
+    assert!(meta.has_baked_model);
+    assert!(meta.is_waterlogged);
+    assert_eq!(meta.full_face_mask, DirMask::empty());
+    assert_eq!(meta.empty_face_mask, DirMask::ALL);
+}

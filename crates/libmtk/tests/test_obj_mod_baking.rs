@@ -282,6 +282,27 @@ fn test_real_obj_mod_jars_if_present() {
         "expected >50 OBJ-backed baked models from real mod samples, got {obj_baked_count}"
     );
 
+    // Invariant datagen `waterlogged=true` keys on Create & Steam 'n' Rails must be folded out
+    // of BakedModelDatabase keys while runtime full queries still resolve seamlessly.
+    let spurious_waterlogged = model_db
+        .models
+        .keys()
+        .filter(|k| {
+            (k.starts_with("create:") || k.starts_with("railways:"))
+                && k.contains("waterlogged=true")
+        })
+        .count();
+    assert_eq!(
+        spurious_waterlogged, 0,
+        "expected invariant datagen waterlogged=true states to fold out of BakedModelDatabase"
+    );
+    assert!(model_db
+        .get("create:track[shape=ae,turn=false,waterlogged=true]")
+        .is_some());
+    assert!(model_db
+        .get("railways:track_warped[shape=cr_d,turn=false,waterlogged=true]")
+        .is_some());
+
     // Verify meshing a section containing real OBJ & composite models across all 6 mods
     // succeeds with zero NaNs and zero duplicate face vertex sets when welded.
     let mut world = VoxelStorage::new();

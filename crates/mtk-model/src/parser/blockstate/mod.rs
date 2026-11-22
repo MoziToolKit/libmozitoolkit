@@ -3,6 +3,7 @@
 //! Provides parsing of Minecraft canonical BlockState identifiers and
 //! matching logic against `blockstates/*.json` variant definitions and multipart rules.
 
+mod collapse;
 pub(crate) mod definition;
 pub(crate) mod resolver;
 pub(crate) mod state;
@@ -184,5 +185,63 @@ mod tests {
         let m_alias = BlockStateResolver::resolve(&def, &bs_alias);
         assert_eq!(m_alias.len(), 2);
         assert_eq!(m_alias[1].model_id, "minecraft:block/wildflowers_2");
+    }
+
+    #[test]
+    fn test_collapse_invariant_variant_props_for_datagen_tracks_and_preserves_meaningful_ones() {
+        // 1. Track-like datagen variants where waterlogged & turn never change the model
+        let track_json = r#"{
+            "variants": {
+                "shape=ae,turn=false,waterlogged=false": { "model": "mod:block/track/ascending", "y": 270 },
+                "shape=ae,turn=false,waterlogged=true":  { "model": "mod:block/track/ascending", "y": 270 },
+                "shape=ae,turn=true,waterlogged=false":  { "model": "mod:block/track/ascending", "y": 270 },
+                "shape=ae,turn=true,waterlogged=true":   { "model": "mod:block/track/ascending", "y": 270 },
+                "shape=cr_d,turn=false,waterlogged=false": { "model": "mod:block/track/cross_d" },
+                "shape=cr_d,turn=false,waterlogged=true":  { "model": "mod:block/track/cross_d" },
+                "shape=cr_d,turn=true,waterlogged=false":  { "model": "mod:block/track/cross_d" },
+                "shape=cr_d,turn=true,waterlogged=true":   { "model": "mod:block/track/cross_d" }
+            }
+        }"#;
+        let track_def: BlockStateDefinition = serde_json::from_str(track_json).unwrap();
+        let collapsed = track_def.enumerate_all_states("mod:track");
+        assert_eq!(
+            collapsed,
+            vec!["mod:track[shape=ae]", "mod:track[shape=cr_d]"]
+        );
+
+        // Resolver still maps folded states to the exact VariantMatch
+        let folded_ae = BlockState::parse("mod:track[shape=ae]").unwrap();
+        let resolved = BlockStateResolver::resolve_variants(&track_def, &folded_ae);
+        assert_eq!(resolved[0].0[0].model_id, "mod:block/track/ascending");
+        assert_eq!(resolved[0].0[0].rot_y, 270.0);
+
+        // 2. Vanilla sea_pickle-like definition where waterlogged DOES change the model must NOT collapse
+        let pickle_json = r#"{
+            "variants": {
+                "pickles=1,waterlogged=false": { "model": "minecraft:block/sea_pickle_dead" },
+                "pickles=1,waterlogged=true":  { "model": "minecraft:block/sea_pickle" }
+            }
+        }"#;
+        let pickle_def: BlockStateDefinition = serde_json::from_str(pickle_json).unwrap();
+        assert_eq!(
+            pickle_def.enumerate_all_states("minecraft:sea_pickle"),
+            vec![
+                "minecraft:sea_pickle[pickles=1,waterlogged=false]",
+                "minecraft:sea_pickle[pickles=1,waterlogged=true]"
+            ]
+        );
+
+        // 3. Emissive property "lit" must be preserved even when model references match
+        let lit_json = r#"{
+            "variants": {
+                "lit=false": { "model": "mod:block/lamp" },
+                "lit=true":  { "model": "mod:block/lamp" }
+            }
+        }"#;
+        let lit_def: BlockStateDefinition = serde_json::from_str(lit_json).unwrap();
+        assert_eq!(
+            lit_def.enumerate_all_states("mod:lamp"),
+            vec!["mod:lamp[lit=false]", "mod:lamp[lit=true]"]
+        );
     }
 }

@@ -338,6 +338,19 @@ pub fn compute_block_cull_meta(
             full_face_mask,
             empty_face_mask,
         )
+    } else if is_waterlogged {
+        // Any block carrying `waterlogged=true` (such as modded tracks, valves, pipes, or furniture)
+        // cannot be a solid 1x1x1 opaque cube in Minecraft. Falling through to `SolidOpaque` would
+        // self-occlude all 5 side/bottom fluid faces and leave only a floating top water sheet.
+        (
+            CullCategory::NonOccluding,
+            false,
+            false,
+            "non_occluding".to_string(),
+            <[Vec<Aabb2d>; 6]>::default(),
+            DirMask::empty(),
+            DirMask::ALL,
+        )
     } else {
         let is_opaque = effective_opaque_hint.unwrap_or(true);
         if is_opaque {

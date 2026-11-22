@@ -279,10 +279,10 @@ impl ModelBaker {
                 quads.push((final_six_faces[dir.to_index()].vertices, dir));
             }
         }
-        let quads_slice = if quads.is_empty() {
-            None
-        } else {
+        let quads_slice = if !quads.is_empty() || has_obj {
             Some(quads.as_slice())
+        } else {
+            None
         };
         let cull_meta =
             mtk_cull::compute_block_cull_meta(canonical_str, quads_slice, Some(is_opaque));

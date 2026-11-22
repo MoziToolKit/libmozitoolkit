@@ -69,9 +69,11 @@ pub(crate) fn quad_corner_offsets(vertices: &[glam::Vec3; 4]) -> [[usize; 3]; 4]
 }
 
 /// Helper to mesh fluid geometry at the given coordinate.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn emit_fluid_at(
     mesh: &mut mtk_core::MeshData,
     padded: &crate::storage::PaddedVoxelArray,
+    palette_entries: &[Arc<ResolvedPaletteEntry>],
     block_pos: glam::IVec3,
     (px, py, pz): (usize, usize, usize),
     (lx, ly, lz): (usize, usize, usize),
@@ -91,6 +93,17 @@ pub(crate) fn emit_fluid_at(
             padded.get_padded_state(n_px, n_py, n_pz)
         } else {
             "minecraft:air"
+        }
+    };
+    let get_meta = |nx: i32, ny: i32, nz: i32| -> Option<Arc<BlockCullMeta>> {
+        let n_px = (nx - block_pos.x + px as i32) as usize;
+        let n_py = (ny - block_pos.y + py as i32) as usize;
+        let n_pz = (nz - block_pos.z + pz as i32) as usize;
+        if n_px < 18 && n_py < 18 && n_pz < 18 {
+            let idx = padded.get_padded_idx(n_px, n_py, n_pz) as usize;
+            palette_entries.get(idx).map(|e| Arc::clone(&e.meta))
+        } else {
+            None
         }
     };
 
@@ -120,6 +133,7 @@ pub(crate) fn emit_fluid_at(
         wz,
         state_str,
         get_state,
+        get_meta,
         culler,
         config,
         0,
