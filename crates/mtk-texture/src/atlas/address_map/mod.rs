@@ -203,15 +203,9 @@ impl AtlasAddressMap {
         }
     }
 
-    /// Deserialize from JSON string, ensuring backward compatibility with older caches lacking `textures`.
+    /// Deserialize from JSON string.
     pub fn from_json(json_str: &str) -> Result<Self, serde_json::Error> {
-        let mut map: Self = serde_json::from_str(json_str)?;
-        for chunk in &mut map.chunks {
-            if chunk.textures.is_empty() {
-                chunk.refresh_textures();
-            }
-        }
-        Ok(map)
+        serde_json::from_str(json_str)
     }
 
     /// Lookup chunk descriptor by chunk ID.

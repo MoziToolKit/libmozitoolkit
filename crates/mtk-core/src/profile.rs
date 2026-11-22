@@ -118,8 +118,6 @@ impl ExecutionProfile {
 #[derive(Debug, Clone)]
 struct ActiveScope {
     name: Cow<'static, str>,
-    #[allow(dead_code)]
-    category: Cow<'static, str>,
     depth: u32,
     start_offset_us: u64,
     start_instant: Instant,
@@ -189,7 +187,6 @@ impl ExecutionProfiler {
 
             self.active_stack.push(ActiveScope {
                 name: name.clone(),
-                category: category.clone(),
                 depth,
                 start_offset_us,
                 start_instant,

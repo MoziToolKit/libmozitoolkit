@@ -38,35 +38,3 @@ fn test_build_texture_slots() {
     assert_eq!(overlay.file_name, "blocks_chunk_001_overlay.png");
     assert_eq!(overlay.colorspace, "sRGB");
 }
-
-#[test]
-fn test_backward_compatibility_json() {
-    // Old JSON without `textures` array
-    let legacy_json = r#"{
-        "chunks": [
-            {
-                "chunk_id": 0,
-                "category": "blocks",
-                "category_chunk_index": 1,
-                "width": 1024,
-                "height": 1024,
-                "has_normal": false,
-                "has_specular": false,
-                "has_orm": true
-            }
-        ],
-        "sprites": {}
-    }"#;
-
-    let map = AtlasAddressMap::from_json(legacy_json).expect("deserialize legacy json");
-    let chunk = &map.chunks[0];
-    assert_eq!(chunk.textures.len(), 2); // albedo + orm
-    assert_eq!(chunk.textures[0].role, "albedo");
-    assert_eq!(chunk.textures[1].role, "orm");
-    assert_eq!(chunk.textures[1].colorspace, "Non-Color");
-
-    // Serialize back
-    let serialized = map.to_json().expect("serialize to json");
-    assert!(serialized.contains(r#""textures""#));
-    assert!(serialized.contains(r#""blocks_chunk_001_orm.png""#));
-}
