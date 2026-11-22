@@ -29,6 +29,7 @@
 //! | `MTK_TEST_JAR` / `MC_JAR` | Minecraft client jar for pack-level baking tests |
 //! | `MTK_TEST_RESOURCE_PACK` | External resource pack `.zip` (e.g. SPBR / PBR packs) |
 //! | `MTK_TEST_SAVE` | Minecraft save directory (contains `level.dat`) |
+//! | `MTK_TEST_MOD_DIR` | Directory containing mod `.jar` archives (e.g. `mod-samples`) |
 //! | `MTK_TEST_MODELS_CACHE` | Pre-built `models.bin` cache for serialization benchmarks |
 //! | `MTK_TEST_ONLINE` / `MTK_ONLINE_TESTS` | Explicitly opt in to live HTTP/network tests |
 //! | `MTK_REQUIRE_REAL_ASSETS` | Fail instead of skipping when real assets are missing |
@@ -207,6 +208,34 @@ pub fn save_world() -> Option<PathBuf> {
         candidates.push(home.join("saves/test_world"));
     }
     first_existing(candidates).filter(|path| path.join("level.dat").exists())
+}
+
+/// Directory containing sample mod `.jar` archives for OBJ/composite mod baking tests.
+pub fn mod_samples_dir() -> Option<PathBuf> {
+    let has_jars = |dir: &PathBuf| {
+        dir.is_dir()
+            && std::fs::read_dir(dir)
+                .ok()
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .any(|e| e.path().extension().is_some_and(|ext| ext == "jar"))
+                })
+                .unwrap_or(false)
+    };
+
+    if let Some(path) = env_existing(&["MTK_TEST_MOD_DIR", "MTK_MOD_SAMPLES_DIR"]) {
+        if has_jars(&path) {
+            return Some(path);
+        }
+    }
+
+    let workspace = workspace_root();
+    let mut candidates = vec![workspace.join("../mod-samples")];
+    if let Some(home) = home_dir() {
+        candidates.push(home.join("mod-samples"));
+    }
+    first_existing(candidates).filter(has_jars)
 }
 
 /// A pre-built `models.bin` asset cache for serialization benchmarks.

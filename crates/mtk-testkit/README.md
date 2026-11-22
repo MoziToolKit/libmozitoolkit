@@ -52,6 +52,7 @@ let loader = |id: &str| std::fs::read_to_string(model_json_path(&root, id)).ok()
 | `fabric_jar()` | `Option<PathBuf>` | 客户端/整合包 jar |
 | `resource_pack_zip()` | `Option<PathBuf>` | 外部资源包 zip |
 | `save_world()` | `Option<PathBuf>` | 存档目录（含 `level.dat`） |
+| `mod_samples_dir()` | `Option<PathBuf>` | 模组样例 `.jar` 目录（`mod-samples`） |
 | `models_cache_bin()` | `Option<PathBuf>` | 预编译 `models.bin` |
 | `model_json_path(root, id)` | `PathBuf` | `minecraft:block/cube_all` → `.../models/block/cube_all.json` |
 | `blockstate_json_path(root, id)` | `PathBuf` | 去除属性谓词并定位 blockstate JSON |
@@ -70,6 +71,7 @@ let loader = |id: &str| std::fs::read_to_string(model_json_path(&root, id)).ok()
 | `MTK_TEST_JAR` / `MC_JAR` | 客户端 jar |
 | `MTK_TEST_RESOURCE_PACK` | 外部资源包 `.zip` |
 | `MTK_TEST_SAVE` | 存档目录 |
+| `MTK_TEST_MOD_DIR` | 模组样例 `.jar` 目录 |
 | `MTK_TEST_MODELS_CACHE` | 预编译模型缓存 `models.bin` |
 | `MTK_TEST_ONLINE` / `MTK_ONLINE_TESTS` | 显式开启真实 HTTP 联网测试（如 Mojang 皮肤拉取） |
 | `MTK_REQUIRE_REAL_ASSETS` | 缺资产时失败而不是跳过（CI / 交付门禁设为 `1`） |

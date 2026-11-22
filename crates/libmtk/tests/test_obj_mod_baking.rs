@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -188,14 +189,12 @@ map_Kd testmod:entity/widget
 
 #[test]
 fn test_real_obj_mod_jars_if_present() {
-    let mod_samples_dir = mtk_testkit::workspace_root()
-        .parent()
-        .expect("workspace parent")
-        .join("mod-samples");
-    if !mod_samples_dir.is_dir() {
+    let Some(mod_samples_dir) = mtk_testkit::mod_samples_dir() else {
+        mtk_testkit::skip("no mod-samples directory available (set MTK_TEST_MOD_DIR)");
         return;
-    }
+    };
     let Some(vanilla_dir) = mtk_testkit::real_assets_root() else {
+        mtk_testkit::skip("no full vanilla asset set");
         return;
     };
 
@@ -204,13 +203,21 @@ fn test_real_obj_mod_jars_if_present() {
         "ImmersiveEngineering-1.21.1-12.4.2-194.jar",
         "Steam_Rails-1.7.3+forge-mc1.20.1.jar",
         "Mekanism-1.21.1-10.7.19.85.jar",
+        "pneumaticcraft-repressurized-8.2.24+mc1.21.1.jar",
+        "electrodynamics-1.21.1-1.1.1.jar",
     ];
     let existing_jars: Vec<_> = sample_jars
         .iter()
         .map(|name| mod_samples_dir.join(name))
         .filter(|p| p.is_file())
         .collect();
-    if existing_jars.is_empty() {
+    if existing_jars.len() != sample_jars.len() {
+        mtk_testkit::skip(&format!(
+            "incomplete mod-samples archive ({}/{} jars found in {})",
+            existing_jars.len(),
+            sample_jars.len(),
+            mod_samples_dir.display()
+        ));
         return;
     }
 
@@ -245,19 +252,24 @@ fn test_real_obj_mod_jars_if_present() {
     let model_db = reader.load_models().unwrap();
     let atlas_map = Arc::new(reader.load_atlas_mapping().unwrap());
 
-    // Verify representative OBJ & composite models baked across real mods
-    for state in [
-        "create:blaze_burner",
+    // Verify representative OBJ & composite models baked across all 6 real mods
+    let showcase_states = [
+        "create:lit_blaze_burner[flame_type=regular]",
         "create:crushing_wheel[axis=y]",
-        "immersiveengineering:alu_slope",
-        "mekanism:quantum_entangloporter[facing=north]",
-    ] {
-        if let Some(m) = model_db.get(state) {
-            assert!(
-                !m.elements.is_empty() || !m.obj_faces.is_empty(),
-                "real mod state {state} must bake non-empty geometry"
-            );
-        }
+        "immersiveengineering:razor_wire[facing=east]",
+        "railways:buffer_wide[diagonal=false,facing=east]",
+        "mekanism:quantum_entangloporter[facing=down]",
+        "pneumaticcraft:etching_tank",
+        "electrodynamics:combustionchamber[facing=south]",
+    ];
+    for state in showcase_states {
+        let m = model_db
+            .get(state)
+            .unwrap_or_else(|| panic!("expected real mod state {state} in BakedModelDatabase"));
+        assert!(
+            !m.elements.is_empty() || !m.obj_faces.is_empty(),
+            "real mod state {state} must bake non-empty geometry"
+        );
     }
 
     let obj_baked_count = model_db
@@ -270,36 +282,49 @@ fn test_real_obj_mod_jars_if_present() {
         "expected >50 OBJ-backed baked models from real mod samples, got {obj_baked_count}"
     );
 
-    // Verify meshing a section containing real OBJ models succeeds with zero NaNs
+    // Verify meshing a section containing real OBJ & composite models across all 6 mods
+    // succeeds with zero NaNs and zero duplicate face vertex sets when welded.
     let mut world = VoxelStorage::new();
     world.set_bounds(0, 0, 0, 16, 16, 16);
-    world.set_block(2, 2, 2, "create:blaze_burner", None);
-    world.set_block(4, 2, 2, "create:crushing_wheel[axis=y]", None);
-    world.set_block(6, 2, 2, "immersiveengineering:alu_slope", None);
-    world.set_block(
-        8,
-        2,
-        2,
-        "mekanism:quantum_entangloporter[facing=north]",
-        None,
-    );
+    for (idx, state) in showcase_states.iter().enumerate() {
+        world.set_block((idx as i32) * 2 + 1, 2, 2, state, None);
+    }
 
     let coords = world.get_all_non_empty_sections();
     assert_eq!(coords.len(), 1);
     let padded = world.get_section_padded_array(coords[0]);
     let culler = FaceCuller::default();
-    let mesher_cfg = MesherConfig {
-        atlas_address_map: Some(atlas_map),
-        weld_vertices: false,
-        ..Default::default()
-    };
-    let mesh =
-        SectionMesher::mesh_section(&padded, &culler, |st| model_db.get(st).into(), &mesher_cfg);
-    assert!(mesh.triangle_count() > 100);
-    assert!(mesh
-        .positions
-        .iter()
-        .all(|p| p[0].is_finite() && p[1].is_finite() && p[2].is_finite()));
+
+    for weld_vertices in [false, true] {
+        let mesher_cfg = MesherConfig {
+            atlas_address_map: Some(Arc::clone(&atlas_map)),
+            weld_vertices,
+            ..Default::default()
+        };
+        let mesh = SectionMesher::mesh_section(
+            &padded,
+            &culler,
+            |st| model_db.get(st).into(),
+            &mesher_cfg,
+        );
+        assert!(mesh.triangle_count() > 500);
+        assert!(mesh
+            .positions
+            .iter()
+            .all(|p| p[0].is_finite() && p[1].is_finite() && p[2].is_finite()));
+
+        if weld_vertices {
+            let mut seen_tris = HashSet::new();
+            for tri in mesh.indices.as_chunks::<3>().0 {
+                let mut key = [tri[0], tri[1], tri[2]];
+                key.sort_unstable();
+                assert!(
+                    seen_tris.insert(key),
+                    "welded OBJ/composite mesh produced duplicate triangle {key:?}"
+                );
+            }
+        }
+    }
 
     let _ = fs::remove_dir_all(&temp_cache_dir);
 }

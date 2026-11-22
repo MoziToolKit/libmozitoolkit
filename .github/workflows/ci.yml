@@ -57,6 +57,7 @@ jobs:
           jar_ok=0
           pack_ok=0
           save_ok=0
+          mods_ok=0
           if curl -fL --retry 3 -o "$work/mc.jar" "$MTK_CI_ASSETS_BASE/26.2-Fabric.jar"; then
             mkdir -p "$work/mc"
             unzip -q "$work/mc.jar" -d "$work/mc"
@@ -83,9 +84,20 @@ jobs:
           else
             echo "::warning::Sample save world unavailable; save tests will skip if not present."
           fi
+          if curl -fL --retry 3 -o "$work/mod-samples.tar.gz" "$MTK_CI_ASSETS_BASE/mod-samples.tar.gz"; then
+            tar -xzf "$work/mod-samples.tar.gz" -C "$work"
+            if [ -d "$work/mod-samples" ]; then
+              echo "MTK_TEST_MOD_DIR=$work/mod-samples" >> "$GITHUB_ENV"
+              mods_ok=1
+            else
+              echo "::warning::Sample mod archive missing expected directory; OBJ mod tests may skip."
+            fi
+          else
+            echo "::warning::Sample mod archive unavailable; OBJ mod tests will skip if not present."
+          fi
           # Only demand full coverage when the full asset set really is present: from here on a
           # test that would skip for missing assets fails instead, so a green run proves coverage.
-          if [ "$jar_ok" = "1" ] && [ "$pack_ok" = "1" ] && [ "$save_ok" = "1" ]; then
+          if [ "$jar_ok" = "1" ] && [ "$pack_ok" = "1" ] && [ "$save_ok" = "1" ] && [ "$mods_ok" = "1" ]; then
             echo "MTK_REQUIRE_REAL_ASSETS=1" >> "$GITHUB_ENV"
           fi
       - name: cargo test --workspace
