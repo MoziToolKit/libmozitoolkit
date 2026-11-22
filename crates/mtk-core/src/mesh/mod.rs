@@ -17,6 +17,7 @@ pub mod greedy;
 mod merge;
 mod merge_attributes;
 mod topology;
+mod triangulate;
 mod weld;
 
 pub use greedy::{greedy_mesh_2d_mask, greedy_mesh_2d_values, greedy_span_1d, GreedyRect};

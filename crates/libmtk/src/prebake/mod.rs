@@ -5,6 +5,7 @@
 
 mod engine;
 mod models;
+mod preload;
 mod reader;
 mod resolver;
 

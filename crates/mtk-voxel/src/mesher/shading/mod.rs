@@ -16,4 +16,6 @@ pub(crate) use resolver::{
     resolve_model_face_shading, resolve_unit_cube_face_shading, sample_quad_corner_biome_tints,
 };
 pub use types::ModelSource;
-pub(crate) use types::{PaletteMeshingData, PreResolvedModelFace, ResolvedFaceShading};
+pub(crate) use types::{
+    PaletteMeshingData, PreResolvedModelFace, PreResolvedObjFace, ResolvedFaceShading,
+};

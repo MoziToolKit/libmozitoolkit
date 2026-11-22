@@ -3,6 +3,7 @@
 //! Provides batch merging of multiple `MeshData` buffers into a single unified mesh,
 //! including zero-copy reference merging and streaming single-pass boundary welding.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use super::merge_attributes::seed_custom_attributes;
@@ -51,7 +52,11 @@ impl MergedMeshPrealloc {
             }
         }
 
-        let total_corners = total_quads.max(total_uvs).max(total_faces * 4);
+        let total_corners = if total_quads > 0 {
+            total_quads.max(total_uvs).max(total_faces * 4)
+        } else {
+            total_indices.max(total_uvs).max(total_faces * 3)
+        };
 
         let uv_layout = meshes
             .iter()
@@ -104,9 +109,45 @@ impl MergedMeshPrealloc {
     }
 }
 
+fn normalize_for_homogeneous_merge<'a>(meshes: &[&'a MeshData]) -> Option<Vec<Cow<'a, MeshData>>> {
+    let all_quads = meshes
+        .iter()
+        .all(|m| m.positions.is_empty() || m.is_quad_topology());
+    if all_quads {
+        return None;
+    }
+    Some(
+        meshes
+            .iter()
+            .map(|m| {
+                if !m.positions.is_empty() && m.is_quad_topology() {
+                    Cow::Owned(m.to_triangles())
+                } else {
+                    Cow::Borrowed(*m)
+                }
+            })
+            .collect(),
+    )
+}
+
 impl MeshData {
     /// Appends another `MeshData` into this mesh data buffer.
     pub fn append_mesh(&mut self, other: &MeshData) {
+        let self_was_quad = self.positions.is_empty() || self.is_quad_topology();
+        let other_is_quad = other.positions.is_empty() || other.is_quad_topology();
+        let other_cow: Cow<'_, MeshData> =
+            if (self_was_quad && other_is_quad) || other.positions.is_empty() {
+                Cow::Borrowed(other)
+            } else {
+                self.convert_to_triangles();
+                if other_is_quad {
+                    Cow::Owned(other.to_triangles())
+                } else {
+                    Cow::Borrowed(other)
+                }
+            };
+        let other = other_cow.as_ref();
+
         let prev_faces = self.face_count();
         let prev_verts = self.vertex_count();
         let prev_corners = self.loop_count();
@@ -116,8 +157,6 @@ impl MeshData {
             self.uv_layout = other.uv_layout;
         }
 
-        let self_was_quad = self.positions.is_empty() || self.is_quad_topology();
-        let other_is_quad = other.positions.is_empty() || other.is_quad_topology();
         if self_was_quad && other_is_quad {
             if self.quad_indices.is_none()
                 && other.quad_indices.is_some()
@@ -237,6 +276,16 @@ impl MeshData {
             return (*meshes[0]).clone();
         }
 
+        let normalized = normalize_for_homogeneous_merge(meshes);
+        let norm_refs: Vec<&MeshData>;
+        let meshes = match normalized.as_ref() {
+            Some(vec) => {
+                norm_refs = vec.iter().map(|c| c.as_ref()).collect();
+                norm_refs.as_slice()
+            }
+            None => meshes,
+        };
+
         let pre = MergedMeshPrealloc::new(meshes);
         let mut merged = pre.merged;
         let has_colors = pre.has_colors;
@@ -336,6 +385,16 @@ impl MeshData {
         if tolerance <= 0.0 {
             return Self::merge_all_refs(meshes);
         }
+
+        let normalized = normalize_for_homogeneous_merge(meshes);
+        let norm_refs: Vec<&MeshData>;
+        let meshes = match normalized.as_ref() {
+            Some(vec) => {
+                norm_refs = vec.iter().map(|c| c.as_ref()).collect();
+                norm_refs.as_slice()
+            }
+            None => meshes,
+        };
 
         let pre = MergedMeshPrealloc::new(meshes);
         let mut merged = pre.merged;

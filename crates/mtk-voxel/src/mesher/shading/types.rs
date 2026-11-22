@@ -1,5 +1,5 @@
 use glam::Vec2;
-use mtk_model::{BakedFace, BakedModel, BakedVariantGroup};
+use mtk_model::{BakedFace, BakedModel, BakedObjFace, BakedVariantGroup};
 use std::borrow::Cow;
 use std::sync::Arc;
 
@@ -24,11 +24,20 @@ pub struct PreResolvedModelFace {
     pub pre: PreResolvedFace,
 }
 
+/// Pre-resolved OBJ face bundling `BakedObjFace`, variable-length atlas UVs, and pre-resolved shading.
+#[derive(Clone, Debug)]
+pub struct PreResolvedObjFace {
+    pub face: BakedObjFace,
+    pub override_uvs: Option<Vec<Vec2>>,
+    pub pre: PreResolvedFace,
+}
+
 /// Pre-resolved face buckets for a single model or model variant.
 #[derive(Clone, Debug, Default)]
 pub struct ModelFaceBuckets {
     pub culled_faces: [Vec<PreResolvedModelFace>; 6],
     pub unculled_faces: Vec<PreResolvedModelFace>,
+    pub obj_faces: Vec<PreResolvedObjFace>,
 }
 
 /// Source representation of a block model (single model, multi-variant group, or unit cube fallback).
@@ -133,6 +142,7 @@ pub enum PaletteMeshingData {
     Model {
         culled_faces: [Vec<PreResolvedModelFace>; 6],
         unculled_faces: Vec<PreResolvedModelFace>,
+        obj_faces: Vec<PreResolvedObjFace>,
     },
     VariantModel {
         variants: Vec<ModelFaceBuckets>,

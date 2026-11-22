@@ -2,8 +2,8 @@
 
 use glam::IVec3;
 use mtk_core::Direction;
-use mtk_core::MeshData;
 use mtk_core::{get_block_offset, OffsetType};
+use mtk_core::{MeshData, UvLayout};
 use mtk_cull::FaceCuller;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -13,7 +13,9 @@ use crate::storage::{padded_index, PaddedVoxelArray, SECTION_SIZE};
 use crate::types::MesherConfig;
 
 use super::collector::FaceAttributesCollector;
-use super::emitter::{emit_baked_face, emit_unit_cube_face};
+use super::emitter::{
+    emit_baked_face, emit_obj_quad_face, emit_obj_tri_faces, emit_unit_cube_face,
+};
 use super::grid_pool::UNIT_CUBE_CORNERS;
 use super::palette_entry::{
     emit_fluid_at, quad_corner_offsets, select_variant_faces, ResolvedPaletteEntry,
@@ -58,6 +60,7 @@ impl SectionMesher {
 
         let mut mesh = MeshData::with_quad_capacity(2048, 3072, 512, true);
         let mut collector = FaceAttributesCollector::with_capacity(512);
+        let mut tri_ctx: Option<(MeshData, FaceAttributesCollector)> = None;
 
         let palette_entries: Vec<Arc<ResolvedPaletteEntry>> = padded
             .palette
@@ -202,12 +205,15 @@ impl SectionMesher {
 
                     if entity_data.is_some() || entry.has_model {
                         has_non_grid_geometry = true;
-                        let (culled_faces, unculled_faces) = if let Some(emd) = entity_data {
+                        let (culled_faces, unculled_faces, obj_faces) = if let Some(emd) =
+                            entity_data
+                        {
                             match &**emd {
                                 PaletteMeshingData::Model {
                                     ref culled_faces,
                                     ref unculled_faces,
-                                } => (culled_faces, unculled_faces),
+                                    ref obj_faces,
+                                } => (culled_faces, unculled_faces, obj_faces),
                                 _ => unreachable!(),
                             }
                         } else {
@@ -215,7 +221,8 @@ impl SectionMesher {
                                 PaletteMeshingData::Model {
                                     ref culled_faces,
                                     ref unculled_faces,
-                                } => (culled_faces, unculled_faces),
+                                    ref obj_faces,
+                                } => (culled_faces, unculled_faces, obj_faces),
                                 PaletteMeshingData::VariantModel {
                                     ref variants,
                                     ref weights,
@@ -338,6 +345,115 @@ impl SectionMesher {
                         for mf in unculled_faces {
                             emit_model_face(mf);
                         }
+
+                        // 3. Process declarative Wavefront OBJ faces (quads -> quad buffer, tris/N-gons -> triangle buffer)
+                        for of in obj_faces {
+                            let n_verts = of.face.vertices.len();
+                            if n_verts < 3 {
+                                continue;
+                            }
+                            let ao_brightness = if config.enable_ao && !is_emissive {
+                                calculate_face_ao_float(of.face.direction, false, |dx, dy, dz| {
+                                    let sx = px as i32 + dx;
+                                    let sy = py as i32 + dy;
+                                    let sz = pz as i32 + dz;
+                                    if (0..18).contains(&sx)
+                                        && (0..18).contains(&sy)
+                                        && (0..18).contains(&sz)
+                                    {
+                                        is_solid_opaque_fn(sx as usize, sy as usize, sz as usize)
+                                    } else {
+                                        false
+                                    }
+                                })
+                            } else {
+                                [1.0, 1.0, 1.0, 1.0]
+                            };
+
+                            if n_verts == 4 {
+                                let v4 = [
+                                    of.face.vertices[0],
+                                    of.face.vertices[1],
+                                    of.face.vertices[2],
+                                    of.face.vertices[3],
+                                ];
+                                let corner_offsets = quad_corner_offsets(&v4);
+                                let (final_tint_data, corner_tint_colors) =
+                                    sample_quad_corner_biome_tints(
+                                        padded.biome_data.as_deref(),
+                                        lx,
+                                        ly,
+                                        lz,
+                                        &corner_offsets,
+                                        of.pre.tint_data,
+                                        of.pre.tint_color,
+                                        config.colormaps.as_deref(),
+                                        config.smooth_biome_blend,
+                                    );
+                                emit_obj_quad_face(
+                                    &mut mesh,
+                                    of,
+                                    wx + plant_offset.x,
+                                    wy + plant_offset.y,
+                                    wz + plant_offset.z,
+                                    ao_brightness,
+                                    config,
+                                    &mut collector,
+                                    final_tint_data,
+                                    corner_tint_colors,
+                                    block_pos,
+                                );
+                            } else {
+                                let v4 = [
+                                    of.face.vertices[0],
+                                    of.face.vertices[1],
+                                    of.face.vertices[2],
+                                    of.face.vertices[2],
+                                ];
+                                let corner_offsets = quad_corner_offsets(&v4);
+                                let (final_tint_data, corner_tint_colors) =
+                                    sample_quad_corner_biome_tints(
+                                        padded.biome_data.as_deref(),
+                                        lx,
+                                        ly,
+                                        lz,
+                                        &corner_offsets,
+                                        of.pre.tint_data,
+                                        of.pre.tint_color,
+                                        config.colormaps.as_deref(),
+                                        config.smooth_biome_blend,
+                                    );
+                                let corner_tint_3 = [
+                                    corner_tint_colors[0],
+                                    corner_tint_colors[1],
+                                    corner_tint_colors[2],
+                                ];
+                                let ao_mean = (ao_brightness[0]
+                                    + ao_brightness[1]
+                                    + ao_brightness[2]
+                                    + ao_brightness[3])
+                                    * 0.25;
+                                let (tri_mesh, tri_collector) = tri_ctx.get_or_insert_with(|| {
+                                    let mut m = MeshData::with_capacity(512, 512, 256);
+                                    m.uv_layout = UvLayout::PerLoop;
+                                    m.colors = Some(Vec::with_capacity(512));
+                                    (m, FaceAttributesCollector::with_capacity(256))
+                                });
+                                emit_obj_tri_faces(
+                                    tri_mesh,
+                                    of,
+                                    wx + plant_offset.x,
+                                    wy + plant_offset.y,
+                                    wz + plant_offset.z,
+                                    ao_mean,
+                                    config,
+                                    tri_collector,
+                                    final_tint_data,
+                                    corner_tint_3,
+                                    block_pos,
+                                );
+                            }
+                        }
                     } else {
                         // Standard unit cube meshing
                         let cube_faces = match &*entry.meshing_data {
@@ -442,6 +558,10 @@ impl SectionMesher {
         }
 
         collector.attach_to_mesh(&mut mesh);
+        if let Some((mut tri_mesh, tri_collector)) = tri_ctx {
+            tri_collector.attach_to_mesh(&mut tri_mesh);
+            mesh.append_mesh(&tri_mesh);
+        }
         if config.weld_vertices && has_non_grid_geometry {
             mesh.weld_vertices(1e-4);
         }

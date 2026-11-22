@@ -11,7 +11,8 @@ use mtk_package::{ChunkWriteOptions, MtkPackageFileWriter, PackageProfile};
 use mtk_resource::{AtlasCategory, ResourcePackStack};
 use mtk_texture::{AtlasBuilder, AtlasBuilderConfig};
 
-use crate::prebake::models::prebake_all_models_with_progress;
+use crate::prebake::models::prebake_all_models_with_preloaded;
+use crate::prebake::preload::preload_model_and_obj_assets;
 use crate::prebake::reader::fingerprint_str_to_bytes16;
 use crate::MtkError;
 
@@ -184,6 +185,12 @@ fn precompile_all_assets_inner(
     let mut baked_count = 0;
     let mut baked_atlas_opt = None;
 
+    let preloaded_opt = if config.compile_atlas || config.compile_models {
+        Some(profiler.measure("models", "preload", |_| preload_model_and_obj_assets(stack))?)
+    } else {
+        None
+    };
+
     // 1. Atlas Baking & Packaging (Raw PNG streams, Zstd for address map)
     if config.compile_atlas {
         if let Some(cb) = progress_callback {
@@ -239,6 +246,21 @@ fn precompile_all_assets_inner(
                                 };
                             }
                             def_list.push((cat_name, def));
+                        }
+                    }
+                }
+            }
+
+            if let Some(ref preloaded) = preloaded_opt {
+                if !preloaded.extra_atlas_textures.is_empty() {
+                    if let Some((_, blocks_def)) =
+                        def_list.iter_mut().find(|(cat, _)| cat == "blocks")
+                    {
+                        for loc in &preloaded.extra_atlas_textures {
+                            blocks_def.sources.push(mtk_resource::AtlasSource::Single {
+                                resource: loc.clone(),
+                                sprite: None,
+                            });
                         }
                     }
                 }
@@ -362,8 +384,12 @@ fn precompile_all_assets_inner(
     // 2. Full-Scale Model Baking & Postcard Packaging (Zstd compressed)
     if config.compile_models {
         let atlas_map = baked_atlas_opt.as_ref().map(|a| &a.address_map);
+        let preloaded = match preloaded_opt {
+            Some(p) => p,
+            None => preload_model_and_obj_assets(stack)?,
+        };
         let model_db = profiler.measure("models", "bake", |_| {
-            prebake_all_models_with_progress(stack, atlas_map, progress_callback)
+            prebake_all_models_with_preloaded(stack, preloaded, atlas_map, progress_callback)
         })?;
         baked_count = model_db.len();
         let bin_bytes = model_db.to_binary()?;

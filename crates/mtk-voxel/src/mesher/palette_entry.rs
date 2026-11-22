@@ -9,6 +9,7 @@ use std::sync::Arc;
 use crate::mesher::shading::types::ModelFaceBuckets;
 use crate::mesher::shading::{
     resolve_palette_meshing_data_for_state, ModelSource, PaletteMeshingData, PreResolvedModelFace,
+    PreResolvedObjFace,
 };
 use crate::types::MesherConfig;
 use mtk_core::{mc_coordinate_seed, JavaRandom};
@@ -23,6 +24,7 @@ pub(crate) fn select_variant_faces<'a>(
 ) -> (
     &'a [Vec<PreResolvedModelFace>; 6],
     &'a Vec<PreResolvedModelFace>,
+    &'a Vec<PreResolvedObjFace>,
 ) {
     let seed = mc_coordinate_seed(pos.x, pos.y, pos.z);
     let mut rng = JavaRandom::new(seed);
@@ -36,7 +38,7 @@ pub(crate) fn select_variant_faces<'a>(
         target = target.saturating_sub(w);
     }
     let b = &variants[chosen];
-    (&b.culled_faces, &b.unculled_faces)
+    (&b.culled_faces, &b.unculled_faces, &b.obj_faces)
 }
 
 /// Computes the 4-corner offset coordinates (0 or 1) for biome tint sampling.
@@ -161,22 +163,26 @@ fn ctm_active_for_entry(
             .ok()
             .is_some_and(|loc| solver.rules_by_tile.contains_key(&loc))
     };
-    let bucket_matches =
-        |culled: &[Vec<PreResolvedModelFace>; 6], unculled: &Vec<PreResolvedModelFace>| -> bool {
-            culled
-                .iter()
-                .flatten()
-                .any(|mf| tile_matches(&mf.face.texture))
-                || unculled.iter().any(|mf| tile_matches(&mf.face.texture))
-        };
+    let bucket_matches = |culled: &[Vec<PreResolvedModelFace>; 6],
+                          unculled: &Vec<PreResolvedModelFace>,
+                          obj_faces: &[PreResolvedObjFace]|
+     -> bool {
+        culled
+            .iter()
+            .flatten()
+            .any(|mf| tile_matches(&mf.face.texture))
+            || unculled.iter().any(|mf| tile_matches(&mf.face.texture))
+            || obj_faces.iter().any(|of| tile_matches(&of.face.texture))
+    };
     match meshing_data {
         PaletteMeshingData::Model {
             culled_faces,
             unculled_faces,
-        } => bucket_matches(culled_faces, unculled_faces),
+            obj_faces,
+        } => bucket_matches(culled_faces, unculled_faces, obj_faces),
         PaletteMeshingData::VariantModel { variants, .. } => variants
             .iter()
-            .any(|b| bucket_matches(&b.culled_faces, &b.unculled_faces)),
+            .any(|b| bucket_matches(&b.culled_faces, &b.unculled_faces, &b.obj_faces)),
         PaletteMeshingData::UnitCube { .. } | PaletteMeshingData::Empty => false,
     }
 }

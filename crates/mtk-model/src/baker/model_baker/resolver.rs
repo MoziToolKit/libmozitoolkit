@@ -32,13 +32,13 @@ impl ModelBaker {
                         .and_then(|canon| shared.get(&canon))
                 });
                 if let Some(r) = hit {
-                    if !r.elements.is_empty() {
+                    if r.has_geometry() {
                         return Ok(std::sync::Arc::clone(r));
                     }
                 }
             }
             if let Some(r) = self.resolved_cache.get(model_id) {
-                if !r.elements.is_empty() {
+                if r.has_geometry() {
                     return Ok(std::sync::Arc::clone(r));
                 }
             }
@@ -51,7 +51,7 @@ impl ModelBaker {
                 model_loader(id).or_else(|| BuiltinModelRegistry::get_builtin_model_by_id(id))
             })?;
             let is_missing_bell_body = is_bell && !res.textures.contains_key("bell_body");
-            if res.elements.is_empty() || is_missing_bell_body {
+            if !res.has_geometry() || is_missing_bell_body {
                 if allow_blockstate_builtin {
                     if let Some(builtin) =
                         BuiltinModelRegistry::get_block_entity_model_json(blockstate, entity)
@@ -107,7 +107,7 @@ impl ModelBaker {
         };
 
         let arc_r = std::sync::Arc::new(r);
-        if can_cache && !is_bell && !arc_r.elements.is_empty() {
+        if can_cache && !is_bell && arc_r.has_geometry() {
             self.resolved_cache
                 .insert(model_id.to_string(), std::sync::Arc::clone(&arc_r));
         }

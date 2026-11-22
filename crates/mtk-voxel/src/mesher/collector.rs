@@ -60,6 +60,60 @@ impl FaceAttributesCollector {
         anim_timing: [f32; 3],
         anim_frame_size: [f32; 3],
     ) {
+        self.push_face_with_corners(
+            source_texture_key,
+            atlas_chunk_id,
+            uv_transform,
+            uv_rotation,
+            tint_data,
+            &corner_tint_colors,
+            block_pos,
+            anim_timing,
+            anim_frame_size,
+        );
+    }
+
+    #[inline]
+    #[allow(clippy::too_many_arguments)]
+    pub fn push_tri_face(
+        &mut self,
+        source_texture_key: &str,
+        atlas_chunk_id: i32,
+        uv_transform: [f32; 4],
+        uv_rotation: f32,
+        tint_data: [f32; 4],
+        corner_tint_colors: [[f32; 4]; 3],
+        block_pos: IVec3,
+        anim_timing: [f32; 3],
+        anim_frame_size: [f32; 3],
+    ) {
+        self.push_face_with_corners(
+            source_texture_key,
+            atlas_chunk_id,
+            uv_transform,
+            uv_rotation,
+            tint_data,
+            &corner_tint_colors,
+            block_pos,
+            anim_timing,
+            anim_frame_size,
+        );
+    }
+
+    #[inline]
+    #[allow(clippy::too_many_arguments)]
+    fn push_face_with_corners(
+        &mut self,
+        source_texture_key: &str,
+        atlas_chunk_id: i32,
+        uv_transform: [f32; 4],
+        uv_rotation: f32,
+        tint_data: [f32; 4],
+        corner_tint_colors: &[[f32; 4]],
+        block_pos: IVec3,
+        anim_timing: [f32; 3],
+        anim_frame_size: [f32; 3],
+    ) {
         let pal_idx = if let Some(last_idx) = self.last_texture_idx {
             if self
                 .source_texture_palette
@@ -103,8 +157,7 @@ impl FaceAttributesCollector {
         self.uv_transforms.push(uv_transform);
         self.uv_rotations.push(uv_rotation);
         self.biome_tint_data.push(tint_data);
-        self.biome_tint_colors
-            .extend_from_slice(&corner_tint_colors);
+        self.biome_tint_colors.extend_from_slice(corner_tint_colors);
         self.block_xs.push(block_pos.x);
         self.block_ys.push(block_pos.y);
         self.block_zs.push(block_pos.z);

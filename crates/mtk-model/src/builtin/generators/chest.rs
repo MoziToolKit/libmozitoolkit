@@ -262,5 +262,6 @@ pub(crate) fn build_chest_model(blockstate: &BlockState) -> Option<BlockModelJso
         elements: Some(elements),
         display: None,
         overrides: None,
+        ..Default::default()
     })
 }

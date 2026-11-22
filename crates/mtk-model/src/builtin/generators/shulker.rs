@@ -154,5 +154,6 @@ pub(crate) fn build_shulker_model(blockstate: &BlockState) -> Option<BlockModelJ
         elements: Some(elements),
         display: None,
         overrides: None,
+        ..Default::default()
     })
 }

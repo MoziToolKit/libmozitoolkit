@@ -12,6 +12,7 @@ use mtk_model::{BakedModelDatabase, BlockModelJson, BlockStateDefinition, ModelB
 use mtk_resource::{ResourceLocation, ResourcePackStack};
 use mtk_texture::AtlasAddressMap;
 
+use crate::prebake::preload::{preload_model_and_obj_assets, PreloadedModelAssets};
 use crate::MtkError;
 
 #[inline]
@@ -71,6 +72,17 @@ pub(crate) fn prebake_all_models_with_progress(
     atlas_map: Option<&AtlasAddressMap>,
     progress_callback: Option<ProgressCallback>,
 ) -> Result<BakedModelDatabase, MtkError> {
+    let preloaded = preload_model_and_obj_assets(stack)?;
+    prebake_all_models_with_preloaded(stack, preloaded, atlas_map, progress_callback)
+}
+
+/// Prebakes all blockstates and item models reusing an already-scanned `PreloadedModelAssets`.
+pub(crate) fn prebake_all_models_with_preloaded(
+    stack: &ResourcePackStack,
+    preloaded: PreloadedModelAssets,
+    atlas_map: Option<&AtlasAddressMap>,
+    progress_callback: Option<ProgressCallback>,
+) -> Result<BakedModelDatabase, MtkError> {
     let blockstate_locs = stack.list_all_blockstate_locations();
 
     if let Some(cb) = progress_callback {
@@ -82,40 +94,11 @@ pub(crate) fn prebake_all_models_with_progress(
         ));
     }
 
-    // 1. Preload all model JSONs across packs into a fast lookup map
-    let mut model_cache: HashMap<String, BlockModelJson> = HashMap::new();
-    let mut item_model_locs: Vec<ResourceLocation> = Vec::new();
-    let mut seen_items = std::collections::HashSet::new();
-
-    // Diagnostics collected during indexing; reported through `bake_failures` at the end.
-    let mut discovery_failures: Vec<(String, &'static str)> = Vec::new();
-
-    // One merged listing: pack priority and `pack.mcmeta` filters are applied by the stack.
-    for file in stack.list_asset_files("assets/") {
-        if file.ends_with(".json") && file.contains("/models/") {
-            let Some(bytes) = stack.open_asset_raw(&file)? else {
-                continue;
-            };
-            let Some(loc) = ResourceLocation::from_asset_path(&file, "models", "json") else {
-                continue;
-            };
-            let canon = loc.as_string();
-            // Zero-length model files exist as intentional placeholders in some packs
-            // (the model is provided by a resource pack lower in the stack).
-            if bytes.iter().all(u8::is_ascii_whitespace) {
-                continue;
-            }
-            match serde_json::from_slice::<BlockModelJson>(&bytes) {
-                Ok(model) => {
-                    model_cache.insert(canon.clone(), model);
-                    if loc.path.starts_with("item/") && seen_items.insert(canon) {
-                        item_model_locs.push(loc);
-                    }
-                }
-                Err(_) => discovery_failures.push((canon, "invalid_model_json")),
-            }
-        }
-    }
+    // 1. Reuse preloaded model JSONs and OBJ/MTL asset store
+    let model_cache = preloaded.model_cache;
+    let mut item_model_locs = preloaded.item_model_locs;
+    let mut discovery_failures = preloaded.discovery_failures;
+    let obj_assets = preloaded.obj_assets;
 
     // `get_model` feeds `resolve_hierarchy`, whose callback cannot return an error, so a read
     // failure is parked here and surfaced once the parallel phases finish.
@@ -239,7 +222,8 @@ pub(crate) fn prebake_all_models_with_progress(
             .map(|(loc, def)| {
                 let states = def.enumerate_all_states(&loc.as_string());
                 let mut local_baker =
-                    ModelBaker::with_shared_resolved(std::sync::Arc::clone(&shared_resolved));
+                    ModelBaker::with_shared_resolved(std::sync::Arc::clone(&shared_resolved))
+                        .with_obj_assets(std::sync::Arc::clone(&obj_assets));
                 let mut remap_cache: HashMap<String, Option<([f32; 4], u16, u32)>> = HashMap::new();
                 let mut pairs = Vec::new();
                 let mut failures: Vec<(String, &'static str)> = Vec::new();
@@ -294,7 +278,8 @@ pub(crate) fn prebake_all_models_with_progress(
         .map(|(loc, def)| {
             let states = def.enumerate_all_states(&loc.as_string());
             let mut local_baker =
-                ModelBaker::with_shared_resolved(std::sync::Arc::clone(&shared_resolved));
+                ModelBaker::with_shared_resolved(std::sync::Arc::clone(&shared_resolved))
+                    .with_obj_assets(std::sync::Arc::clone(&obj_assets));
             let mut remap_cache: HashMap<String, Option<([f32; 4], u16, u32)>> = HashMap::new();
             let mut pairs = Vec::new();
             let mut failures: Vec<(String, &'static str)> = Vec::new();
@@ -381,8 +366,8 @@ pub(crate) fn prebake_all_models_with_progress(
                         reason: "unresolved_model",
                     })?;
 
-            let baked: Option<mtk_model::BakedModel> = if !resolved.elements.is_empty() {
-                let baker = ModelBaker::new();
+            let baked: Option<mtk_model::BakedModel> = if resolved.has_geometry() {
+                let baker = ModelBaker::new().with_obj_assets(std::sync::Arc::clone(&obj_assets));
                 Some(baker.bake_resolved_model(&canon, resolved))
             } else {
                 // 2D sprite items: extrude the layer textures into a flat model.
@@ -413,11 +398,14 @@ pub(crate) fn prebake_all_models_with_progress(
                 if combined_model.is_none() {
                     if let Some(block_name) = loc.path.strip_prefix("item/") {
                         let state = format!("{}:{}", loc.namespace, block_name);
-                        let mut baker = ModelBaker::new();
+                        let mut baker =
+                            ModelBaker::new().with_obj_assets(std::sync::Arc::clone(&obj_assets));
                         let builtin = baker
                             .bake_blockstate_with_entity(&state, None, None, |id| get_model(id))
                             .ok()
-                            .filter(|model| !model.elements.is_empty());
+                            .filter(|model| {
+                                !model.elements.is_empty() || !model.obj_faces.is_empty()
+                            });
                         if let Some(mut model) = builtin {
                             model.transforms = resolved.transforms.clone();
                             model.gui_light = resolved.gui_light.or(model.gui_light);
@@ -428,8 +416,9 @@ pub(crate) fn prebake_all_models_with_progress(
                         if combined_model.is_none() {
                             if let Some(block_id) = block_model_id_for_item(loc) {
                                 if let Some(block_resolved) = shared_resolved.get(&block_id) {
-                                    if !block_resolved.elements.is_empty() {
+                                    if block_resolved.has_geometry() {
                                         let mut model = ModelBaker::new()
+                                            .with_obj_assets(std::sync::Arc::clone(&obj_assets))
                                             .bake_resolved_model(&canon, block_resolved);
                                         model.transforms = resolved.transforms.clone();
                                         model.gui_light =

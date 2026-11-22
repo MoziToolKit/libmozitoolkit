@@ -37,6 +37,7 @@
 
 - **BlockState 状态机与变体解算**：解析带属性方块标识符（如 `minecraft:oak_stairs[facing=east,half=bottom,shape=straight]`），支持原版 `variants` 规则匹配与 `multipart` 组合条件树评估（`OR`, `AND`, 属性正则匹配）。
 - **递归模型继承树展开 (Hierarchy Resolution)**：支持多达 32 层的父模型继承（`parent`），合并子父级纹理字典，精准展开 `#texture` 变量引用并将纹理绑定写入三维要素 (Element)。
+- **声明式模组模型扩展 (`*:obj` / `*:composite`)**：原生支持 Forge / NeoForge 声明式模型加载器：`forge:obj`、`neoforge:obj`、`porting_lib:obj`、`immersiveengineering:ie_obj`（纯 Rust Wavefront `.obj` / `.mtl` 解析、`#var` 贴图变量展开、`forge_TintIndex`、`flip_v`、`visibility` 分组显隐与 `BakedObjFace` 图集重映射）以及 `forge:composite` / `neoforge:composite` / `porting_lib:composite`（子模型 `parent` 继承与 `transform` 根变换矩阵）。
 - **混合式实体模型架构 (Hybrid Parametric & Vanilla Model Architecture)**：
   - **普通方块 (Vanilla-First Pipeline)**：100% 遵循原版 BlockState 状态机与 BlockModel JSON 规范，无头烘焙红石线缆、连接墙、楼梯以及各类第三方材质包自定义模型；
   - **实体方块生成器 (`builtin::props`)**：针对 Java 原版通过 `BlockEntityRenderer` 绘制、assets 中只有 `particle` 占位模型的方块（箱子、潜影盒、头颅、末地传送门、铜像），以 Rust 程序化生成器产出 `BlockModelJson`，几何与 UV 逐条对齐客户端源码，不存在表达式方言或运行时解释；

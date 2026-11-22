@@ -189,45 +189,21 @@ impl PyBakedModelDatabase {
                 let offset_x = (col as f32) * spacing;
                 let offset_y = -(row as f32) * spacing;
 
-                let base_v_idx = gallery_mesh.positions.len() as u32;
-
-                for p in item_mesh.positions {
-                    if vertical {
-                        gallery_mesh
-                            .positions
-                            .push([p[0] + offset_x, p[2], p[1] + offset_y]);
+                for p in &mut item_mesh.positions {
+                    *p = if vertical {
+                        [p[0] + offset_x, p[2], p[1] + offset_y]
                     } else {
-                        gallery_mesh
-                            .positions
-                            .push([p[0] + offset_x, p[1] + offset_y, p[2]]);
+                        [p[0] + offset_x, p[1] + offset_y, p[2]]
+                    };
+                }
+
+                if vertical {
+                    for n in &mut item_mesh.normals {
+                        *n = [n[0], n[2], n[1]];
                     }
                 }
 
-                for n in item_mesh.normals {
-                    if vertical {
-                        gallery_mesh.normals.push([n[0], n[2], n[1]]);
-                    } else {
-                        gallery_mesh.normals.push(n);
-                    }
-                }
-
-                gallery_mesh.uvs.extend(item_mesh.uvs);
-
-                for idx in item_mesh.indices {
-                    gallery_mesh.indices.push(idx + base_v_idx);
-                }
-
-                if let Some(quads) = item_mesh.quad_indices {
-                    let g_quads = gallery_mesh.quad_indices.get_or_insert_with(Vec::new);
-                    for q_idx in quads {
-                        g_quads.push(q_idx + base_v_idx);
-                    }
-                }
-
-                gallery_mesh.face_materials.extend(item_mesh.face_materials);
-                gallery_mesh
-                    .face_tint_indices
-                    .extend(item_mesh.face_tint_indices);
+                gallery_mesh.append_mesh(&item_mesh);
 
                 for t in textures {
                     if !all_textures.contains(&t) {

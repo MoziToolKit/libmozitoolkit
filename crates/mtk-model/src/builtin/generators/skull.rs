@@ -637,5 +637,6 @@ pub(crate) fn build_skull_model(
         elements: Some(elements),
         display: None,
         overrides: None,
+        ..Default::default()
     })
 }

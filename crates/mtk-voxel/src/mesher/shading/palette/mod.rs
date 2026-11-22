@@ -4,9 +4,11 @@ pub(crate) mod unit_cube;
 use mtk_core::Direction;
 use mtk_model::BakedModel;
 
-use super::types::{ModelFaceBuckets, ModelSource, PaletteMeshingData, PreResolvedModelFace};
+use super::types::{
+    ModelFaceBuckets, ModelSource, PaletteMeshingData, PreResolvedModelFace, PreResolvedObjFace,
+};
 use crate::types::MesherConfig;
-use face::resolve_model_face;
+use face::{resolve_model_face, resolve_obj_face};
 use unit_cube::resolve_unit_cube_palette_data;
 
 fn resolve_model_buckets(
@@ -27,10 +29,16 @@ fn resolve_model_buckets(
         .iter()
         .map(|f| resolve_model_face(f, state_str, config))
         .collect();
+    let obj_faces: Vec<PreResolvedObjFace> = baked
+        .obj_faces
+        .iter()
+        .map(|f| resolve_obj_face(f, state_str, config))
+        .collect();
 
     ModelFaceBuckets {
         culled_faces,
         unculled_faces,
+        obj_faces,
     }
 }
 
@@ -48,6 +56,7 @@ pub fn resolve_palette_meshing_data_for_state<'a>(
             PaletteMeshingData::Model {
                 culled_faces: b.culled_faces,
                 unculled_faces: b.unculled_faces,
+                obj_faces: b.obj_faces,
             }
         }
         ModelSource::OwnedSingle(baked) => {
@@ -55,6 +64,7 @@ pub fn resolve_palette_meshing_data_for_state<'a>(
             PaletteMeshingData::Model {
                 culled_faces: b.culled_faces,
                 unculled_faces: b.unculled_faces,
+                obj_faces: b.obj_faces,
             }
         }
         ModelSource::Variant(group) => {
@@ -64,6 +74,7 @@ pub fn resolve_palette_meshing_data_for_state<'a>(
                 PaletteMeshingData::Model {
                     culled_faces: b.culled_faces,
                     unculled_faces: b.unculled_faces,
+                    obj_faces: b.obj_faces,
                 }
             } else {
                 let variants = group
@@ -85,6 +96,7 @@ pub fn resolve_palette_meshing_data_for_state<'a>(
                 PaletteMeshingData::Model {
                     culled_faces: b.culled_faces,
                     unculled_faces: b.unculled_faces,
+                    obj_faces: b.obj_faces,
                 }
             } else {
                 let variants = group

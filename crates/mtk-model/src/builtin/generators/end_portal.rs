@@ -58,5 +58,6 @@ pub(crate) fn build_end_portal_model(blockstate: &BlockState) -> Option<BlockMod
         elements: Some(vec![element]),
         display: None,
         overrides: None,
+        ..Default::default()
     })
 }

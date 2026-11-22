@@ -1745,3 +1745,134 @@ fn test_spawner_does_not_cull_underlying_block_face() {
         "Cobblestone top face under spawner must NOT be culled (no hollow void underneath spawner)!"
     );
 }
+
+#[test]
+fn test_mesher_mixed_vanilla_quad_and_obj_triangle_section() {
+    use mtk_core::attribute_constants::*;
+    use mtk_core::Direction;
+    use mtk_model::{BakedModel, BakedObjFace};
+    use std::sync::Arc;
+
+    let mut tri_obj_model = BakedModel {
+        block_state: "testmod:tri_widget".to_string(),
+        is_cube: false,
+        is_opaque: false,
+        obj_faces: vec![BakedObjFace {
+            direction: Direction::South,
+            texture: "testmod:block/widget".to_string(),
+            tint_index: -1,
+            vertices: vec![
+                glam::Vec3::new(0.1, 0.1, 0.5),
+                glam::Vec3::new(0.9, 0.1, 0.5),
+                glam::Vec3::new(0.5, 0.9, 0.5),
+            ],
+            uvs: vec![
+                glam::Vec2::new(0.0, 1.0),
+                glam::Vec2::new(1.0, 1.0),
+                glam::Vec2::new(0.5, 0.0),
+            ],
+            normal: glam::Vec3::Z,
+            atlas_uvs: None,
+            atlas_chunk_id: None,
+            atlas_texture_id: None,
+        }],
+        ..Default::default()
+    };
+    tri_obj_model.rebuild_face_buckets();
+
+    let mut quad_obj_model = BakedModel {
+        block_state: "testmod:quad_widget".to_string(),
+        is_cube: false,
+        is_opaque: false,
+        obj_faces: vec![BakedObjFace {
+            direction: Direction::Up,
+            texture: "testmod:block/plate".to_string(),
+            tint_index: -1,
+            vertices: vec![
+                glam::Vec3::new(0.0, 0.5, 0.0),
+                glam::Vec3::new(0.0, 0.5, 1.0),
+                glam::Vec3::new(1.0, 0.5, 1.0),
+                glam::Vec3::new(1.0, 0.5, 0.0),
+            ],
+            uvs: vec![
+                glam::Vec2::new(0.0, 0.0),
+                glam::Vec2::new(0.0, 1.0),
+                glam::Vec2::new(1.0, 1.0),
+                glam::Vec2::new(1.0, 0.0),
+            ],
+            normal: glam::Vec3::Y,
+            atlas_uvs: None,
+            atlas_chunk_id: None,
+            atlas_texture_id: None,
+        }],
+        ..Default::default()
+    };
+    quad_obj_model.rebuild_face_buckets();
+
+    let tri_arc = Arc::new(tri_obj_model);
+    let quad_arc = Arc::new(quad_obj_model);
+
+    let mut sec = SectionStorage::new(glam::IVec3::ZERO);
+    let pal_stone = sec.palette.len() as u16;
+    sec.palette.push("minecraft:stone".to_string());
+    let pal_tri = sec.palette.len() as u16;
+    sec.palette.push("testmod:tri_widget".to_string());
+    let pal_quad = sec.palette.len() as u16;
+    sec.palette.push("testmod:quad_widget".to_string());
+
+    sec.voxels[block_index(1, 1, 1)] = pal_stone;
+    sec.voxels[block_index(3, 1, 1)] = pal_tri;
+    sec.voxels[block_index(5, 1, 1)] = pal_quad;
+    sec.non_air_count = 3;
+
+    let padded = sec.build_padded_array(|_, _, _| "minecraft:air");
+    let culler = FaceCuller::default();
+    let config = MesherConfig {
+        weld_vertices: false,
+        ..Default::default()
+    };
+
+    let mesh = SectionMesher::mesh_section(
+        &padded,
+        &culler,
+        |state| match state {
+            "testmod:tri_widget" => ModelSource::from(Some(tri_arc.clone())),
+            "testmod:quad_widget" => ModelSource::from(Some(quad_arc.clone())),
+            _ => ModelSource::None,
+        },
+        &config,
+    );
+
+    // Stone (6 quads = 12 tris) + quad_obj (1 quad = 2 tris) + tri_obj (1 tri) = 15 triangles
+    assert!(!mesh.is_quad_topology());
+    assert!(mesh.quad_indices.is_none());
+    assert_eq!(mesh.triangle_count(), 15);
+    assert_eq!(mesh.face_materials.len(), 15);
+    assert_eq!(mesh.face_tint_indices.len(), 15);
+    assert_eq!(mesh.uvs.len(), 45);
+    assert_eq!(mesh.colors.as_ref().unwrap().len(), 45);
+    assert_eq!(
+        mesh.get_custom_attribute(ATTR_SOURCE_TEXTURE_IDX)
+            .unwrap()
+            .len(),
+        15
+    );
+    assert_eq!(mesh.get_custom_attribute(ATTR_AO).unwrap().len(), 45);
+    assert_eq!(
+        mesh.get_custom_attribute(ATTR_BIOME_TINT_COLOR)
+            .unwrap()
+            .len(),
+        45
+    );
+    if let mtk_core::AttributeData::String(ref pal) = mesh
+        .get_custom_attribute(ATTR_SOURCE_TEXTURE_PALETTE)
+        .unwrap()
+        .data
+    {
+        assert!(pal.iter().any(|s| s == "testmod:block/widget"));
+        assert!(pal.iter().any(|s| s == "testmod:block/plate"));
+        assert!(pal.iter().any(|s| s == "minecraft:block/stone"));
+    } else {
+        panic!("expected String palette");
+    }
+}

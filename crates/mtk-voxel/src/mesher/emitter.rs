@@ -8,11 +8,43 @@ use glam::{IVec3, Vec3};
 use mtk_core::Direction;
 use mtk_core::{MeshData, UvLayout};
 use mtk_model::BakedFace;
+use std::borrow::Cow;
 
 use crate::mesher::ao::should_flip_quad_diagonal;
 use crate::mesher::collector::FaceAttributesCollector;
-use crate::mesher::shading::ResolvedFaceShading;
+use crate::mesher::shading::{PreResolvedObjFace, ResolvedFaceShading};
 use crate::types::MesherConfig;
+
+#[inline]
+fn push_corner_colors(
+    mesh: &mut MeshData,
+    average_color: [f32; 4],
+    final_tint_data: [f32; 4],
+    corner_tint_colors: &[[f32; 4]],
+) {
+    let colors_vec = mesh.colors.get_or_insert_with(Vec::new);
+    if final_tint_data[2] > 0.0 {
+        let is_grayscale = (average_color[0] - average_color[1]).abs() < 0.03
+            && (average_color[1] - average_color[2]).abs() < 0.03;
+        for &c in corner_tint_colors {
+            let col = if is_grayscale {
+                c
+            } else {
+                [
+                    average_color[0] * c[0],
+                    average_color[1] * c[1],
+                    average_color[2] * c[2],
+                    1.0,
+                ]
+            };
+            colors_vec.push(col);
+        }
+    } else {
+        for _ in 0..corner_tint_colors.len() {
+            colors_vec.push(average_color);
+        }
+    }
+}
 
 /// Emits a baked model face into `MeshData` with AO shading and anisotropy diagonal flip.
 #[inline]
@@ -76,21 +108,12 @@ pub(crate) fn emit_quad_shading_and_topology(
     tint_index: i16,
     uv_rot: f32,
 ) {
-    let colors_vec = mesh.colors.get_or_insert_with(Vec::new);
-    if final_tint_data[2] > 0.0 {
-        let avg = shading.average_color;
-        let is_grayscale = (avg[0] - avg[1]).abs() < 0.03 && (avg[1] - avg[2]).abs() < 0.03;
-        for c in corner_tint_colors {
-            let col = if is_grayscale {
-                c
-            } else {
-                [avg[0] * c[0], avg[1] * c[1], avg[2] * c[2], 1.0]
-            };
-            colors_vec.push(col);
-        }
-    } else {
-        colors_vec.extend_from_slice(&[shading.average_color; 4]);
-    }
+    push_corner_colors(
+        mesh,
+        shading.average_color,
+        final_tint_data,
+        &corner_tint_colors,
+    );
 
     mesh.quad_indices
         .get_or_insert_with(Vec::new)
@@ -272,4 +295,135 @@ pub fn emit_unit_cube_face(
         -1,
         0.0,
     );
+}
+
+/// Emits a 4-vertex Wavefront OBJ polygon face into a quad `MeshData` buffer.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn emit_obj_quad_face(
+    mesh: &mut MeshData,
+    pre_obj: &PreResolvedObjFace,
+    wx: f32,
+    wy: f32,
+    wz: f32,
+    ao_brightness: [f32; 4],
+    config: &MesherConfig,
+    collector: &mut FaceAttributesCollector,
+    final_tint_data: [f32; 4],
+    corner_tint_colors: [[f32; 4]; 4],
+    block_pos: IVec3,
+) {
+    let face = &pre_obj.face;
+    let pre = &pre_obj.pre;
+    mesh.uv_layout = UvLayout::PerLoop;
+    let base_idx = mesh.positions.len() as u32;
+    let norm = config.transform_direction(face.normal);
+    let n = [norm.x, norm.y, norm.z];
+
+    for i in 0..4 {
+        let v = face.vertices[i];
+        let p = config.transform_position(Vec3::new(wx + v.x, wy + v.y, wz + v.z));
+        mesh.positions.push([p.x, p.y, p.z]);
+        mesh.normals.push(n);
+        if let Some(uv) = pre_obj.override_uvs.as_ref().and_then(|u| u.get(i)) {
+            mesh.uvs.push([uv.x, uv.y]);
+        } else {
+            let uv = face.uvs[i];
+            mesh.uvs.push([uv.x, 1.0 - uv.y]);
+        }
+        collector.ao_values.push(ao_brightness[i]);
+    }
+
+    let shading = ResolvedFaceShading {
+        texture_key: Cow::Borrowed(pre.source_texture_key.as_str()),
+        override_uvs: None,
+        mat_slot: pre.mat_slot,
+        chunk_id: pre.chunk_id,
+        tint_data: pre.tint_data,
+        tint_color: pre.tint_color,
+        anim_timing: pre.anim_timing,
+        anim_frame_size: pre.anim_frame_size,
+        average_color: pre.average_color,
+    };
+
+    emit_quad_shading_and_topology(
+        mesh,
+        collector,
+        [base_idx, base_idx + 1, base_idx + 2, base_idx + 3],
+        ao_brightness,
+        &shading,
+        final_tint_data,
+        corner_tint_colors,
+        block_pos,
+        face.tint_index,
+        0.0,
+    );
+}
+
+/// Emits a 3-vertex or N-gon Wavefront OBJ polygon face as fan-triangulated triangles into a
+/// pure-triangle `MeshData` buffer.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn emit_obj_tri_faces(
+    mesh: &mut MeshData,
+    pre_obj: &PreResolvedObjFace,
+    wx: f32,
+    wy: f32,
+    wz: f32,
+    ao_brightness: f32,
+    config: &MesherConfig,
+    collector: &mut FaceAttributesCollector,
+    final_tint_data: [f32; 4],
+    corner_tint_colors: [[f32; 4]; 3],
+    block_pos: IVec3,
+) {
+    let face = &pre_obj.face;
+    let pre = &pre_obj.pre;
+    let n_verts = face.vertices.len();
+    if n_verts < 3 {
+        return;
+    }
+
+    mesh.uv_layout = UvLayout::PerLoop;
+    mesh.quad_indices = None;
+    let norm = config.transform_direction(face.normal);
+    let n = [norm.x, norm.y, norm.z];
+
+    for i in 1..(n_verts - 1) {
+        let base_idx = mesh.positions.len() as u32;
+        for corner in [0, i, i + 1] {
+            let v = face.vertices[corner];
+            let p = config.transform_position(Vec3::new(wx + v.x, wy + v.y, wz + v.z));
+            mesh.positions.push([p.x, p.y, p.z]);
+            mesh.normals.push(n);
+            if let Some(uv) = pre_obj.override_uvs.as_ref().and_then(|u| u.get(corner)) {
+                mesh.uvs.push([uv.x, uv.y]);
+            } else {
+                let uv = face.uvs[corner];
+                mesh.uvs.push([uv.x, 1.0 - uv.y]);
+            }
+            collector.ao_values.push(ao_brightness);
+        }
+
+        push_corner_colors(
+            mesh,
+            pre.average_color,
+            final_tint_data,
+            &corner_tint_colors,
+        );
+        mesh.indices
+            .extend_from_slice(&[base_idx, base_idx + 1, base_idx + 2]);
+        mesh.face_materials.push(pre.mat_slot);
+        mesh.face_tint_indices.push(face.tint_index);
+
+        collector.push_tri_face(
+            &pre.source_texture_key,
+            pre.chunk_id,
+            [1.0, 1.0, 0.0, 0.0],
+            0.0,
+            final_tint_data,
+            corner_tint_colors,
+            block_pos,
+            pre.anim_timing,
+            pre.anim_frame_size,
+        );
+    }
 }

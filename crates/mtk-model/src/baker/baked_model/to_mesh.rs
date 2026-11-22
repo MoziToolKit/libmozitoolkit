@@ -130,16 +130,9 @@ impl BakedModel {
                         }
                     }
 
-                    if all_quads {
-                        mesh.quad_indices
-                            .get_or_insert_with(Vec::new)
-                            .extend_from_slice(&[
-                                base_idx,
-                                base_idx + 1,
-                                base_idx + 2,
-                                base_idx + 3,
-                            ]);
-                    }
+                    mesh.quad_indices
+                        .get_or_insert_with(Vec::new)
+                        .extend_from_slice(&[base_idx, base_idx + 1, base_idx + 2, base_idx + 3]);
 
                     // Triangulate CCW quad: 0-1-2 and 0-2-3
                     mesh.indices.push(base_idx);
@@ -178,83 +171,142 @@ impl BakedModel {
         }
 
         // 2. Process OBJ faces
-        for obj_f in &self.obj_faces {
-            let slot = *texture_to_slot
-                .entry(obj_f.texture.clone())
-                .or_insert_with(|| {
-                    let id = texture_list.len() as u16;
-                    texture_list.push(obj_f.texture.clone());
-                    id
-                });
+        if all_quads {
+            for obj_f in &self.obj_faces {
+                let slot = *texture_to_slot
+                    .entry(obj_f.texture.clone())
+                    .or_insert_with(|| {
+                        let id = texture_list.len() as u16;
+                        texture_list.push(obj_f.texture.clone());
+                        id
+                    });
+                let mat_slot = obj_f.atlas_chunk_id.unwrap_or(slot);
 
-            let base_idx = mesh.positions.len() as u32;
-            let norm = [obj_f.normal.x, obj_f.normal.y, obj_f.normal.z];
+                let base_idx = mesh.positions.len() as u32;
+                let norm = [obj_f.normal.x, obj_f.normal.y, obj_f.normal.z];
 
-            for (&v, &uv) in obj_f.vertices.iter().zip(obj_f.uvs.iter()) {
-                mesh.positions.push([v.x, v.y, v.z]);
-                mesh.normals.push(norm);
-                mesh.uvs.push([uv.x, 1.0 - uv.y]);
-            }
-
-            let (tint_data, tint_color) = mtk_material::compute_face_tint(
-                &obj_f.texture,
-                Some(&self.block_state),
-                obj_f.tint_index,
-                None,
-                None,
-            );
-
-            let face_attr = mtk_core::FaceAttributes {
-                texture_key: obj_f.texture.clone(),
-                material_slot: slot,
-                tint_index: obj_f.tint_index,
-                is_overlay: false,
-                atlas_chunk_id: None,
-                uv_transform: [1.0, 1.0, 0.0, 0.0],
-                uv_rotation: 0.0,
-                biome_tint_color: tint_color,
-                biome_tint_data: tint_data,
-                ..Default::default()
-            };
-
-            let n_verts = obj_f.vertices.len();
-            if n_verts == 3 {
-                mesh.indices.push(base_idx);
-                mesh.indices.push(base_idx + 1);
-                mesh.indices.push(base_idx + 2);
-                mesh.face_materials.push(slot);
-                mesh.face_tint_indices.push(obj_f.tint_index);
-                face_attributes_list.push(face_attr);
-            } else if n_verts == 4 {
-                if all_quads {
-                    mesh.quad_indices
-                        .get_or_insert_with(Vec::new)
-                        .extend_from_slice(&[base_idx, base_idx + 1, base_idx + 2, base_idx + 3]);
+                for (i, &v) in obj_f.vertices.iter().enumerate() {
+                    mesh.positions.push([v.x, v.y, v.z]);
+                    mesh.normals.push(norm);
+                    if let Some(uv) = obj_f.atlas_uvs.as_ref().and_then(|u| u.get(i)) {
+                        mesh.uvs.push([uv.x, uv.y]);
+                    } else {
+                        let uv = obj_f.uvs[i];
+                        mesh.uvs.push([uv.x, 1.0 - uv.y]);
+                    }
                 }
+
+                let (tint_data, tint_color) = mtk_material::compute_face_tint(
+                    &obj_f.texture,
+                    Some(&self.block_state),
+                    obj_f.tint_index,
+                    None,
+                    None,
+                );
+
+                mesh.quad_indices
+                    .get_or_insert_with(Vec::new)
+                    .extend_from_slice(&[base_idx, base_idx + 1, base_idx + 2, base_idx + 3]);
                 mesh.indices.push(base_idx);
                 mesh.indices.push(base_idx + 1);
                 mesh.indices.push(base_idx + 2);
-
                 mesh.indices.push(base_idx);
                 mesh.indices.push(base_idx + 2);
                 mesh.indices.push(base_idx + 3);
-                mesh.face_materials.push(slot);
+                mesh.face_materials.push(mat_slot);
                 mesh.face_tint_indices.push(obj_f.tint_index);
-                face_attributes_list.push(face_attr);
+
+                face_attributes_list.push(mtk_core::FaceAttributes {
+                    texture_key: obj_f.texture.clone(),
+                    material_slot: mat_slot,
+                    tint_index: obj_f.tint_index,
+                    is_overlay: false,
+                    atlas_chunk_id: obj_f.atlas_chunk_id.map(|c| c as u32),
+                    uv_transform: [1.0, 1.0, 0.0, 0.0],
+                    uv_rotation: 0.0,
+                    biome_tint_color: tint_color,
+                    biome_tint_data: tint_data,
+                    ..Default::default()
+                });
+            }
+
+            if !face_attributes_list.is_empty() {
+                mesh.populate_standard_face_attributes(&face_attributes_list, false);
+            }
+        } else {
+            if !face_attributes_list.is_empty() {
+                mesh.populate_standard_face_attributes(&face_attributes_list, false);
+                mesh.convert_to_triangles();
             } else {
-                for i in 1..n_verts - 1 {
-                    mesh.indices.push(base_idx);
-                    mesh.indices.push(base_idx + i as u32);
-                    mesh.indices.push(base_idx + (i + 1) as u32);
-                    mesh.face_materials.push(slot);
-                    mesh.face_tint_indices.push(obj_f.tint_index);
-                    face_attributes_list.push(face_attr.clone());
+                mesh.quad_indices = None;
+            }
+
+            let mut obj_tri_mesh = MeshData::new();
+            obj_tri_mesh.uv_layout = UvLayout::PerLoop;
+            let mut obj_tri_attrs = Vec::new();
+
+            for obj_f in &self.obj_faces {
+                let n_verts = obj_f.vertices.len();
+                if n_verts < 3 {
+                    continue;
+                }
+                let slot = *texture_to_slot
+                    .entry(obj_f.texture.clone())
+                    .or_insert_with(|| {
+                        let id = texture_list.len() as u16;
+                        texture_list.push(obj_f.texture.clone());
+                        id
+                    });
+                let mat_slot = obj_f.atlas_chunk_id.unwrap_or(slot);
+                let norm = [obj_f.normal.x, obj_f.normal.y, obj_f.normal.z];
+                let (tint_data, tint_color) = mtk_material::compute_face_tint(
+                    &obj_f.texture,
+                    Some(&self.block_state),
+                    obj_f.tint_index,
+                    None,
+                    None,
+                );
+                let face_attr = mtk_core::FaceAttributes {
+                    texture_key: obj_f.texture.clone(),
+                    material_slot: mat_slot,
+                    tint_index: obj_f.tint_index,
+                    is_overlay: false,
+                    atlas_chunk_id: obj_f.atlas_chunk_id.map(|c| c as u32),
+                    uv_transform: [1.0, 1.0, 0.0, 0.0],
+                    uv_rotation: 0.0,
+                    biome_tint_color: tint_color,
+                    biome_tint_data: tint_data,
+                    ..Default::default()
+                };
+
+                let uv_at = |idx: usize| -> [f32; 2] {
+                    if let Some(uv) = obj_f.atlas_uvs.as_ref().and_then(|u| u.get(idx)) {
+                        [uv.x, uv.y]
+                    } else {
+                        let uv = obj_f.uvs[idx];
+                        [uv.x, 1.0 - uv.y]
+                    }
+                };
+
+                for i in 1..(n_verts - 1) {
+                    let b = obj_tri_mesh.positions.len() as u32;
+                    for corner in [0, i, i + 1] {
+                        let v = obj_f.vertices[corner];
+                        obj_tri_mesh.positions.push([v.x, v.y, v.z]);
+                        obj_tri_mesh.normals.push(norm);
+                        obj_tri_mesh.uvs.push(uv_at(corner));
+                    }
+                    obj_tri_mesh.indices.extend_from_slice(&[b, b + 1, b + 2]);
+                    obj_tri_mesh.face_materials.push(mat_slot);
+                    obj_tri_mesh.face_tint_indices.push(obj_f.tint_index);
+                    obj_tri_attrs.push(face_attr.clone());
                 }
             }
-        }
 
-        if !face_attributes_list.is_empty() {
-            mesh.populate_standard_face_attributes(&face_attributes_list, false);
+            if !obj_tri_attrs.is_empty() {
+                obj_tri_mesh.populate_standard_face_attributes(&obj_tri_attrs, false);
+                mesh.append_mesh(&obj_tri_mesh);
+            }
         }
 
         // 3. De-overlapping and Duplicate/Opposite Face Culling (prevents DCC renderer Z-fighting)

@@ -130,114 +130,116 @@ impl BakedModel {
     /// Automatically rebuilds `culled_faces` and `unculled_faces` buckets.
     /// Returns the number of removed faces.
     pub fn deduplicate_faces(&mut self) -> usize {
-        if self.elements.len() <= 1
-            && self.elements.first().map(|e| e.faces.len()).unwrap_or(0) <= 6
-        {
-            return 0;
-        }
+        let mut culled_count = 0usize;
+        let run_elements = !(self.elements.len() <= 1
+            && self.elements.first().map(|e| e.faces.len()).unwrap_or(0) <= 6);
 
-        let mut face_list = Vec::new();
-        for (el_idx, el) in self.elements.iter().enumerate() {
-            let is_plane = (el.from_pos[0] - el.to_pos[0]).abs() < 1e-4
-                || (el.from_pos[1] - el.to_pos[1]).abs() < 1e-4
-                || (el.from_pos[2] - el.to_pos[2]).abs() < 1e-4;
-            let is_inverted = el.is_inverted();
-            for (&dir, f) in &el.faces {
-                face_list.push((
-                    (el_idx, dir, is_plane, is_inverted),
-                    f.vertices,
-                    f.normal,
-                    &f.texture,
-                    f.tint_index,
-                ));
+        if run_elements {
+            let mut face_list = Vec::new();
+            for (el_idx, el) in self.elements.iter().enumerate() {
+                let is_plane = (el.from_pos[0] - el.to_pos[0]).abs() < 1e-4
+                    || (el.from_pos[1] - el.to_pos[1]).abs() < 1e-4
+                    || (el.from_pos[2] - el.to_pos[2]).abs() < 1e-4;
+                let is_inverted = el.is_inverted();
+                for (&dir, f) in &el.faces {
+                    face_list.push((
+                        (el_idx, dir, is_plane, is_inverted),
+                        f.vertices,
+                        f.normal,
+                        &f.texture,
+                        f.tint_index,
+                    ));
+                }
             }
-        }
 
-        let mut to_remove = std::collections::HashSet::new();
-        let tolerance = 1e-3;
+            let mut to_remove = std::collections::HashSet::new();
+            let tolerance = 1e-3;
 
-        for i in 0..face_list.len() {
-            if to_remove.contains(&(face_list[i].0 .0, face_list[i].0 .1)) {
-                continue;
-            }
-            let ((el_a, dir_a, is_plane_a, is_inverted_a), verts_a, norm_a, tex_a, tint_a) =
-                &face_list[i];
-
-            for j in (i + 1)..face_list.len() {
-                let ((el_b, dir_b, is_plane_b, is_inverted_b), verts_b, norm_b, tex_b, tint_b) =
-                    &face_list[j];
-                if el_a == el_b || to_remove.contains(&(*el_b, *dir_b)) {
+            for i in 0..face_list.len() {
+                if to_remove.contains(&(face_list[i].0 .0, face_list[i].0 .1)) {
                     continue;
                 }
+                let ((el_a, dir_a, is_plane_a, is_inverted_a), verts_a, norm_a, tex_a, tint_a) =
+                    &face_list[i];
 
-                if let Some(rel) =
-                    mtk_cull::check_coplanar_overlap(verts_a, *norm_a, verts_b, *norm_b, tolerance)
-                {
-                    use mtk_cull::{CoplanarOverlap, FaceAlignment};
-                    match rel.overlap {
-                        CoplanarOverlap::Exact => {
-                            if rel.alignment == FaceAlignment::SameDirection {
-                                // Exact duplicate face: only remove B if identical texture and tint
-                                if tex_a == tex_b && tint_a == tint_b {
+                for j in (i + 1)..face_list.len() {
+                    let ((el_b, dir_b, is_plane_b, is_inverted_b), verts_b, norm_b, tex_b, tint_b) =
+                        &face_list[j];
+                    if el_a == el_b || to_remove.contains(&(*el_b, *dir_b)) {
+                        continue;
+                    }
+
+                    if let Some(rel) = mtk_cull::check_coplanar_overlap(
+                        verts_a, *norm_a, verts_b, *norm_b, tolerance,
+                    ) {
+                        use mtk_cull::{CoplanarOverlap, FaceAlignment};
+                        match rel.overlap {
+                            CoplanarOverlap::Exact => {
+                                if rel.alignment == FaceAlignment::SameDirection {
+                                    // Exact duplicate face: only remove B if identical texture and tint
+                                    if tex_a == tex_b && tint_a == tint_b {
+                                        to_remove.insert((*el_b, *dir_b));
+                                    } else if is_emissive_overlay_of(tex_b, tex_a) {
+                                        // Face B is an emissive companion overlay (e.g. firefly_bush_emissive over firefly_bush)
+                                        // Remove redundant coplanar face B to eliminate Z-fighting and shadow deadlock
+                                        to_remove.insert((*el_b, *dir_b));
+                                    } else if is_emissive_overlay_of(tex_a, tex_b) {
+                                        // Face A is an emissive companion overlay over base face B
+                                        to_remove.insert((*el_a, *dir_a));
+                                        break;
+                                    }
+                                } else if !*is_plane_a
+                                    && !*is_plane_b
+                                    && !*is_inverted_a
+                                    && !*is_inverted_b
+                                {
+                                    // Solid cuboid back-to-back contacting faces: remove both
+                                    to_remove.insert((*el_a, *dir_a));
                                     to_remove.insert((*el_b, *dir_b));
-                                } else if is_emissive_overlay_of(tex_b, tex_a) {
-                                    // Face B is an emissive companion overlay (e.g. firefly_bush_emissive over firefly_bush)
-                                    // Remove redundant coplanar face B to eliminate Z-fighting and shadow deadlock
+                                    break;
+                                }
+                            }
+                            CoplanarOverlap::ContainedInA => {
+                                // Only solid cuboid back-to-back contacting faces: Face B is completely covered by Cuboid A
+                                if rel.alignment == FaceAlignment::OppositeDirection
+                                    && !*is_plane_a
+                                    && !*is_plane_b
+                                    && !*is_inverted_a
+                                    && !*is_inverted_b
+                                {
                                     to_remove.insert((*el_b, *dir_b));
-                                } else if is_emissive_overlay_of(tex_a, tex_b) {
-                                    // Face A is an emissive companion overlay over base face B
+                                }
+                            }
+                            CoplanarOverlap::ContainedInB
+                                // Only solid cuboid back-to-back contacting faces: Face A is completely covered by Cuboid B
+                                if rel.alignment == FaceAlignment::OppositeDirection
+                                    && !*is_plane_a
+                                    && !*is_plane_b
+                                    && !*is_inverted_a
+                                    && !*is_inverted_b
+                                => {
                                     to_remove.insert((*el_a, *dir_a));
                                     break;
                                 }
-                            } else if !*is_plane_a
-                                && !*is_plane_b
-                                && !*is_inverted_a
-                                && !*is_inverted_b
-                            {
-                                // Solid cuboid back-to-back contacting faces: remove both
-                                to_remove.insert((*el_a, *dir_a));
-                                to_remove.insert((*el_b, *dir_b));
-                                break;
-                            }
+                            _ => {}
                         }
-                        CoplanarOverlap::ContainedInA => {
-                            // Only solid cuboid back-to-back contacting faces: Face B is completely covered by Cuboid A
-                            if rel.alignment == FaceAlignment::OppositeDirection
-                                && !*is_plane_a
-                                && !*is_plane_b
-                                && !*is_inverted_a
-                                && !*is_inverted_b
-                            {
-                                to_remove.insert((*el_b, *dir_b));
-                            }
-                        }
-                        CoplanarOverlap::ContainedInB
-                            // Only solid cuboid back-to-back contacting faces: Face A is completely covered by Cuboid B
-                            if rel.alignment == FaceAlignment::OppositeDirection
-                                && !*is_plane_a
-                                && !*is_plane_b
-                                && !*is_inverted_a
-                                && !*is_inverted_b
-                            => {
-                                to_remove.insert((*el_a, *dir_a));
-                                break;
-                            }
-                        _ => {}
                     }
                 }
             }
-        }
 
-        let culled_count = to_remove.len();
-        if culled_count > 0 {
-            for (el_idx, dir) in to_remove {
-                if let Some(el) = self.elements.get_mut(el_idx) {
-                    el.faces.remove(&dir);
+            let elements_removed = to_remove.len();
+            if elements_removed > 0 {
+                for (el_idx, dir) in to_remove {
+                    if let Some(el) = self.elements.get_mut(el_idx) {
+                        el.faces.remove(&dir);
+                    }
                 }
             }
+            self.rebuild_face_buckets();
+            culled_count += elements_removed;
         }
-        self.rebuild_face_buckets();
 
+        culled_count += deduplicate_obj_faces(&mut self.obj_faces);
         culled_count
     }
 
@@ -329,15 +331,8 @@ impl BakedModel {
             }
         }
         for obj_face in &mut self.obj_faces {
-            if let Some((bounds, _chunk_id, _tex_id)) = lookup_fn(&obj_face.texture) {
-                let u_min = bounds[0];
-                let v_min = bounds[1];
-                let u_span = bounds[2] - u_min;
-                let v_span = bounds[3] - v_min;
-                for uv in &mut obj_face.uvs {
-                    uv.x = u_min + uv.x * u_span;
-                    uv.y = v_min + (1.0 - uv.y) * v_span;
-                }
+            if let Some((bounds, chunk_id, tex_id)) = lookup_fn(&obj_face.texture) {
+                obj_face.remap_to_atlas_bounds(bounds, chunk_id, tex_id);
             }
         }
     }
@@ -418,4 +413,35 @@ fn is_emissive_overlay_of(emissive_tex: &str, base_tex: &str) -> bool {
     } else {
         emissive_tex.contains("cross_emissive") && !base_tex.contains("cross_emissive")
     }
+}
+
+/// Removes coplanar or duplicate `BakedObjFace` cards that share vertices and texture/tint
+/// (such as opposite-winding double-sided planes), preserving multi-texture overlays.
+fn deduplicate_obj_faces(obj_faces: &mut Vec<BakedObjFace>) -> usize {
+    if obj_faces.is_empty() {
+        return 0;
+    }
+    let orig_len = obj_faces.len();
+    let mut seen: std::collections::HashSet<(Vec<[i32; 3]>, String, i16)> =
+        std::collections::HashSet::with_capacity(orig_len);
+    obj_faces.retain(|face| {
+        let mut key_verts: Vec<[i32; 3]> = face
+            .vertices
+            .iter()
+            .map(|p| {
+                [
+                    (p.x * 10_000.0).round() as i32,
+                    (p.y * 10_000.0).round() as i32,
+                    (p.z * 10_000.0).round() as i32,
+                ]
+            })
+            .collect();
+        key_verts.sort_unstable();
+        key_verts.dedup();
+        if key_verts.len() < 3 {
+            return false;
+        }
+        seen.insert((key_verts, face.texture.clone(), face.tint_index))
+    });
+    orig_len - obj_faces.len()
 }

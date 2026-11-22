@@ -30,7 +30,12 @@ impl MeshData {
         let mut uv_rotations = Vec::with_capacity(face_count);
         let mut anim_timings = Vec::with_capacity(face_count);
         let mut anim_sizes = Vec::with_capacity(face_count);
-        let mut tint_colors = Vec::with_capacity(face_count);
+        let corners_per_face = if !self.indices.is_empty() && !self.is_quad_topology() {
+            3
+        } else {
+            4
+        };
+        let mut tint_colors = Vec::with_capacity(face_count * corners_per_face);
         let mut tint_datas = Vec::with_capacity(face_count);
         let mut block_x = Vec::with_capacity(face_count);
         let mut block_y = Vec::with_capacity(face_count);
@@ -55,7 +60,9 @@ impl MeshData {
             anim_timings.push(attr.anim_timing);
             anim_sizes.push(attr.anim_frame_size);
             has_animation |= attr.anim_timing[0] > 1.0;
-            tint_colors.extend_from_slice(&[attr.biome_tint_color; 4]);
+            for _ in 0..corners_per_face {
+                tint_colors.push(attr.biome_tint_color);
+            }
             tint_datas.push(attr.biome_tint_data);
             if include_block_coords {
                 block_x.push(attr.block_pos[0]);

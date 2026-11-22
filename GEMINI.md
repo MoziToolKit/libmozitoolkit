@@ -67,8 +67,8 @@
 
 ### 规则 6：资产缓存 (.mtkcache) 与场景交换包 (.mtkscene) 规范
 
-- **全量资产预烘焙**：Atlas 拼接、PBR 对齐与 Model Baking 由 `libmtk::prebake` 统一无头处理（`ASSET_CACHE_FORMAT_VERSION = 14`）。
-- **场景交换中间格式**：`.mtkscene` 由 `libmtk::scene` 统一编解码（`SCENE_PACKAGE_FORMAT_VERSION = 6`），包含：
+- **全量资产预烘焙**：Atlas 拼接、PBR 对齐与 Model Baking 由 `libmtk::prebake` 统一无头处理（`ASSET_CACHE_FORMAT_VERSION = 15`）。
+- **场景交换中间格式**：`.mtkscene` 由 `libmtk::scene` 统一编解码（`SCENE_PACKAGE_FORMAT_VERSION = 7`），包含：
   1. 稀疏体素紧凑流 (`crates/mtk-voxel/src/storage/sparse.rs`)；
   2. 动态裁剪重装箱的自包含 Mini-Atlas（多通道 PBR 裁剪与 UV 并行重映射）；
   3. Tree-Shaken 方块模型库，实现脱离原版权威资产的便携场景独立分发与网格重构。

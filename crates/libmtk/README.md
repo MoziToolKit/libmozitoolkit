@@ -51,9 +51,9 @@
 ### 2.1 端到端无头资产预编译 (`libmtk::prebake`)
 
 一键将离线资源包栈（Vanilla + 材质包）全量烘焙为运行时持久化高速缓存（受 `ASSET_CACHE_FORMAT_VERSION` 版本约束）：
-- **多类别图集烘焙**：自动装箱 Blocks、Items、ArmorTrims、Beds 等图集大图，并行编码 PNG 并落盘；
+- **多类别图集烘焙**：自动装箱 Blocks、Items、ArmorTrims、Beds 等图集大图，并行编码 PNG 并落盘（自动收集模组 `.obj`/`.mtl` 及 `composite` 模型在 `textures/block/` 之外引用的贴图进入图集）；
 - **伴随贴图与 Overlay 提取**：自动合成 `_overlay.png` 并在图集地址映射表 (`AtlasAddressMap`) 中建立别名对齐；
-- **模型图集 UV 预解算**：多线程全量烘焙模型，将图集 UV 坐标与 Chunk/Texture ID 预先注入 `BakedModelDatabase` 并序列化为二进制快照 (`models.bin`)；
+- **模型图集 UV 预解算**：多线程全量烘焙原版 JSON、声明式 Wavefront OBJ (`forge:obj`/`neoforge:obj`/`ie_obj`) 与 Composite (`forge:composite`/`neoforge:composite`) 模型，将图集 UV 坐标与 Chunk/Texture ID 预先注入 `BakedModelDatabase` 并序列化为二进制快照 (`models.bin`)；
 - **调色板与生物群系映射**：提取 `biome_mapping.json` 供运行时极速着色。
 
 ## 2.3 统一错误系统 (`MtkError`)

@@ -1,4 +1,5 @@
 pub mod assembler;
+mod obj_bake;
 pub mod resolver;
 
 #[cfg(test)]
@@ -17,6 +18,7 @@ use crate::parser::blockstate::{
     BlockState, BlockStateDefinition, BlockStateResolver, VariantMatch,
 };
 use crate::parser::model_json::{BlockModelJson, ResolvedBlockModel};
+use crate::parser::obj::ObjAssetStore;
 
 /// Universal, headless Minecraft Model Baker.
 ///
@@ -32,6 +34,8 @@ pub struct ModelBaker {
     resolved_cache: HashMap<String, std::sync::Arc<ResolvedBlockModel>>,
     /// Shared pre-resolved model database (zero-copy read across threads).
     shared_resolved: Option<std::sync::Arc<HashMap<String, std::sync::Arc<ResolvedBlockModel>>>>,
+    /// Shared Wavefront OBJ / MTL asset repository used for `*:obj` and composite OBJ models.
+    obj_assets: Option<std::sync::Arc<ObjAssetStore>>,
 }
 
 impl ModelBaker {
@@ -49,7 +53,14 @@ impl ModelBaker {
             variant_cache: HashMap::new(),
             resolved_cache: HashMap::new(),
             shared_resolved: Some(shared),
+            obj_assets: None,
         }
+    }
+
+    /// Attaches a preloaded Wavefront OBJ/MTL asset store to this baker.
+    pub fn with_obj_assets(mut self, store: std::sync::Arc<ObjAssetStore>) -> Self {
+        self.obj_assets = Some(store);
+        self
     }
 
     /// Clears the internal bake cache and resolved model cache.

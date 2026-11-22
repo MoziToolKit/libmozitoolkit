@@ -113,12 +113,107 @@ impl MeshData {
             }
         }
 
+        Self::resolve_face_index_collisions(
+            &mut self.indices,
+            self.quad_indices.as_deref_mut(),
+            per_loop,
+            &mut new_positions,
+            &mut new_normals,
+            &mut new_uvs,
+            new_sec_uvs.as_mut(),
+            new_colors.as_mut(),
+        );
+
         self.positions = new_positions;
         self.normals = new_normals;
         if !per_loop {
             self.uvs = new_uvs;
             self.secondary_uvs = new_sec_uvs;
             self.colors = new_colors;
+        }
+    }
+
+    /// Splits a single vertex when multiple non-degenerate faces collapse onto the same unordered
+    /// vertex-index tuple during welding, preventing duplicate-face validation errors downstream.
+    #[allow(clippy::too_many_arguments)]
+    fn resolve_face_index_collisions(
+        indices: &mut [u32],
+        quad_indices: Option<&mut [u32]>,
+        per_loop: bool,
+        new_positions: &mut Vec<[f32; 3]>,
+        new_normals: &mut Vec<[f32; 3]>,
+        new_uvs: &mut Vec<[f32; 2]>,
+        mut new_sec_uvs: Option<&mut Vec<[f32; 2]>>,
+        mut new_colors: Option<&mut Vec<[f32; 4]>>,
+    ) {
+        let mut clone_vertex = |v0: u32| -> u32 {
+            let fresh = new_positions.len() as u32;
+            let src = v0 as usize;
+            new_positions.push(new_positions[src]);
+            if let Some(&n) = new_normals.get(src) {
+                new_normals.push(n);
+            }
+            if !per_loop {
+                if let Some(&uv) = new_uvs.get(src) {
+                    new_uvs.push(uv);
+                }
+                if let Some(ref mut sec) = new_sec_uvs {
+                    if let Some(&s) = sec.get(src) {
+                        sec.push(s);
+                    }
+                }
+                if let Some(ref mut cols) = new_colors {
+                    if let Some(&c) = cols.get(src) {
+                        cols.push(c);
+                    }
+                }
+            }
+            fresh
+        };
+
+        if let Some(quads) = quad_indices {
+            let mut seen = rustc_hash::FxHashSet::<[u32; 4]>::default();
+            let quad_count = quads.len() / 4;
+            let sync_tris = indices.len() == quad_count * 6;
+            for q in 0..quad_count {
+                let q_base = q * 4;
+                let mut key = [
+                    quads[q_base],
+                    quads[q_base + 1],
+                    quads[q_base + 2],
+                    quads[q_base + 3],
+                ];
+                key.sort_unstable();
+                if key[0] == key[1] || key[1] == key[2] || key[2] == key[3] {
+                    continue;
+                }
+                if !seen.insert(key) {
+                    let v0 = quads[q_base];
+                    let fresh = clone_vertex(v0);
+                    quads[q_base] = fresh;
+                    if sync_tris {
+                        let tri_base = q * 6;
+                        for slot in &mut indices[tri_base..tri_base + 6] {
+                            if *slot == v0 {
+                                *slot = fresh;
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            let mut seen = rustc_hash::FxHashSet::<[u32; 3]>::default();
+            for tri in indices.as_chunks_mut::<3>().0 {
+                let mut key = [tri[0], tri[1], tri[2]];
+                key.sort_unstable();
+                if key[0] == key[1] || key[1] == key[2] {
+                    continue;
+                }
+                if !seen.insert(key) {
+                    let fresh = clone_vertex(tri[0]);
+                    tri[0] = fresh;
+                }
+            }
         }
     }
 }

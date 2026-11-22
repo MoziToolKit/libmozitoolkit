@@ -3,6 +3,10 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::error::ModelError;
+use crate::parser::loader_ext::{
+    compose_optional_mat4, is_composite_loader, is_obj_loader, model_namespace,
+    ModelRootTransformJson, ResolvedObjSpec,
+};
 
 const MAX_PARENT_DEPTH: usize = 32;
 
@@ -213,9 +217,101 @@ pub struct BlockModelJson {
     /// Item predicate-based model overrides.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub overrides: Option<Vec<ModelOverride>>,
+
+    /// Optional Forge/NeoForge declarative model loader ID (e.g. `"neoforge:obj"`, `"neoforge:composite"`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loader: Option<String>,
+
+    /// Porting Lib alias loader field found in Fabric/multi-loader mod assets (e.g. `"porting_lib:obj"`).
+    #[serde(
+        default,
+        rename = "porting_lib:loader",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub porting_lib_loader: Option<String>,
+
+    /// External geometry resource path for OBJ loaders (`"ns:models/block/foo.obj"`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+
+    /// Optional `.mtl` material library override path for OBJ loaders.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mtl_override: Option<String>,
+
+    /// Whether to flip the vertical UV axis (`1.0 - v`) when loading an OBJ model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flip_v: Option<bool>,
+
+    /// Per-object/group visibility overrides for OBJ models.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visibility: Option<HashMap<String, bool>>,
+
+    /// Sub-models dictionary for composite loaders (`forge:composite`, `neoforge:composite`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub children: Option<HashMap<String, BlockModelJson>>,
+
+    /// Optional deterministic child order for composite models.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_render_order: Option<Vec<String>>,
+
+    /// Optional Forge/NeoForge model-space transform (`"transform"` or `"root_transforms"`).
+    #[serde(
+        default,
+        alias = "root_transforms",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub transform: Option<ModelRootTransformJson>,
 }
 
 impl BlockModelJson {
+    /// Collects all `(obj_model_path, mtl_override)` pairs declared on this model and any nested composite children.
+    pub fn obj_model_references(&self) -> Vec<(&str, Option<&str>)> {
+        let mut out = Vec::new();
+        self.collect_obj_refs_recursive(&mut out);
+        out
+    }
+
+    fn collect_obj_refs_recursive<'a>(&'a self, out: &mut Vec<(&'a str, Option<&'a str>)>) {
+        let eff_loader = self
+            .loader
+            .as_deref()
+            .or(self.porting_lib_loader.as_deref())
+            .unwrap_or("");
+        if (is_obj_loader(eff_loader) || eff_loader.is_empty()) && self.model.is_some() {
+            if let Some(ref m) = self.model {
+                out.push((m.as_str(), self.mtl_override.as_deref()));
+            }
+        }
+        if let Some(ref children) = self.children {
+            for child in children.values() {
+                child.collect_obj_refs_recursive(out);
+            }
+        }
+    }
+
+    /// Collects all non-variable texture references declared on this model and any nested composite children.
+    pub fn texture_references(&self) -> Vec<&str> {
+        let mut out = Vec::new();
+        self.collect_tex_refs_recursive(&mut out);
+        out
+    }
+
+    fn collect_tex_refs_recursive<'a>(&'a self, out: &mut Vec<&'a str>) {
+        if let Some(ref textures) = self.textures {
+            for val in textures.values() {
+                let s = val.as_str();
+                if !s.is_empty() && !s.starts_with('#') {
+                    out.push(s);
+                }
+            }
+        }
+        if let Some(ref children) = self.children {
+            for child in children.values() {
+                child.collect_tex_refs_recursive(out);
+            }
+        }
+    }
+
     /// Fully resolves the inheritance tree using a parent loader callback.
     ///
     /// Merges textures (child overrides parent) and inherits elements (first model in the chain providing elements wins).
@@ -228,6 +324,15 @@ impl BlockModelJson {
     where
         F: FnMut(&str) -> Option<BlockModelJson>,
     {
+        self.resolve_hierarchy_dyn(current_model_id, &mut parent_loader, false)
+    }
+
+    fn resolve_hierarchy_dyn(
+        &self,
+        current_model_id: &str,
+        parent_loader: &mut dyn FnMut(&str) -> Option<BlockModelJson>,
+        skip_unresolved_dict_vars: bool,
+    ) -> Result<ResolvedBlockModel, ModelError> {
         let mut visited = HashSet::new();
         visited.insert(current_model_id.to_string());
 
@@ -236,6 +341,17 @@ impl BlockModelJson {
         let mut ambientocclusion = self.ambientocclusion;
         let mut gui_light = self.gui_light;
         let mut overrides = self.overrides.clone();
+        let mut loader_name = self
+            .loader
+            .clone()
+            .or_else(|| self.porting_lib_loader.clone());
+        let mut obj_model = self.model.clone();
+        let mut mtl_override = self.mtl_override.clone();
+        let mut flip_v = self.flip_v;
+        let mut visibility = self.visibility.clone().unwrap_or_default();
+        let mut children = self.children.clone();
+        let mut item_render_order = self.item_render_order.clone();
+        let mut root_transform = self.transform.as_ref().map(|t| t.to_mat4().to_cols_array());
 
         let mut display_chain: Vec<ItemTransformsJson> = Vec::new();
         if let Some(ref d) = self.display {
@@ -261,9 +377,45 @@ impl BlockModelJson {
                 }
             }
 
-            // 2. Inherit elements if not defined yet
-            if elements.is_none() && parent_model.elements.is_some() {
-                elements = parent_model.elements.clone();
+            // 2. Inherit geometry (elements, OBJ spec, or composite children) if child defines none
+            let has_local_geom = elements.is_some()
+                || obj_model.is_some()
+                || children.is_some()
+                || loader_name.is_some();
+            if !has_local_geom {
+                if let Some(ref p_elems) = parent_model.elements {
+                    elements = Some(p_elems.clone());
+                }
+                let p_loader = parent_model
+                    .loader
+                    .clone()
+                    .or_else(|| parent_model.porting_lib_loader.clone());
+                if p_loader.is_some()
+                    || parent_model.model.is_some()
+                    || parent_model.children.is_some()
+                {
+                    loader_name = p_loader;
+                    obj_model = parent_model.model.clone();
+                    if mtl_override.is_none() {
+                        mtl_override = parent_model.mtl_override.clone();
+                    }
+                    if flip_v.is_none() {
+                        flip_v = parent_model.flip_v;
+                    }
+                    if let Some(ref p_vis) = parent_model.visibility {
+                        for (k, &v) in p_vis {
+                            visibility.entry(k.clone()).or_insert(v);
+                        }
+                    }
+                    children = parent_model.children.clone();
+                    if item_render_order.is_none() {
+                        item_render_order = parent_model.item_render_order.clone();
+                    }
+                }
+            }
+            if let Some(ref p_tf) = parent_model.transform {
+                root_transform =
+                    compose_optional_mat4(Some(p_tf.to_mat4().to_cols_array()), root_transform);
             }
 
             // 3. Inherit ambient occlusion if not defined
@@ -321,15 +473,26 @@ impl BlockModelJson {
             on_shelf,
         };
 
+        let eff_loader = loader_name.as_deref().unwrap_or("");
+        let is_obj = is_obj_loader(eff_loader) || (eff_loader.is_empty() && obj_model.is_some());
+        let is_composite =
+            is_composite_loader(eff_loader) || (eff_loader.is_empty() && children.is_some());
+        let allow_unresolved_dict_vars = skip_unresolved_dict_vars || is_obj || is_composite;
+
         // Resolve all `#texture` variable references
         let mut resolved_textures = HashMap::new();
         for (k, val) in &raw_textures {
-            let final_tex = Self::resolve_texture_value(val.as_str(), &raw_textures)?;
-            resolved_textures.insert(k.clone(), final_tex);
+            match Self::resolve_texture_value(val.as_str(), &raw_textures) {
+                Ok(final_tex) => {
+                    resolved_textures.insert(k.clone(), final_tex);
+                }
+                Err(ModelError::UnresolvedTextureVariable(_)) if allow_unresolved_dict_vars => {}
+                Err(e) => return Err(e),
+            }
         }
 
         // Bake texture values into elements
-        let resolved_elements = if let Some(elems) = elements {
+        let mut resolved_elements = if let Some(elems) = elements {
             let mut res_elems = Vec::with_capacity(elems.len());
             for elem in elems {
                 let elem_emission = elem.light_emission.unwrap_or(0);
@@ -353,6 +516,7 @@ impl BlockModelJson {
                     to: elem.to,
                     rotation: elem.rotation,
                     transform: elem.transform,
+                    root_transform,
                     shade: elem.shade.unwrap_or(true),
                     light_emission: elem_emission,
                     faces: res_faces,
@@ -363,11 +527,72 @@ impl BlockModelJson {
             Vec::new()
         };
 
+        let mut obj_specs = Vec::new();
+        if is_obj {
+            if let Some(model_path) = obj_model {
+                obj_specs.push(ResolvedObjSpec {
+                    model_path,
+                    fallback_namespace: model_namespace(current_model_id),
+                    mtl_override,
+                    flip_v: flip_v.unwrap_or(eff_loader == "immersiveengineering:ie_obj"),
+                    visibility,
+                    textures: resolved_textures.clone(),
+                    root_transform,
+                });
+            }
+        }
+
+        if is_composite {
+            if let Some(mut children_map) = children {
+                let mut ordered_keys: Vec<String> = Vec::new();
+                if let Some(ref order) = item_render_order {
+                    for key in order {
+                        if children_map.contains_key(key) && !ordered_keys.contains(key) {
+                            ordered_keys.push(key.clone());
+                        }
+                    }
+                }
+                let mut remaining: Vec<String> = children_map
+                    .keys()
+                    .filter(|k| !ordered_keys.contains(k))
+                    .cloned()
+                    .collect();
+                remaining.sort();
+                ordered_keys.extend(remaining);
+
+                for child_key in ordered_keys {
+                    let Some(mut child_model) = children_map.remove(&child_key) else {
+                        continue;
+                    };
+                    if !raw_textures.is_empty() {
+                        let c_tex = child_model.textures.get_or_insert_with(HashMap::new);
+                        for (k, v) in &raw_textures {
+                            c_tex.entry(k.clone()).or_insert_with(|| v.clone());
+                        }
+                    }
+                    let child_id = format!("{current_model_id}#{child_key}");
+                    let child_resolved =
+                        child_model.resolve_hierarchy_dyn(&child_id, parent_loader, true)?;
+                    for mut el in child_resolved.elements {
+                        el.root_transform =
+                            compose_optional_mat4(root_transform, el.root_transform);
+                        resolved_elements.push(el);
+                    }
+                    for mut spec in child_resolved.obj_specs {
+                        spec.root_transform =
+                            compose_optional_mat4(root_transform, spec.root_transform);
+                        obj_specs.push(spec);
+                    }
+                }
+            }
+        }
+
         Ok(ResolvedBlockModel {
             ambientocclusion: ambientocclusion.unwrap_or(true),
             gui_light,
             textures: resolved_textures,
             elements: resolved_elements,
+            obj_specs,
             transforms: resolved_transforms,
             overrides: overrides.unwrap_or_default(),
         })
@@ -435,10 +660,21 @@ pub struct ResolvedBlockModel {
     pub textures: HashMap<String, String>,
     /// Fully resolved elements.
     pub elements: Vec<ResolvedElement>,
+    /// Resolved Wavefront OBJ specifications (`forge:obj`, `neoforge:obj`, `ie_obj`, or composite OBJ parts).
+    #[serde(default)]
+    pub obj_specs: Vec<ResolvedObjSpec>,
     /// Resolved viewport 3D display transformations.
     pub transforms: ItemTransforms,
     /// Item predicate-based model overrides.
     pub overrides: Vec<ModelOverride>,
+}
+
+impl ResolvedBlockModel {
+    /// Returns `true` when this resolved model carries box elements or OBJ geometry.
+    #[inline]
+    pub fn has_geometry(&self) -> bool {
+        !self.elements.is_empty() || !self.obj_specs.is_empty()
+    }
 }
 
 /// Resolved element with concrete textures.
@@ -448,6 +684,8 @@ pub struct ResolvedElement {
     pub to: [f32; 3],
     pub rotation: Option<RotationJson>,
     pub transform: Option<BuiltinTransform>,
+    #[serde(default)]
+    pub root_transform: Option<[f32; 16]>,
     pub shade: bool,
     pub light_emission: u8,
     pub faces: HashMap<String, ResolvedFace>,

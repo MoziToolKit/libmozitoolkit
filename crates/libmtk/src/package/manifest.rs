@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Bump whenever the baked payloads change meaning (geometry, atlas layout, manifest layout): old
 /// packages are rejected rather than served.
+/// v15: `BakedObjFace` stores pre-mapped Atlas UVs, chunk/texture IDs, and declarative OBJ/composite models.
 /// v14: CTM rules gained `inner_seams`/`biomes_negated` and the method enum lost its per-variant
 ///      `inner_seams` field (invalid rules are dropped, so rule sets can shrink).
 /// v13: animated atlas strips follow `.mcmeta`'s `frames` list (reordered / repeated), so the
@@ -21,16 +22,17 @@ use serde::{Deserialize, Serialize};
 ///      neighbour sprite; sprite rects and UVs are unchanged.
 /// v11: unified manifest (scene fields are present but defaulted).
 /// v10: chest up/down faces carry the corrected v orientation; copper/ender sheet selection.
-pub const ASSET_CACHE_FORMAT_VERSION: u32 = 14;
+pub const ASSET_CACHE_FORMAT_VERSION: u32 = 15;
 
 /// Payload revision of a scene interchange package.
 ///
+/// v7: `BakedObjFace` payload matches asset-cache v15 (declarative OBJ & composite model support).
 /// v6: CTM rule payload matches asset-cache v14 (per-rule `inner_seams`, `biomes_negated`).
 /// v5: animated strips follow `.mcmeta`'s `frames` list, matching asset-cache v13.
 /// v4: every atlas sprite is padded (replicated edges), matching asset-cache v12.
 /// v3: unified manifest; the continuous visual entity payload is gone.
 /// v2: removed the continuous visual entity payload.
-pub const SCENE_PACKAGE_FORMAT_VERSION: u32 = 6;
+pub const SCENE_PACKAGE_FORMAT_VERSION: u32 = 7;
 
 /// Capability flags a package may advertise.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
