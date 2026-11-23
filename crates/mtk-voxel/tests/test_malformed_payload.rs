@@ -154,8 +154,8 @@ fn test_palette_index_negative_one_rejects_without_silent_zero() {
 }
 
 #[test]
-fn test_palette_index_u16_overflow_rejects_without_silent_zero() {
-    // Index 65536 cannot fit in u16. Previously `65536 as u16` truncated to 0.
+fn test_palette_index_out_of_range_rejects_without_silent_zero() {
+    // Index 65536 against a 2-entry palette must return Err rather than truncating.
     let json = r#"{
         "positions": [0.5, 0.5, 0.5],
         "block_x": [0],
@@ -175,36 +175,140 @@ fn test_palette_index_u16_overflow_rejects_without_silent_zero() {
     let res = SparseVoxelPayload::from_point_cloud(&cloud);
     assert!(
         res.is_err(),
-        "from_point_cloud must return Err for index 65536 rather than truncating to index 0"
+        "from_point_cloud must return Err for out-of-range index 65536 rather than truncating to index 0"
     );
 }
 
 #[test]
-fn test_palette_count_overflow_rejects() {
-    // State palette count > 65536 cannot be represented by u16 indices.
-    let big_palette: Vec<String> = (0..65537)
-        .map(|i| format!("minecraft:block_{}", i))
-        .collect();
+fn test_large_state_palette_exceeding_u16_roundtrips() {
+    const COUNT: usize = 69_932;
+    let big_palette: Vec<String> = (0..COUNT).map(|i| format!("modded:block_{i}")).collect();
+    let mut positions = Vec::with_capacity(COUNT * 3);
+    let mut block_x = Vec::with_capacity(COUNT);
+    let mut block_y = Vec::with_capacity(COUNT);
+    let mut block_z = Vec::with_capacity(COUNT);
+    let mut state_indices = Vec::with_capacity(COUNT);
+    for i in 0..COUNT {
+        positions.extend_from_slice(&[i as f32 + 0.5, 0.5, 0.5]);
+        block_x.push(i as i32);
+        block_y.push(0);
+        block_z.push(0);
+        state_indices.push(i as i32);
+    }
 
     let cloud = VoxelPointCloud {
-        positions: vec![0.5, 0.5, 0.5],
-        block_x: vec![0],
-        block_y: vec![0],
-        block_z: vec![0],
+        positions,
+        block_x,
+        block_y,
+        block_z,
         state_palette: big_palette,
-        state_indices: vec![0],
+        state_indices,
         biome_palette: vec!["minecraft:plains".to_string()],
-        biome_indices: vec![0],
+        biome_indices: vec![0; COUNT],
         entity_palette: vec![],
-        entity_indices: vec![-1],
+        entity_indices: vec![-1; COUNT],
         light_levels: vec![],
-        bounds: None,
+        bounds: Some([0, 0, 0, COUNT as i32, 1, 1]),
     };
 
-    let res = SparseVoxelPayload::from_point_cloud(&cloud);
+    let payload = SparseVoxelPayload::from_point_cloud(&cloud)
+        .expect("from_point_cloud must support >65536 states via u32 palette indices");
+    assert_eq!(payload.state_palette.len(), COUNT);
+    assert_eq!(payload.columns.state_indices[0], 0);
+    assert_eq!(payload.columns.state_indices[COUNT - 1], (COUNT - 1) as u32);
+
+    let encoded = postcard::to_allocvec(&payload).expect("postcard serialize large payload");
+    let decoded: SparseVoxelPayload =
+        postcard::from_bytes(&encoded).expect("postcard deserialize large payload");
+    assert_eq!(decoded.state_palette.len(), COUNT);
+    assert_eq!(decoded.columns.state_indices[COUNT - 1], (COUNT - 1) as u32);
+
+    let restored = decoded.to_point_cloud(None);
+    assert_eq!(restored.len(), COUNT);
+    assert_eq!(restored.state_at(0), Some("modded:block_0"));
+    assert_eq!(restored.state_at(COUNT - 1), Some("modded:block_69931"));
+}
+
+#[test]
+fn test_from_point_cloud_compacts_unused_and_duplicate_palettes() {
+    let chest_json = r#"{"id":"minecraft:chest"}"#.to_string();
+    let cloud = VoxelPointCloud {
+        positions: vec![0.5, 0.5, 0.5, 1.5, 0.5, 0.5, 2.5, 0.5, 0.5],
+        block_x: vec![0, 1, 2],
+        block_y: vec![0, 0, 0],
+        block_z: vec![0, 0, 0],
+        state_palette: vec![
+            "minecraft:air".to_string(),
+            "minecraft:stone".to_string(),
+            "minecraft:dirt".to_string(),
+            "minecraft:stone".to_string(),
+            "minecraft:oak_planks".to_string(),
+        ],
+        state_indices: vec![1, 4, 3],
+        biome_palette: vec![
+            "minecraft:desert".to_string(),
+            "minecraft:plains".to_string(),
+            "minecraft:plains".to_string(),
+        ],
+        biome_indices: vec![1, 2, 1],
+        entity_palette: vec![
+            r#"{"id":"minecraft:sign"}"#.to_string(),
+            chest_json.clone(),
+            r#"{"id":"minecraft:banner"}"#.to_string(),
+            chest_json.clone(),
+        ],
+        entity_indices: vec![-1, 1, 3],
+        light_levels: vec![],
+        bounds: Some([0, 0, 0, 3, 1, 1]),
+    };
+
+    let payload = SparseVoxelPayload::from_point_cloud(&cloud).expect("compact palettes");
+    assert_eq!(
+        payload.state_palette,
+        vec![
+            "minecraft:stone".to_string(),
+            "minecraft:oak_planks".to_string(),
+        ]
+    );
+    assert_eq!(payload.columns.state_indices, vec![0, 1, 0]);
+    assert_eq!(payload.biome_palette, vec!["minecraft:plains".to_string()]);
+    assert_eq!(payload.columns.biome_indices, vec![0, 0, 0]);
+    assert_eq!(payload.entity_palette, vec![chest_json.clone()]);
+    assert_eq!(payload.columns.entity_indices, vec![-1, 0, 0]);
+
+    let restored = payload.to_point_cloud(None);
+    assert_eq!(restored.state_at(0), Some("minecraft:stone"));
+    assert_eq!(restored.state_at(1), Some("minecraft:oak_planks"));
+    assert_eq!(restored.state_at(2), Some("minecraft:stone"));
+    assert_eq!(restored.biome_at(0), Some("minecraft:plains"));
+    assert_eq!(restored.biome_at(1), Some("minecraft:plains"));
+    assert_eq!(restored.biome_at(2), Some("minecraft:plains"));
+    assert_eq!(restored.entity_at(0), None);
+    assert_eq!(restored.entity_at(1), Some(chest_json.as_str()));
+    assert_eq!(restored.entity_at(2), Some(chest_json.as_str()));
+}
+
+#[test]
+fn test_sparse_payload_json_index_above_i32_max_rejects() {
+    let json = r#"{
+        "bounds": [0, 0, 0, 16, 16, 16],
+        "state_palette": ["minecraft:air", "minecraft:stone"],
+        "biome_palette": ["minecraft:plains"],
+        "entity_palette": [],
+        "columns": {
+            "x": [0],
+            "y": [0],
+            "z": [0],
+            "state_indices": [2147483648],
+            "biome_indices": [0],
+            "entity_indices": [-1]
+        }
+    }"#;
+
+    let res: Result<SparseVoxelPayload, _> = serde_json::from_str(json);
     assert!(
         res.is_err(),
-        "from_point_cloud must return Err when state_palette.len() > 65536"
+        "Deserializing SparseVoxelPayload with state index > i32::MAX must return Err"
     );
 }
 

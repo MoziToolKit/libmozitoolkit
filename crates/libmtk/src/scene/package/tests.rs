@@ -510,3 +510,74 @@ fn dynamic_entity_slots_are_written_in_key_order() {
 
     let _ = std::fs::remove_file(&temp_path);
 }
+
+#[test]
+fn test_scene_package_large_palette_roundtrip() {
+    const COUNT: usize = 69_932;
+    let temp_path = std::env::temp_dir().join(format!(
+        "test_scene_large_palette_{}_{}.mtkscene",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+
+    let state_palette: Vec<String> = (0..COUNT).map(|i| format!("modded:block_{i}")).collect();
+    let mut positions = Vec::with_capacity(COUNT * 3);
+    let mut block_x = Vec::with_capacity(COUNT);
+    let mut block_y = Vec::with_capacity(COUNT);
+    let mut block_z = Vec::with_capacity(COUNT);
+    let mut state_indices = Vec::with_capacity(COUNT);
+    for i in 0..COUNT {
+        positions.extend_from_slice(&[i as f32 + 0.5, 0.5, 0.5]);
+        block_x.push(i as i32);
+        block_y.push(0);
+        block_z.push(0);
+        state_indices.push(i as i32);
+    }
+
+    let cloud = mtk_voxel::VoxelPointCloud {
+        positions,
+        block_x,
+        block_y,
+        block_z,
+        state_palette,
+        state_indices,
+        biome_palette: vec!["minecraft:plains".to_string()],
+        biome_indices: vec![0; COUNT],
+        entity_palette: vec![],
+        entity_indices: vec![-1; COUNT],
+        light_levels: vec![],
+        bounds: Some([0, 0, 0, COUNT as i32, 1, 1]),
+    };
+
+    let voxels = SparseVoxelPayload::from_point_cloud(&cloud).expect("convert large point cloud");
+    let mut metadata = PackageManifest::new_scene(voxels.bounds, voxels.len());
+    metadata.unique_states_count = voxels.state_palette.len();
+    metadata.unique_biomes_count = voxels.biome_palette.len();
+    metadata.unique_entities_count = voxels.entity_palette.len();
+
+    let dummy_png = vec![137, 80, 78, 71, 13, 10, 26, 10];
+    let textures = vec![("atlas_0.png".to_string(), dummy_png)];
+    let write_req = SceneWriteRequest::new(&metadata, &voxels, &textures);
+    write_scene_package(&temp_path, write_req).expect("write large-palette scene package");
+
+    let reader = ScenePackageReader::open_file(&temp_path).expect("open large-palette scene");
+    assert_eq!(
+        reader.metadata().format_version,
+        crate::package::SCENE_PACKAGE_FORMAT_VERSION
+    );
+    assert_eq!(reader.metadata().unique_states_count, COUNT);
+
+    let read_voxels = reader.read_sparse_voxels().expect("read sparse voxels");
+    assert_eq!(read_voxels.len(), COUNT);
+    assert_eq!(read_voxels.state_palette.len(), COUNT);
+    assert_eq!(read_voxels.state_palette[COUNT - 1], "modded:block_69931");
+    assert_eq!(
+        read_voxels.columns.state_indices[COUNT - 1],
+        (COUNT - 1) as u32
+    );
+
+    let _ = std::fs::remove_file(&temp_path);
+}

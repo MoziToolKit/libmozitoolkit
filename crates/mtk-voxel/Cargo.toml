@@ -29,6 +29,7 @@ serde = ["dep:serde", "dep:serde_json", "mtk-core/serde", "mtk-cull/serde"]
 
 [dev-dependencies]
 image = { workspace = true }
+postcard = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 mtk-testkit = { workspace = true }

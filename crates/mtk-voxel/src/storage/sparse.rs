@@ -5,6 +5,8 @@
 //! Designed specifically for the `VOXL` chunk in `.mtkscene` packages and zero-copy
 //! bidirectional conversion with DCC companion point clouds (`VoxelPointCloud`).
 
+use std::collections::HashMap;
+
 use mtk_model::BlockEntityData;
 
 #[cfg(feature = "serde")]
@@ -13,6 +15,11 @@ use serde::{Deserialize, Serialize};
 use crate::storage::point_cloud::VoxelPointCloud;
 use crate::storage::world::VoxelStorage;
 use crate::types::{MesherConfig, VoxelError};
+
+/// Maximum representable palette index in `SparseVoxelColumns` (`i32::MAX` for 1:1 Blender/PointCloud parity).
+const MAX_SPARSE_PALETTE_INDEX: u32 = i32::MAX as u32;
+/// Maximum representable palette length in `SparseVoxelPayload` (`i32::MAX + 1`).
+const MAX_SPARSE_PALETTE_LEN: usize = (i32::MAX as usize) + 1;
 
 /// High-throughput sparse voxel container optimized for scene interchange (`.mtkscene`).
 ///
@@ -77,9 +84,9 @@ pub struct SparseVoxelColumns {
     /// World integer coordinates Z.
     pub z: Vec<i32>,
     /// Palette index into `state_palette`.
-    pub state_indices: Vec<u16>,
+    pub state_indices: Vec<u32>,
     /// Palette index into `biome_palette`.
-    pub biome_indices: Vec<u16>,
+    pub biome_indices: Vec<u32>,
     /// Entity palette index (-1 if none; >=0 into `entity_palette`).
     pub entity_indices: Vec<i32>,
     /// Optional combined light levels (sky nibble << 4 | block nibble).
@@ -93,8 +100,8 @@ struct SparseVoxelColumnsDef {
     x: Vec<i32>,
     y: Vec<i32>,
     z: Vec<i32>,
-    state_indices: Vec<u16>,
-    biome_indices: Vec<u16>,
+    state_indices: Vec<u32>,
+    biome_indices: Vec<u32>,
     entity_indices: Vec<i32>,
     #[serde(default)]
     light_levels: Option<Vec<u8>>,
@@ -244,8 +251,8 @@ impl SparseVoxelPayload {
         self.columns.x.push(x);
         self.columns.y.push(y);
         self.columns.z.push(z);
-        self.columns.state_indices.push(s_idx as u16);
-        self.columns.biome_indices.push(b_idx as u16);
+        self.columns.state_indices.push(s_idx as u32);
+        self.columns.biome_indices.push(b_idx as u32);
         self.columns.entity_indices.push(e_idx);
 
         if let Some(lvl) = light {
@@ -274,16 +281,18 @@ impl SparseVoxelPayload {
     pub fn validate(&self) -> Result<(), VoxelError> {
         self.columns.validate()?;
 
-        if self.state_palette.len() > (u16::MAX as usize + 1) {
+        if self.state_palette.len() > MAX_SPARSE_PALETTE_LEN {
             return Err(VoxelError::InvalidPointCloud(format!(
-                "State palette length {} exceeds maximum representable size 65536",
-                self.state_palette.len()
+                "State palette length {} exceeds maximum representable size {}",
+                self.state_palette.len(),
+                MAX_SPARSE_PALETTE_LEN
             )));
         }
-        if self.biome_palette.len() > (u16::MAX as usize + 1) {
+        if self.biome_palette.len() > MAX_SPARSE_PALETTE_LEN {
             return Err(VoxelError::InvalidPointCloud(format!(
-                "Biome palette length {} exceeds maximum representable size 65536",
-                self.biome_palette.len()
+                "Biome palette length {} exceeds maximum representable size {}",
+                self.biome_palette.len(),
+                MAX_SPARSE_PALETTE_LEN
             )));
         }
 
@@ -303,7 +312,7 @@ impl SparseVoxelPayload {
 
         let s_len = self.state_palette.len();
         for (i, &s_idx) in self.columns.state_indices.iter().enumerate() {
-            if (s_idx as usize) >= s_len {
+            if s_idx > MAX_SPARSE_PALETTE_INDEX || (s_idx as usize) >= s_len {
                 return Err(VoxelError::InvalidPointCloud(format!(
                     "SparseVoxelPayload state index {} at voxel {} out of range (state_palette len {})",
                     s_idx, i, s_len
@@ -313,7 +322,7 @@ impl SparseVoxelPayload {
 
         let b_len = self.biome_palette.len();
         for (i, &b_idx) in self.columns.biome_indices.iter().enumerate() {
-            if (b_idx as usize) >= b_len {
+            if b_idx > MAX_SPARSE_PALETTE_INDEX || (b_idx as usize) >= b_len {
                 return Err(VoxelError::InvalidPointCloud(format!(
                     "SparseVoxelPayload biome index {} at voxel {} out of range (biome_palette len {})",
                     b_idx, i, b_len
@@ -336,20 +345,23 @@ impl SparseVoxelPayload {
 
     /// Constructs a `SparseVoxelPayload` from a `VoxelPointCloud`.
     ///
-    /// Validates representability of palette counts and per-point indices.
+    /// Validates representability of palette counts and per-point indices,
+    /// then compacts palettes to prune unreferenced or duplicate entries.
     pub fn from_point_cloud(cloud: &VoxelPointCloud) -> Result<Self, VoxelError> {
         let count = cloud.len();
 
-        if cloud.state_palette.len() > (u16::MAX as usize + 1) {
+        if cloud.state_palette.len() > MAX_SPARSE_PALETTE_LEN {
             return Err(VoxelError::InvalidPointCloud(format!(
-                "State palette length {} exceeds maximum representable size 65536",
-                cloud.state_palette.len()
+                "State palette length {} exceeds maximum representable size {}",
+                cloud.state_palette.len(),
+                MAX_SPARSE_PALETTE_LEN
             )));
         }
-        if cloud.biome_palette.len() > (u16::MAX as usize + 1) {
+        if cloud.biome_palette.len() > MAX_SPARSE_PALETTE_LEN {
             return Err(VoxelError::InvalidPointCloud(format!(
-                "Biome palette length {} exceeds maximum representable size 65536",
-                cloud.biome_palette.len()
+                "Biome palette length {} exceeds maximum representable size {}",
+                cloud.biome_palette.len(),
+                MAX_SPARSE_PALETTE_LEN
             )));
         }
 
@@ -369,46 +381,15 @@ impl SparseVoxelPayload {
             )));
         }
 
-        let mut state_indices = Vec::with_capacity(count);
-        for (idx, &i) in cloud.state_indices.iter().enumerate() {
-            if i < 0 || i > (u16::MAX as i32) || (i as usize) >= cloud.state_palette.len() {
-                return Err(VoxelError::InvalidPointCloud(format!(
-                    "Unrepresentable or out-of-range state index {} at point {} (palette len {})",
-                    i,
-                    idx,
-                    cloud.state_palette.len()
-                )));
-            }
-            state_indices.push(i as u16);
-        }
+        let (state_palette, state_indices) =
+            compact_palette("state", &cloud.state_palette, &cloud.state_indices)?;
+        let (biome_palette, biome_indices) =
+            compact_palette("biome", &cloud.biome_palette, &cloud.biome_indices)?;
 
-        let mut biome_indices = Vec::with_capacity(count);
-        for (idx, &i) in cloud.biome_indices.iter().enumerate() {
-            if i < 0 || i > (u16::MAX as i32) || (i as usize) >= cloud.biome_palette.len() {
-                return Err(VoxelError::InvalidPointCloud(format!(
-                    "Unrepresentable or out-of-range biome index {} at point {} (palette len {})",
-                    i,
-                    idx,
-                    cloud.biome_palette.len()
-                )));
-            }
-            biome_indices.push(i as u16);
-        }
-
-        let entity_indices = if cloud.entity_indices.len() == count {
-            for (idx, &e) in cloud.entity_indices.iter().enumerate() {
-                if e < -1 || (e >= 0 && (e as usize) >= cloud.entity_palette.len()) {
-                    return Err(VoxelError::InvalidPointCloud(format!(
-                        "Out-of-range entity index {} at point {} (entity palette len {})",
-                        e,
-                        idx,
-                        cloud.entity_palette.len()
-                    )));
-                }
-            }
-            cloud.entity_indices.clone()
+        let (entity_palette, entity_indices) = if cloud.entity_indices.len() == count {
+            compact_entity_palette(&cloud.entity_palette, &cloud.entity_indices)?
         } else if cloud.entity_indices.is_empty() {
-            vec![-1; count]
+            (Vec::new(), vec![-1; count])
         } else {
             return Err(VoxelError::InvalidPointCloud(format!(
                 "Ragged entity indices length {} != point count {}",
@@ -435,9 +416,9 @@ impl SparseVoxelPayload {
 
         let payload = Self {
             bounds,
-            state_palette: cloud.state_palette.clone(),
-            biome_palette: cloud.biome_palette.clone(),
-            entity_palette: cloud.entity_palette.clone(),
+            state_palette,
+            biome_palette,
+            entity_palette,
             columns: SparseVoxelColumns {
                 x: cloud.block_x.clone(),
                 y: cloud.block_y.clone(),
@@ -586,6 +567,94 @@ impl TryFrom<&VoxelPointCloud> for SparseVoxelPayload {
     fn try_from(cloud: &VoxelPointCloud) -> Result<Self, Self::Error> {
         Self::from_point_cloud(cloud)
     }
+}
+
+fn compact_used_palette(
+    label: &str,
+    raw_palette: &[String],
+    used: &[bool],
+) -> Result<(Vec<String>, Vec<u32>), VoxelError> {
+    let mut compact_pal = Vec::new();
+    let mut dedup: HashMap<&str, u32> = HashMap::new();
+    let mut remap = vec![0u32; raw_palette.len()];
+
+    for (old_idx, entry) in raw_palette.iter().enumerate() {
+        if !used[old_idx] {
+            continue;
+        }
+        let new_idx = if let Some(&existing) = dedup.get(entry.as_str()) {
+            existing
+        } else {
+            let next = compact_pal.len();
+            if next > MAX_SPARSE_PALETTE_INDEX as usize {
+                return Err(VoxelError::InvalidPointCloud(format!(
+                    "{label} palette length {} exceeds maximum representable size {}",
+                    next + 1,
+                    MAX_SPARSE_PALETTE_LEN
+                )));
+            }
+            let next_u32 = next as u32;
+            compact_pal.push(entry.clone());
+            dedup.insert(entry.as_str(), next_u32);
+            next_u32
+        };
+        remap[old_idx] = new_idx;
+    }
+
+    Ok((compact_pal, remap))
+}
+
+fn compact_palette(
+    label: &str,
+    raw_palette: &[String],
+    raw_indices: &[i32],
+) -> Result<(Vec<String>, Vec<u32>), VoxelError> {
+    let mut used = vec![false; raw_palette.len()];
+    for (pt_idx, &i) in raw_indices.iter().enumerate() {
+        if i < 0 || (i as usize) >= raw_palette.len() {
+            return Err(VoxelError::InvalidPointCloud(format!(
+                "Unrepresentable or out-of-range {label} index {} at point {} (palette len {})",
+                i,
+                pt_idx,
+                raw_palette.len()
+            )));
+        }
+        used[i as usize] = true;
+    }
+
+    let (compact_pal, remap) = compact_used_palette(label, raw_palette, &used)?;
+    let remapped = raw_indices
+        .iter()
+        .map(|&old_idx| remap[old_idx as usize])
+        .collect();
+    Ok((compact_pal, remapped))
+}
+
+fn compact_entity_palette(
+    raw_palette: &[String],
+    raw_indices: &[i32],
+) -> Result<(Vec<String>, Vec<i32>), VoxelError> {
+    let mut used = vec![false; raw_palette.len()];
+    for (pt_idx, &e) in raw_indices.iter().enumerate() {
+        if e < -1 || (e >= 0 && (e as usize) >= raw_palette.len()) {
+            return Err(VoxelError::InvalidPointCloud(format!(
+                "Out-of-range entity index {} at point {} (entity palette len {})",
+                e,
+                pt_idx,
+                raw_palette.len()
+            )));
+        }
+        if e >= 0 {
+            used[e as usize] = true;
+        }
+    }
+
+    let (compact_pal, remap) = compact_used_palette("entity", raw_palette, &used)?;
+    let remapped = raw_indices
+        .iter()
+        .map(|&e| if e < 0 { -1 } else { remap[e as usize] as i32 })
+        .collect();
+    Ok((compact_pal, remapped))
 }
 
 #[inline]

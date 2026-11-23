@@ -110,7 +110,7 @@ pub struct ChunkEntry {
 ### 5.2 `VOXL` - 稀疏体素列存块 (`SceneInterchange` 专属)
 * **存储原则**：
   * 专为 `.mtkscene` 设计，存放选区内有效表面体素与伴生点云数据（`SparseVoxelPayload`）。
-  * 采用列存（Struct-of-Arrays, SoA）布局（`SparseVoxelColumns`）：扁平一维连续坐标数组 `(x, y, z)` 与紧凑调色板索引流（`state_indices`, `biome_indices`, `entity_indices`）。
+  * 采用列存（Struct-of-Arrays, SoA）布局（`SparseVoxelColumns`）：扁平一维连续坐标数组 `(x, y, z)` 与紧凑调色板索引流（`state_indices: Vec<u32>`, `biome_indices: Vec<u32>`, `entity_indices: Vec<i32>`；经 Postcard LEB128 varint 与 Zstd 压缩编码，支持最高 `i32::MAX` 个不重复条目并对齐 Blender `INT` 属性）。
   * **正交离散调色板 (Orthogonal Palettes)**：
     * `state_palette: Vec<String>`：不重复方块状态标识符（如 `minecraft:stone`）。
     * `biome_palette: Vec<String>`：不重复生物群系标识符（如 `minecraft:plains`）。

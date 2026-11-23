@@ -26,13 +26,15 @@ pub const ASSET_CACHE_FORMAT_VERSION: u32 = 15;
 
 /// Payload revision of a scene interchange package.
 ///
+/// v8: `SparseVoxelColumns` widens `state_indices` and `biome_indices` from `u16` to `u32`
+///     (supports >65,536 distinct blockstates such as modded debug worlds).
 /// v7: `BakedObjFace` payload matches asset-cache v15 (declarative OBJ & composite model support).
 /// v6: CTM rule payload matches asset-cache v14 (per-rule `inner_seams`, `biomes_negated`).
 /// v5: animated strips follow `.mcmeta`'s `frames` list, matching asset-cache v13.
 /// v4: every atlas sprite is padded (replicated edges), matching asset-cache v12.
 /// v3: unified manifest; the continuous visual entity payload is gone.
 /// v2: removed the continuous visual entity payload.
-pub const SCENE_PACKAGE_FORMAT_VERSION: u32 = 7;
+pub const SCENE_PACKAGE_FORMAT_VERSION: u32 = 8;
 
 /// Capability flags a package may advertise.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

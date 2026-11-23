@@ -1015,6 +1015,7 @@ dependencies = [
  "mtk-resource",
  "mtk-testkit",
  "mtk-texture",
+ "postcard",
  "rayon",
  "serde",
  "serde_json",
