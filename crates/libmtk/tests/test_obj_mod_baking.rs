@@ -25,6 +25,14 @@ fn test_precompile_and_mesh_synthetic_obj_and_composite_mod() {
         make_solid_png([128, 128, 128, 255]),
     );
     vanilla.insert(
+        "assets/minecraft/textures/item/barrier.png",
+        make_solid_png([255, 0, 0, 255]),
+    );
+    vanilla.insert(
+        "assets/minecraft/models/block/barrier.json",
+        br#"{ "textures": { "particle": "minecraft:item/barrier" } }"#.to_vec(),
+    );
+    vanilla.insert(
         "assets/minecraft/models/block/stone.json",
         br##"{
             "textures": { "all": "minecraft:block/stone" },
@@ -149,6 +157,13 @@ map_Kd testmod:entity/widget
             .resolve_texture_key("testmod:entity/widget")
             .is_some(),
         "Extra entity/ texture referenced by .mtl must be stitched into Atlas"
+    );
+    let barrier_entry = atlas_map
+        .resolve_texture_key("minecraft:item/barrier")
+        .expect("minecraft:item/barrier must be stitched into items atlas");
+    assert_eq!(
+        barrier_entry.category, "items",
+        "Block model particle references to item/ textures must stay in the items atlas"
     );
 
     let model_db = reader.load_models().unwrap();

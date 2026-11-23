@@ -28,7 +28,7 @@ fn try_collect_extra_texture(
     let Ok(loc) = ResourceLocation::parse(&norm) else {
         return;
     };
-    if loc.path.starts_with("block/") {
+    if loc.path.starts_with("block/") || loc.path.starts_with("item/") {
         return;
     }
     let asset_path = loc.to_asset_path("textures", "png");
