@@ -3,6 +3,8 @@
 //! High-throughput collector for canonical per-face attributes needed for Atlas
 //! materials, UV tiling transforms, and dynamic Biome Tinting.
 
+use std::collections::HashMap;
+
 use glam::IVec3;
 use mtk_core::attribute_constants::*;
 use mtk_core::MeshData;
@@ -11,7 +13,7 @@ use mtk_core::{AttributeData, AttributeDomain, MeshAttribute};
 #[derive(Debug, Clone, Default)]
 pub(crate) struct FaceAttributesCollector {
     pub source_texture_palette: Vec<String>,
-    pub source_texture_indices: Vec<u16>,
+    pub source_texture_indices: Vec<i32>,
     pub atlas_chunk_ids: Vec<i32>,
     pub uv_transforms: Vec<[f32; 4]>,
     pub uv_rotations: Vec<f32>,
@@ -23,7 +25,8 @@ pub(crate) struct FaceAttributesCollector {
     pub anim_timings: Vec<[f32; 3]>,
     pub anim_frame_sizes: Vec<[f32; 3]>,
     pub ao_values: Vec<f32>,
-    pub last_texture_idx: Option<u16>,
+    pub last_texture_idx: Option<i32>,
+    source_texture_map: HashMap<String, i32>,
 }
 
 impl FaceAttributesCollector {
@@ -43,6 +46,7 @@ impl FaceAttributesCollector {
             anim_frame_sizes: Vec::with_capacity(capacity),
             ao_values: Vec::with_capacity(capacity * 4),
             last_texture_idx: None,
+            source_texture_map: HashMap::with_capacity(16),
         }
     }
 
@@ -101,6 +105,21 @@ impl FaceAttributesCollector {
     }
 
     #[inline]
+    fn intern_texture(&mut self, source_texture_key: &str) -> i32 {
+        let idx = if let Some(&existing) = self.source_texture_map.get(source_texture_key) {
+            existing
+        } else {
+            let next = self.source_texture_palette.len() as i32;
+            let key_owned = source_texture_key.to_string();
+            self.source_texture_palette.push(key_owned.clone());
+            self.source_texture_map.insert(key_owned, next);
+            next
+        };
+        self.last_texture_idx = Some(idx);
+        idx
+    }
+
+    #[inline]
     #[allow(clippy::too_many_arguments)]
     fn push_face_with_corners(
         &mut self,
@@ -118,39 +137,15 @@ impl FaceAttributesCollector {
             if self
                 .source_texture_palette
                 .get(last_idx as usize)
-                .map(|s| s.as_str())
+                .map(String::as_str)
                 == Some(source_texture_key)
             {
                 last_idx
-            } else if let Some(idx) = self
-                .source_texture_palette
-                .iter()
-                .position(|k| k == source_texture_key)
-            {
-                let u = idx as u16;
-                self.last_texture_idx = Some(u);
-                u
             } else {
-                let idx = self.source_texture_palette.len() as u16;
-                self.source_texture_palette
-                    .push(source_texture_key.to_string());
-                self.last_texture_idx = Some(idx);
-                idx
+                self.intern_texture(source_texture_key)
             }
-        } else if let Some(idx) = self
-            .source_texture_palette
-            .iter()
-            .position(|k| k == source_texture_key)
-        {
-            let u = idx as u16;
-            self.last_texture_idx = Some(u);
-            u
         } else {
-            let idx = self.source_texture_palette.len() as u16;
-            self.source_texture_palette
-                .push(source_texture_key.to_string());
-            self.last_texture_idx = Some(idx);
-            idx
+            self.intern_texture(source_texture_key)
         };
         self.source_texture_indices.push(pal_idx);
         self.atlas_chunk_ids.push(atlas_chunk_id);
@@ -175,20 +170,15 @@ impl FaceAttributesCollector {
         // `mtk_core::RETIRED_MESH_ATTRIBUTES` and must never be written
         // again: it cost one heap-allocated String per face and every host had to
         // purge it right after ingestion.
-        let indices_i32: Vec<i32> = self
-            .source_texture_indices
-            .iter()
-            .map(|&i| i as i32)
-            .collect();
         mesh.add_custom_attribute(MeshAttribute::new(
             ATTR_SOURCE_TEXTURE_IDX,
             AttributeDomain::Face,
-            AttributeData::Int32(indices_i32),
+            AttributeData::Int32(self.source_texture_indices),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
             ATTR_SOURCE_TEXTURE_PALETTE,
             AttributeDomain::Mesh,
-            AttributeData::String(self.source_texture_palette.clone()),
+            AttributeData::String(self.source_texture_palette),
         ));
         mesh.add_custom_attribute(MeshAttribute::new(
             ATTR_ATLAS_CHUNK_ID,
@@ -300,5 +290,46 @@ mod tests {
 
         assert!(mesh.get_custom_attribute(ATTR_ANIM_TIMING).is_some());
         assert!(mesh.get_custom_attribute(ATTR_ANIM_FRAME_SIZE).is_some());
+    }
+
+    #[test]
+    fn texture_palette_deduplicates_with_fast_and_map_paths() {
+        let mut collector = FaceAttributesCollector::with_capacity(4);
+        for key in [
+            "minecraft:block/stone",
+            "minecraft:block/stone",
+            "minecraft:block/dirt",
+            "minecraft:block/stone",
+        ] {
+            collector.push_face(
+                key,
+                0,
+                [1.0, 1.0, 0.0, 0.0],
+                0.0,
+                [1.0, 0.0, 0.0, 0.0],
+                [[1.0, 1.0, 1.0, 1.0]; 4],
+                glam::IVec3::ZERO,
+                [1.0, 1.0, 0.0],
+                [16.0, 16.0, 0.0],
+            );
+        }
+
+        let mut mesh = MeshData::new();
+        collector.attach_to_mesh(&mut mesh);
+
+        let palette = mesh
+            .get_custom_attribute(ATTR_SOURCE_TEXTURE_PALETTE)
+            .expect("palette attr");
+        assert_eq!(
+            palette.data,
+            AttributeData::String(vec![
+                "minecraft:block/stone".to_string(),
+                "minecraft:block/dirt".to_string(),
+            ])
+        );
+        let idx = mesh
+            .get_custom_attribute(ATTR_SOURCE_TEXTURE_IDX)
+            .expect("idx attr");
+        assert_eq!(idx.data, AttributeData::Int32(vec![0, 0, 1, 0]));
     }
 }

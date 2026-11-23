@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use crate::error::{PackageError, PackageResult};
 use crate::header::{CompressionType, PackageHeader, PackageProfile, HEADER_SIZE};
-use crate::toc::{ChunkEntry, TableOfContents};
+use crate::toc::{ChunkEntry, TableOfContents, MAX_DECOMPRESSED_CHUNK_SIZE};
 
 /// Chunk compression and serialization options.
 #[derive(Debug, Clone)]
@@ -92,6 +92,14 @@ impl<W: Write + Seek> MtkPackageWriter<W> {
         options: &ChunkWriteOptions,
     ) -> PackageResult<()> {
         let id = identifier.into();
+        let decompressed_size = decompressed_data.len() as u64;
+        if decompressed_size > MAX_DECOMPRESSED_CHUNK_SIZE {
+            return Err(PackageError::ChunkTooLarge {
+                identifier: id,
+                size: decompressed_size,
+                limit: MAX_DECOMPRESSED_CHUNK_SIZE,
+            });
+        }
 
         // 1. Ensure 64-byte alignment
         let remainder = self.current_offset % 64;
@@ -103,7 +111,6 @@ impl<W: Write + Seek> MtkPackageWriter<W> {
         }
 
         let chunk_start_offset = self.current_offset;
-        let decompressed_size = decompressed_data.len() as u64;
 
         // 2. Compute CRC32 checksum on decompressed payload
         let checksum = crc32fast::hash(decompressed_data) as u64;

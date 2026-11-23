@@ -89,8 +89,8 @@ impl VoxelWorld {
 
         // Publishing rule mirrors the pre-provider behaviour: a world that already has an atlas
         // map gets the provider's sprites (including the pinned banner slots) merged in, while a
-        // world without one (standalone materials) only gains a map when a real dynamic sprite
-        // appeared — otherwise `atlas_address_map: None` would silently become a dynamic-only map.
+        // world without an atlas map only gains a map when a real dynamic sprite appeared —
+        // otherwise `atlas_address_map: None` would silently become a dynamic-only map.
         if outcome.atlas_changed && (existing.is_some() || outcome.added) {
             self.config.atlas_address_map = Some(Arc::new(atlas));
         }

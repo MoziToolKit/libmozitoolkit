@@ -6,13 +6,15 @@ use std::io::{Cursor, Read, Write};
 use crate::error::{PackageError, PackageResult};
 use crate::header::CompressionType;
 
-/// Maximum decompressed size allowed per chunk or TOC (64 MiB).
-pub(crate) const MAX_DECOMPRESSED_CHUNK_SIZE: u64 = 64 * 1024 * 1024;
+/// Maximum decompressed size allowed for a package Table of Contents (64 MiB).
+pub(crate) const MAX_TOC_SIZE: u64 = 64 * 1024 * 1024;
+/// Maximum decompressed size allowed per data chunk payload (512 MiB).
+pub(crate) const MAX_DECOMPRESSED_CHUNK_SIZE: u64 = 512 * 1024 * 1024;
 
 /// Single chunk metadata entry in Table of Contents.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ChunkEntry {
-    /// Chunk type tag (e.g. `b"META"`, `b"MODL"`, `b"ATLS"`, `b"BIOM"`, `b"TXTR"`, `b"VOXL"`).
+    /// Chunk type tag (e.g. `b"META"`, `b"MODL"`, `b"ATLS"`, `b"BIOM"`, `b"CTMR"`, `b"VOXL"`).
     pub(crate) chunk_type: [u8; 4],
     /// Absolute start offset in package file (must be 64-byte aligned).
     pub(crate) offset: u64,
@@ -164,11 +166,11 @@ impl TableOfContents {
 
     /// Deserializes TOC from raw uncompressed bytes.
     pub(crate) fn decode_bytes(slice: &[u8]) -> PackageResult<Self> {
-        if slice.len() as u64 > MAX_DECOMPRESSED_CHUNK_SIZE {
+        if slice.len() as u64 > MAX_TOC_SIZE {
             return Err(PackageError::InvalidToc(format!(
                 "TOC size {} exceeds {} byte limit",
                 slice.len(),
-                MAX_DECOMPRESSED_CHUNK_SIZE
+                MAX_TOC_SIZE
             )));
         }
 
@@ -222,22 +224,19 @@ impl TableOfContents {
             }
         })?;
         let mut decompressed = Vec::new();
-        let mut limited = (&mut decoder).take(MAX_DECOMPRESSED_CHUNK_SIZE + 1);
+        let mut limited = (&mut decoder).take(MAX_TOC_SIZE + 1);
         limited
             .read_to_end(&mut decompressed)
             .map_err(|e| PackageError::DecompressionFailed {
                 identifier: "TOC".to_string(),
                 source: e,
             })?;
-        if decompressed.len() as u64 > MAX_DECOMPRESSED_CHUNK_SIZE {
+        if decompressed.len() as u64 > MAX_TOC_SIZE {
             return Err(PackageError::DecompressionFailed {
                 identifier: "TOC".to_string(),
                 source: std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!(
-                        "TOC decompressed size exceeds {} byte limit",
-                        MAX_DECOMPRESSED_CHUNK_SIZE
-                    ),
+                    format!("TOC decompressed size exceeds {} byte limit", MAX_TOC_SIZE),
                 ),
             });
         }

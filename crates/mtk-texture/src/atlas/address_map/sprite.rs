@@ -21,8 +21,6 @@ pub enum SpriteKind {
     StaticAtlas,
     /// Placed on a dedicated animated chunk (full vertical strip, frame_count > 1).
     AnimatedAtlas,
-    /// Standalone-only texture.
-    StandaloneOnly,
 }
 
 /// Address and metrics for a single sprite located within a stitched Atlas Chunk.

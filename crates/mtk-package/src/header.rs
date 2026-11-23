@@ -18,7 +18,7 @@ pub(crate) const CURRENT_VERSION_MINOR: u16 = 1;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
 pub enum PackageProfile {
-    /// Full precompiled asset cache (Atlas, Standalone, Models, Biomes).
+    /// Full precompiled asset cache (Atlas, Models, Biomes, CTM, Banners).
     AssetCache = 0,
     /// Lightweight scene interchange (sparse voxels, tree-shaken textures/models).
     SceneInterchange = 1,

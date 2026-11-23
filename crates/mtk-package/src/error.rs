@@ -58,6 +58,13 @@ pub enum PackageError {
     #[error("Invalid TOC format: {0}")]
     InvalidToc(String),
 
+    #[error("Chunk '{identifier}' size {size} exceeds maximum limit of {limit} bytes")]
+    ChunkTooLarge {
+        identifier: String,
+        size: u64,
+        limit: u64,
+    },
+
     #[error("Package writer has already been finalized")]
     WriterClosed,
 }

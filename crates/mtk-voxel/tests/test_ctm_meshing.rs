@@ -128,7 +128,7 @@ tiles=0-46
 }
 
 #[test]
-fn test_ctm_standalone_meshing() {
+fn test_ctm_meshing_without_atlas() {
     let mut world = VoxelStorage::new();
     world.set_bounds(0, 0, 0, 16, 16, 16);
     // Place 3 bookshelves in a line along X: (1, 1, 1), (2, 1, 1), (3, 1, 1)
@@ -149,7 +149,7 @@ tiles=0-3
             .unwrap();
     let solver = Arc::new(CtmSolver::new(vec![rule]));
 
-    // Standalone mode: atlas_address_map is None!
+    // Headless meshing without an atlas map (atlas_address_map is None).
     let config = MesherConfig {
         ctm_solver: Some(solver),
         atlas_address_map: None,

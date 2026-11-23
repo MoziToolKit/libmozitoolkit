@@ -1,6 +1,6 @@
 //! # Headless Asset Prebaking and Cache Engine
 //!
-//! Performs unified end-to-end asset precompilation (Atlas stitching, Standalone PBR alignment,
+//! Performs unified end-to-end asset precompilation (Atlas stitching, canonical PBR decoding,
 //! and multi-threaded Model baking) directly into `.mtkcache` binary package files.
 
 mod engine;

@@ -101,34 +101,109 @@ fn test_chunk_huge_declared_decompressed_size_rejected() {
 }
 
 #[test]
-fn test_decompression_bomb_exceeding_64mib_cap_rejected() {
+fn test_large_chunk_above_64mib_roundtrips() {
     let mut cursor = Cursor::new(Vec::new());
     let mut writer =
         MtkPackageWriter::new(&mut cursor, PackageProfile::AssetCache, [0x42; 16]).unwrap();
 
-    // 70 MiB of compressible data: compresses to a few hundred bytes
-    let bomb_payload = vec![0xABu8; 70 * 1024 * 1024];
+    // 70 MiB of compressible data must succeed cleanly under the 512 MiB chunk cap.
+    let large_payload = vec![0xABu8; 70 * 1024 * 1024];
     writer
         .add_chunk(
-            *b"BOMB",
-            "test/bomb",
-            &bomb_payload,
+            *b"MODL",
+            "test/large_chunk",
+            &large_payload,
             &ChunkWriteOptions::zstd_fast(),
         )
         .unwrap();
 
     writer.finish().unwrap();
+    let bytes = cursor.into_inner();
+
+    let reader = MtkPackageReader::from_bytes(bytes).unwrap();
+    let decoded = reader.read_chunk_decompressed("test/large_chunk").unwrap();
+    assert_eq!(decoded.len(), large_payload.len());
+    assert_eq!(decoded[0], 0xAB);
+    assert_eq!(decoded[decoded.len() - 1], 0xAB);
+}
+
+#[test]
+fn test_decompression_bomb_exceeding_512mib_cap_rejected() {
+    use std::io::Write;
+
+    let mut cursor = Cursor::new(Vec::new());
+    let mut writer =
+        MtkPackageWriter::new(&mut cursor, PackageProfile::AssetCache, [0x42; 16]).unwrap();
+
+    // Seed a valid single-chunk Zstd package.
+    let placeholder = vec![0xABu8; 4096];
+    writer
+        .add_chunk(
+            *b"BOMB",
+            "test/bomb",
+            &placeholder,
+            &ChunkWriteOptions::zstd_fast(),
+        )
+        .unwrap();
+    writer.finish().unwrap();
     let mut bytes = cursor.into_inner();
 
-    // Case 1: declared size is 70 MiB (exceeds 64 MiB cap)
+    // Stream-compress 513 MiB of 0xAB in 1 MiB slices (~1 MiB memory).
+    const BOMB_MIB: usize = 513;
+    const CHUNK_1MIB: usize = 1024 * 1024;
+    let slice = vec![0xABu8; CHUNK_1MIB];
+    let mut hasher = crc32fast::Hasher::new();
+    let mut encoder = zstd::Encoder::new(Vec::new(), 3).unwrap();
+    for _ in 0..BOMB_MIB {
+        hasher.update(&slice);
+        encoder.write_all(&slice).unwrap();
+    }
+    let bomb_zstd = encoder.finish().unwrap();
+    let bomb_crc = hasher.finalize() as u64;
+    let bomb_len = (BOMB_MIB * CHUNK_1MIB) as u64;
+
+    // Decode original TOC entry template, splice bomb payload at offset 64, and rewrite aligned TOC.
+    let old_toc_offset = u64::from_le_bytes(bytes[40..48].try_into().unwrap()) as usize;
+    let old_toc_length = u64::from_le_bytes(bytes[48..56].try_into().unwrap()) as usize;
+    let is_zstd = (bytes[10] & (1 << 1)) != 0;
+    let mut raw_toc = if is_zstd {
+        zstd::decode_all(&bytes[old_toc_offset..old_toc_offset + old_toc_length]).unwrap()
+    } else {
+        bytes[old_toc_offset..old_toc_offset + old_toc_length].to_vec()
+    };
+
+    raw_toc[16..24].copy_from_slice(&(bomb_zstd.len() as u64).to_le_bytes());
+    raw_toc[24..32].copy_from_slice(&bomb_len.to_le_bytes());
+    raw_toc[40..48].copy_from_slice(&bomb_crc.to_le_bytes());
+
+    let new_toc_bytes = if is_zstd {
+        zstd::encode_all(Cursor::new(raw_toc), 3).unwrap()
+    } else {
+        raw_toc
+    };
+
+    bytes.truncate(64);
+    bytes.extend_from_slice(&bomb_zstd);
+    while bytes.len() % 64 != 0 {
+        bytes.push(0);
+    }
+    let new_toc_offset = bytes.len() as u64;
+    bytes.extend_from_slice(&new_toc_bytes);
+
+    bytes[40..48].copy_from_slice(&new_toc_offset.to_le_bytes());
+    bytes[48..56].copy_from_slice(&(new_toc_bytes.len() as u64).to_le_bytes());
+    let header_crc = crc32fast::hash(&bytes[0..60]);
+    bytes[60..64].copy_from_slice(&header_crc.to_le_bytes());
+
+    // Case 1: declared size is 513 MiB (exceeds 512 MiB cap)
     let reader = MtkPackageReader::from_bytes(bytes.clone()).unwrap();
     let res = reader.read_chunk_decompressed("test/bomb");
     assert!(
         res.is_err(),
-        "Chunk exceeding 64 MiB declared size must be rejected"
+        "Chunk exceeding 512 MiB declared size must be rejected"
     );
 
-    // Case 2: forged TOC claiming decompressed_size is only 100 bytes, but payload expands to 70 MiB
+    // Case 2: forged TOC claiming decompressed_size is only 100 bytes, but payload expands to 513 MiB
     modify_toc(&mut bytes, |raw_toc| {
         let fake_size: u64 = 100;
         raw_toc[24..32].copy_from_slice(&fake_size.to_le_bytes());

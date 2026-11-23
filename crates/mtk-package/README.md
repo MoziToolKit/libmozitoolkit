@@ -10,7 +10,7 @@
 - **零拷贝寻址**：基于 `memmap2` 内存映射实现零拷贝直读，无需将整个文件预先载入内存。
 - **分块按需压缩**：
   - 数据与模型（`MODL`, `META`, JSON 映射表）：默认采用 Zstd 块级压缩；
-  - 贴图与图像（`ATLS`, `TXTR` 中的 PNG 字节流）：采用 `CompressionType::None` 直存原始字节流，避免二次压缩损耗性能。
+  - 贴图与图像（`ATLS`, `BANR` 中的 PNG 字节流）：采用 `CompressionType::None` 直存原始字节流，避免二次压缩损耗性能。
 
 ---
 

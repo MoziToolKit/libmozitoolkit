@@ -16,8 +16,8 @@
 - **统一底层容器 (Unified Container Architecture)**：
   缓存包与交换包共享完全一致的二进制底层物理结构（统一文件头、分块目录表 TOC、Zstd 块压缩、64 字节对齐）。
 - **Profile 业务分化 (Specialized Profiles)**：
-  - **`AssetCache Profile`（全量预编译缓存包，`.mtkcache`）**：打包全量预烘焙图集、Standalone PBR 贴图库、全局模型数据库与生物群系映射表，用于本地毫秒级即时加载。
-  - **`SceneInterchange Profile`（轻量场景交换包，`.mtkscene`）**：**不存全量网格**（仅存选区稀疏体素网格），**不存预烘焙图集**（仅按需打包场景用到的独立材质贴图），**按需剪枝模型**。在接收方端现场根据宿主配置实时重构网格并按需构建材质节点或现场图集。
+  - **`AssetCache Profile`（全量预编译缓存包，`.mtkcache`）**：打包全量预烘焙图集、全局模型数据库、生物群系映射表、CTM 规则与旗帜资产，用于本地毫秒级即时加载。
+  - **`SceneInterchange Profile`（轻量场景交换包，`.mtkscene`）**：**不存全量网格**（仅存选区稀疏体素网格），**不存全局预烘焙图集**（仅按需裁切并装箱自包含 Scene Mini-Atlas），**按需剪枝模型**。在接收方端现场根据宿主配置实时重构网格并直接绑定场景自带 Mini-Atlas 材质。
 
 ---
 
@@ -35,9 +35,9 @@
 ├────────────────────────────────────────────────────────┤
 │ Chunk 2: MODL  (方块模型定义 / 烘焙模型缓存)             │
 ├────────────────────────────────────────────────────────┤
-│ Chunk 3: TXTR  (独立贴图 / 纹理数据块流)                 │
+│ Chunk 3: ATLS  (图集切片 PNG 与地址映射表)               │
 ├────────────────────────────────────────────────────────┤
-│ ... (其余数据分块: ATLS / BIOM 等)                      │
+│ ... (其余数据分块: BIOM / CTMR / BANR 等)              │
 ├────────────────────────────────────────────────────────┤
 │ Table of Contents (TOC，分块索引表，可独立 Zstd 压缩)    │
 └────────────────────────────────────────────────────────┘
@@ -76,7 +76,7 @@ TOC 由 `chunk_count` 个连续的条目组成：
 
 ```rust
 pub struct ChunkEntry {
-    /// 分块类型标识 (如 b"META", b"VOXL", b"MODL", b"TXTR", b"BIOM", b"ATLS")
+    /// 分块类型标识 (如 b"META", b"VOXL", b"MODL", b"ATLS", b"BIOM", b"CTMR")
     pub chunk_type: [u8; 4],
     /// 分块在文件中的绝对字节起始偏移 (必须 64 字节对齐)
     pub offset: u64,
@@ -94,6 +94,8 @@ pub struct ChunkEntry {
     pub identifier: String,
 }
 ```
+
+> **内存安全护栏**：单数据分块解压上限为 `512 MiB`（`MAX_DECOMPRESSED_CHUNK_SIZE`，写入端与读取端对称强制校验），TOC 目录表上限为 `64 MiB`（`MAX_TOC_SIZE`），用于防范超大模组包溢出的同时防御恶意解压炸弹。
 
 ---
 
@@ -122,18 +124,12 @@ pub struct ChunkEntry {
   * `AssetCache`：使用全局 **`BakedModelDatabase`**（已烘焙的完整方块模型库）。
   * `SceneInterchange`：**Tree-shaken 按需剪枝模型库**，只保留场景体素中实际引用的方块模型定义，且所有网格面 UV 已预先重映射至伴生的 Scene Mini-Atlas。
 
-### 5.4 `TXTR` - 独立贴图与纹理块
-* **存储原则**：
-  * 存储 Standalone PBR 独立纹理条目与原始 PNG 字节流。
-  * 相同纹理严格去重。
-  * 可选携带伴生 PBR 贴图（`_n.png` OpenGL 法线 + 高度、`_orm.png` AO/粗糙度/金属度/发光、`_aux.png` IOR/SSS/孔隙度/透射）。
-
-### 5.5 `ATLS` - 图集与映射块
+### 5.4 `ATLS` - 图集与映射块
 * **存储原则**：
   * `AssetCache`：存储全量预烘焙出的全局多通道图集切片与 `atlas_mapping.json`。
   * `SceneInterchange`：存储在内存中动态拼接的 **Scene Mini-Atlas**（自包含微型多通道 PBR 图集与局部 `mapping.json`），仅按需裁切并装箱当前场景方块实际引用的纹理，模型 UV 已对其对齐。
 
-### 5.6 `BIOM` - 生物群系调色板映射与色盘分块
+### 5.5 `BIOM` - 生物群系调色板映射与色盘分块
 * **存储内容**：
   * `biome/mapping` 或 `biome/resolver`：原版及材质包自定义生物群系映射表与 BiomeResolver 规则 JSON。
   * `biome/colormap/*`：色盘纹理切片原始 PNG 缓冲（`biome/colormap/grass`、`biome/colormap/foliage`、`biome/colormap/dry_foliage`）。
@@ -141,14 +137,14 @@ pub struct ChunkEntry {
   * 场景包导出时自动提取资源包中的自定义 Colormap 与解析器一同打包。
   * 读取器（`ScenePackageReader`）通过 `unpack()` 提供包含 `colormaps` 与 `biome_resolver` 的纯只读解析，遵循纯粹 Data In, Data Out 原则，无全局单例状态副作用。
 
-### 5.7 `CTMR` - CTM 连通纹理规则分块
+### 5.6 `CTMR` - CTM 连通纹理规则分块
 * **存储内容**：
   * `ctm/rules`：携带经过 Tree-Shaking 剪枝后的 CTM 规则集（JSON 序列化后的 `Vec<CtmRule>`）。
 * **使用契约**：
   * 仅剪枝打包当前场景实际方块状态或其关联贴图所命中的 CTM 规则（`CtmRule::applies_to_scene`），同时将规则展开引用的 CTM 变体子贴图（如 `optifine/ctm/.../0.png`）自动装箱进伴生的 Scene Mini-Atlas。
   * 读取端可通过 `unpack()` 零外部依赖现场复原带优先级倒序索引的 `CtmSolver`，使跨设备脱机场景在重构几何时保持 100% 精确的连通纹理外观。
 
-### 5.8 `ENTI` - 连续视觉实体分块
+### 5.7 `ENTI` - 连续视觉实体分块
 * **存储内容**：
   * `entities/instances`：紧凑序列化后的场景连续视觉实体列表（如艺术画 Painting、展示框 ItemFrame 等，采用 JSON + Zstandard 压缩）。
 * **使用契约**：

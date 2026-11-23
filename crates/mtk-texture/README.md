@@ -69,7 +69,6 @@ pub struct RgbaBuffer {
 pub enum SpriteKind {
     StaticAtlas,
     AnimatedAtlas,
-    StandaloneOnly,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
