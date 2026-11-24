@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use flate2::read::{GzDecoder, ZlibDecoder};
 
@@ -16,6 +16,8 @@ pub(crate) const REGION_HEADER_SIZE: usize = 4096;
 pub(crate) const SECTOR_SIZE: usize = 4096;
 /// Maximum allowed size of decompressed chunk data (64 MiB).
 pub(crate) const MAX_DECOMPRESSED_CHUNK_SIZE: usize = 64 * 1024 * 1024;
+/// Compression byte bitflag indicating the chunk payload is stored in an external `.mcc` file.
+const EXTERNAL_STREAM_FLAG: u8 = 0x80;
 
 /// Location entry inside an Anvil region file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,6 +43,7 @@ impl ChunkLocation {
 /// Anvil MCA region file reader with direct sector seeking and zero unneeded decompression.
 #[derive(Debug)]
 pub(crate) struct RegionFile {
+    dir: PathBuf,
     file: File,
     locations: [ChunkLocation; REGION_TOTAL_CHUNKS],
 }
@@ -84,7 +87,16 @@ impl RegionFile {
             };
         }
 
-        Ok(Self { file, locations })
+        let dir = match path.parent() {
+            Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+            _ => PathBuf::from("."),
+        };
+
+        Ok(Self {
+            dir,
+            file,
+            locations,
+        })
     }
 
     /// Computes the linear chunk index (0..1024) within a region from world chunk coordinates.
@@ -184,39 +196,75 @@ impl RegionFile {
             )));
         }
 
-        // 1 byte: compression type
+        // 1 byte: compression type (high bit 0x80 indicates external `.mcc` chunk stream)
         let mut comp_type = [0u8; 1];
         self.file.read_exact(&mut comp_type)?;
+        let comp = comp_type[0];
+
+        if (comp & EXTERNAL_STREAM_FLAG) != 0 {
+            let inner_comp = comp & !EXTERNAL_STREAM_FLAG;
+            return self
+                .read_external_chunk(chunk_x, chunk_z, inner_comp)
+                .map(Some);
+        }
 
         let compressed_size = (chunk_len - 1) as usize;
         let mut compressed_data = vec![0u8; compressed_size];
         self.file.read_exact(&mut compressed_data)?;
 
-        let decompressed = match comp_type[0] {
-            1 => {
-                // GZip
-                let gz = GzDecoder::new(&compressed_data[..]);
-                Self::decompress_limited(gz, "GZip")?
-            }
-            2 => {
-                // Zlib / Deflate (standard Java Edition)
-                let zlib = ZlibDecoder::new(&compressed_data[..]);
-                Self::decompress_limited(zlib, "Zlib")?
-            }
+        Self::decompress_payload(comp, &compressed_data).map(Some)
+    }
+
+    fn read_external_chunk(
+        &self,
+        chunk_x: i32,
+        chunk_z: i32,
+        inner_comp: u8,
+    ) -> Result<Vec<u8>, SaveError> {
+        let ext_path = self.dir.join(format!("c.{chunk_x}.{chunk_z}.mcc"));
+        if !ext_path.is_file() {
+            return Err(SaveError::InvalidChunkData(format!(
+                "External chunk file missing: {}",
+                ext_path.display()
+            )));
+        }
+
+        let file = File::open(&ext_path)?;
+        // Cap compressed/uncompressed read safely before decoding.
+        let read_cap = if inner_comp == 3 {
+            MAX_DECOMPRESSED_CHUNK_SIZE as u64
+        } else {
+            (MAX_DECOMPRESSED_CHUNK_SIZE as u64) + 1024 * 1024
+        };
+        let mut raw = Vec::new();
+        file.take(read_cap + 1).read_to_end(&mut raw)?;
+        if (raw.len() as u64) > read_cap {
+            return Err(SaveError::InvalidChunkData(format!(
+                "External chunk {} exceeds {} byte size limit",
+                ext_path.display(),
+                read_cap
+            )));
+        }
+
+        Self::decompress_payload(inner_comp, &raw)
+    }
+
+    fn decompress_payload(comp_type: u8, data: &[u8]) -> Result<Vec<u8>, SaveError> {
+        match comp_type {
+            1 => Self::decompress_limited(GzDecoder::new(data), "GZip"),
+            2 => Self::decompress_limited(ZlibDecoder::new(data), "Zlib"),
             3 => {
-                // Uncompressed
-                if compressed_data.len() > MAX_DECOMPRESSED_CHUNK_SIZE {
+                if data.len() > MAX_DECOMPRESSED_CHUNK_SIZE {
                     return Err(SaveError::InvalidChunkData(format!(
                         "Uncompressed chunk size {} exceeds 64 MiB limit",
-                        compressed_data.len()
+                        data.len()
                     )));
                 }
-                compressed_data
+                Ok(data.to_vec())
             }
-            other => return Err(SaveError::UnsupportedCompression(other)),
-        };
-
-        Ok(Some(decompressed))
+            4 => crate::lz4::decompress_lz4_block_stream(data, MAX_DECOMPRESSED_CHUNK_SIZE),
+            other => Err(SaveError::UnsupportedCompression(other)),
+        }
     }
 
     fn decompress_limited<R: Read>(mut reader: R, codec: &str) -> Result<Vec<u8>, SaveError> {
@@ -239,6 +287,42 @@ impl RegionFile {
 mod tests {
     use super::*;
 
+    fn make_temp_dir(tag: &str) -> PathBuf {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir =
+            std::env::temp_dir().join(format!("mtk_save_{tag}_{}_{}", std::process::id(), unique));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn build_single_chunk_mca(comp_type: u8, payload: &[u8]) -> Vec<u8> {
+        let declared_len = (payload.len() + 1) as u32;
+        let sectors_needed = (payload.len() + 5).div_ceil(SECTOR_SIZE) as u8;
+        let mut bytes = vec![0u8; SECTOR_SIZE * (2 + sectors_needed as usize)];
+        bytes[0..3].copy_from_slice(&[0, 0, 2]);
+        bytes[3] = sectors_needed;
+        let data_offset = SECTOR_SIZE * 2;
+        bytes[data_offset..data_offset + 4].copy_from_slice(&declared_len.to_be_bytes());
+        bytes[data_offset + 4] = comp_type;
+        bytes[data_offset + 5..data_offset + 5 + payload.len()].copy_from_slice(payload);
+        bytes
+    }
+
+    fn with_temp_mca<F>(tag: &str, mca_bytes: &[u8], f: F)
+    where
+        F: FnOnce(&Path, &Path),
+    {
+        let dir = make_temp_dir(tag);
+        let path = dir.join("r.0.0.mca");
+        std::fs::write(&path, mca_bytes).unwrap();
+        f(&dir, &path);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[test]
     fn test_region_chunk_indexing() {
         assert_eq!(RegionFile::chunk_index(0, 0), 0);
@@ -256,7 +340,6 @@ mod tests {
         use flate2::write::GzEncoder;
         use flate2::Compression;
         use std::io::Write;
-        use std::time::{SystemTime, UNIX_EPOCH};
 
         let payload = b"gzip-compressed chunk payload".repeat(16);
         let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
@@ -264,134 +347,129 @@ mod tests {
         let compressed = encoder.finish().unwrap();
         assert!(compressed.len() + 5 < SECTOR_SIZE);
 
-        // 4 KiB location header + one data sector. Chunk (0,0) starts at sector 2.
-        let mut bytes = vec![0u8; SECTOR_SIZE * 3];
-        bytes[0..3].copy_from_slice(&[0, 0, 2]);
-        bytes[3] = 1;
-        let data_offset = SECTOR_SIZE * 2;
-        let declared_len = (compressed.len() + 1) as u32;
-        bytes[data_offset..data_offset + 4].copy_from_slice(&declared_len.to_be_bytes());
-        bytes[data_offset + 4] = 1; // GZip
-        bytes[data_offset + 5..data_offset + 5 + compressed.len()].copy_from_slice(&compressed);
+        let mca = build_single_chunk_mca(1, &compressed);
+        with_temp_mca("gzip", &mca, |_, path| {
+            let mut region = RegionFile::open(path).unwrap();
+            let decoded = region
+                .read_chunk_decompressed(0, 0)
+                .unwrap()
+                .expect("gzip chunk should be present");
+            assert_eq!(decoded, payload);
+        });
+    }
 
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "mtk_save_gzip_{}_{}.mca",
-            std::process::id(),
-            unique
-        ));
-        std::fs::write(&path, &bytes).unwrap();
+    #[test]
+    fn test_region_file_reads_lz4_chunk() {
+        let payload = b"lz4-compressed chunk payload".repeat(12);
+        let compressed = crate::lz4::test_helpers::encode_raw_lz4_stream(&payload);
+        let mca = build_single_chunk_mca(4, &compressed);
+        with_temp_mca("lz4", &mca, |_, path| {
+            let mut region = RegionFile::open(path).unwrap();
+            let decoded = region
+                .read_chunk_decompressed(0, 0)
+                .unwrap()
+                .expect("lz4 chunk should be present");
+            assert_eq!(decoded, payload);
+        });
+    }
 
-        let mut region = RegionFile::open(&path).unwrap();
-        let decoded = region
-            .read_chunk_decompressed(0, 0)
-            .unwrap()
-            .expect("gzip chunk should be present");
-        assert_eq!(decoded, payload);
-        drop(region);
-        std::fs::remove_file(&path).unwrap();
+    #[test]
+    fn test_region_file_reads_external_mcc_chunk() {
+        use flate2::write::ZlibEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+
+        let payload_zlib = b"external zlib mcc payload".repeat(20);
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
+        encoder.write_all(&payload_zlib).unwrap();
+        let zlib_bytes = encoder.finish().unwrap();
+
+        let mca_zlib = build_single_chunk_mca(EXTERNAL_STREAM_FLAG | 2, &[]);
+        with_temp_mca("mcc_zlib", &mca_zlib, |dir, path| {
+            std::fs::write(dir.join("c.0.0.mcc"), &zlib_bytes).unwrap();
+            let mut region = RegionFile::open(path).unwrap();
+            let decoded = region
+                .read_chunk_decompressed(0, 0)
+                .unwrap()
+                .expect("external zlib chunk should be present");
+            assert_eq!(decoded, payload_zlib);
+        });
+
+        let payload_lz4 = b"external lz4 mcc payload".repeat(20);
+        let lz4_bytes = crate::lz4::test_helpers::encode_raw_lz4_stream(&payload_lz4);
+        let mca_lz4 = build_single_chunk_mca(EXTERNAL_STREAM_FLAG | 4, &[]);
+        with_temp_mca("mcc_lz4", &mca_lz4, |dir, path| {
+            std::fs::write(dir.join("c.0.0.mcc"), &lz4_bytes).unwrap();
+            let mut region = RegionFile::open(path).unwrap();
+            let decoded = region
+                .read_chunk_decompressed(0, 0)
+                .unwrap()
+                .expect("external lz4 chunk should be present");
+            assert_eq!(decoded, payload_lz4);
+        });
+    }
+
+    #[test]
+    fn test_region_file_missing_external_mcc_returns_err() {
+        let mca = build_single_chunk_mca(EXTERNAL_STREAM_FLAG | 2, &[]);
+        with_temp_mca("mcc_missing", &mca, |_, path| {
+            let mut region = RegionFile::open(path).unwrap();
+            let result = region.read_chunk_decompressed(0, 0);
+            assert!(
+                matches!(result, Err(SaveError::InvalidChunkData(_))),
+                "Expected InvalidChunkData for missing .mcc, got: {result:?}"
+            );
+        });
     }
 
     #[test]
     fn test_region_location_pointing_past_eof_returns_err() {
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        // 3 sectors total (12 KiB). Chunk (0,0) location points to sector 100.
         let mut bytes = vec![0u8; SECTOR_SIZE * 3];
         bytes[0..3].copy_from_slice(&[0, 0, 100]);
         bytes[3] = 1;
 
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "mtk_save_past_eof_{}_{}.mca",
-            std::process::id(),
-            unique
-        ));
-        std::fs::write(&path, &bytes).unwrap();
-
-        let mut region = RegionFile::open(&path).unwrap();
-        let result = region.read_chunk_decompressed(0, 0);
-        assert!(
-            matches!(result, Err(SaveError::InvalidRegionHeader(_))),
-            "Expected InvalidRegionHeader, got: {:?}",
-            result
-        );
-        drop(region);
-        std::fs::remove_file(&path).unwrap();
+        with_temp_mca("past_eof", &bytes, |_, path| {
+            let mut region = RegionFile::open(path).unwrap();
+            let result = region.read_chunk_decompressed(0, 0);
+            assert!(
+                matches!(result, Err(SaveError::InvalidRegionHeader(_))),
+                "Expected InvalidRegionHeader, got: {result:?}"
+            );
+        });
     }
 
     #[test]
     fn test_region_location_invalid_low_sector_offset_returns_err() {
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        // Chunk (0,0) points to sector 1 (timestamp table), which is < 2.
         let mut bytes = vec![0u8; SECTOR_SIZE * 3];
         bytes[0..3].copy_from_slice(&[0, 0, 1]);
         bytes[3] = 1;
 
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "mtk_save_low_sector_{}_{}.mca",
-            std::process::id(),
-            unique
-        ));
-        std::fs::write(&path, &bytes).unwrap();
-
-        let mut region = RegionFile::open(&path).unwrap();
-        let result = region.read_chunk_decompressed(0, 0);
-        assert!(
-            matches!(result, Err(SaveError::InvalidRegionHeader(_))),
-            "Expected InvalidRegionHeader, got: {:?}",
-            result
-        );
-        drop(region);
-        std::fs::remove_file(&path).unwrap();
+        with_temp_mca("low_sector", &bytes, |_, path| {
+            let mut region = RegionFile::open(path).unwrap();
+            let result = region.read_chunk_decompressed(0, 0);
+            assert!(
+                matches!(result, Err(SaveError::InvalidRegionHeader(_))),
+                "Expected InvalidRegionHeader, got: {result:?}"
+            );
+        });
     }
 
     #[test]
     fn test_region_chunk_length_exceeding_sector_capacity_returns_err() {
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        // Chunk (0,0) starts at sector 2 with sector_count 1 (4 KiB max).
-        // File has 3 sectors (12 KiB).
         let mut bytes = vec![0u8; SECTOR_SIZE * 3];
         bytes[0..3].copy_from_slice(&[0, 0, 2]);
         bytes[3] = 1;
-
         let data_offset = SECTOR_SIZE * 2;
-        // Hostile chunk length: 0x7FFF_FFFF (2 GiB)
-        let hostile_len: u32 = 0x7FFF_FFFF;
-        bytes[data_offset..data_offset + 4].copy_from_slice(&hostile_len.to_be_bytes());
+        bytes[data_offset..data_offset + 4].copy_from_slice(&0x7FFF_FFFFu32.to_be_bytes());
 
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "mtk_save_huge_len_{}_{}.mca",
-            std::process::id(),
-            unique
-        ));
-        std::fs::write(&path, &bytes).unwrap();
-
-        let mut region = RegionFile::open(&path).unwrap();
-        let result = region.read_chunk_decompressed(0, 0);
-        assert!(
-            matches!(result, Err(SaveError::InvalidChunkData(_))),
-            "Expected InvalidChunkData, got: {:?}",
-            result
-        );
-        drop(region);
-        std::fs::remove_file(&path).unwrap();
+        with_temp_mca("huge_len", &bytes, |_, path| {
+            let mut region = RegionFile::open(path).unwrap();
+            let result = region.read_chunk_decompressed(0, 0);
+            assert!(
+                matches!(result, Err(SaveError::InvalidChunkData(_))),
+                "Expected InvalidChunkData, got: {result:?}"
+            );
+        });
     }
 
     #[test]
@@ -399,46 +477,21 @@ mod tests {
         use flate2::write::GzEncoder;
         use flate2::Compression;
         use std::io::Write;
-        use std::time::{SystemTime, UNIX_EPOCH};
 
-        // 65 MiB of zeros compresses to ~65 KiB
         let bomb_payload = vec![0u8; 65 * 1024 * 1024];
         let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
         encoder.write_all(&bomb_payload).unwrap();
         let compressed = encoder.finish().unwrap();
 
-        let sectors_needed = (compressed.len() + 5).div_ceil(SECTOR_SIZE) as u8;
-        let total_sectors = 2 + sectors_needed as usize;
-        let mut bytes = vec![0u8; SECTOR_SIZE * total_sectors];
-        bytes[0..3].copy_from_slice(&[0, 0, 2]);
-        bytes[3] = sectors_needed;
-
-        let data_offset = SECTOR_SIZE * 2;
-        let declared_len = (compressed.len() + 1) as u32;
-        bytes[data_offset..data_offset + 4].copy_from_slice(&declared_len.to_be_bytes());
-        bytes[data_offset + 4] = 1; // GZip
-        bytes[data_offset + 5..data_offset + 5 + compressed.len()].copy_from_slice(&compressed);
-
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "mtk_save_gz_bomb_{}_{}.mca",
-            std::process::id(),
-            unique
-        ));
-        std::fs::write(&path, &bytes).unwrap();
-
-        let mut region = RegionFile::open(&path).unwrap();
-        let result = region.read_chunk_decompressed(0, 0);
-        assert!(
-            matches!(result, Err(SaveError::DecompressionFailed(_))),
-            "Expected DecompressionFailed, got: {:?}",
-            result
-        );
-        drop(region);
-        std::fs::remove_file(&path).unwrap();
+        let mca = build_single_chunk_mca(1, &compressed);
+        with_temp_mca("gz_bomb", &mca, |_, path| {
+            let mut region = RegionFile::open(path).unwrap();
+            let result = region.read_chunk_decompressed(0, 0);
+            assert!(
+                matches!(result, Err(SaveError::DecompressionFailed(_))),
+                "Expected DecompressionFailed, got: {result:?}"
+            );
+        });
     }
 
     #[test]
@@ -446,70 +499,31 @@ mod tests {
         use flate2::write::ZlibEncoder;
         use flate2::Compression;
         use std::io::Write;
-        use std::time::{SystemTime, UNIX_EPOCH};
 
-        // 65 MiB of zeros
         let bomb_payload = vec![0u8; 65 * 1024 * 1024];
         let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
         encoder.write_all(&bomb_payload).unwrap();
         let compressed = encoder.finish().unwrap();
 
-        let sectors_needed = (compressed.len() + 5).div_ceil(SECTOR_SIZE) as u8;
-        let total_sectors = 2 + sectors_needed as usize;
-        let mut bytes = vec![0u8; SECTOR_SIZE * total_sectors];
-        bytes[0..3].copy_from_slice(&[0, 0, 2]);
-        bytes[3] = sectors_needed;
-
-        let data_offset = SECTOR_SIZE * 2;
-        let declared_len = (compressed.len() + 1) as u32;
-        bytes[data_offset..data_offset + 4].copy_from_slice(&declared_len.to_be_bytes());
-        bytes[data_offset + 4] = 2; // Zlib
-        bytes[data_offset + 5..data_offset + 5 + compressed.len()].copy_from_slice(&compressed);
-
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "mtk_save_zlib_bomb_{}_{}.mca",
-            std::process::id(),
-            unique
-        ));
-        std::fs::write(&path, &bytes).unwrap();
-
-        let mut region = RegionFile::open(&path).unwrap();
-        let result = region.read_chunk_decompressed(0, 0);
-        assert!(
-            matches!(result, Err(SaveError::DecompressionFailed(_))),
-            "Expected DecompressionFailed, got: {:?}",
-            result
-        );
-        drop(region);
-        std::fs::remove_file(&path).unwrap();
+        let mca = build_single_chunk_mca(2, &compressed);
+        with_temp_mca("zlib_bomb", &mca, |_, path| {
+            let mut region = RegionFile::open(path).unwrap();
+            let result = region.read_chunk_decompressed(0, 0);
+            assert!(
+                matches!(result, Err(SaveError::DecompressionFailed(_))),
+                "Expected DecompressionFailed, got: {result:?}"
+            );
+        });
     }
 
     #[test]
     fn test_malformed_location_table_file_too_small_returns_err() {
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "mtk_save_too_small_{}_{}.mca",
-            std::process::id(),
-            unique
-        ));
-        // Only 100 bytes (header requires 4096 bytes)
-        std::fs::write(&path, [0u8; 100]).unwrap();
-
-        let result = RegionFile::open(&path);
-        assert!(
-            matches!(result, Err(SaveError::InvalidRegionHeader(_))),
-            "Expected InvalidRegionHeader, got: {:?}",
-            result
-        );
-        std::fs::remove_file(&path).unwrap();
+        with_temp_mca("too_small", &[0u8; 100], |_, path| {
+            let result = RegionFile::open(path);
+            assert!(
+                matches!(result, Err(SaveError::InvalidRegionHeader(_))),
+                "Expected InvalidRegionHeader, got: {result:?}"
+            );
+        });
     }
 }

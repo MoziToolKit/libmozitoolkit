@@ -89,6 +89,28 @@ fn decode_decorated_pot(comp: &NbtCompound) -> Option<BlockEntityData> {
     Some(mtk_model::BlockEntityData::DecoratedPot { sherds })
 }
 
+/// Maps numeric Minecraft dye color ID (`0..=15`) to its canonical color name.
+fn dye_color_id_to_name(id: i32) -> &'static str {
+    match id {
+        1 => "orange",
+        2 => "magenta",
+        3 => "light_blue",
+        4 => "yellow",
+        5 => "lime",
+        6 => "pink",
+        7 => "gray",
+        8 => "light_gray",
+        9 => "cyan",
+        10 => "purple",
+        11 => "blue",
+        12 => "brown",
+        13 => "green",
+        14 => "red",
+        15 => "black",
+        _ => "white",
+    }
+}
+
 /// Decodes Banner NBT data (pre-1.20.5 `Patterns` list and 1.20.5+ `minecraft:banner_patterns` component).
 fn decode_banner(comp: &NbtCompound) -> Option<BlockEntityData> {
     // 1. Determine base color
@@ -118,6 +140,13 @@ fn decode_banner(comp: &NbtCompound) -> Option<BlockEntityData> {
                 .string("Color")
                 .or_else(|| p_comp.string("color"))
                 .map(|s| s.as_str().to_string())
+                .or_else(|| {
+                    p_comp
+                        .int("Color")
+                        .or_else(|| p_comp.byte("Color").map(|b| b as i32))
+                        .or_else(|| p_comp.int("color"))
+                        .map(|id| dye_color_id_to_name(id).to_string())
+                })
                 .unwrap_or_else(|| "white".to_string());
 
             patterns.push(BannerPatternLayer::new(pat, col));
@@ -347,6 +376,47 @@ mod tests {
             assert_eq!(patterns.len(), 1);
             assert_eq!(patterns[0].pattern, "ts");
             assert_eq!(patterns[0].color, "orange");
+        } else {
+            panic!("Expected Banner variant");
+        }
+    }
+
+    #[test]
+    fn test_decode_banner_pre_1_20_5_integer_colors() {
+        let mut banner_comp = NbtCompound::new();
+        banner_comp.entries.push((
+            NbtStr::from_borrowed("id"),
+            NbtTag::String(NbtStr::from_borrowed("minecraft:banner")),
+        ));
+
+        let mut p1 = NbtCompound::new();
+        p1.entries.push((
+            NbtStr::from_borrowed("Pattern"),
+            NbtTag::String(NbtStr::from_borrowed("cre")),
+        ));
+        p1.entries
+            .push((NbtStr::from_borrowed("Color"), NbtTag::Int(14)));
+
+        let mut p2 = NbtCompound::new();
+        p2.entries.push((
+            NbtStr::from_borrowed("Pattern"),
+            NbtTag::String(NbtStr::from_borrowed("bo")),
+        ));
+        p2.entries
+            .push((NbtStr::from_borrowed("Color"), NbtTag::Byte(11)));
+
+        banner_comp.entries.push((
+            NbtStr::from_borrowed("Patterns"),
+            NbtTag::List(NbtList::Compound(vec![p1, p2])),
+        ));
+
+        let decoded = decode_block_entity(&banner_comp).expect("Must decode integer-color banner");
+        if let BlockEntityData::Banner { patterns, .. } = decoded {
+            assert_eq!(patterns.len(), 2);
+            assert_eq!(patterns[0].pattern, "cre");
+            assert_eq!(patterns[0].color, "red");
+            assert_eq!(patterns[1].pattern, "bo");
+            assert_eq!(patterns[1].color, "blue");
         } else {
             panic!("Expected Banner variant");
         }

@@ -62,18 +62,20 @@ impl SaveLoader {
             dims.push("overworld".to_string());
         }
 
-        // 2. The Nether check (1.18+ dimension folder layout)
+        // 2. The Nether check (1.18+/26.x dimension folder layout and classic DIM-1 layout)
         if save_dir
             .join("dimensions/minecraft/the_nether/region")
             .exists()
+            || save_dir.join("DIM-1/region").exists()
         {
             dims.push("the_nether".to_string());
         }
 
-        // 3. The End check (1.18+ dimension folder layout)
+        // 3. The End check (1.18+/26.x dimension folder layout and classic DIM1 layout)
         if save_dir
             .join("dimensions/minecraft/the_end/region")
             .exists()
+            || save_dir.join("DIM1/region").exists()
         {
             dims.push("the_end".to_string());
         }
@@ -137,16 +139,24 @@ impl SaveLoader {
                     return Some(p2);
                 }
             }
-            "nether" | "the_nether" | "minecraft:the_nether" => {
-                let p = save_dir.join("dimensions/minecraft/the_nether/region");
-                if p.is_dir() {
-                    return Some(p);
+            "nether" | "the_nether" | "minecraft:the_nether" | "dim-1" => {
+                let modern = save_dir.join("dimensions/minecraft/the_nether/region");
+                if modern.is_dir() {
+                    return Some(modern);
+                }
+                let classic = save_dir.join("DIM-1/region");
+                if classic.is_dir() {
+                    return Some(classic);
                 }
             }
-            "end" | "the_end" | "minecraft:the_end" => {
-                let p = save_dir.join("dimensions/minecraft/the_end/region");
-                if p.is_dir() {
-                    return Some(p);
+            "end" | "the_end" | "minecraft:the_end" | "dim1" => {
+                let modern = save_dir.join("dimensions/minecraft/the_end/region");
+                if modern.is_dir() {
+                    return Some(modern);
+                }
+                let classic = save_dir.join("DIM1/region");
+                if classic.is_dir() {
+                    return Some(classic);
                 }
             }
             custom => {
@@ -357,4 +367,49 @@ fn decode_region(
     }
 
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_dimension_region_dir_classic_and_modern() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "mtk_save_resolve_{}_{}",
+            std::process::id(),
+            unique
+        ));
+        let dim_nether = root.join("DIM-1/region");
+        let dim_end = root.join("DIM1/region");
+        std::fs::create_dir_all(&dim_nether).unwrap();
+        std::fs::create_dir_all(&dim_end).unwrap();
+
+        assert_eq!(
+            SaveLoader::resolve_dimension_region_dir(&root, "the_nether"),
+            Some(dim_nether.clone())
+        );
+        assert_eq!(
+            SaveLoader::resolve_dimension_region_dir(&root, "minecraft:the_nether"),
+            Some(dim_nether)
+        );
+        assert_eq!(
+            SaveLoader::resolve_dimension_region_dir(&root, "the_end"),
+            Some(dim_end)
+        );
+
+        let modern_nether = root.join("dimensions/minecraft/the_nether/region");
+        std::fs::create_dir_all(&modern_nether).unwrap();
+        assert_eq!(
+            SaveLoader::resolve_dimension_region_dir(&root, "the_nether"),
+            Some(modern_nether)
+        );
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 }

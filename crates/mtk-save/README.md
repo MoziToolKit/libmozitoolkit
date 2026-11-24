@@ -16,7 +16,7 @@
 - [3. 核心数据结构与契约](#3-核心数据结构与契约)
   - [3.1 世界元数据与环境 (`level.rs`)](#31-世界元数据与环境-levelrs)
   - [3.2 Anvil 区域文件与扇区寻址 (`region.rs`)](#32-anvil-区域文件与扇区寻址-regionrs)
-  - [3.3 现代 1.18+ 区块切片解包 (`chunk.rs`)](#33-现代-118-区块切片解包-chunkrs)
+  - [3.3 区块切片解包与版本升级 (`chunk.rs` / `upgrade.rs`)](#33-现代-118-区块切片解包-chunkrs)
   - [3.4 按需空间切片加载器 (`loader.rs`)](#34-按需空间切片加载器-loaderrs)
 - [4. 核心公共 API 清单](#4-核心公共-api-清单)
 - [5. 快速上手示例 (Quick Start)](#5-快速上手示例-quick-start)
@@ -29,11 +29,11 @@
 
 ## 1. 架构定位与核心职责
 
-`mtk-save` 专为大规模 Minecraft Java 版世界存档（1.18+、1.20+、1.21+ / `DataVersion` >= 2844）的高吞吐解析与局部按需提取而设计：
+`mtk-save` 专为大规模 Minecraft Java 版世界存档（1.13–26.2 / `DataVersion >= 1451`）的高吞吐解析与局部按需提取而设计：
 
-- **`level.dat` 极速审阅**：零拷贝反序列化世界版本号、生成时间戳、出生点坐标与多维度（主世界 Overworld、下界 The Nether、末地 The End）寻址。
-- **Anvil `.mca` 零开销寻址**：直接解析 4096 字节 Location Table 与时间戳表，按 4KiB 扇区直接定位目标 Chunk，仅解压所需区块的压缩数据流（Zlib / Gzip）。
-- **现代 Chunk Section 纯位解包**：高效解密 384 高度范围（$Y \in [-64, 320)$）的世界切片，解包紧凑位紧缩长整型数组（Bit-Unpacking），提取调色板方块状态与 3D 4×4×4 生物群系单元。
+- **`level.dat` 极速审阅**：零拷贝反序列化世界版本号、生成时间戳、出生点坐标（兼容经典 `SpawnX/Y/Z` 与 1.21.9+/26.x `spawn.pos` 复合格式，支持 GZip 与未压缩 `level.dat`）与多维度（主世界 Overworld、下界 The Nether、末地 The End，兼容 `DIM-1`/`DIM1` 与 `dimensions/.../region` 布局）寻址。
+- **Anvil `.mca` 零开销寻址**：直接解析 4096 字节 Location Table 与时间戳表，按 4KiB 扇区直接定位目标 Chunk，仅解压所需区块的压缩数据流（GZip / Zlib / Uncompressed / LZ4，以及 `0x80` 外部 `.mcc` 超大区块）。
+- **跨版本 Chunk Section 纯位解包与迁移**：同时支持 1.18+ 顶层 `sections` (`block_states`/`biomes`/`block_entities`) 与 1.13–1.17.1 `Level.Sections` (`Palette`/`BlockStates`/`TileEntities`/`Biomes`)，自动识别 1.16+ 字节对齐与 1.13–1.15 跨 64-bit long 紧密打包，支持 2D/3D 数值生物群系 ID 映射以及按 `DataVersion` 执行方块/生物群系重命名与旧版旗帜整型图案色值迁移。
 - **按需 3D 空间切片 (On-Demand Spatial Slicing)**：依据用户指定的 3D 轴对齐包围盒 $[P_{\min}, P_{\max}]$，精确推算相交的 Region / Chunk / Section 坐标范围，仅加载落入选区内的区块，杜绝数十 GB 全图扫描导致的内存崩溃。
 - **统一体素源 (`VoxelSource`) 桥接**：实现 `mtk_voxel::source::VoxelSource`，使外部 Anvil 存档能够直接作为数据源流式驱动 `SectionMesher` 与 `VoxelWorld`。
 
@@ -44,7 +44,7 @@
 ```
 ┌────────────────────────────────────────────────────────┐
 │               Minecraft Java Save Directory            │
-│  level.dat  │  region/r.*.*.mca  │ dimensions/.../region │
+│  level.dat  │  region/r.*.*.mca  │ DIM-* / dimensions/...│
 └───────────────────────────┬────────────────────────────┘
                             │ 寻址与流式读取
                             ▼

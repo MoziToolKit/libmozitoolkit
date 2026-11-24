@@ -69,7 +69,7 @@ fn test_real_world_bounded_box_loading() {
 }
 
 #[test]
-fn test_legacy_dimension_folders_are_ignored() {
+fn test_dimension_discovery_supports_dim_and_modern_layouts() {
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
@@ -80,13 +80,14 @@ fn test_legacy_dimension_folders_are_ignored() {
     std::fs::create_dir_all(root.join("DIM1/region")).unwrap();
 
     let dims = SaveLoader::discover_dimensions(&root);
-    assert!(!dims.iter().any(|d| d == "the_nether" || d == "the_end"));
+    assert!(dims.iter().any(|d| d == "the_nether"));
+    assert!(dims.iter().any(|d| d == "the_end"));
 
     std::fs::create_dir_all(root.join("dimensions/minecraft/the_nether/region")).unwrap();
     std::fs::create_dir_all(root.join("dimensions/minecraft/the_end/region")).unwrap();
     let dims = SaveLoader::discover_dimensions(&root);
-    assert!(dims.iter().any(|d| d == "the_nether"));
-    assert!(dims.iter().any(|d| d == "the_end"));
+    assert_eq!(dims.iter().filter(|d| *d == "the_nether").count(), 1);
+    assert_eq!(dims.iter().filter(|d| *d == "the_end").count(), 1);
 
     std::fs::remove_dir_all(&root).unwrap();
 }
