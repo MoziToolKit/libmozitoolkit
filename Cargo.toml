@@ -24,7 +24,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "2.0.0"
 edition = "2021"
 authors = ["Mozi <mozi1924@arasaka.ltd>"]
 license = "GPL-3.0-or-later"
@@ -63,21 +63,21 @@ bytemuck = { version = "1.25.2", default-features = false }
 regex = "1.12.2"
 
 # Internal workspace crates
-mtk-core = { path = "crates/mtk-core", version = "0.1.0" }
-mtk-cull = { path = "crates/mtk-cull", version = "0.1.0" }
-mtk-model = { path = "crates/mtk-model", version = "0.1.0" }
-mtk-voxel = { path = "crates/mtk-voxel", version = "0.1.0" }
-mtk-block-entity-textures = { path = "crates/mtk-block-entity-textures", version = "0.1.0" }
-mtk-sync = { path = "crates/mtk-sync", version = "0.1.0" }
-mtk-resource = { path = "crates/mtk-resource", version = "0.1.0" }
-mtk-texture = { path = "crates/mtk-texture", version = "0.1.0" }
-mtk-material = { path = "crates/mtk-material", version = "0.1.0" }
-mtk-save = { path = "crates/mtk-save", version = "0.1.0" }
-mtk-package = { path = "crates/mtk-package", version = "0.1.0" }
-libmtk = { path = "crates/libmtk", version = "0.1.0" }
-mtk-testkit = { path = "crates/mtk-testkit", version = "0.1.0" }
-mtk-blender-dna = { path = "adapters/blender/mtk-blender-dna", version = "0.1.0" }
-mtk-host-memory = { path = "adapters/mtk-host-memory", version = "0.1.0" }
+mtk-core = { path = "crates/mtk-core", version = "2.0.0" }
+mtk-cull = { path = "crates/mtk-cull", version = "2.0.0" }
+mtk-model = { path = "crates/mtk-model", version = "2.0.0" }
+mtk-voxel = { path = "crates/mtk-voxel", version = "2.0.0" }
+mtk-block-entity-textures = { path = "crates/mtk-block-entity-textures", version = "2.0.0" }
+mtk-sync = { path = "crates/mtk-sync", version = "2.0.0" }
+mtk-resource = { path = "crates/mtk-resource", version = "2.0.0" }
+mtk-texture = { path = "crates/mtk-texture", version = "2.0.0" }
+mtk-material = { path = "crates/mtk-material", version = "2.0.0" }
+mtk-save = { path = "crates/mtk-save", version = "2.0.0" }
+mtk-package = { path = "crates/mtk-package", version = "2.0.0" }
+libmtk = { path = "crates/libmtk", version = "2.0.0" }
+mtk-testkit = { path = "crates/mtk-testkit", version = "2.0.0" }
+mtk-blender-dna = { path = "adapters/blender/mtk-blender-dna", version = "2.0.0" }
+mtk-host-memory = { path = "adapters/mtk-host-memory", version = "2.0.0" }
 
 # Workspace-wide Clippy policy (opt in per-crate via `[lints] workspace = true`).
 # Keep this list small and justified: it only suppresses lints that are inherent to the
@@ -109,4 +109,4 @@ opt-level = 3
 lto = true
 codegen-units = 1
 panic = "abort"
-strip = false
+strip = true

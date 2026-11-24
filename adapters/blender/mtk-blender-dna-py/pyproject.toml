@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "libmtk_blender_dna"
-version = "0.1.0"
+version = "2.0.0"
 description = "Standalone Blender raw-memory adapter for libmtk"
 requires-python = ">=3.10"
 classifiers = [
