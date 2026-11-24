@@ -221,6 +221,30 @@ pub(crate) fn upgrade_block_state(
         current = "minecraft:melon".to_string();
     }
 
+    if data_version < 1496
+        && current.ends_with("_leaves")
+        && props
+            .iter()
+            .any(|(k, _)| k == "decayable" || k == "check_decay")
+    {
+        let persistent = if props
+            .iter()
+            .find(|(k, _)| k == "decayable")
+            .is_some_and(|(_, v)| v == "false")
+        {
+            "true"
+        } else {
+            "false"
+        };
+        props.retain(|(k, _)| k != "decayable" && k != "check_decay");
+        if !props.iter().any(|(k, _)| k == "distance") {
+            props.push(("distance".to_string(), "7".to_string()));
+        }
+        if !props.iter().any(|(k, _)| k == "persistent") {
+            props.push(("persistent".to_string(), persistent.to_string()));
+        }
+    }
+
     if data_version < 1510 {
         if let Some(target) = rename_entity_renaming_block(current.as_str()) {
             current = target.to_string();
@@ -572,5 +596,39 @@ mod tests {
             "minecraft:water_cauldron"
         );
         assert_eq!(full_cauldron, vec![("level".to_string(), "3".to_string())]);
+    }
+
+    #[test]
+    fn test_leaves_fix_upgrade() {
+        let mut props = vec![
+            ("check_decay".to_string(), "false".to_string()),
+            ("decayable".to_string(), "true".to_string()),
+        ];
+        assert_eq!(
+            upgrade_block_state("minecraft:oak_leaves", &mut props, 1451),
+            "minecraft:oak_leaves"
+        );
+        props.sort();
+        assert_eq!(
+            props,
+            vec![
+                ("distance".to_string(), "7".to_string()),
+                ("persistent".to_string(), "false".to_string()),
+            ]
+        );
+
+        let mut persistent_props = vec![
+            ("check_decay".to_string(), "true".to_string()),
+            ("decayable".to_string(), "false".to_string()),
+        ];
+        upgrade_block_state("minecraft:spruce_leaves", &mut persistent_props, 1451);
+        persistent_props.sort();
+        assert_eq!(
+            persistent_props,
+            vec![
+                ("distance".to_string(), "7".to_string()),
+                ("persistent".to_string(), "true".to_string()),
+            ]
+        );
     }
 }

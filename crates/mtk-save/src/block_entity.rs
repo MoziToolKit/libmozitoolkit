@@ -10,8 +10,13 @@ use mtk_model::BlockEntityData;
 
 /// Decodes an NBT Compound from a chunk's `block_entities` list into a typed `BlockEntityData`.
 ///
+/// When `invert_legacy_banner_colors` is true (pre-1.13 chunks), integer banner `Base` and
+/// `Patterns[].Color` dye indices are converted via `15 - id`.
 /// Returns `None` for unsupported or non-visual block entities (e.g. standard storage chests, hoppers).
-pub(crate) fn decode_block_entity(comp: &NbtCompound) -> Option<BlockEntityData> {
+pub(crate) fn decode_block_entity(
+    comp: &NbtCompound,
+    invert_legacy_banner_colors: bool,
+) -> Option<BlockEntityData> {
     let id_str = comp
         .string("id")
         .or_else(|| comp.string("Id"))?
@@ -19,9 +24,9 @@ pub(crate) fn decode_block_entity(comp: &NbtCompound) -> Option<BlockEntityData>
         .to_string();
     let clean_id = id_str.strip_prefix("minecraft:").unwrap_or(&id_str);
 
-    match clean_id {
+    match clean_id.to_ascii_lowercase().as_str() {
         "decorated_pot" => decode_decorated_pot(comp),
-        "banner" => decode_banner(comp),
+        "banner" => decode_banner(comp, invert_legacy_banner_colors),
         "skull" => decode_skull(comp, None),
         _ => None,
     }
@@ -90,7 +95,7 @@ fn decode_decorated_pot(comp: &NbtCompound) -> Option<BlockEntityData> {
 }
 
 /// Maps numeric Minecraft dye color ID (`0..=15`) to its canonical color name.
-fn dye_color_id_to_name(id: i32) -> &'static str {
+pub(crate) fn dye_color_id_to_name(id: i32) -> &'static str {
     match id {
         1 => "orange",
         2 => "magenta",
@@ -112,13 +117,25 @@ fn dye_color_id_to_name(id: i32) -> &'static str {
 }
 
 /// Decodes Banner NBT data (pre-1.20.5 `Patterns` list and 1.20.5+ `minecraft:banner_patterns` component).
-fn decode_banner(comp: &NbtCompound) -> Option<BlockEntityData> {
-    // 1. Determine base color
+fn decode_banner(comp: &NbtCompound, invert_legacy_banner_colors: bool) -> Option<BlockEntityData> {
+    // 1. Determine base color (strings in 1.13+, inverted `Base` int in 1.8–1.12.2)
     let base_color = comp
         .string("BaseColor")
         .or_else(|| comp.string("base_color"))
         .or_else(|| comp.string("minecraft:base_color"))
         .map(|s| s.as_str().to_string())
+        .or_else(|| {
+            comp.int("Base")
+                .or_else(|| comp.byte("Base").map(|b| b as i32))
+                .map(|raw| {
+                    let id = if invert_legacy_banner_colors {
+                        15 - raw
+                    } else {
+                        raw
+                    };
+                    dye_color_id_to_name(id).to_string()
+                })
+        })
         .unwrap_or_else(|| "white".to_string());
 
     let mut patterns = Vec::new();
@@ -145,7 +162,14 @@ fn decode_banner(comp: &NbtCompound) -> Option<BlockEntityData> {
                         .int("Color")
                         .or_else(|| p_comp.byte("Color").map(|b| b as i32))
                         .or_else(|| p_comp.int("color"))
-                        .map(|id| dye_color_id_to_name(id).to_string())
+                        .map(|raw| {
+                            let id = if invert_legacy_banner_colors {
+                                15 - raw
+                            } else {
+                                raw
+                            };
+                            dye_color_id_to_name(id).to_string()
+                        })
                 })
                 .unwrap_or_else(|| "white".to_string());
 
@@ -236,10 +260,11 @@ fn decode_skull(comp: &NbtCompound, item_id: Option<&str>) -> Option<BlockEntity
 /// or component-based `minecraft:profile`.
 fn decode_profile(comp: &NbtCompound) -> Option<PlayerProfileData> {
     // 1. Direct profile compound (1.20.5+ block entity), SkullOwner (pre-1.20.5),
-    // or component `minecraft:profile`
+    // Owner (pre-1.16 block entity), or component `minecraft:profile`
     let prof_comp = comp
         .compound("profile")
         .or_else(|| comp.compound("SkullOwner"))
+        .or_else(|| comp.compound("Owner"))
         .or_else(|| comp.compound("minecraft:profile"))
         .or_else(|| {
             comp.compound("components").and_then(|c| {
@@ -302,7 +327,12 @@ fn decode_profile(comp: &NbtCompound) -> Option<PlayerProfileData> {
     }
 
     // 2. Direct string owner / profile
-    if let Some(s) = comp.string("profile").or_else(|| comp.string("SkullOwner")) {
+    if let Some(s) = comp
+        .string("profile")
+        .or_else(|| comp.string("SkullOwner"))
+        .or_else(|| comp.string("Owner"))
+        .or_else(|| comp.string("ExtraType"))
+    {
         return Some(PlayerProfileData::new(
             Some(s.as_str().to_string()),
             None,
@@ -366,7 +396,7 @@ mod tests {
             NbtTag::List(NbtList::Compound(vec![p1])),
         ));
 
-        let decoded = decode_block_entity(&banner_comp).expect("Must decode banner");
+        let decoded = decode_block_entity(&banner_comp, false).expect("Must decode banner");
         if let BlockEntityData::Banner {
             base_color,
             patterns,
@@ -410,7 +440,8 @@ mod tests {
             NbtTag::List(NbtList::Compound(vec![p1, p2])),
         ));
 
-        let decoded = decode_block_entity(&banner_comp).expect("Must decode integer-color banner");
+        let decoded =
+            decode_block_entity(&banner_comp, false).expect("Must decode integer-color banner");
         if let BlockEntityData::Banner { patterns, .. } = decoded {
             assert_eq!(patterns.len(), 2);
             assert_eq!(patterns[0].pattern, "cre");
@@ -464,7 +495,7 @@ mod tests {
             NbtTag::Compound(owner_comp),
         ));
 
-        let decoded = decode_block_entity(&skull_comp).expect("Must decode skull");
+        let decoded = decode_block_entity(&skull_comp, false).expect("Must decode skull");
         if let BlockEntityData::Skull {
             kind,
             rotation,
@@ -527,7 +558,8 @@ mod tests {
             NbtTag::Compound(prof_comp),
         ));
 
-        let decoded = decode_block_entity(&skull_comp).expect("Must decode modern 1.20.5+ skull");
+        let decoded =
+            decode_block_entity(&skull_comp, false).expect("Must decode modern 1.20.5+ skull");
         if let BlockEntityData::Skull { kind, profile, .. } = decoded {
             assert_eq!(kind, SkullKind::Player);
             let prof = profile.expect("Profile must be present");
@@ -538,6 +570,59 @@ mod tests {
             );
         } else {
             panic!("Expected Skull variant");
+        }
+    }
+
+    #[test]
+    fn test_decode_pre_1_13_banner_inverted_colors_and_legacy_id() {
+        let mut banner_comp = NbtCompound::new();
+        banner_comp.entries.push((
+            NbtStr::from_borrowed("id"),
+            NbtTag::String(NbtStr::from_borrowed("Banner")),
+        ));
+        // Pre-1.13: Base = 1 => 15 - 1 = 14 ("red")
+        banner_comp
+            .entries
+            .push((NbtStr::from_borrowed("Base"), NbtTag::Int(1)));
+
+        let mut p1 = NbtCompound::new();
+        p1.entries.push((
+            NbtStr::from_borrowed("Pattern"),
+            NbtTag::String(NbtStr::from_borrowed("cre")),
+        ));
+        // Color = 15 => 15 - 15 = 0 ("white")
+        p1.entries
+            .push((NbtStr::from_borrowed("Color"), NbtTag::Int(15)));
+
+        let mut p2 = NbtCompound::new();
+        p2.entries.push((
+            NbtStr::from_borrowed("Pattern"),
+            NbtTag::String(NbtStr::from_borrowed("bo")),
+        ));
+        // Color = 0 => 15 - 0 = 15 ("black")
+        p2.entries
+            .push((NbtStr::from_borrowed("Color"), NbtTag::Int(0)));
+
+        banner_comp.entries.push((
+            NbtStr::from_borrowed("Patterns"),
+            NbtTag::List(NbtList::Compound(vec![p1, p2])),
+        ));
+
+        let decoded = decode_block_entity(&banner_comp, true)
+            .expect("Must decode pre-1.13 inverted-color banner");
+        if let BlockEntityData::Banner {
+            base_color,
+            patterns,
+        } = decoded
+        {
+            assert_eq!(base_color, "red");
+            assert_eq!(patterns.len(), 2);
+            assert_eq!(patterns[0].pattern, "cre");
+            assert_eq!(patterns[0].color, "white");
+            assert_eq!(patterns[1].pattern, "bo");
+            assert_eq!(patterns[1].color, "black");
+        } else {
+            panic!("Expected Banner variant");
         }
     }
 }

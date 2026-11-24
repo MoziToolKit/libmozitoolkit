@@ -142,6 +142,14 @@ impl<'a> NbtTag<'a> {
     }
 
     #[inline]
+    pub fn byte_array(&self) -> Option<&'a [u8]> {
+        match self {
+            Self::ByteArray(bytes) => Some(bytes),
+            _ => None,
+        }
+    }
+
+    #[inline]
     pub fn int_array(&self) -> Option<Vec<i32>> {
         match self {
             Self::IntArray(bytes) => {
@@ -226,6 +234,11 @@ impl<'a> NbtCompound<'a> {
     #[inline]
     pub fn list(&self, key: &str) -> Option<&NbtList<'a>> {
         self.get(key).and_then(|t| t.list())
+    }
+
+    #[inline]
+    pub fn byte_array(&self, key: &str) -> Option<&'a [u8]> {
+        self.get(key).and_then(|t| t.byte_array())
     }
 
     #[inline]

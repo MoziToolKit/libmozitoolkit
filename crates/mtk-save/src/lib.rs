@@ -7,12 +7,13 @@
 //! Key components:
 //! - [`LevelData`]: `level.dat` metadata deserializer (classic and modern `spawn` layouts).
 //! - [`RegionFile`]: Anvil `.mca` 1024-chunk location table parser, LZ4/Zlib/GZip/raw codecs, and `.mcc` external chunk reader.
-//! - [`ChunkParser`]: 1.13–26.2 (`DataVersion >= 1451`) chunk section bit-unpacker (aligned and unaligned), legacy numeric/string biome decoder, and DataVersion upgrade pipeline.
+//! - [`ChunkParser`]: Full Anvil 1.2–26.2 chunk decoder supporting pre-flattening (`Blocks`/`Data`/`Add` + Mojang `BlockStateData` upgrades), 1.13–1.17.1 `Level.Sections` (aligned & unaligned), and modern 1.18+ `sections`.
 //! - [`SaveLoader`]: High-level bounding box slicer and dimension directory discovery engine.
 
 mod block_entity;
 mod chunk;
 mod error;
+mod legacy;
 mod level;
 mod loader;
 mod lz4;

@@ -268,7 +268,10 @@ impl ChunkParser {
     }
 
     /// Parses 1.13–1.17 numeric chunk `Biomes` (`IntArray(1024)` 3D or `IntArray(256)` 2D) for `sec_y`.
-    fn parse_legacy_section_biomes(chunk_biomes: &[i32], sec_y: i32) -> Option<SectionBiomes> {
+    pub(crate) fn parse_legacy_section_biomes(
+        chunk_biomes: &[i32],
+        sec_y: i32,
+    ) -> Option<SectionBiomes> {
         let mut palette: Vec<String> = Vec::new();
         let mut indices: Vec<u8> = Vec::with_capacity(64);
 
@@ -333,7 +336,7 @@ impl ChunkParser {
         let root = base.as_compound();
         let data_version = root.int("DataVersion").unwrap_or(0);
 
-        // Modern 1.18+ chunks place `sections` at root; 1.13–1.17.1 chunks wrap data in `Level`.
+        // Modern 1.18+ chunks place `sections` at root; 1.2–1.17.1 chunks wrap data in `Level`.
         let (chunk_body, sections_list, be_list, legacy_biomes) = if let Some(modern_sections) =
             root.list("sections").and_then(|l| l.compounds())
         {
@@ -347,6 +350,25 @@ impl ChunkParser {
             let Some(legacy_sections) = level.list("Sections").and_then(|l| l.compounds()) else {
                 return Ok(Vec::new());
             };
+            if legacy_sections
+                .iter()
+                .any(|s| s.byte_array("Blocks").is_some())
+            {
+                let cx = level
+                    .int("xPos")
+                    .or_else(|| level.int("x_pos"))
+                    .unwrap_or(0);
+                let cz = level
+                    .int("zPos")
+                    .or_else(|| level.int("z_pos"))
+                    .unwrap_or(0);
+                return crate::legacy::parse_pre_flattening_chunk(
+                    level,
+                    IVec3::new(cx, 0, cz),
+                    min_section_y,
+                    max_section_y,
+                );
+            }
             (
                 level,
                 legacy_sections,
@@ -390,7 +412,8 @@ impl ChunkParser {
         // Universal BlockEntity Decoding (Decorated Pots, Banners, Skulls, etc.)
         if let Some(be_list) = be_list {
             for be_comp in be_list {
-                if let Some(entity_data) = crate::block_entity::decode_block_entity(&be_comp) {
+                if let Some(entity_data) = crate::block_entity::decode_block_entity(&be_comp, false)
+                {
                     let x = be_comp.int("x").unwrap_or(0);
                     let y = be_comp.int("y").unwrap_or(0);
                     let z = be_comp.int("z").unwrap_or(0);
