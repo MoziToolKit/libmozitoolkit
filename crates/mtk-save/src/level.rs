@@ -130,6 +130,14 @@ impl LevelData {
             game_type,
         })
     }
+
+    /// Returns `true` when this save predates the 1.13 "Flattening" (`DataVersion < 1451`),
+    /// where connection properties (double chests, stair corners, fences, walls, panes) are not
+    /// stored on disk and upgrading once in a newer game client is recommended.
+    #[inline]
+    pub fn is_pre_flattening(&self) -> bool {
+        self.data_version < 1451
+    }
 }
 
 #[cfg(test)]
@@ -198,6 +206,15 @@ mod tests {
         assert_eq!(classic.version_name, "26.2");
         assert_eq!(classic.data_version, 4903);
         assert_eq!(classic.spawn, IVec3::new(12, 72, -34));
+        assert!(!classic.is_pre_flattening());
+
+        let mut old_1_12 = classic.clone();
+        old_1_12.data_version = 1343;
+        assert!(old_1_12.is_pre_flattening());
+
+        let mut old_1_8 = classic;
+        old_1_8.data_version = 0;
+        assert!(old_1_8.is_pre_flattening());
 
         let modern_bytes = build_level_dat_nbt(Some([-120, 95, 440]), None);
         let modern = LevelData::read_from_bytes(&modern_bytes).unwrap();

@@ -73,6 +73,11 @@ impl PyLevelData {
         self.dimensions.clone()
     }
 
+    #[getter]
+    pub fn is_pre_flattening(&self) -> bool {
+        self.inner.is_pre_flattening()
+    }
+
     /// Converts metadata into a Python dictionary.
     pub fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
@@ -88,6 +93,7 @@ impl PyLevelData {
         dict.set_item("hardcore", self.inner.hardcore)?;
         dict.set_item("game_type", self.inner.game_type)?;
         dict.set_item("dimensions", self.dimensions.clone())?;
+        dict.set_item("is_pre_flattening", self.inner.is_pre_flattening())?;
         Ok(dict)
     }
 
