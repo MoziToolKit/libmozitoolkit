@@ -8,7 +8,7 @@
 //! access, disk caches and texture baking. Hosts (`mtk-py`, the live-sync client) construct this
 //! and inject it into a [`VoxelWorld`](mtk_voxel::VoxelWorld).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use glam::IVec3;
@@ -16,11 +16,14 @@ use glam::IVec3;
 use mtk_core::{ProgressCallback, ProgressThrottler};
 use mtk_model::skull::SkullKind;
 use mtk_model::BlockEntityData;
-use mtk_resource::skin::{clean_player_name, clean_uuid, derive_skin_key, SkinResolver};
+use mtk_resource::skin::{
+    candidate_skin_urls, clean_player_name, clean_uuid, derive_skin_key, is_valid_player_skin_png,
+    SkinResolver,
+};
 use mtk_texture::{AtlasAddressMap, BannerBaker, DynamicAtlasManager};
 use mtk_voxel::{
-    BlockEntityTextureProvider, SkinResolvedCallback, TexturePrepareOutcome, TextureResolveMode,
-    VoxelStorage,
+    BlockEntityTextureProvider, PendingSkinRequest, SkinResolvedCallback, TexturePrepareOutcome,
+    TextureResolveMode, VoxelStorage,
 };
 
 /// Runtime block-entity textures: dynamic atlas, skin resolver and banner baker.
@@ -403,8 +406,126 @@ impl BlockEntityTextureProvider for BlockEntityTextures {
         BlockEntityTextures::set_skin_resolved_callback(self, callback);
     }
 
-    fn register_memory_skin(&mut self, key: &str, png: Vec<u8>) {
-        BlockEntityTextures::register_memory_skin(self, key, png);
+    fn pending_skin_requests(
+        &self,
+        storage: &VoxelStorage,
+        atlas: Option<&AtlasAddressMap>,
+    ) -> Vec<PendingSkinRequest> {
+        let mut seen = HashSet::new();
+        let mut requests = Vec::new();
+
+        for (&sec_coord, section) in &storage.sections {
+            for (&local_idx, entity) in &section.block_entities {
+                if storage.has_explicit_bounds {
+                    let (wx, wy, wz) = local_to_world(sec_coord, local_idx);
+                    if !storage.contains(wx, wy, wz) {
+                        continue;
+                    }
+                }
+                let BlockEntityData::Skull {
+                    kind,
+                    profile: Some(profile),
+                    ..
+                } = entity
+                else {
+                    continue;
+                };
+                if *kind != SkullKind::Player {
+                    continue;
+                }
+                let skin_url = profile.skin_url.as_deref();
+                let uuid = profile.id.as_deref();
+                let name = profile.name.as_deref();
+                if skin_url.is_none() && uuid.is_none() && name.is_none() {
+                    continue;
+                }
+
+                let key = derive_skin_key(skin_url, uuid, name);
+                let hash = self.skin_resolver.resolve_skin_hash(skin_url, uuid, name);
+                let primary = hash.unwrap_or_else(|| key.clone());
+
+                if let Some(map) = atlas {
+                    if is_in_static_atlas(map, &primary)
+                        || is_in_static_atlas(map, &key)
+                        || map.resolve_texture_key(&primary).is_some()
+                        || map.resolve_texture_key(&key).is_some()
+                    {
+                        continue;
+                    }
+                }
+                if self.manager.contains_key(&primary)
+                    || self.manager.contains_key(&key)
+                    || self
+                        .skin_resolver
+                        .try_resolve_cached(skin_url, uuid, name)
+                        .is_some()
+                {
+                    continue;
+                }
+                if !seen.insert(key.clone()) {
+                    continue;
+                }
+
+                let candidate_urls = candidate_skin_urls(skin_url, uuid, name);
+                requests.push(PendingSkinRequest {
+                    key,
+                    skin_url: candidate_urls
+                        .first()
+                        .filter(|_| skin_url.is_some())
+                        .cloned(),
+                    uuid: uuid.map(str::to_string),
+                    name: name.map(str::to_string),
+                    candidate_urls,
+                });
+            }
+        }
+
+        requests
+    }
+
+    fn register_memory_skin(
+        &mut self,
+        storage: &mut VoxelStorage,
+        key: &str,
+        png: Vec<u8>,
+    ) -> bool {
+        if !is_valid_player_skin_png(&png) {
+            return false;
+        }
+        self.skin_resolver.register_memory_skin(key, png);
+
+        let normalized_req = clean_player_name(key);
+        let normalized_uuid = clean_uuid(key);
+        let mut dirty = Vec::new();
+        for (&sec_coord, section) in &storage.sections {
+            let matches_section = section.block_entities.values().any(|entity| {
+                let BlockEntityData::Skull {
+                    kind,
+                    profile: Some(profile),
+                    ..
+                } = entity
+                else {
+                    return false;
+                };
+                if *kind != SkullKind::Player {
+                    return false;
+                }
+                let url = profile.skin_url.as_deref();
+                let uuid = profile.id.as_deref();
+                let name = profile.name.as_deref();
+                let derived = derive_skin_key(url, uuid, name);
+                derived == key
+                    || name.is_some_and(|n| clean_player_name(n) == normalized_req)
+                    || uuid.is_some_and(|u| clean_uuid(u) == normalized_uuid)
+            });
+            if matches_section {
+                dirty.push(sec_coord);
+            }
+        }
+        for coord in dirty {
+            storage.dirty_sections.insert(coord);
+        }
+        true
     }
 
     fn invalidate_atlas_registration(&mut self) {

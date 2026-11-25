@@ -27,7 +27,8 @@ mod rebuild;
 mod sync;
 
 pub use block_entity_textures::{
-    BlockEntityTextureProvider, SkinResolvedCallback, TexturePrepareOutcome, TextureResolveMode,
+    BlockEntityTextureProvider, PendingSkinRequest, SkinResolvedCallback, TexturePrepareOutcome,
+    TextureResolveMode,
 };
 
 /// Unified 3D Voxel World scene managing storage, multi-source ingestion,

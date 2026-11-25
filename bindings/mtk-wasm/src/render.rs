@@ -5,18 +5,16 @@
 //! ready for zero-copy `THREE.BufferAttribute` construction.
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
-use libmtk::PackageManifest;
+use libmtk::{chunks, PackageManifest};
 use mtk_core::attribute_constants::{
     ATTR_ANIM_FRAME_SIZE, ATTR_ANIM_TIMING, ATTR_AO, ATTR_ATLAS_CHUNK_ID, ATTR_BIOME_TINT_COLOR,
     ATTR_BIOME_TINT_DATA,
 };
 use mtk_core::{AttributeData, MeshData, UvLayout};
-use mtk_material::{BiomeResolver, VanillaColormaps};
-use mtk_resource::CtmSolver;
-use mtk_texture::{AtlasAddressMap, AtlasChunkMeta};
-use mtk_voxel::{CoordinateSystem, MesherConfig};
+use mtk_texture::{
+    dynamic_chunk_texture_id, AtlasAddressMap, AtlasChunkMeta, DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID,
+};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
@@ -39,32 +37,6 @@ pub(crate) fn serialize_metadata_json(
         atlas_chunks,
     };
     serde_json::to_string(&payload).map_err(|e| JsValue::from_str(&e.to_string()))
-}
-
-pub(crate) fn build_mesher_config(
-    enable_ao: Option<bool>,
-    mesh_fluids: Option<bool>,
-    enable_ctm: Option<bool>,
-    enable_animated_textures: Option<bool>,
-    atlas_address_map: Option<Arc<AtlasAddressMap>>,
-    biome_resolver: Option<Arc<BiomeResolver>>,
-    colormaps: Option<Arc<VanillaColormaps>>,
-    ctm_solver: Option<Arc<CtmSolver>>,
-) -> MesherConfig {
-    let use_ctm = enable_ctm.unwrap_or(true);
-    MesherConfig {
-        coordinate_system: CoordinateSystem::YUpRightHanded,
-        origin_centered: true,
-        weld_vertices: false,
-        enable_ao: enable_ao.unwrap_or(true),
-        mesh_fluids: mesh_fluids.unwrap_or(true),
-        enable_animated_textures: enable_animated_textures.unwrap_or(true),
-        atlas_address_map,
-        biome_resolver,
-        colormaps,
-        ctm_solver: if use_ctm { ctm_solver } else { None },
-        ..Default::default()
-    }
 }
 
 /// Single atlas-chunk mesh batch with aligned `PerVertex` buffers for Three.js / WebGPU.
@@ -336,9 +308,9 @@ fn resolve_chunk_textures(
     Option<String>,
     bool,
 ) {
-    if chunk_id >= mtk_texture::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID as i32 {
+    if chunk_id >= DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID as i32 {
         return (
-            Some(format!("dynamic/chunk_{chunk_id}.png")),
+            Some(dynamic_chunk_texture_id(chunk_id as u16)),
             None,
             None,
             None,
@@ -348,18 +320,11 @@ fn resolve_chunk_textures(
     }
 
     let Some(meta) = meta else {
-        let fallback = if chunk_id >= 0 {
-            Some(format!(
-                "atlas/textures/blocks_chunk_{:03}.png",
-                chunk_id + 1
-            ))
-        } else {
-            None
-        };
+        let fallback = (chunk_id >= 0)
+            .then(|| chunks::atlas_texture(&format!("blocks_chunk_{:03}.png", chunk_id + 1)));
         return (fallback, None, None, None, None, false);
     };
 
-    let prefix = "atlas/textures/";
     let mut albedo = None;
     let mut overlay = None;
     let mut normal = None;
@@ -367,11 +332,7 @@ fn resolve_chunk_textures(
     let mut aux = None;
 
     for slot in &meta.textures {
-        let id = if slot.file_name.starts_with(prefix) {
-            slot.file_name.clone()
-        } else {
-            format!("{prefix}{}", slot.file_name)
-        };
+        let id = chunks::atlas_texture(&slot.file_name);
         match slot.role.as_str() {
             "albedo" => albedo = Some(id),
             "overlay" => overlay = Some(id),
@@ -383,7 +344,7 @@ fn resolve_chunk_textures(
     }
 
     if albedo.is_none() {
-        albedo = Some(format!("{prefix}{}.png", meta.file_stem()));
+        albedo = Some(chunks::atlas_texture(&format!("{}.png", meta.file_stem())));
     }
 
     (albedo, overlay, normal, orm, aux, meta.is_animated)

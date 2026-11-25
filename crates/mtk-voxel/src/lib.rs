@@ -28,6 +28,6 @@ pub use storage::{
 };
 pub use types::{CoordinateSystem, MesherConfig, UnknownBlockStrategy, VoxelError};
 pub use world::{
-    BlockEntityTextureProvider, SkinResolvedCallback, TexturePrepareOutcome, TextureResolveMode,
-    VoxelWorld,
+    BlockEntityTextureProvider, PendingSkinRequest, SkinResolvedCallback, TexturePrepareOutcome,
+    TextureResolveMode, VoxelWorld,
 };

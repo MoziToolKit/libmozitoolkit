@@ -57,12 +57,7 @@ impl ScenePackageReader {
         } else {
             None
         };
-        let texture_names = self
-            .reader
-            .iter_chunk_identifiers(*b"ATLS")
-            .filter(|id| id.starts_with("atlas/textures/"))
-            .map(|id| id.to_string())
-            .collect();
+        let texture_names = self.texture_names();
         let biome_resolver = self.read_biome_resolver()?;
         let colormaps = self.read_colormaps()?;
         let dynamic_entity_slots = self.read_dynamic_entity_slots()?;
@@ -129,6 +124,18 @@ impl ScenePackageReader {
     /// Reads the scene mini-atlas address map if present.
     pub fn read_atlas_mapping(&self) -> Result<Option<AtlasAddressMap>, MtkError> {
         self.contents().atlas_mapping()
+    }
+
+    /// Lists all atlas texture chunk identifiers present in this scene package.
+    pub fn texture_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .reader
+            .iter_chunk_identifiers(*b"ATLS")
+            .filter(|id| id.starts_with(crate::chunks::ATLAS_TEXTURE_PREFIX))
+            .map(str::to_string)
+            .collect();
+        names.sort();
+        names
     }
 
     /// Reads all mini-atlas textures (`atlas/textures/*.png`) present in the package.

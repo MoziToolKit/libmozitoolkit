@@ -399,6 +399,56 @@ impl crate::source::VoxelReader for VoxelStorage {
 }
 
 impl VoxelStorage {
+    /// Counts non-air voxels strictly inside `[min_block, max_block]` (inclusive).
+    pub fn count_non_air_in_bounds(&self, min_block: IVec3, max_block: IVec3) -> usize {
+        let true_min = min_block.min(max_block);
+        let true_max = min_block.max(max_block);
+        let mut count = 0usize;
+        for (&coord, section) in &self.sections {
+            if section.non_air_count == 0 {
+                continue;
+            }
+            let base = coord * 16;
+            let sec_max = base + IVec3::splat(15);
+            if sec_max.x < true_min.x
+                || base.x > true_max.x
+                || sec_max.y < true_min.y
+                || base.y > true_max.y
+                || sec_max.z < true_min.z
+                || base.z > true_max.z
+            {
+                continue;
+            }
+            if base.x >= true_min.x
+                && sec_max.x <= true_max.x
+                && base.y >= true_min.y
+                && sec_max.y <= true_max.y
+                && base.z >= true_min.z
+                && sec_max.z <= true_max.z
+            {
+                count += section.non_air_count as usize;
+                continue;
+            }
+            let min_lx = (true_min.x - base.x).clamp(0, 15) as usize;
+            let max_lx = (true_max.x - base.x).clamp(0, 15) as usize;
+            let min_ly = (true_min.y - base.y).clamp(0, 15) as usize;
+            let max_ly = (true_max.y - base.y).clamp(0, 15) as usize;
+            let min_lz = (true_min.z - base.z).clamp(0, 15) as usize;
+            let max_lz = (true_max.z - base.z).clamp(0, 15) as usize;
+            for x in min_lx..=max_lx {
+                for y in min_ly..=max_ly {
+                    for z in min_lz..=max_lz {
+                        let idx = crate::storage::block_index(x, y, z);
+                        if section.voxels[idx] != 0 {
+                            count += 1;
+                        }
+                    }
+                }
+            }
+        }
+        count
+    }
+
     /// Scans all chunk section palettes for unknown blockstates lacking both models and textures.
     pub fn scan_unknown_blocks(
         &self,

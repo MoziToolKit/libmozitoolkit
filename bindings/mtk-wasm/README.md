@@ -31,14 +31,18 @@
 - `version() -> string`：返回绑定版本号。
 - `set_hardware_concurrency(count: number)` / `get_hardware_concurrency() -> number`：配置并发线程数。
 
-### 2.2 `WasmScenePackage`（S1 `.mtkscene` 查看器）
+### 2.2 `WasmMesherConfig`
+- `new WasmMesherConfig()`：网格化与面剔除强类型配置 DTO（默认：`coordinate_system = "y_up"`, `origin_centered = true`, `weld_vertices = false`, `leaves_cull_mode = "fancy"`, `glass_cull_mode = "group"`, `unknown_block_strategy = "fallback_cube"`，AO/流体/CTM/动图/平滑生物群系均为 `true`）。
+- 支持读写属性：`enable_ao`、`mesh_fluids`、`enable_ctm`、`enable_animated_textures`、`smooth_biome_blend`、`origin_centered`、`weld_vertices`、`exclude_hidden_volume`、`enable_alternate_blocks`、`enable_random_offsets`、`coordinate_system`（`"y_up" | "z_up" | "minecraft"`）、`leaves_cull_mode`（`"fancy" | "fast" | "single_face" | "none"`）、`glass_cull_mode`（`"group" | "same_block" | "none"`）、`unknown_block_strategy`（`"fallback_cube" | "ignore_as_air"`）。
+
+### 2.3 `WasmScenePackage`（S1 `.mtkscene` 查看器）
 - `WasmScenePackage.from_bytes(bytes: Uint8Array) -> WasmScenePackage`：从内存字节打开 `.mtkscene`。
 - `metadata_json() -> string`：返回 `manifest`、`texture_names` 与 `atlas_chunks` 描述 JSON。
 - `texture_names() -> string[]`：列出包内所有 `atlas/textures/*.png` chunk ID。
 - `read_texture_png(chunk_id: string) -> Uint8Array`：读取原始 PNG 字节（不经过像素解码）。
-- `build_render_scene(enable_ao?: boolean, mesh_fluids?: boolean, enable_ctm?: boolean, enable_animated_textures?: boolean) -> WasmRenderScene`：按 Y-Up 右手坐标系构建 Three.js 渲染批次。
+- `build_render_scene(config?: WasmMesherConfig) -> WasmRenderScene`：按 `WasmMesherConfig`（默认 Y-Up 右手坐标系；传入时移交所有权，无需额外调用 `config.free()`）构建 Three.js 渲染批次。
 
-### 2.3 `WasmAssetCache` & `WasmSaveWorld`（S2 `.mtkcache` + 本地存档查看器）
+### 2.4 `WasmAssetCache` & `WasmSaveWorld`（S2 `.mtkcache` + 本地存档查看器）
 - **`WasmAssetCache`**：
   - `WasmAssetCache.from_bytes(bytes: Uint8Array) -> WasmAssetCache`：加载 `.mtkcache`。
   - `metadata_json() -> string` / `texture_names() -> string[]` / `read_texture_png(chunk_id: string) -> Uint8Array`。
@@ -47,12 +51,12 @@
   - `WasmSaveWorld.plan_region_files(dimension, min_x, min_y, min_z, max_x, max_y, max_z, relative_paths) -> string`：返回与选框相交的 `.mca` 与 `.mcc` 相对路径规划。
   - `new WasmSaveWorld(cache: WasmAssetCache)`：创建绑定资产缓存与内置 `BannerBaker` 的存档会话。
   - `load_regions(regions, external_chunks, min_x, min_y, min_z, max_x, max_y, max_z) -> string`：按选区读入命中的 region 字节，并返回体素统计。
-  - `pending_skin_requests_json() -> string`：返回未解析的玩家头颅 `{ key, skin_url, uuid, name }` 列表（已将 `http://textures.minecraft.net/` 规范为 `https://`）。
+  - `pending_skin_requests_json() -> string`：返回未解析的玩家头颅 `{ key, skin_url, uuid, name, candidate_urls }` 列表（`candidate_urls` 由核心 `mtk-resource` 统一派生并规范 `https://`）。
   - `register_skin_png(key: string, png_bytes: Uint8Array) -> boolean`：校验皮肤 PNG 魔数并过滤镜像站默认兜底皮肤（Alex/Steve/Minotar），注入内存缓存并标脏关联区块。
   - `texture_names() -> string[]` / `read_texture_png(chunk_id: string) -> Uint8Array`：统一读取静态 `.mtkcache` 图集与动态 `dynamic/chunk_<id>.png`（`0xFFF0+` 旗帜/皮肤图集，避免与静态 `entities_chunk_001.png` 命名冲突）。
-  - `build_render_scene(enable_ao?, mesh_fluids?, enable_ctm?, enable_animated_textures?) -> WasmRenderScene`：首次全量构建，后续皮肤回填仅增量重算脏区块。
+  - `build_render_scene(config?: WasmMesherConfig) -> WasmRenderScene`：首次全量构建或配置变化时重建，后续皮肤回填仅增量重算脏区块。
 
-### 2.4 `WasmRenderScene` & `WasmRenderBatch`
+### 2.5 `WasmRenderScene` & `WasmRenderBatch`
 - `WasmRenderScene`：`batch_count`、`total_vertices`、`total_triangles`、`take_batch(index)`。
 - `WasmRenderBatch`：
   - 元数据：`chunk_id`、`is_animated`、`has_animation`、`vertex_count`、`triangle_count`、`albedo_chunk_id`、`overlay_chunk_id`、`normal_chunk_id`、`orm_chunk_id`、`aux_chunk_id`
@@ -71,7 +75,7 @@
 ## 3. Three.js 最小调用示例
 
 ```javascript
-import init, { init_panic_hook, WasmScenePackage } from './pkg/mtk_wasm.js';
+import init, { init_panic_hook, WasmMesherConfig, WasmScenePackage } from './pkg/mtk_wasm.js';
 import * as THREE from 'three';
 
 const wasm = await init();
@@ -79,7 +83,8 @@ init_panic_hook();
 
 const bytes = new Uint8Array(await fetch('/demo.mtkscene').then(r => r.arrayBuffer()));
 const pkg = WasmScenePackage.from_bytes(bytes);
-const renderScene = pkg.build_render_scene(true, true, true, true);
+const cfg = new WasmMesherConfig();
+const renderScene = pkg.build_render_scene(cfg);
 
 for (let i = 0; i < renderScene.batch_count; i++) {
     const batch = renderScene.take_batch(i);

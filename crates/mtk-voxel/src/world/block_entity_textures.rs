@@ -44,6 +44,17 @@ impl SkinResolvedCallback {
     }
 }
 
+/// Unresolved player-head skin request discovered in world storage.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PendingSkinRequest {
+    pub key: String,
+    pub skin_url: Option<String>,
+    pub uuid: Option<String>,
+    pub name: Option<String>,
+    pub candidate_urls: Vec<String>,
+}
+
 /// Result of one [`BlockEntityTextureProvider::prepare`] pass.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct TexturePrepareOutcome {
@@ -87,8 +98,25 @@ pub trait BlockEntityTextureProvider: Send + Sync {
     /// Registers a callback fired when a background skin download completes.
     fn set_skin_resolved_callback(&mut self, callback: SkinResolvedCallback);
 
-    /// Registers an in-memory player skin PNG payload keyed by skin key/hash.
-    fn register_memory_skin(&mut self, _key: &str, _png: Vec<u8>) {}
+    /// Lists unresolved player-head skin requests in `storage` not yet in memory cache or `atlas`.
+    fn pending_skin_requests(
+        &self,
+        _storage: &VoxelStorage,
+        _atlas: Option<&mtk_texture::AtlasAddressMap>,
+    ) -> Vec<PendingSkinRequest> {
+        Vec::new()
+    }
+
+    /// Registers an in-memory player skin PNG payload keyed by skin key/hash and marks
+    /// matching skull sections dirty. Returns `false` if rejected or unsupported.
+    fn register_memory_skin(
+        &mut self,
+        _storage: &mut VoxelStorage,
+        _key: &str,
+        _png: Vec<u8>,
+    ) -> bool {
+        false
+    }
 
     /// Marks previously merged atlas entries as stale so the next [`prepare`](Self::prepare)
     /// re-registers the provider's dynamic slots into a replacement `AtlasAddressMap`.
@@ -193,11 +221,23 @@ impl VoxelWorld {
         }
     }
 
-    /// Injects a decoded/downloaded player skin PNG directly into the runtime texture cache.
-    pub fn register_memory_skin(&mut self, key: &str, png: Vec<u8>) {
-        if let Some(textures) = self.block_textures.as_mut() {
-            textures.register_memory_skin(key, png);
-        }
+    /// Lists unresolved player-head skin requests discovered in world storage.
+    pub fn pending_skin_requests(&self) -> Vec<PendingSkinRequest> {
+        self.block_textures
+            .as_ref()
+            .map(|textures| {
+                textures
+                    .pending_skin_requests(&self.storage, self.config.atlas_address_map.as_deref())
+            })
+            .unwrap_or_default()
+    }
+
+    /// Injects a decoded/downloaded player skin PNG directly into the runtime texture cache
+    /// and marks matching skull sections dirty.
+    pub fn register_memory_skin(&mut self, key: &str, png: Vec<u8>) -> bool {
+        self.block_textures
+            .as_mut()
+            .is_some_and(|textures| textures.register_memory_skin(&mut self.storage, key, png))
     }
 
     /// Cache-only resolution over every section (background fetches anything uncached).

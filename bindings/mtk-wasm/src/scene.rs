@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use js_sys::Uint8Array;
 use libmtk::{PackageManifest, ScenePackageReader};
-use mtk_cull::{FaceCuller, GlassCullMode, LeavesCullMode};
 use mtk_material::{BiomeResolver, VanillaColormaps};
 use mtk_model::BakedModelDatabase;
 use mtk_resource::CtmSolver;
@@ -12,9 +11,8 @@ use mtk_texture::AtlasAddressMap;
 use mtk_voxel::VoxelWorld;
 use wasm_bindgen::prelude::*;
 
-use crate::render::{
-    build_mesher_config, build_render_scene, serialize_metadata_json, WasmRenderScene,
-};
+use crate::config::WasmMesherConfig;
+use crate::render::{build_render_scene, serialize_metadata_json, WasmRenderScene};
 
 /// Self-contained `.mtkscene` viewer handle backed by in-memory package bytes.
 ///
@@ -61,13 +59,7 @@ impl WasmScenePackage {
             .map_err(|e| JsValue::from_str(&e.to_string()))?
             .map(Arc::new);
 
-        let mut texture_names: Vec<String> = reader
-            .inner_reader()
-            .iter_chunk_identifiers(*b"ATLS")
-            .filter(|id| id.starts_with("atlas/textures/"))
-            .map(|id| id.to_string())
-            .collect();
-        texture_names.sort();
+        let texture_names = reader.texture_names();
 
         Ok(Self {
             reader,
@@ -111,14 +103,11 @@ impl WasmScenePackage {
 
     /// Reconstructs the sparse voxel world and emits Three.js-ready render batches.
     ///
-    /// Uses `CoordinateSystem::YUpRightHanded` and `origin_centered = true`.
     /// Transient `VoxelStorage` / `VoxelWorld` allocations are dropped before returning.
+    /// Takes ownership of `config` when supplied.
     pub fn build_render_scene(
         &self,
-        enable_ao: Option<bool>,
-        mesh_fluids: Option<bool>,
-        enable_ctm: Option<bool>,
-        enable_animated_textures: Option<bool>,
+        config: Option<WasmMesherConfig>,
     ) -> Result<WasmRenderScene, JsValue> {
         let sparse_voxels = self
             .reader
@@ -127,20 +116,21 @@ impl WasmScenePackage {
         let storage = sparse_voxels.reconstruct_storage();
         drop(sparse_voxels);
 
-        let config = build_mesher_config(
-            enable_ao,
-            mesh_fluids,
-            enable_ctm,
-            enable_animated_textures,
+        let cfg = config.unwrap_or_default();
+        let mesher_config = cfg.to_mesher_config(
             self.atlas_mapping.clone(),
             self.biome_resolver.clone(),
             self.colormaps.clone(),
             self.ctm_solver.clone(),
         );
+        let culler = cfg.to_face_culler();
 
-        let culler = FaceCuller::new(LeavesCullMode::Fancy, GlassCullMode::Group);
-        let mut world =
-            VoxelWorld::from_storage(storage, Some(config), Some(culler), self.models.clone());
+        let mut world = VoxelWorld::from_storage(
+            storage,
+            Some(mesher_config),
+            Some(culler),
+            self.models.clone(),
+        );
         let mesh = world
             .rebuild_all()
             .map_err(|e| JsValue::from_str(&e.to_string()))?;

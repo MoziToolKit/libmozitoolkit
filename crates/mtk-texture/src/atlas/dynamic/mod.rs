@@ -4,8 +4,9 @@ mod chunk;
 mod manager;
 
 pub use chunk::{
-    DynamicAtlasChunk, DynamicSlotInfo, DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID, DYNAMIC_ATLAS_HEIGHT,
-    DYNAMIC_ATLAS_WIDTH, DYNAMIC_CHUNK_START,
+    dynamic_chunk_texture_id, parse_dynamic_chunk_texture_id, DynamicAtlasChunk, DynamicSlotInfo,
+    DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID, DYNAMIC_ATLAS_HEIGHT, DYNAMIC_ATLAS_WIDTH,
+    DYNAMIC_CHUNK_START,
 };
 pub use manager::DynamicAtlasManager;
 

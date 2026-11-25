@@ -4,6 +4,7 @@ import init, {
   init_panic_hook,
   version,
   WasmAssetCache,
+  WasmMesherConfig,
   WasmSaveWorld,
   WasmScenePackage,
 } from './pkg/mtk_wasm.js';
@@ -418,12 +419,12 @@ async function rebuildActiveScene({ refitCamera = false } = {}) {
   statusBadge.textContent = '正在构建网格…';
 
   const t0 = performance.now();
-  const renderScene = source.build_render_scene(
-    optAo.checked,
-    optFluids.checked,
-    optCtm.checked,
-    optAnim.checked,
-  );
+  const mesherConfig = new WasmMesherConfig();
+  mesherConfig.enable_ao = optAo.checked;
+  mesherConfig.mesh_fluids = optFluids.checked;
+  mesherConfig.enable_ctm = optCtm.checked;
+  mesherConfig.enable_animated_textures = optAnim.checked;
+  const renderScene = source.build_render_scene(mesherConfig);
   const meshMs = performance.now() - t0;
 
   clearWorld();
@@ -780,22 +781,10 @@ async function executeSaveSelection({ refitCamera = true } = {}) {
 }
 
 function buildCandidateSkinUrls(req) {
-  if (req.skin_url) {
-    return [req.skin_url];
+  if (Array.isArray(req.candidate_urls) && req.candidate_urls.length > 0) {
+    return req.candidate_urls;
   }
-  const cleanUuid = req.uuid ? req.uuid.replace(/^(uuid_|uuid:)/i, '').replace(/-/g, '').toLowerCase() : '';
-  const cleanName = req.name ? req.name.replace(/^(player_|player:)/i, '').trim() : '';
-  const isV4Uuid = cleanUuid.length === 32 && cleanUuid[12] === '4';
-  const ids = isV4Uuid
-    ? [cleanUuid, cleanName].filter(Boolean)
-    : [cleanName, cleanUuid].filter(Boolean);
-
-  const urls = [];
-  for (const id of ids) {
-    const enc = encodeURIComponent(id);
-    urls.push(`https://crafthead.net/skin/${enc}`, `https://minotar.net/skin/${enc}`);
-  }
-  return urls;
+  return req.skin_url ? [req.skin_url] : [];
 }
 
 async function fetchFirstValidSkin(saveWorld, req) {

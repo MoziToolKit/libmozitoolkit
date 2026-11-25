@@ -20,6 +20,21 @@ pub use mtk_core::constants::atlas::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
 pub(crate) const MAX_DYNAMIC_CHUNKS: usize = 16;
 pub const DYNAMIC_CHUNK_START: u16 = DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID;
 
+/// Canonical virtual texture identifier for a runtime dynamic entity atlas chunk.
+pub fn dynamic_chunk_texture_id(chunk_id: u16) -> String {
+    format!("dynamic/chunk_{chunk_id}.png")
+}
+
+/// Parses a `dynamic/chunk_<id>.png` identifier back into its dynamic chunk ID if valid.
+pub fn parse_dynamic_chunk_texture_id(chunk_id: &str) -> Option<u16> {
+    let cid = chunk_id
+        .strip_prefix("dynamic/chunk_")?
+        .strip_suffix(".png")?
+        .parse::<u16>()
+        .ok()?;
+    (cid >= DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID).then_some(cid)
+}
+
 /// Information about an allocated slot inside a dynamic atlas chunk.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DynamicSlotInfo {
