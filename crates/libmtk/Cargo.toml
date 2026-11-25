@@ -17,7 +17,7 @@ mtk-resource = { workspace = true }
 xxhash-rust = { workspace = true }
 mtk-texture = { workspace = true }
 mtk-material = { workspace = true }
-mtk-package = { workspace = true }
+mtk-package = { path = "../mtk-package", version = "2.0.0", default-features = false }
 mtk-save = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -26,7 +26,10 @@ rayon = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
 [features]
-default = ["parallel", "save"]
+default = ["parallel", "save", "mmap"]
+mmap = [
+    "mtk-package/mmap",
+]
 parallel = [
     "mtk-core/parallel",
     "mtk-model/parallel",

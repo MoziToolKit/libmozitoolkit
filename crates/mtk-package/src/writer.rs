@@ -1,7 +1,7 @@
 //! Streaming package builder and writer.
 
 use std::fs::{self, File};
-use std::io::{Cursor, Seek, SeekFrom, Write};
+use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -120,12 +120,7 @@ impl<W: Write + Seek> MtkPackageWriter<W> {
             CompressionType::None => (decompressed_data.to_vec(), CompressionType::None),
             CompressionType::Zstd => {
                 let compressed =
-                    zstd::encode_all(Cursor::new(decompressed_data), options.zstd_level).map_err(
-                        |e| PackageError::CompressionFailed {
-                            identifier: id.clone(),
-                            source: e,
-                        },
-                    )?;
+                    crate::codec::compress_zstd(decompressed_data, options.zstd_level, &id)?;
                 // If compressed size is larger than uncompressed, fallback to raw
                 if compressed.len() >= decompressed_data.len() {
                     (decompressed_data.to_vec(), CompressionType::None)
@@ -388,6 +383,8 @@ fn replace_file(temp_path: &Path, final_path: &Path) -> PackageResult<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use super::*;
 
     #[test]

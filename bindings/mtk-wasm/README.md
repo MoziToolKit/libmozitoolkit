@@ -3,191 +3,111 @@
 [![Crate](https://img.shields.io/badge/crate-mtk--wasm-blue.svg)](Cargo.toml)
 [![Rust](https://img.shields.io/badge/Rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 [![WebAssembly](https://img.shields.io/badge/WASM-wasm--bindgen-blue.svg)](https://rustwasm.github.io/docs/wasm-bindgen/)
-[![WebGPU](https://img.shields.io/badge/WebGPU-Ready-green.svg)](https://www.w3.org/TR/webgpu/)
-[![Status](https://img.shields.io/badge/Roadmap%20Priority-P2%20Future%20Prep-blueviolet.svg)]()
+[![Three.js](https://img.shields.io/badge/Three.js-Ready-green.svg)](https://threejs.org/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
-**`mtk-wasm`** 是基于 [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen) 构建的高性能 WebAssembly 跨平台绑定库，为现代 Web 浏览器、Node.js 环境以及 WebGPU / Three.js 渲染管线提供体素网格化与遮挡剔除算力。
+**`mtk-wasm`** 是基于 [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen) 构建的 WebAssembly 绑定库，用于浏览器内 `.mtkscene` 场景包加载、体素网格化并输出 Three.js / WebGPU 友好的零拷贝渲染批次。
 
 ---
 
-## 目录 (Table of Contents)
+## 1. 核心定位（S1 精简版 3D 查看器）
 
-- [1. 架构定位与演进优先级](#1-架构定位与演进优先级)
-- [2. 核心导出类型与 API 清单](#2-核心导出类型与-api-清单)
-  - [2.1 全局控制与诊断](#21-全局控制与诊断)
-  - [2.2 遮挡状态机 (`WasmFaceCuller`)](#22-遮挡状态机-wasmfaceculler)
-  - [2.3 体素世界与紧凑存储 (`WasmVoxelStorage`)](#23-体素世界与紧凑存储-wasmvoxelstorage)
-  - [2.4 高性能网格化器 (`WasmSectionMesher`)](#24-高性能网格化器-wasmsectionmesher)
-  - [2.5 几何网格结果与零拷贝内存视图 (`WasmMeshData`)](#25-几何网格结果与零拷贝内存视图-wasmmeshdata)
-- [3. 构建、编译与测试](#3-构建编译与测试)
-- [4. 真实调用示例](#4-真实调用示例)
-- [5. Feature 开关与依赖](#5-feature-开关与依赖)
-- [6. 开源协议 (License)](#6-开源协议-license)
+- **单向浏览器管线**：`.mtkscene`（`Uint8Array`） → `WasmScenePackage` → `WasmRenderScene` / `WasmRenderBatch` → `THREE.BufferGeometry`。
+- **轻量内存策略**：
+  1. 贴图以原始 PNG 字节流暴露（`read_texture_png`），由浏览器通过 `Blob` + `createImageBitmap` 异步解码，不在 WASM 线性内存中持有大尺寸未压缩 RGBA 缓冲；
+  2. 几何网格在 Rust 内按图集分块（`atlas_chunk_id`）拆批，并将 `PerLoop` UV/染色/AO 对齐为 `PerVertex` 缓冲，通过 WASM 线性内存指针零拷贝构造 `THREE.BufferAttribute`；
+  3. `take_batch(index)` 将批次所有权直接转移给 JS，避免二次拷贝峰值；
+  4. `build_render_scene()` 在返回前释放临时 `VoxelStorage` / `VoxelWorld` 内存。
 
 ---
 
-## 1. 架构定位与演进优先级
+## 2. 导出 API 清单
 
-- **演进优先级**：`P2`（**远期预备与 Web 端 / WebGPU 交互展示扩展**）。
-- **核心定位**：将 `libmtk` 的体素存储、6 向遮挡状态机与网格化器编译为无头 WASM 字节码，无缝嵌入 Web 前端（如基于 Three.js / Babylon.js 的网页版 3D 预览器、WebGPU 实时体素世界编辑器）。
-- **性能与零拷贝特性**：
-  1. **零拷贝指针直传**：直接暴露 WASM 线性内存指针（`positions_ptr`、`indices_ptr` 等），JavaScript 可直接通过 `new Float32Array(wasm.memory.buffer, ptr, len)` 构造 TypedArray 视图，免除数据序列化与深拷贝开销。
-  2. **WebGPU 极速缓冲写入**：支持将 WASM 内存视图直接传递给 `GPUQueue.writeBuffer()`。
-  3. **多线程并行能力**：通过 `parallel` 特性集成 `wasm-bindgen-rayon`，支持在 Web Workers 池中并发执行网格切分与体素网格化。
+### 2.1 全局控制
+- `init_panic_hook()`：初始化浏览器控制台可读 panic 堆栈。
+- `version() -> string`：返回绑定版本号。
+- `set_hardware_concurrency(count: number)` / `get_hardware_concurrency() -> number`：配置并发线程数。
 
----
+### 2.2 `WasmScenePackage`
+- `WasmScenePackage.from_bytes(bytes: Uint8Array) -> WasmScenePackage`：从内存字节打开 `.mtkscene`。
+- `metadata_json() -> string`：返回 `manifest`、`texture_names` 与 `atlas_chunks` 描述 JSON。
+- `texture_names() -> string[]`：列出包内所有 `atlas/textures/*.png` chunk ID。
+- `read_texture_png(chunk_id: string) -> Uint8Array`：读取原始 PNG 字节（不经过像素解码）。
+- `build_render_scene(enable_ao?: boolean, mesh_fluids?: boolean, enable_ctm?: boolean, enable_animated_textures?: boolean) -> WasmRenderScene`：按 Y-Up 右手坐标系构建 Three.js 渲染批次。
 
-## 2. 核心导出类型与 API 清单
-
-### 2.1 全局控制与诊断
-- **`init_panic_hook()`**：初始化控制台 Panic 堆栈跟踪，在浏览器 DevTools 中打印可读的 Rust 崩溃信息。
-- **`version() -> string`**：返回底层 `libmtk` 版本号。
-- **`set_hardware_concurrency(count: number)`** / **`get_hardware_concurrency() -> number`**：设置/获取并发计算线程数（通常传入 `navigator.hardwareConcurrency`）。
-
----
-
-### 2.2 `WasmMeshData` (网格缓冲容器)
-- **几何状态**：
-  - `vertex_count` (getter): 顶点数量
-  - `triangle_count` (getter): 三角形数量
-  - `face_count` (getter): 四边形面数量
-  - `is_empty()`: 是否为空
-  - `clear()`: 清空网格数据
-  - `append_mesh(other: WasmMeshData)`: 合并另一个网格
-  - `append_unit_cube_face(direction_id: number, material_slot: number)`: 追加单位立方体面（0:Down, 1:Up, 2:North, 3:South, 4:West, 5:East）
-- **零拷贝底层内存指针（推荐用于 WebGPU）**：
-  - `positions_ptr() -> number`, `positions_len() -> number`
-  - `normals_ptr() -> number`, `normals_len() -> number`
-  - `uvs_ptr() -> number`, `uvs_len() -> number`
-  - `indices_ptr() -> number`, `indices_len() -> number`
-  - `face_materials_ptr() -> number`, `face_materials_len() -> number`
-- **复制型 TypedArray（便捷集成 Three.js）**：
-  - `get_flat_positions() -> Float32Array`
-  - `get_flat_normals() -> Float32Array`
-  - `get_flat_uvs() -> Float32Array`
-  - `get_indices() -> Uint32Array`
-  - `get_face_materials() -> Uint16Array`
+### 2.3 `WasmRenderScene` & `WasmRenderBatch`
+- `WasmRenderScene`：`batch_count`、`total_vertices`、`total_triangles`、`take_batch(index)`。
+- `WasmRenderBatch`：
+  - 元数据：`chunk_id`、`is_animated`、`has_animation`、`vertex_count`、`triangle_count`、`albedo_chunk_id`、`overlay_chunk_id`、`normal_chunk_id`、`orm_chunk_id`、`aux_chunk_id`
+  - 零拷贝指针与长度：
+    - `positions_ptr() / positions_len()` (`Float32Array`, 3 floats/vertex)
+    - `normals_ptr() / normals_len()` (`Float32Array`, 3 floats/vertex)
+    - `uvs_ptr() / uvs_len()` (`Float32Array`, 2 floats/vertex)
+    - `colors_ptr() / colors_len()` (`Float32Array`, 4 floats/vertex, 线性 `[tint_r, tint_g, tint_b, ao]`)
+    - `tint_weights_ptr() / tint_weights_len()` (`Float32Array`, 2 floats/vertex, `[base_tint_factor, overlay_tint_factor]`)
+    - `indices_ptr() / indices_len()` (`Uint32Array`, 3 indices/triangle)
+    - `anim_timings_ptr() / anim_timings_len()` (`Float32Array`, 3 floats/vertex，仅动图批次非空)
+    - `anim_frame_sizes_ptr() / anim_frame_sizes_len()` (`Float32Array`, 3 floats/vertex，仅动图批次非空)
 
 ---
 
-### 2.3 `WasmFaceCuller` (遮挡剔除器)
-- **构造函数**：`new(leaves_cull_mode: number, glass_cull_mode: number)`
-  - `leaves_cull_mode`: `0` (SingleFace), `1` (Fancy), `2` (Fast), `3` (None)
-  - `glass_cull_mode`: `0` (Group), `1` (SameBlock), `2` (None)
-- **缓存管理**：`clear_cache()`, `cache_len() -> number`
+## 3. Three.js 最小调用示例
 
----
+```javascript
+import init, { init_panic_hook, WasmScenePackage } from './pkg/mtk_wasm.js';
+import * as THREE from 'three';
 
-### 2.4 `WasmVoxelStorage` & `WasmMesherConfig` (体素存储与配置)
-- **`WasmVoxelStorage`**：
-  - `new()`: 创建稀疏 16x16x16 体素容器
-  - `set_bounds(min_x, min_y, min_z, size_x, size_y, size_z) -> boolean`: 设置活动世界包围盒
-  - `set_block(x, y, z, block_state: string) -> boolean`: 设置指定方块
-  - `get_block(x, y, z) -> string`: 获取指定方块
-  - `dirty_section_count() -> number`: 脏区块段数量
-  - `clear_dirty_sections()`: 清空脏标记
-- **`WasmMesherConfig`**：
-  - `new(enable_ao: boolean, mesh_fluids: boolean, z_up_coordinates: boolean, num_threads?: number)`
+const wasm = await init();
+init_panic_hook();
 
----
+const bytes = new Uint8Array(await fetch('/demo.mtkscene').then(r => r.arrayBuffer()));
+const pkg = WasmScenePackage.from_bytes(bytes);
+const renderScene = pkg.build_render_scene(true, true, true, true);
 
-### 2.5 `WasmSectionMesher` (网格化生成器)
-- **`mesh_world(storage, config?, culler?) -> WasmMeshData`**：执行全场景体素网格化并返回合并的紧凑几何网格。
+for (let i = 0; i < renderScene.batch_count; i++) {
+    const batch = renderScene.take_batch(i);
+    const geom = new THREE.BufferGeometry();
 
----
+    geom.setAttribute('position', new THREE.BufferAttribute(
+        new Float32Array(wasm.memory.buffer, batch.positions_ptr(), batch.positions_len()).slice(), 3));
+    geom.setAttribute('normal', new THREE.BufferAttribute(
+        new Float32Array(wasm.memory.buffer, batch.normals_ptr(), batch.normals_len()).slice(), 3));
+    geom.setAttribute('uv', new THREE.BufferAttribute(
+        new Float32Array(wasm.memory.buffer, batch.uvs_ptr(), batch.uvs_len()).slice(), 2));
+    geom.setAttribute('color', new THREE.BufferAttribute(
+        new Float32Array(wasm.memory.buffer, batch.colors_ptr(), batch.colors_len()).slice(), 4));
+    geom.setIndex(new THREE.BufferAttribute(
+        new Uint32Array(wasm.memory.buffer, batch.indices_ptr(), batch.indices_len()).slice(), 1));
 
-## 3. 构建、编译与测试
+    const pngBytes = pkg.read_texture_png(batch.albedo_chunk_id);
+    const bitmap = await createImageBitmap(new Blob([pngBytes], { type: 'image/png' }));
+    const tex = new THREE.Texture(bitmap);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestMipmapLinearFilter;
+    tex.needsUpdate = true;
 
-### 3.1 使用 `wasm-pack` 构建 npm 包
-```bash
-# 安装 wasm-pack
-cargo install wasm-pack
-
-# 构建 Web 目标 (产物位于 bindings/mtk-wasm/pkg/)
-wasm-pack build bindings/mtk-wasm --target web --release
-
-# 构建 Node.js 目标
-wasm-pack build bindings/mtk-wasm --target nodejs --release
+    const mat = new THREE.MeshStandardMaterial({
+        map: tex,
+        vertexColors: true,
+        alphaTest: 0.5,
+    });
+    scene.add(new THREE.Mesh(geom, mat));
+    batch.free();
+}
+renderScene.free();
+pkg.free();
 ```
 
-### 3.2 运行原生与 WebAssembly 兼容性校验
+---
+
+## 4. 构建与测试
+
 ```bash
-# 验证原生测试
+# 原生单元与往返测试
 cargo test -p mtk-wasm
 
-# 验证 wasm32-unknown-unknown 编译兼容性
+# WASM 交叉编译检查与 release 构建
 cargo check -p mtk-wasm --target wasm32-unknown-unknown
+wasm-pack build bindings/mtk-wasm --target web --release
 ```
-
----
-
-## 4. 真实调用示例
-
-### 4.1 Web 浏览器与 Three.js / WebGPU 示例 (JavaScript / TypeScript)
-```javascript
-import init, {
-    init_panic_hook,
-    version,
-    WasmVoxelStorage,
-    WasmMesherConfig,
-    WasmFaceCuller,
-    WasmSectionMesher
-} from './pkg/mtk_wasm.js';
-
-async function run() {
-    // 1. 初始化 WASM 模块与 Panic Hook
-    const wasm = await init();
-    init_panic_hook();
-    console.log(`libmtk WASM initialized, version: ${version()}`);
-
-    // 2. 构造体素世界
-    const storage = new WasmVoxelStorage();
-    storage.set_bounds(0, 0, 0, 16, 16, 16);
-    storage.set_block(0, 0, 0, "minecraft:stone");
-    storage.set_block(0, 1, 0, "minecraft:oak_stairs[facing=north,half=bottom,shape=straight]");
-
-    // 3. 配置网格化器与遮挡剔除
-    const config = new WasmMesherConfig(true, true, true, 4);
-    const culler = new WasmFaceCuller(0, 0);
-
-    // 4. 生成几何网格
-    const mesh = WasmSectionMesher.mesh_world(storage, config, culler);
-    console.log(`Vertices: ${mesh.vertex_count}, Triangles: ${mesh.triangle_count}`);
-
-    // 5. 零拷贝直传 WebGPU 缓冲区 (Zero-Copy Buffer Upload)
-    const positionsView = new Float32Array(
-        wasm.memory.buffer,
-        mesh.positions_ptr(),
-        mesh.positions_len()
-    );
-    const indicesView = new Uint32Array(
-        wasm.memory.buffer,
-        mesh.indices_ptr(),
-        mesh.indices_len()
-    );
-
-    // 直接写入 WebGPU 顶点/索引缓冲，无需任何内存深拷贝
-    // device.queue.writeBuffer(vertexBuffer, 0, positionsView);
-    // device.queue.writeBuffer(indexBuffer, 0, indicesView);
-}
-
-run();
-```
-
----
-
-## 5. Feature 开关与依赖
-
-`mtk-wasm` 在 `Cargo.toml` 中提供特性开关：
-
-| Feature | 默认启用 | 描述 |
-| :--- | :---: | :--- |
-| `std` | 是 | 启用标准库与各子模块的 WebAssembly 兼容子集。 |
-| `parallel` | 否 | 启用 `wasm-bindgen-rayon` 支持 Web Workers 线程池多核并行网格化。 |
-
----
-
-## 6. 开源协议 (License)
-
-本项目遵循 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](../../LICENSE) 开源协议。

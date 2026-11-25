@@ -209,37 +209,13 @@ impl TableOfContents {
     /// Encodes TOC with Zstd compression.
     pub(crate) fn encode_zstd(&self, level: i32) -> PackageResult<Vec<u8>> {
         let raw = self.encode_bytes()?;
-        zstd::encode_all(Cursor::new(raw), level).map_err(|e| PackageError::CompressionFailed {
-            identifier: "TOC".to_string(),
-            source: e,
-        })
+        crate::codec::compress_zstd(&raw, level, "TOC")
     }
 
     /// Decodes TOC from Zstd compressed bytes.
     pub(crate) fn decode_zstd(compressed_slice: &[u8]) -> PackageResult<Self> {
-        let mut decoder = zstd::Decoder::new(Cursor::new(compressed_slice)).map_err(|e| {
-            PackageError::DecompressionFailed {
-                identifier: "TOC".to_string(),
-                source: e,
-            }
-        })?;
-        let mut decompressed = Vec::new();
-        let mut limited = (&mut decoder).take(MAX_TOC_SIZE + 1);
-        limited
-            .read_to_end(&mut decompressed)
-            .map_err(|e| PackageError::DecompressionFailed {
-                identifier: "TOC".to_string(),
-                source: e,
-            })?;
-        if decompressed.len() as u64 > MAX_TOC_SIZE {
-            return Err(PackageError::DecompressionFailed {
-                identifier: "TOC".to_string(),
-                source: std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("TOC decompressed size exceeds {} byte limit", MAX_TOC_SIZE),
-                ),
-            });
-        }
+        let decompressed =
+            crate::codec::decompress_zstd_limited(compressed_slice, MAX_TOC_SIZE, "TOC", 0)?;
         Self::decode_bytes(&decompressed)
     }
 }

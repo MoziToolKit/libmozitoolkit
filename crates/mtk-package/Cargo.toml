@@ -12,9 +12,14 @@ description = "High-performance unified binary package container and codec for M
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-zstd = { workspace = true }
 crc32fast = { workspace = true }
 memmap2 = { workspace = true, optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+zstd = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+ruzstd = { workspace = true }
 
 [features]
 default = ["mmap"]

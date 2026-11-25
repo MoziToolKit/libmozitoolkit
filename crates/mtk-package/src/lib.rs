@@ -4,6 +4,7 @@
 //!
 //! Unified binary package container codec for MoziToolKit (`.mtkcache`, `.mtkscene`).
 
+mod codec;
 mod error;
 mod header;
 mod reader;

@@ -143,6 +143,11 @@ impl ScenePackageReader {
         Ok(textures)
     }
 
+    /// Reads raw PNG bytes for a texture chunk without decoding pixels in Rust.
+    pub fn read_texture_png(&self, chunk_id: &str) -> Result<Vec<u8>, MtkError> {
+        self.contents().texture_png(chunk_id)
+    }
+
     /// Reads and decodes a texture chunk (PNG) directly into an `RgbaBuffer` in memory with optional vertical flip.
     pub fn read_texture_rgba_with_orientation(
         &self,

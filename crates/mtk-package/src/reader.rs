@@ -1,7 +1,7 @@
 //! Zero-copy memory-mapped package reader and decoder.
 
 use std::fs::File;
-use std::io::{Cursor, Read};
+use std::io::Read;
 use std::path::Path;
 
 use crate::error::{PackageError, PackageResult};
@@ -291,33 +291,13 @@ impl MtkPackageReader {
                 raw_payload.to_vec()
             }
             CompressionType::Zstd => {
-                let mut decoder = zstd::Decoder::new(Cursor::new(raw_payload)).map_err(|e| {
-                    PackageError::DecompressionFailed {
-                        identifier: identifier.to_string(),
-                        source: e,
-                    }
-                })?;
                 let initial_cap = (entry.decompressed_size as usize).min(1024 * 1024);
-                let mut buf = Vec::with_capacity(initial_cap);
-                let mut limited = (&mut decoder).take(MAX_DECOMPRESSED_CHUNK_SIZE + 1);
-                limited
-                    .read_to_end(&mut buf)
-                    .map_err(|e| PackageError::DecompressionFailed {
-                        identifier: identifier.to_string(),
-                        source: e,
-                    })?;
-                if buf.len() as u64 > MAX_DECOMPRESSED_CHUNK_SIZE {
-                    return Err(PackageError::DecompressionFailed {
-                        identifier: identifier.to_string(),
-                        source: std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            format!(
-                                "Decompressed chunk '{}' exceeds limit of {} bytes",
-                                identifier, MAX_DECOMPRESSED_CHUNK_SIZE
-                            ),
-                        ),
-                    });
-                }
+                let buf = crate::codec::decompress_zstd_limited(
+                    raw_payload,
+                    MAX_DECOMPRESSED_CHUNK_SIZE,
+                    identifier,
+                    initial_cap,
+                )?;
                 if buf.len() as u64 != entry.decompressed_size {
                     return Err(PackageError::DecompressionFailed {
                         identifier: identifier.to_string(),

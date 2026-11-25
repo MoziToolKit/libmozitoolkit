@@ -115,13 +115,20 @@ impl<'a> PackageContents<'a> {
         Ok(Some(self.reader.read_chunk_str(chunks::ATLAS_MAPPING)?))
     }
 
+    /// Reads raw PNG bytes for an atlas texture chunk without decoding pixels.
+    ///
+    /// Accepts a file stem or a full `atlas/textures/...` id.
+    pub fn texture_png(&self, chunk_id: &str) -> Result<Vec<u8>, MtkError> {
+        Ok(self
+            .reader
+            .read_chunk_decompressed(&chunks::atlas_texture(chunk_id))?)
+    }
+
     /// Decodes an atlas texture chunk to RGBA, optionally flipping v.
     ///
     /// Accepts a file stem or a full `atlas/textures/...` id.
     pub fn texture_rgba(&self, chunk_id: &str, flip_v: bool) -> Result<RgbaBuffer, MtkError> {
-        let png = self
-            .reader
-            .read_chunk_decompressed(&chunks::atlas_texture(chunk_id))?;
+        let png = self.texture_png(chunk_id)?;
         let mut buffer = RgbaBuffer::from_png_bytes(&png)?;
         if flip_v {
             buffer.flip_v();
@@ -135,9 +142,7 @@ impl<'a> PackageContents<'a> {
         chunk_id: &str,
         flip_v: bool,
     ) -> Result<(u32, u32, Vec<f32>), MtkError> {
-        let png = self
-            .reader
-            .read_chunk_decompressed(&chunks::atlas_texture(chunk_id))?;
+        let png = self.texture_png(chunk_id)?;
         let buffer = RgbaBuffer::from_png_bytes(&png)?;
         let (width, height) = (buffer.width, buffer.height);
         Ok((width, height, buffer.to_f32_buffer(flip_v)))

@@ -22,3 +22,4 @@ wheels/
 
 .VSCodeCounter/
 pi-session-*
+bindings/mtk-wasm/examples/viewer/pkg/
