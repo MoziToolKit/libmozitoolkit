@@ -611,6 +611,7 @@ function readValidatedBounds() {
 }
 
 async function loadCacheBytes(bytes, label) {
+  skinFetchGeneration += 1;
   statusBadge.textContent = `加载缓存 ${label}…`;
   if (activeSaveWorld) {
     activeSaveWorld.free();
@@ -672,6 +673,7 @@ function normalizeSaveFileList(entries) {
 }
 
 async function indexSaveEntries(entries, folderLabel) {
+  skinFetchGeneration += 1;
   statusBadge.textContent = `索引存档 ${folderLabel}…`;
   const normalized = normalizeSaveFileList(entries);
   const levelBytes = await normalized.readFile('level.dat');

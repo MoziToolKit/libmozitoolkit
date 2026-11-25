@@ -421,47 +421,321 @@ mod tests {
         assert_eq!(batch.indices_len(), batch.triangle_count() * 3);
     }
 
+    fn push_nbt_tag_header(buf: &mut Vec<u8>, tag_type: u8, name: &str) {
+        buf.push(tag_type);
+        let bytes = name.as_bytes();
+        buf.extend_from_slice(&(bytes.len() as u16).to_be_bytes());
+        buf.extend_from_slice(bytes);
+    }
+
+    fn push_nbt_string_tag(buf: &mut Vec<u8>, name: &str, value: &str) {
+        push_nbt_tag_header(buf, 8, name);
+        let bytes = value.as_bytes();
+        buf.extend_from_slice(&(bytes.len() as u16).to_be_bytes());
+        buf.extend_from_slice(bytes);
+    }
+
+    fn push_nbt_int_tag(buf: &mut Vec<u8>, name: &str, value: i32) {
+        push_nbt_tag_header(buf, 3, name);
+        buf.extend_from_slice(&value.to_be_bytes());
+    }
+
+    fn push_nbt_long_array_tag(buf: &mut Vec<u8>, name: &str, values: &[u64]) {
+        push_nbt_tag_header(buf, 12, name);
+        buf.extend_from_slice(&(values.len() as i32).to_be_bytes());
+        for v in values {
+            buf.extend_from_slice(&v.to_be_bytes());
+        }
+    }
+
+    fn build_synthetic_skull_and_banner_mca() -> Vec<u8> {
+        use flate2::write::ZlibEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+
+        let mut nbt = Vec::new();
+        push_nbt_tag_header(&mut nbt, 10, "");
+        push_nbt_int_tag(&mut nbt, "DataVersion", 4903);
+        push_nbt_int_tag(&mut nbt, "xPos", 0);
+        push_nbt_int_tag(&mut nbt, "zPos", 0);
+        push_nbt_int_tag(&mut nbt, "yPos", 0);
+
+        // sections: 1 section at Y=0
+        push_nbt_tag_header(&mut nbt, 9, "sections");
+        nbt.push(10); // TAG_Compound
+        nbt.extend_from_slice(&1i32.to_be_bytes());
+        push_nbt_tag_header(&mut nbt, 1, "Y");
+        nbt.push(0);
+
+        push_nbt_tag_header(&mut nbt, 10, "block_states");
+        push_nbt_tag_header(&mut nbt, 9, "palette");
+        nbt.push(10);
+        nbt.extend_from_slice(&4i32.to_be_bytes());
+        push_nbt_string_tag(&mut nbt, "Name", "minecraft:air");
+        nbt.push(0);
+        push_nbt_string_tag(&mut nbt, "Name", "minecraft:stone");
+        nbt.push(0);
+        push_nbt_string_tag(&mut nbt, "Name", "minecraft:player_head");
+        nbt.push(0);
+        push_nbt_string_tag(&mut nbt, "Name", "minecraft:red_banner");
+        nbt.push(0);
+
+        // 4096 blocks, 4 bits/block = 256 u64 longs.
+        // Anvil local index = (y << 8) | (z << 4) | x.
+        // Put stone at (0,0,0), player_head at (1,0,0), red_banner at (2,0,0).
+        let mut longs = vec![0u64; 256];
+        longs[0] = 1u64 | (2u64 << 4) | (3u64 << 8);
+        push_nbt_long_array_tag(&mut nbt, "data", &longs);
+        nbt.push(0); // end block_states
+        nbt.push(0); // end section
+
+        // block_entities: 1 player skull + 1 banner
+        push_nbt_tag_header(&mut nbt, 9, "block_entities");
+        nbt.push(10);
+        nbt.extend_from_slice(&2i32.to_be_bytes());
+
+        // 0: player_head at (1, 0, 0)
+        push_nbt_string_tag(&mut nbt, "id", "minecraft:skull");
+        push_nbt_int_tag(&mut nbt, "x", 1);
+        push_nbt_int_tag(&mut nbt, "y", 0);
+        push_nbt_int_tag(&mut nbt, "z", 0);
+        push_nbt_tag_header(&mut nbt, 10, "profile");
+        push_nbt_string_tag(&mut nbt, "name", "Notch");
+        nbt.push(0); // end profile
+        nbt.push(0); // end skull
+
+        // 1: banner at (2, 0, 0)
+        push_nbt_string_tag(&mut nbt, "id", "minecraft:banner");
+        push_nbt_int_tag(&mut nbt, "x", 2);
+        push_nbt_int_tag(&mut nbt, "y", 0);
+        push_nbt_int_tag(&mut nbt, "z", 0);
+        nbt.push(0); // end banner
+
+        nbt.push(0); // end root
+
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
+        encoder.write_all(&nbt).unwrap();
+        let compressed = encoder.finish().unwrap();
+
+        let payload_len = 1 + compressed.len(); // comp_type + compressed
+        let total_chunk_bytes = 4 + payload_len;
+        let sectors = total_chunk_bytes.div_ceil(4096).max(1);
+        let mut mca = vec![0u8; 4096 * (2 + sectors)];
+        // Chunk (0, 0) at sector offset 2
+        mca[0..3].copy_from_slice(&[0, 0, 2]);
+        mca[3] = sectors as u8;
+        let off = 4096 * 2;
+        mca[off..off + 4].copy_from_slice(&(payload_len as u32).to_be_bytes());
+        mca[off + 4] = 2; // Zlib
+        mca[off + 5..off + 5 + compressed.len()].copy_from_slice(&compressed);
+        mca
+    }
+
+    fn build_minimal_asset_cache_bytes() -> Vec<u8> {
+        let mut pack = mtk_resource::MemoryPack::new("WasmSaveUnitPack");
+        let stone_png = encode_tiny_png([128, 128, 128, 255]);
+        pack.insert("assets/minecraft/textures/block/stone.png", stone_png);
+        pack.insert(
+            "assets/minecraft/models/block/stone.json",
+            br##"{
+                "textures": { "all": "minecraft:block/stone" },
+                "elements": [{
+                    "from": [0, 0, 0], "to": [16, 16, 16],
+                    "faces": {
+                        "up":    { "texture": "#all", "cullface": "up" },
+                        "down":  { "texture": "#all", "cullface": "down" },
+                        "north": { "texture": "#all", "cullface": "north" },
+                        "south": { "texture": "#all", "cullface": "south" },
+                        "west":  { "texture": "#all", "cullface": "west" },
+                        "east":  { "texture": "#all", "cullface": "east" }
+                    }
+                }]
+            }"##
+            .to_vec(),
+        );
+        pack.insert(
+            "assets/minecraft/blockstates/stone.json",
+            br##"{ "variants": { "": { "model": "minecraft:block/stone" } } }"##.to_vec(),
+        );
+
+        let mut stack = mtk_resource::ResourcePackStack::new();
+        stack.push_pack(Box::new(pack));
+
+        let temp_dir = std::env::temp_dir().join(format!(
+            "mtk_wasm_cache_{}_{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let cfg = libmtk::PrecompileConfig {
+            max_atlas_width: 256,
+            max_atlas_height: 256,
+            atlas_category: "blocks".to_string(),
+            compile_atlas: true,
+            compile_models: true,
+            num_threads: Some(1),
+            resolver_overrides: None,
+        };
+        let res = libmtk::precompile_all_assets(&stack, &temp_dir, &cfg).unwrap();
+        let bytes = std::fs::read(&res.package_path).unwrap();
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        bytes
+    }
+
     #[test]
-    fn test_save_and_cache_parity_against_untitled_mtkscene() {
-        let cache_path = std::path::Path::new(
-            "/Users/jaxlocke/Library/Application Support/Blender/5.2/extensions/.user/vscode_development/MoziToolKit/cache/mtk_fp_58d0c7fee81ad3bf.mtkcache",
+    fn test_save_world_skin_pre_register_multi_region_and_corrupt_mca() {
+        let cache_bytes = build_minimal_asset_cache_bytes();
+        let cache = WasmAssetCache::from_bytes(&cache_bytes).expect("open minimal cache");
+        let mca = build_synthetic_skull_and_banner_mca();
+        let regions = [mtk_save::RegionBytes {
+            rx: 0,
+            rz: 0,
+            data: &mca,
+        }];
+        let empty_ext = HashMap::new();
+        let min_b = glam::IVec3::new(0, 0, 0);
+        let max_b = glam::IVec3::new(15, 15, 15);
+
+        let mut world = WasmSaveWorld::from_cache_for_test(&cache).expect("new WasmSaveWorld");
+        let summary = world
+            .load_regions_internal(&regions, &empty_ext, min_b, max_b)
+            .expect("load synthetic region");
+        assert_eq!(summary.voxel_count, 3);
+
+        // 1. Before registering, Notch's player_head must appear in pending_skin_requests.
+        let pending = world.collect_pending_skin_requests();
+        assert_eq!(pending.len(), 1);
+        let skin_key = pending[0].key.clone();
+
+        // Register a valid 64x64 player skin PNG and verify incremental rebuild.
+        let skin_img: ImageBuffer<Rgba<u8>, Vec<u8>> =
+            ImageBuffer::from_pixel(64, 64, Rgba([220, 180, 140, 255]));
+        let mut skin_png = Vec::new();
+        skin_img
+            .write_to(&mut Cursor::new(&mut skin_png), image::ImageFormat::Png)
+            .unwrap();
+        assert!(world.register_skin_png_internal(&skin_key, &skin_png));
+        assert!(world.collect_pending_skin_requests().is_empty());
+
+        let scene_1 = world
+            .build_render_scene_internal(Some(true), Some(true), Some(true), Some(true))
+            .expect("first render scene");
+        assert!(scene_1.total_triangles() > 0);
+        assert!(world
+            .texture_names()
+            .contains(&"dynamic/chunk_65520.png".to_string()));
+
+        // 2. Reload regions on the SAME WasmSaveWorld (simulating selection change in viewer.js):
+        //    - resolved_skin_keys must remain intact so Notch is NOT requested again;
+        //    - dynamic atlas registration must be re-applied so dynamic/chunk_65520.png still renders.
+        world
+            .load_regions_internal(&regions, &empty_ext, min_b, max_b)
+            .expect("reload synthetic region");
+        assert!(
+            world.collect_pending_skin_requests().is_empty(),
+            "resolved_skin_keys should persist across load_regions on the same WasmSaveWorld"
         );
-        let save_dir = std::path::Path::new(
-            "/Users/jaxlocke/Library/Application Support/PrismLauncher/instances/26.2/minecraft/saves/新的世界",
+        let mut scene_2 = world
+            .build_render_scene_internal(Some(true), Some(true), Some(true), Some(true))
+            .expect("second render scene after reload");
+        let mut saw_dynamic_batch = false;
+        for i in 0..scene_2.batch_count() {
+            let b = scene_2.take_batch(i).unwrap();
+            if b.chunk_id() >= mtk_texture::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID as i32 {
+                saw_dynamic_batch = true;
+                assert_eq!(
+                    b.albedo_chunk_id().as_deref(),
+                    Some("dynamic/chunk_65520.png")
+                );
+            }
+        }
+        assert!(
+            saw_dynamic_batch,
+            "reloaded WasmSaveWorld must keep dynamic banner/skin atlas registration"
         );
-        let scene_path = std::path::Path::new("/Users/jaxlocke/Untitled.mtkscene");
-        if !cache_path.exists() || !save_dir.exists() || !scene_path.exists() {
-            println!("SKIP test_save_and_cache_parity_against_untitled_mtkscene: host test assets missing");
+
+        // 3. Corrupted non-empty .mca input must return Err rather than silently succeeding.
+        let corrupt = [0xDEu8, 0xAD, 0xBE, 0xEF];
+        let corrupt_regions = [mtk_save::RegionBytes {
+            rx: 0,
+            rz: 0,
+            data: &corrupt,
+        }];
+        assert!(
+            world
+                .load_regions_internal(&corrupt_regions, &empty_ext, min_b, max_b)
+                .is_err(),
+            "non-empty corrupted .mca must fail instead of returning empty sections"
+        );
+    }
+
+    #[test]
+    fn test_save_and_cache_parity_with_testkit() {
+        let Some(jar) = mtk_testkit::fabric_jar() else {
+            mtk_testkit::skip("no Minecraft jar (set MTK_TEST_JAR or place ../26.2-Fabric.jar)");
             return;
+        };
+        let Some(save_dir) = mtk_testkit::save_world() else {
+            mtk_testkit::skip("no Minecraft save world available (set MTK_TEST_SAVE)");
+            return;
+        };
+
+        let temp_dir = std::env::temp_dir().join(format!(
+            "mtk_wasm_parity_{}_{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let mut stack = mtk_resource::ResourcePackStack::new();
+        stack.push_pack(Box::new(
+            mtk_resource::ZipPack::from_file("vanilla", &jar).expect("open jar"),
+        ));
+        if let Some(assets) = mtk_testkit::real_assets_root() {
+            stack.push_pack(Box::new(mtk_resource::DirectoryPack::new(
+                "mojang_assets",
+                &assets,
+            )));
         }
 
-        let cache_bytes = std::fs::read(cache_path).expect("read mtkcache");
+        let cache_dir = temp_dir.join("cache");
+        std::fs::create_dir_all(&cache_dir).unwrap();
+        let precompile = libmtk::precompile_all_assets(
+            &stack,
+            &cache_dir,
+            &libmtk::PrecompileConfig {
+                max_atlas_width: 4096,
+                max_atlas_height: 4096,
+                atlas_category: "blocks".to_string(),
+                compile_atlas: true,
+                compile_models: true,
+                num_threads: None,
+                resolver_overrides: None,
+            },
+        )
+        .expect("precompile testkit assets");
+
+        let cache_bytes = std::fs::read(&precompile.package_path).expect("read mtkcache");
         let cache = WasmAssetCache::from_bytes(&cache_bytes).expect("open WasmAssetCache");
 
-        // Collect normalized save-relative file paths just as browser webkitdirectory/FSA would.
+        let min_b = glam::IVec3::new(-16, -64, -16);
+        let max_b = glam::IVec3::new(15, 127, 15);
+
+        // Collect save-relative paths just as browser directory picker would.
         let mut rel_paths = Vec::new();
-        let mut stack = vec![save_dir.to_path_buf()];
-        while let Some(dir) = stack.pop() {
+        let mut stack_dirs = vec![save_dir.clone()];
+        while let Some(dir) = stack_dirs.pop() {
             for entry in std::fs::read_dir(&dir).expect("read_dir").flatten() {
                 let p = entry.path();
                 if p.is_dir() {
-                    stack.push(p);
-                } else if let Ok(rel) = p.strip_prefix(save_dir) {
+                    stack_dirs.push(p);
+                } else if let Ok(rel) = p.strip_prefix(&save_dir) {
                     rel_paths.push(rel.to_string_lossy().replace('\\', "/"));
                 }
             }
         }
-        let dims = mtk_save::SaveLoader::discover_dimensions_from_paths(
-            rel_paths.iter().map(String::as_str),
-        );
-        assert!(dims.contains(&"overworld".to_string()), "dims={dims:?}");
-
-        let level_bytes = std::fs::read(save_dir.join("level.dat")).expect("read level.dat");
-        let level = mtk_save::LevelData::from_bytes(&level_bytes).expect("parse level.dat");
-        assert!(!level.level_name.is_empty());
-
-        let min_b = glam::IVec3::new(-64, -64, -64);
-        let max_b = glam::IVec3::new(64, 320, 64);
         let plan = mtk_save::SaveLoader::plan_dimension_region_files(
             "overworld",
             min_b,
@@ -473,13 +747,7 @@ mod tests {
         let loaded_mca: Vec<(i32, i32, Vec<u8>)> = plan
             .regions
             .iter()
-            .map(|r| {
-                (
-                    r.rx,
-                    r.rz,
-                    std::fs::read(save_dir.join(&r.path)).expect("read mca"),
-                )
-            })
+            .map(|r| (r.rx, r.rz, std::fs::read(save_dir.join(&r.path)).unwrap()))
             .collect();
         let region_refs: Vec<mtk_save::RegionBytes<'_>> = loaded_mca
             .iter()
@@ -493,7 +761,7 @@ mod tests {
         for ext in &plan.external_chunks {
             ext_map.insert(
                 (ext.cx, ext.cz),
-                std::fs::read(save_dir.join(&ext.path)).expect("read mcc"),
+                std::fs::read(save_dir.join(&ext.path)).unwrap(),
             );
         }
 
@@ -501,86 +769,99 @@ mod tests {
         let summary = save_world
             .load_regions_internal(&region_refs, &ext_map, min_b, max_b)
             .expect("load_regions");
+
+        // Resolve any player skulls deterministically offline so both WasmSaveWorld and
+        // export_scene_package share identical skin textures without hitting the network.
+        let skin_img: ImageBuffer<Rgba<u8>, Vec<u8>> =
+            ImageBuffer::from_pixel(64, 64, Rgba([200, 160, 120, 255]));
+        let mut offline_skin_png = Vec::new();
+        skin_img
+            .write_to(
+                &mut Cursor::new(&mut offline_skin_png),
+                image::ImageFormat::Png,
+            )
+            .unwrap();
         let pending_skins = save_world.collect_pending_skin_requests();
-        let mut save_render = save_world
+        for req in &pending_skins {
+            assert!(save_world.register_skin_png_internal(&req.key, &offline_skin_png));
+        }
+
+        // Export matching .mtkscene from the exact same save slice, cache, and offline skins.
+        let mut storage = mtk_voxel::VoxelStorage::new();
+        mtk_save::SaveLoader::load_box_into_storage(
+            &save_dir,
+            "overworld",
+            min_b,
+            max_b,
+            &mut storage,
+        )
+        .expect("load_box_into_storage");
+
+        let cache_reader = libmtk::AssetCacheReader::open(&precompile.package_path).unwrap();
+        let models = cache_reader.load_models().unwrap();
+        let atlas_map = cache_reader.load_atlas_mapping().unwrap();
+        let sparse = SparseVoxelPayload::from_storage(
+            &storage,
+            &mtk_voxel::MesherConfig {
+                coordinate_system: mtk_voxel::CoordinateSystem::Minecraft,
+                origin_centered: false,
+                ..Default::default()
+            },
+        )
+        .expect("sparse payload");
+
+        let mut world_for_entities = mtk_voxel::VoxelWorld::from_storage(
+            storage,
+            Some(mtk_voxel::MesherConfig {
+                atlas_address_map: Some(std::sync::Arc::new(atlas_map.clone())),
+                ..Default::default()
+            }),
+            None,
+            None,
+        );
+        let mut textures = mtk_block_entity_textures::BlockEntityTextures::default();
+        textures.set_allow_network(false);
+        textures.set_banner_baker(cache_reader.load_banner_baker().unwrap());
+        world_for_entities.set_block_entity_textures(Some(Box::new(textures)));
+        for req in &pending_skins {
+            world_for_entities.register_memory_skin(&req.key, offline_skin_png.clone());
+        }
+        world_for_entities.prepare_block_entity_textures(
+            None,
+            mtk_voxel::TextureResolveMode::Cached,
+            None,
+        );
+        let dyn_atlases = world_for_entities.dynamic_entity_atlases_owned();
+        let dyn_slots = world_for_entities.dynamic_entity_slots();
+
+        let scene_path = temp_dir.join("parity.mtkscene");
+        let mut cache_source = cache_reader;
+        libmtk::export_scene_package(
+            &scene_path,
+            libmtk::SceneExportRequest {
+                voxels: &sparse,
+                source_models: &models,
+                source_atlas_map: &atlas_map,
+                atlas_source: &mut cache_source,
+                config: &libmtk::SceneExporterConfig::default(),
+                dynamic_entity_atlases: (!dyn_atlases.is_empty()).then_some(&dyn_atlases),
+                dynamic_entity_slots: (!dyn_slots.is_empty()).then_some(&dyn_slots),
+                ctm_mode: libmtk::CtmMode::Auto,
+            },
+        )
+        .expect("export parity.mtkscene");
+
+        let save_render = save_world
             .build_render_scene_internal(Some(true), Some(true), Some(true), Some(true))
             .expect("build save render scene");
 
-        // Compare against Untitled.mtkscene exported from the same selection.
-        let scene_bytes = std::fs::read(scene_path).expect("read Untitled.mtkscene");
+        let scene_bytes = std::fs::read(&scene_path).expect("read parity.mtkscene");
         let scene_pkg = WasmScenePackage::from_bytes(&scene_bytes).expect("open WasmScenePackage");
-        let scene_meta_json = scene_pkg.metadata_json().expect("scene meta");
-        let scene_meta: serde_json::Value = serde_json::from_str(&scene_meta_json).unwrap();
-        let mut scene_render = scene_pkg
+        let scene_meta: serde_json::Value =
+            serde_json::from_str(&scene_pkg.metadata_json().unwrap()).unwrap();
+        let scene_render = scene_pkg
             .build_render_scene(Some(true), Some(true), Some(true), Some(true))
             .expect("build scene render");
-
-        println!(
-            "PARITY COMPARISON:\n  save summary: sections={}, voxels={}, bounds={:?}, pending_skins={}\n  save render : batches={}, verts={}, tris={}\n  scene meta  : voxels={}, bounds={}\n  scene render: batches={}, verts={}, tris={}",
-            summary.loaded_sections,
-            summary.voxel_count,
-            summary.bounds,
-            pending_skins.len(),
-            save_render.batch_count(),
-            save_render.total_vertices(),
-            save_render.total_triangles(),
-            scene_meta["manifest"]["voxel_count"],
-            scene_meta["manifest"]["bounds"],
-            scene_render.batch_count(),
-            scene_render.total_vertices(),
-            scene_render.total_triangles(),
-        );
-
-        let save_batch_summary: Vec<(i32, usize, usize, Option<String>)> = (0..save_render
-            .batch_count())
-            .map(|i| {
-                let b = save_render.take_batch(i).unwrap();
-                (
-                    b.chunk_id(),
-                    b.vertex_count(),
-                    b.triangle_count(),
-                    b.albedo_chunk_id(),
-                )
-            })
-            .collect();
-        let scene_batch_summary: Vec<(i32, usize, usize, Option<String>)> = (0..scene_render
-            .batch_count())
-            .map(|i| {
-                let b = scene_render.take_batch(i).unwrap();
-                (
-                    b.chunk_id(),
-                    b.vertex_count(),
-                    b.triangle_count(),
-                    b.albedo_chunk_id(),
-                )
-            })
-            .collect();
-        println!("  save batches : {save_batch_summary:?}");
-        println!("  scene batches: {scene_batch_summary:?}");
-        println!("  pending skins: {pending_skins:?}");
-        println!("  save textures: {:?}", save_world.texture_names());
-
-        // Check dynamic entity PNG readability and assert zero collision with static entities atlas.
-        for (cid, _, _, albedo) in &save_batch_summary {
-            if *cid >= mtk_texture::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID as i32 {
-                let tex_id = albedo.as_deref().expect("dynamic albedo id");
-                assert!(tex_id.starts_with("dynamic/chunk_"));
-                let png = save_world
-                    .read_texture_png_bytes_internal(tex_id)
-                    .expect("encode dynamic atlas PNG");
-                assert!(png.starts_with(&[0x89, b'P', b'N', b'G']));
-            }
-        }
-        assert!(
-            save_world
-                .texture_names()
-                .contains(&"dynamic/chunk_65520.png".to_string()),
-            "expected dynamic/chunk_65520.png from prewarmed BannerBaker atlas"
-        );
-        assert!(save_world
-            .read_texture_png_bytes_internal("dynamic/chunk_65520.png")
-            .expect("read dynamic banner/skin atlas")
-            .starts_with(&[0x89, b'P', b'N', b'G']));
 
         assert_eq!(
             summary.voxel_count as u64,
@@ -591,5 +872,7 @@ mod tests {
             scene_render.total_triangles()
         );
         assert_eq!(save_render.total_vertices(), scene_render.total_vertices());
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

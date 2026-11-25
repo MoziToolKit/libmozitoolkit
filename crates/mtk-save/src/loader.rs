@@ -304,12 +304,11 @@ impl SaveLoader {
 
         let decode_one =
             |region: &RegionBytes<'_>| -> Result<Vec<(IVec3, SectionStorage)>, SaveError> {
+                if region.data.is_empty() {
+                    return Ok(Vec::new());
+                }
                 let label = format!("r.{}.{}.mca", region.rx, region.rz);
-                let mut region_file =
-                    match RegionFile::from_bytes(region.data, &label, external_chunks) {
-                        Ok(rf) => rf,
-                        Err(_) => return Ok(Vec::new()),
-                    };
+                let mut region_file = RegionFile::from_bytes(region.data, &label, external_chunks)?;
                 decode_region_reader(
                     &mut region_file,
                     sel.region_chunk_range_x(region.rx),

@@ -42,7 +42,7 @@ pub(crate) struct LoadRegionsSummary {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct PendingSkinRequest {
-    key: String,
+    pub(crate) key: String,
     skin_url: Option<String>,
     uuid: Option<String>,
     name: Option<String>,
@@ -223,7 +223,7 @@ impl WasmSaveWorld {
         names
     }
 
-    /// Reads PNG bytes for either a dynamic entity atlas chunk (`entities_chunk_*.png`) or a static cache chunk.
+    /// Reads PNG bytes for either a dynamic entity atlas chunk (`dynamic/chunk_<id>.png`) or a static cache chunk.
     pub fn read_texture_png(&self, chunk_id: &str) -> Result<Uint8Array, JsValue> {
         let png = self
             .read_texture_png_bytes_internal(chunk_id)
@@ -270,7 +270,6 @@ impl WasmSaveWorld {
         self.world.set_config(fresh_config);
         self.has_initial_mesh = false;
         self.last_toggles = None;
-        self.resolved_skin_keys.clear();
 
         let loaded_sections = SaveLoader::load_box_from_regions_into_storage(
             regions,

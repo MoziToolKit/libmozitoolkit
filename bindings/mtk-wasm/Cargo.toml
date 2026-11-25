@@ -44,6 +44,8 @@ parallel = [
 
 [dev-dependencies]
 mtk-package = { path = "../../crates/mtk-package", version = "2.0.0", default-features = false }
+mtk-testkit = { path = "../../crates/mtk-testkit" }
+flate2 = { workspace = true }
 glam = { workspace = true }
 postcard = { workspace = true }
 image = { workspace = true }
