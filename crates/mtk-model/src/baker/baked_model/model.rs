@@ -288,12 +288,11 @@ impl BakedModel {
                 quads.push((self.faces[dir.to_index()].vertices, dir));
             }
         }
-        let quads_slice = if !quads.is_empty() || !self.obj_faces.is_empty() {
-            Some(quads.as_slice())
-        } else {
-            None
-        };
-        mtk_cull::compute_block_cull_meta(&self.block_state, quads_slice, Some(self.is_opaque))
+        mtk_cull::compute_block_cull_meta(
+            &self.block_state,
+            Some(quads.as_slice()),
+            Some(self.is_opaque && !quads.is_empty()),
+        )
     }
 
     /// Returns the standard face for a given direction (from 6-face summary).

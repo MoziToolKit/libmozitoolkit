@@ -1456,3 +1456,57 @@ fn vanilla_hanging_sign_bakes_with_euler_rotations() {
         mesh.face_count()
     );
 }
+
+#[test]
+fn empty_placeholder_entity_block_model_is_non_occluding() {
+    use mtk_core::DirMask;
+    use mtk_cull::CullCategory;
+
+    // Mimics modded Java-rendered BlockEntity blocks such as `yuushya:showblock` -> `yuushya:block/blank`
+    // whose JSON model only inherits `minecraft:block/block` and defines `textures.particle` with no `elements`.
+    let bs_json = r#"{ "variants": { "": { "model": "yuushya:block/blank" } } }"#;
+    let def: BlockStateDefinition = serde_json::from_str(bs_json).unwrap();
+    let blank_json = r#"{
+        "parent": "minecraft:block/block",
+        "textures": { "particle": "yuushya:block/pt" },
+        "ambientocclusion": false
+    }"#;
+    let blank_model: BlockModelJson = serde_json::from_str(blank_json).unwrap();
+    let parent_block: BlockModelJson = serde_json::from_str(r#"{ "gui_light": "side" }"#).unwrap();
+
+    let mut baker = ModelBaker::new();
+    let baked = baker
+        .bake_blockstate("yuushya:showblock", Some(&def), |id| match id {
+            "yuushya:block/blank" => Some(blank_model.clone()),
+            "minecraft:block/block" | "block/block" => Some(parent_block.clone()),
+            _ => None,
+        })
+        .expect("empty placeholder model must bake cleanly");
+
+    assert!(baked.elements.is_empty());
+    assert!(!baked.is_cube);
+    assert!(
+        !baked.is_opaque,
+        "empty placeholder model must not be opaque"
+    );
+
+    let meta = baked
+        .cull_meta
+        .as_ref()
+        .expect("baked model must include cull_meta");
+    assert!(!meta.is_full_cube);
+    assert!(!meta.is_opaque);
+    assert!(meta.has_baked_model);
+    assert_eq!(meta.category, CullCategory::PartialShape);
+    assert_eq!(meta.full_face_mask, DirMask::empty());
+    assert_eq!(meta.empty_face_mask, DirMask::ALL);
+
+    // Also verify recomputing cull_meta via get_or_compute_cull_meta() agrees.
+    let mut no_meta_baked = baked.clone();
+    no_meta_baked.cull_meta = None;
+    let recomputed = no_meta_baked.get_or_compute_cull_meta();
+    assert!(!recomputed.is_full_cube);
+    assert!(!recomputed.is_opaque);
+    assert_eq!(recomputed.full_face_mask, DirMask::empty());
+    assert_eq!(recomputed.empty_face_mask, DirMask::ALL);
+}

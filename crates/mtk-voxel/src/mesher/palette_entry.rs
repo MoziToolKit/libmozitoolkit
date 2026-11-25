@@ -232,9 +232,12 @@ impl ResolvedPaletteEntry {
         let meshing_data = Arc::new(resolve_palette_meshing_data_for_state(st, source, config));
         if matches!(*meshing_data, PaletteMeshingData::Empty) {
             let mut empty_meta = (*meta).clone();
+            empty_meta.category = mtk_cull::CullCategory::Air;
             empty_meta.is_air = true;
             empty_meta.is_full_cube = false;
             empty_meta.is_opaque = false;
+            empty_meta.full_face_mask = mtk_core::DirMask::empty();
+            empty_meta.empty_face_mask = mtk_core::DirMask::ALL;
             meta = Arc::new(empty_meta);
         }
 

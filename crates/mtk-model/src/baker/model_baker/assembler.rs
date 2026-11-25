@@ -263,7 +263,7 @@ impl ModelBaker {
                 .iter()
                 .all(|el| el.from_pos == [0.0, 0.0, 0.0] && el.to_pos == [16.0, 16.0, 16.0]);
 
-        let is_opaque = !has_obj && is_opaque_block(short_name);
+        let is_opaque = !has_obj && !baked_elements.is_empty() && is_opaque_block(short_name);
 
         let emissive = is_block_emissive(blockstate);
 
@@ -279,13 +279,11 @@ impl ModelBaker {
                 quads.push((final_six_faces[dir.to_index()].vertices, dir));
             }
         }
-        let quads_slice = if !quads.is_empty() || has_obj {
-            Some(quads.as_slice())
-        } else {
-            None
-        };
-        let cull_meta =
-            mtk_cull::compute_block_cull_meta(canonical_str, quads_slice, Some(is_opaque));
+        let cull_meta = mtk_cull::compute_block_cull_meta(
+            canonical_str,
+            Some(quads.as_slice()),
+            Some(is_opaque),
+        );
 
         let mut baked_model = BakedModel {
             block_state: canonical_str.to_string(),

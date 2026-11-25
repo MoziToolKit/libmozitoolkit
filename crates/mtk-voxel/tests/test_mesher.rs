@@ -1971,3 +1971,63 @@ fn test_waterlogged_modded_obj_block_emits_all_six_fluid_faces_and_does_not_cull
     // 6 water faces (12 triangles) + 1 OBJ track triangle = 13 triangles.
     assert_eq!(mesh_adj.triangle_count(), 13);
 }
+
+#[test]
+fn test_empty_placeholder_entity_block_does_not_cull_adjacent_solid_block() {
+    use mtk_model::{BlockModelJson, BlockStateDefinition, ModelBaker};
+
+    let bs_def: BlockStateDefinition =
+        serde_json::from_str(r#"{ "variants": { "": { "model": "testmod:block/blank" } } }"#)
+            .unwrap();
+    let blank_model: BlockModelJson = serde_json::from_str(
+        r#"{ "parent": "minecraft:block/block", "textures": { "particle": "testmod:block/pt" } }"#,
+    )
+    .unwrap();
+    let parent_block: BlockModelJson = serde_json::from_str(r#"{ "gui_light": "side" }"#).unwrap();
+
+    let mut baker = ModelBaker::new();
+    let empty_baked = std::sync::Arc::new(
+        baker
+            .bake_blockstate("testmod:entity_placeholder", Some(&bs_def), |id| match id {
+                "testmod:block/blank" => Some(blank_model.clone()),
+                "minecraft:block/block" | "block/block" => Some(parent_block.clone()),
+                _ => None,
+            })
+            .unwrap(),
+    );
+
+    let mut section = SectionStorage::new(glam::IVec3::ZERO);
+    let pal_stone = section.palette.len() as u16;
+    section.palette.push("minecraft:stone".to_string());
+    let pal_placeholder = section.palette.len() as u16;
+    section
+        .palette
+        .push("testmod:entity_placeholder".to_string());
+    section.voxels[block_index(4, 4, 4)] = pal_stone;
+    section.voxels[block_index(5, 4, 4)] = pal_placeholder;
+    section.non_air_count = 2;
+
+    let padded = section.build_padded_array(|_, _, _| "minecraft:air");
+    let culler = FaceCuller::default();
+    let config = MesherConfig {
+        weld_mode: mtk_voxel::WeldMode::None,
+        ..Default::default()
+    };
+
+    let mesh = SectionMesher::mesh_section(
+        &padded,
+        &culler,
+        |st| {
+            if st == "testmod:entity_placeholder" {
+                ModelSource::from(Some(empty_baked.clone()))
+            } else {
+                ModelSource::None
+            }
+        },
+        &config,
+    );
+
+    // Stone must retain all 6 faces (12 triangles) instead of having its +X face culled
+    // by the empty placeholder entity block.
+    assert_eq!(mesh.triangle_count(), 12);
+}
