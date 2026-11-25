@@ -64,19 +64,35 @@ mod tests {
         cursor.into_inner()
     }
 
-    fn build_test_mtkscene() -> Vec<u8> {
+    fn build_test_mtkscene(stepped: bool) -> Vec<u8> {
         let mut voxels = SparseVoxelPayload::new();
-        voxels.bounds = [0, 0, 0, 2, 1, 1];
-        voxels.push(0, 0, 0, "minecraft:stone", "minecraft:plains", None, None);
-        voxels.push(
-            1,
-            0,
-            0,
-            "minecraft:oak_leaves[persistent=true]",
-            "minecraft:plains",
-            None,
-            None,
-        );
+        if stepped {
+            voxels.bounds = [0, 0, 0, 2, 2, 2];
+            voxels.push(0, 0, 0, "minecraft:stone", "minecraft:plains", None, None);
+            voxels.push(1, 0, 0, "minecraft:stone", "minecraft:plains", None, None);
+            voxels.push(0, 1, 0, "minecraft:stone", "minecraft:plains", None, None);
+            voxels.push(
+                1,
+                0,
+                1,
+                "minecraft:oak_leaves[persistent=true]",
+                "minecraft:plains",
+                None,
+                None,
+            );
+        } else {
+            voxels.bounds = [0, 0, 0, 2, 1, 1];
+            voxels.push(0, 0, 0, "minecraft:stone", "minecraft:plains", None, None);
+            voxels.push(
+                1,
+                0,
+                0,
+                "minecraft:oak_leaves[persistent=true]",
+                "minecraft:plains",
+                None,
+                None,
+            );
+        }
 
         let stone_loc = ResourceLocation::parse_texture_path("minecraft:block/stone").unwrap();
         let leaves_loc =
@@ -143,6 +159,44 @@ mod tests {
             ];
             let faces: [BakedFace; 6] = std::array::from_fn(|i| {
                 let dir = dirs[i];
+                let vertices = match dir {
+                    Direction::Down => [
+                        Vec3::new(0.0, 0.0, 1.0),
+                        Vec3::new(0.0, 0.0, 0.0),
+                        Vec3::new(1.0, 0.0, 0.0),
+                        Vec3::new(1.0, 0.0, 1.0),
+                    ],
+                    Direction::Up => [
+                        Vec3::new(0.0, 1.0, 0.0),
+                        Vec3::new(0.0, 1.0, 1.0),
+                        Vec3::new(1.0, 1.0, 1.0),
+                        Vec3::new(1.0, 1.0, 0.0),
+                    ],
+                    Direction::North => [
+                        Vec3::new(1.0, 1.0, 0.0),
+                        Vec3::new(1.0, 0.0, 0.0),
+                        Vec3::new(0.0, 0.0, 0.0),
+                        Vec3::new(0.0, 1.0, 0.0),
+                    ],
+                    Direction::South => [
+                        Vec3::new(0.0, 1.0, 1.0),
+                        Vec3::new(0.0, 0.0, 1.0),
+                        Vec3::new(1.0, 0.0, 1.0),
+                        Vec3::new(1.0, 1.0, 1.0),
+                    ],
+                    Direction::West => [
+                        Vec3::new(0.0, 1.0, 0.0),
+                        Vec3::new(0.0, 0.0, 0.0),
+                        Vec3::new(0.0, 0.0, 1.0),
+                        Vec3::new(0.0, 1.0, 1.0),
+                    ],
+                    Direction::East => [
+                        Vec3::new(1.0, 1.0, 1.0),
+                        Vec3::new(1.0, 0.0, 1.0),
+                        Vec3::new(1.0, 0.0, 0.0),
+                        Vec3::new(1.0, 1.0, 0.0),
+                    ],
+                };
                 BakedFace {
                     direction: dir,
                     texture: tex_key.to_string(),
@@ -150,12 +204,7 @@ mod tests {
                     uv_bounds: [0.0, 0.0, 1.0, 1.0],
                     tint_index,
                     cullface: Some(dir),
-                    vertices: [
-                        Vec3::new(0.0, 0.0, 0.0),
-                        Vec3::new(1.0, 0.0, 0.0),
-                        Vec3::new(1.0, 1.0, 0.0),
-                        Vec3::new(0.0, 1.0, 0.0),
-                    ],
+                    vertices,
                     uvs: [
                         Vec2::new(0.0, 0.0),
                         Vec2::new(1.0, 0.0),
@@ -263,6 +312,62 @@ mod tests {
     }
 
     #[test]
+    fn test_stepped_scene_preserves_per_face_normals_and_ao() {
+        let bytes = build_test_mtkscene(true);
+        let pkg = WasmScenePackage::from_bytes(&bytes).expect("open stepped scene");
+        let mut render_scene = pkg
+            .build_render_scene(Some(true), Some(true), Some(true), Some(true))
+            .expect("build render scene");
+        assert_eq!(render_scene.batch_count(), 1);
+        let batch = render_scene.take_batch(0).expect("take batch 0");
+
+        let pos =
+            unsafe { std::slice::from_raw_parts(batch.positions_ptr(), batch.positions_len()) };
+        let norm = unsafe { std::slice::from_raw_parts(batch.normals_ptr(), batch.normals_len()) };
+        let col = unsafe { std::slice::from_raw_parts(batch.colors_ptr(), batch.colors_len()) };
+        let idx = unsafe { std::slice::from_raw_parts(batch.indices_ptr(), batch.indices_len()) };
+
+        let mut saw_shaded_ao = false;
+        let mut saw_full_ao = false;
+        for t in 0..batch.triangle_count() {
+            let i0 = idx[t * 3] as usize;
+            let i1 = idx[t * 3 + 1] as usize;
+            let i2 = idx[t * 3 + 2] as usize;
+
+            let n0 = Vec3::from_slice(&norm[i0 * 3..i0 * 3 + 3]);
+            let n1 = Vec3::from_slice(&norm[i1 * 3..i1 * 3 + 3]);
+            let n2 = Vec3::from_slice(&norm[i2 * 3..i2 * 3 + 3]);
+            assert!(
+                (n0 - n1).length() < 1e-5 && (n1 - n2).length() < 1e-5,
+                "triangle {t} has mismatched corner normals: {n0:?}, {n1:?}, {n2:?}"
+            );
+
+            let p0 = Vec3::from_slice(&pos[i0 * 3..i0 * 3 + 3]);
+            let p1 = Vec3::from_slice(&pos[i1 * 3..i1 * 3 + 3]);
+            let p2 = Vec3::from_slice(&pos[i2 * 3..i2 * 3 + 3]);
+            let geom_n = (p1 - p0).cross(p2 - p0).normalize_or_zero();
+            assert!(
+                geom_n.dot(n0) > 0.99,
+                "triangle {t} normal {n0:?} disagrees with geometric winding {geom_n:?}"
+            );
+
+            for vi in [i0, i1, i2] {
+                let ao = col[vi * 4 + 3];
+                assert!((0.19..=1.01).contains(&ao), "unexpected AO {ao}");
+                if ao < 0.95 {
+                    saw_shaded_ao = true;
+                } else {
+                    saw_full_ao = true;
+                }
+            }
+        }
+        assert!(
+            saw_shaded_ao && saw_full_ao,
+            "expected both shaded and unshaded AO vertices"
+        );
+    }
+
+    #[test]
     fn test_wasm_concurrency_and_version() {
         assert_eq!(version(), env!("CARGO_PKG_VERSION"));
         set_hardware_concurrency(8);
@@ -272,7 +377,7 @@ mod tests {
 
     #[test]
     fn test_scene_package_viewer_roundtrip_and_batches() {
-        let bytes = build_test_mtkscene();
+        let bytes = build_test_mtkscene(false);
         let pkg = WasmScenePackage::from_bytes(&bytes).expect("open scene bytes");
 
         let meta_json = pkg.metadata_json().expect("metadata json");

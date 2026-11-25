@@ -289,7 +289,7 @@ function createMtkPbrMaterial({ albedoTex, overlayTex, normalTex, ormTex, auxTex
         float compositedAlpha = max(baseSample.a, overlaySample.a);
 
         float texAo = 1.0;
-        float ormRough = 0.72;
+        float ormRough = 1.0;
         float ormMetal = 0.0;
         float ormEmit = 0.0;
         if (uHasOrm > 0.5) {

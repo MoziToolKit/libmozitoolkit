@@ -153,7 +153,7 @@ where
     };
 
     let shade_corner12 = if !translucent2 && !translucent1 {
-        shade0
+        shade1
     } else {
         let p = add3(pos1, c2);
         if is_solid_opaque(p.0, p.1, p.2) {
@@ -164,7 +164,7 @@ where
     };
 
     let shade_corner13 = if !translucent3 && !translucent1 {
-        shade0
+        shade1
     } else {
         let p = add3(pos1, c3);
         if is_solid_opaque(p.0, p.1, p.2) {
@@ -282,5 +282,20 @@ mod tests {
             (dx == 1 && dy == 0 && dz == 0) || (dx == 0 && dy == 0 && dz == 1)
         });
         assert_eq!(ao_east_south, [1.0, 0.8, 0.6, 0.8]);
+    }
+
+    #[test]
+    fn test_corner12_uses_shade1_not_shade0() {
+        // Direction::Up with face_cubic = true:
+        // c0 = East(+1,0,0), c1 = West(-1,0,0), c2 = North(0,0,-1), c3 = South(0,0,+1), dir = (0,+1,0).
+        // pos1 = (-1,1,0) [West], corner_pos1 = (-1,2,0), corner_pos2 = (0,2,-1).
+        // When corner_pos1 and corner_pos2 are opaque (!translucent1 && !translucent2),
+        // shade_corner12 must reuse shade1 (0.2 when pos1 is opaque), NOT shade0 (1.0 when pos0 is air).
+        let ao = calculate_face_ao_float(Direction::Up, true, |dx, dy, dz| {
+            matches!((dx, dy, dz), (-1, 1, 0) | (-1, 2, 0) | (0, 2, -1))
+        });
+        // v0 is NW (l3 = (shade2 + shade1 + shade_corner12 + shade_center) * 0.25)
+        // shade2=1.0, shade1=0.2, shade_corner12=shade1=0.2, shade_center=1.0 => 2.4 * 0.25 = 0.6
+        assert!((ao[0] - 0.6).abs() < 1e-6, "expected 0.6, got {}", ao[0]);
     }
 }

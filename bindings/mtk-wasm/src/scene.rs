@@ -143,7 +143,7 @@ impl WasmScenePackage {
         let config = MesherConfig {
             coordinate_system: CoordinateSystem::YUpRightHanded,
             origin_centered: true,
-            weld_vertices: true,
+            weld_vertices: false,
             enable_ao: enable_ao.unwrap_or(true),
             mesh_fluids: mesh_fluids.unwrap_or(true),
             enable_animated_textures: enable_animated_textures.unwrap_or(true),
