@@ -17,10 +17,10 @@
   - `.mtkcache`（`Uint8Array`） → `WasmAssetCache`（提供烘焙模型、图集映射、生物群系、CTM 规则与 `BannerBaker` 旗帜合成模板）；
   - 浏览器选择本地存档目录 → `WasmSaveWorld.inspect_level`（解析 `level.dat` 与维度清单） → `WasmSaveWorld.plan_region_files`（按 `[min, max]` 选区仅筛选相交的 `.mca`/`.mcc`） → `WasmSaveWorld.load_regions` → `WasmRenderScene`；
   - 玩家皮肤走浏览器端异步跨域 `fetch`（`textures.minecraft.net` / `crafthead.net` / `minotar.net`）→ `register_skin_png` + `build_render_scene` 局部脏区块增量刷新。
-- **轻量内存策略**：
-  1. 静态贴图与动态实体图集（`dynamic/chunk_<id>.png`）以原始 PNG 字节流暴露（`read_texture_png`），由浏览器通过 `Blob` + `createImageBitmap` 异步解码；
-  2. 几何网格在 Rust 内按图集分块（`atlas_chunk_id`）拆批，并将 `PerLoop` UV/染色/AO 对齐为 `PerVertex` 缓冲，通过 WASM 线性内存指针零拷贝构造 `THREE.BufferAttribute`；
-  3. `take_batch(index)` 将批次所有权直接转移给 JS，避免二次拷贝峰值。
+- **轻量内存与安全传输策略**：
+  1. 静态贴图与动态实体图集（`dynamic/chunk_<id>.png`）以原始 PNG 字节流暴露（`read_texture_png`），由浏览器通过 `Blob` + `createImageBitmap(..., { imageOrientation: 'flipY' })` 异步解码；
+  2. 几何网格在 Rust 内按图集分块（`atlas_chunk_id`）拆批，并将 `PerLoop` UV/染色/AO 对齐为 `PerVertex` 缓冲（`uvs` 采用 `flipY = false` 自底向上约定，动图帧沿 `-v` 步进；`colors` 为线性 `[tint_r, tint_g, tint_b, ao]`）；JS 侧通过 WASM 线性内存指针单次 `.slice()` 拷贝至独立 `TypedArray` 后即可安全释放 `batch.free()`，避免跨语言序列化开销及后续 `memory.grow` 导致视图悬空；
+  3. `take_batch(index)` 将批次所有权直接转移给渲染循环，避免二次拷贝峰值。
 
 ---
 

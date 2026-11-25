@@ -108,6 +108,16 @@
               <label for="opt-fluids"><input id="opt-fluids" name="meshFluids" type="checkbox" checked> <span>流体网格</span></label>
               <label for="opt-ctm"><input id="opt-ctm" name="enableCtm" type="checkbox" checked> <span>CTM 连接纹理</span></label>
               <label for="opt-anim"><input id="opt-anim" name="enableAnim" type="checkbox" checked> <span>动画纹理</span></label>
+              <label for="opt-skins-net"><input id="opt-skins-net" name="skinsAllowNet" type="checkbox" checked> <span>联网拉取玩家皮肤</span></label>
+            </div>
+            <div class="field-row">
+              <label for="opt-leaves-cull">树叶剔除</label>
+              <select id="opt-leaves-cull" name="leavesCullMode">
+                <option value="fancy" selected>Fancy (同向内部剔除)</option>
+                <option value="fast">Fast (全实心剔除)</option>
+                <option value="single_face">SingleFace (仅保留单面)</option>
+                <option value="none">None (保留全部面)</option>
+              </select>
             </div>
             <div class="slider-row">
               <label for="opt-sun">日光强度 <output id="sun-val">2.4</output></label>

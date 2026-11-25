@@ -77,6 +77,7 @@ def check_pub_mod_and_mtk_py_pub_use() -> list[str]:
     errors: list[str] = []
     lib_files = list((LIB_ROOT / "crates").glob("*/src/lib.rs")) + [
         LIB_ROOT / "bindings/mtk-py/src/lib.rs",
+        LIB_ROOT / "bindings/mtk-wasm/src/lib.rs",
         LIB_ROOT / "adapters/mtk-host-memory/src/lib.rs",
         LIB_ROOT / "adapters/blender/mtk-blender-dna/src/lib.rs",
         LIB_ROOT / "adapters/blender/mtk-blender-dna-py/src/lib.rs",
@@ -201,6 +202,7 @@ def check_unwrap_expect_in_bindings_and_adapters() -> list[str]:
     errors: list[str] = []
     targets = [
         LIB_ROOT / "bindings/mtk-py/src",
+        LIB_ROOT / "bindings/mtk-wasm/src",
         LIB_ROOT / "adapters/mtk-host-memory/src",
         LIB_ROOT / "adapters/blender/mtk-blender-dna/src",
         LIB_ROOT / "adapters/blender/mtk-blender-dna-py/src",
@@ -609,6 +611,7 @@ def check_docs_drift() -> list[str]:
     doc_files = [
         LIB_ROOT / "README.md",
         LIB_ROOT / "bindings/mtk-py/README.md",
+        LIB_ROOT / "bindings/mtk-wasm/README.md",
         LIB_ROOT / "docs/API_REFERENCE.md",
         LIB_ROOT / "docs/BINDINGS_DESIGN.md",
         LIB_ROOT / "crates/mtk-material/README.md",

@@ -21,12 +21,12 @@
 | :--- | :---: | :--- | :--- |
 | **`mtk-py`** | **P0 (当前核心)** | PyO3 + maturin + CPython ABI3 (`libmtk_py`) | **生产事实标准**：MoziToolKit (Blender 4.2+) 扩展插件的核心胶水后端 |
 | **`mtk-cli`** | **P1 (工具与验证)** | Rust 原生 CLI (`mtk`) | **核心工具链**：无头资产预编译、模型排查与测试验证 |
-| **`mtk-wasm`** | **P2 (远期预备)** | wasm-bindgen (`mtk_wasm`) | **生态预备**：面向 WebGPU / Three.js 网页端 3D 资产预览 |
+| **`mtk-wasm`** | **P1 (Web 绑定)** | wasm-bindgen (`mtk_wasm`) | **Web 查看器**：面向 Three.js / WebGPU 的 `.mtkscene` 与 `.mtkcache`+存档浏览器预览 |
 
 ```
 bindings/
   ├── mtk-py/    -> [P0] Python CPython 扩展模块 (PyO3 + maturin) -> libmtk_py
-  └── mtk-wasm/  -> [P2] 浏览器与 Node.js 模块 (wasm-bindgen + wasm-pack) -> mtk_wasm
+  └── mtk-wasm/  -> [P1] 浏览器与 WebGPU 模块 (wasm-bindgen + wasm-pack) -> mtk_wasm
 ```
 
 ---
@@ -73,11 +73,11 @@ bindings/
 
 ##### 3. 体素与实时同步 (`mtk.voxel` & `mtk.sync`)
 - `VoxelStorage`: 稀疏体素世界存储，纳秒级快照更新与选区包围盒裁剪；测试专用底层方法位于 `unstable.testing`。
-- **技术栈**：`wasm-bindgen` + `wasm-pack` (发布为 npm package / ES Module)。
-- **数据对接**：
-  - 利用 `js_sys::Float32Array::view` / `js_sys::Uint32Array::view` 直接将 WASM 线性内存暴露给 JavaScript 前端。
-  - Three.js / Babylon.js / WebGPU 渲染管线可直接通过 `BufferAttribute` 引用 WASM 内存并上传 GPU。
-- **目标场景**：Web 网页端 3D 预览器、WebGPU 在线地图渲染、轻量前端数据转换工具。
+- **技术栈**：`wasm-bindgen` + `wasm-pack`（发布为 ES Module / npm package）。
+- **配置与数据对接**：
+  - 使用强类型 `WasmMesherConfig` DTO 控制坐标系（默认 `y_up`）、居中、焊接、AO/流体/CTM/动图及树叶/玻璃剔除模式。
+  - 利用 WASM 线性内存指针 (`positions_ptr` / `indices_ptr` 等) 配合 JS 侧单次 `TypedArray(...).slice()` 脱离线性内存后立即 `batch.free()`，避免序列化开销以及后续 `memory.grow` 引起的视图悬空。
+- **目标场景**：Web 网页端 `.mtkscene` / 本地 Minecraft 存档 3D 预览器（见 [`bindings/mtk-wasm/examples/viewer`](../bindings/mtk-wasm/examples/viewer)）、WebGPU 在线地图渲染。
 
 ---
 

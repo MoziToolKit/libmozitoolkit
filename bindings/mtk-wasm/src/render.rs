@@ -407,6 +407,107 @@ fn sample_color_and_ao(
     [rgb[0], rgb[1], rgb[2], ao]
 }
 
+struct FaceAttrRefs<'a> {
+    mesh: &'a MeshData,
+    chunk_ids: Option<&'a [i32]>,
+    tint_colors: Option<&'a [[f32; 4]]>,
+    tint_data: Option<&'a [[f32; 4]]>,
+    ao_values: Option<&'a [f32]>,
+    anim_timings: Option<&'a [[f32; 3]]>,
+    anim_frame_sizes: Option<&'a [[f32; 3]]>,
+    total_corners: usize,
+}
+
+impl<'a> FaceAttrRefs<'a> {
+    fn from_mesh(mesh: &'a MeshData, total_corners: usize) -> Self {
+        Self {
+            mesh,
+            chunk_ids: mesh
+                .get_custom_attribute(ATTR_ATLAS_CHUNK_ID)
+                .and_then(|attr| match &attr.data {
+                    AttributeData::Int32(v) => Some(v.as_slice()),
+                    _ => None,
+                }),
+            tint_colors: mesh
+                .get_custom_attribute(ATTR_BIOME_TINT_COLOR)
+                .and_then(|attr| match &attr.data {
+                    AttributeData::Float4(v) => Some(v.as_slice()),
+                    _ => None,
+                }),
+            tint_data: mesh
+                .get_custom_attribute(ATTR_BIOME_TINT_DATA)
+                .and_then(|attr| match &attr.data {
+                    AttributeData::Float4(v) => Some(v.as_slice()),
+                    _ => None,
+                }),
+            ao_values: mesh
+                .get_custom_attribute(ATTR_AO)
+                .and_then(|attr| match &attr.data {
+                    AttributeData::Float(v) => Some(v.as_slice()),
+                    _ => None,
+                }),
+            anim_timings: mesh
+                .get_custom_attribute(ATTR_ANIM_TIMING)
+                .and_then(|attr| match &attr.data {
+                    AttributeData::Float3(v) => Some(v.as_slice()),
+                    _ => None,
+                }),
+            anim_frame_sizes: mesh
+                .get_custom_attribute(ATTR_ANIM_FRAME_SIZE)
+                .and_then(|attr| match &attr.data {
+                    AttributeData::Float3(v) => Some(v.as_slice()),
+                    _ => None,
+                }),
+            total_corners,
+        }
+    }
+
+    #[inline]
+    fn chunk_id(&self, face_idx: usize) -> i32 {
+        self.chunk_ids
+            .and_then(|ids| ids.get(face_idx).copied())
+            .or_else(|| self.mesh.face_materials.get(face_idx).map(|&id| id as i32))
+            .unwrap_or(0)
+    }
+
+    #[inline]
+    fn tint_weights(&self, face_idx: usize) -> [f32; 2] {
+        self.tint_data
+            .and_then(|arr| arr.get(face_idx).copied())
+            .map(|td| [td[0] * td[2], td[1] * td[2]])
+            .unwrap_or([0.0, 0.0])
+    }
+
+    #[inline]
+    fn push_corner(
+        &self,
+        builder: &mut BatchBuilder,
+        v_idx: usize,
+        corner_idx: usize,
+        tint_w: [f32; 2],
+        anim_t: Option<[f32; 3]>,
+        anim_s: Option<[f32; 3]>,
+    ) {
+        let pos = self.mesh.positions.get(v_idx).copied().unwrap_or([0.0; 3]);
+        let norm = self
+            .mesh
+            .normals
+            .get(v_idx)
+            .copied()
+            .unwrap_or([0.0, 1.0, 0.0]);
+        let uv = sample_uv(self.mesh, v_idx, corner_idx);
+        let color = sample_color_and_ao(
+            self.mesh,
+            self.tint_colors,
+            self.ao_values,
+            self.total_corners,
+            v_idx,
+            corner_idx,
+        );
+        builder.push_vertex(pos, norm, uv, color, tint_w, anim_t, anim_s);
+    }
+}
+
 pub(crate) fn build_render_scene(
     mesh: &MeshData,
     atlas_mapping: Option<&AtlasAddressMap>,
@@ -419,120 +520,52 @@ pub(crate) fn build_render_scene(
         };
     }
 
-    let chunk_ids = mesh
-        .get_custom_attribute(ATTR_ATLAS_CHUNK_ID)
-        .and_then(|attr| match &attr.data {
-            AttributeData::Int32(v) => Some(v.as_slice()),
-            _ => None,
-        });
-    let tint_colors = mesh
-        .get_custom_attribute(ATTR_BIOME_TINT_COLOR)
-        .and_then(|attr| match &attr.data {
-            AttributeData::Float4(v) => Some(v.as_slice()),
-            _ => None,
-        });
-    let tint_data = mesh
-        .get_custom_attribute(ATTR_BIOME_TINT_DATA)
-        .and_then(|attr| match &attr.data {
-            AttributeData::Float4(v) => Some(v.as_slice()),
-            _ => None,
-        });
-    let ao_values = mesh
-        .get_custom_attribute(ATTR_AO)
-        .and_then(|attr| match &attr.data {
-            AttributeData::Float(v) => Some(v.as_slice()),
-            _ => None,
-        });
-    let anim_timings = mesh
-        .get_custom_attribute(ATTR_ANIM_TIMING)
-        .and_then(|attr| match &attr.data {
-            AttributeData::Float3(v) => Some(v.as_slice()),
-            _ => None,
-        });
-    let anim_frame_sizes = mesh
-        .get_custom_attribute(ATTR_ANIM_FRAME_SIZE)
-        .and_then(|attr| match &attr.data {
-            AttributeData::Float3(v) => Some(v.as_slice()),
-            _ => None,
-        });
-
     let mut builders: BTreeMap<i32, BatchBuilder> = BTreeMap::new();
 
     if mesh.is_quad_topology() {
         let quad_count = mesh.quad_count().min(mesh.indices.len() / 6);
         let quads = mesh.reconstruct_quad_indices();
-        let total_corners = quad_count * 4;
+        let attrs = FaceAttrRefs::from_mesh(mesh, quad_count * 4);
 
         for f in 0..quad_count {
-            let chunk_id = chunk_ids
-                .and_then(|ids| ids.get(f).copied())
-                .or_else(|| mesh.face_materials.get(f).map(|&id| id as i32))
-                .unwrap_or(0);
-            let tint_w = tint_data
-                .and_then(|arr| arr.get(f).copied())
-                .map(|td| [td[0] * td[2], td[1] * td[2]])
-                .unwrap_or([0.0, 0.0]);
-            let anim_t = anim_timings.and_then(|arr| arr.get(f).copied());
-            let anim_s = anim_frame_sizes.and_then(|arr| arr.get(f).copied());
+            let chunk_id = attrs.chunk_id(f);
+            let tint_w = attrs.tint_weights(f);
+            let anim_t = attrs.anim_timings.and_then(|arr| arr.get(f).copied());
+            let anim_s = attrs.anim_frame_sizes.and_then(|arr| arr.get(f).copied());
 
             let builder = builders.entry(chunk_id).or_default();
             let base = (builder.positions.len() / 3) as u32;
-
             let q_base = f * 4;
-            let quad = [
-                quads[q_base],
-                quads[q_base + 1],
-                quads[q_base + 2],
-                quads[q_base + 3],
-            ];
             let t_base = f * 6;
-            let tris = [
-                mesh.indices[t_base],
-                mesh.indices[t_base + 1],
-                mesh.indices[t_base + 2],
-                mesh.indices[t_base + 3],
-                mesh.indices[t_base + 4],
-                mesh.indices[t_base + 5],
-            ];
-            let corner_map = quad_tri_corner_map(&quad, &tris);
+            let quad: [u32; 4] = quads[q_base..q_base + 4].try_into().unwrap_or([0; 4]);
+            let tris: [u32; 6] = mesh.indices[t_base..t_base + 6]
+                .try_into()
+                .unwrap_or([0; 6]);
 
             for (c, &v_idx_u32) in quad.iter().enumerate() {
-                let v_idx = v_idx_u32 as usize;
-                let corner_idx = q_base + c;
-                let pos = mesh.positions.get(v_idx).copied().unwrap_or([0.0; 3]);
-                let norm = mesh.normals.get(v_idx).copied().unwrap_or([0.0, 1.0, 0.0]);
-                let uv = sample_uv(mesh, v_idx, corner_idx);
-                let color = sample_color_and_ao(
-                    mesh,
-                    tint_colors,
-                    ao_values,
-                    total_corners,
-                    v_idx,
-                    corner_idx,
+                attrs.push_corner(
+                    builder,
+                    v_idx_u32 as usize,
+                    q_base + c,
+                    tint_w,
+                    anim_t,
+                    anim_s,
                 );
-                builder.push_vertex(pos, norm, uv, color, tint_w, anim_t, anim_s);
             }
-
-            for &c in &corner_map {
+            for c in quad_tri_corner_map(&quad, &tris) {
                 builder.indices.push(base + c as u32);
             }
         }
     } else {
         let tri_count =
             (mesh.indices.len() / 3).min(mesh.face_materials.len().max(mesh.indices.len() / 3));
-        let total_corners = tri_count * 3;
+        let attrs = FaceAttrRefs::from_mesh(mesh, tri_count * 3);
 
         for f in 0..tri_count {
-            let chunk_id = chunk_ids
-                .and_then(|ids| ids.get(f).copied())
-                .or_else(|| mesh.face_materials.get(f).map(|&id| id as i32))
-                .unwrap_or(0);
-            let tint_w = tint_data
-                .and_then(|arr| arr.get(f).copied())
-                .map(|td| [td[0] * td[2], td[1] * td[2]])
-                .unwrap_or([0.0, 0.0]);
-            let anim_t = anim_timings.and_then(|arr| arr.get(f).copied());
-            let anim_s = anim_frame_sizes.and_then(|arr| arr.get(f).copied());
+            let chunk_id = attrs.chunk_id(f);
+            let tint_w = attrs.tint_weights(f);
+            let anim_t = attrs.anim_timings.and_then(|arr| arr.get(f).copied());
+            let anim_s = attrs.anim_frame_sizes.and_then(|arr| arr.get(f).copied());
 
             let builder = builders.entry(chunk_id).or_default();
             let base = (builder.positions.len() / 3) as u32;
@@ -541,18 +574,7 @@ pub(crate) fn build_render_scene(
             for c in 0..3 {
                 let corner_idx = t_base + c;
                 let v_idx = mesh.indices[corner_idx] as usize;
-                let pos = mesh.positions.get(v_idx).copied().unwrap_or([0.0; 3]);
-                let norm = mesh.normals.get(v_idx).copied().unwrap_or([0.0, 1.0, 0.0]);
-                let uv = sample_uv(mesh, v_idx, corner_idx);
-                let color = sample_color_and_ao(
-                    mesh,
-                    tint_colors,
-                    ao_values,
-                    total_corners,
-                    v_idx,
-                    corner_idx,
-                );
-                builder.push_vertex(pos, norm, uv, color, tint_w, anim_t, anim_s);
+                attrs.push_corner(builder, v_idx, corner_idx, tint_w, anim_t, anim_s);
                 builder.indices.push(base + c as u32);
             }
         }

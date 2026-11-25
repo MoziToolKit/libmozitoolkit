@@ -101,7 +101,7 @@ graph TD
 | **`crates/mtk-testkit`** | **仅测试用**（`publish = false`）资产解析器与内置 JSON fixtures：统一真包位置发现、缺省跳过策略与路径拼接 | 仅 `std` | `assets_root`, `real_assets_root`, `fabric_jar`, `model_json_path`, fixtures |
 | **`bindings/mtk-py`** | Python 动态扩展模块 (PyO3 + maturin)，提供 `MeshData`、零拷贝内存视图、极速批处理算子与 `.mtkscene` 场景包编解码支持 | 各领域 Crate + `libmtk` | `libmtk_py` CPython 轮子 (.whl) |
 | **`bindings/mtk-jni`** | Java Native Interface 绑定 (JNI)，为 Minecraft 模组 ([`Yefira`](https://github.com/MoziToolKit/yefira)) 提供无锁高性能原生 `LiveSyncServer`、xxHash64 权威指纹计算与流式分帧推送 | `mtk-sync`, `mtk-core` | `libmtk_jni` 动态链接库 (.dylib / .so / .dll) |
-| **`bindings/mtk-wasm`** | WebAssembly 绑定 (wasm-bindgen)，暴露 TypedArray 视图 | `mtk-core`, `mtk-voxel`, `mtk-resource`, `mtk-cull`, `mtk-model`, `mtk-material` | `mtk_wasm.wasm` + `mtk_wasm.js` npm 包 |
+| **`bindings/mtk-wasm`** | WebAssembly 绑定 (wasm-bindgen)，提供 `.mtkscene` 与 `.mtkcache`+存档浏览器端网格化及线性内存渲染批次 | `libmtk`, `mtk-voxel`, `mtk-save`, `mtk-block-entity-textures`, `mtk-texture`, `mtk-material`, `mtk-model`, `mtk-cull`, `mtk-resource`, `mtk-core` | `mtk_wasm.wasm` + `mtk_wasm.js` ES Module |
 | **`adapters/mtk-host-memory`** | 宿主无关 raw slice → pointer 复制原语；无核心/宿主 SDK 依赖，负责空指针、对齐与容量守卫 | 仅 `thiserror` | `copy_f32_to_ptr`, `copy_i32_to_ptr`, `copy_u32_to_ptr`, `copy_u8_to_ptr` |
 | **`adapters/blender/mtk-blender-dna`** | Blender 语义 raw slice → pointer 适配层；不依赖核心 crate | `mtk-host-memory` | `copy_positions_to_ptr`, `copy_indices_to_ptr`, `copy_point_cloud_positions_to_ptr` |
 | **`adapters/blender/mtk-blender-dna-py`** | 独立 `libmtk_blender_dna` ABI3 wheel；通过 Python Buffer Protocol 接收核心 view，并提供对网格拓扑、面材质与点云属性的双向直写与直读适配 | `mtk-blender-dna`, `pyo3` | `libmtk_blender_dna` wheel |
