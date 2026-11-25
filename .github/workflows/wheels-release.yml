@@ -104,9 +104,47 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+  build-wasm:
+    name: WASM (web)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (wasm32)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm32
+          workspaces: ". -> target"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build, smoke test & package mtk-wasm
+        run: |
+          python3 tools/build_wasm.py \
+            --out-dir "$RUNNER_TEMP/mtk-wasm-pkg" \
+            --install-cli \
+            --smoke \
+            --tarball-dir dist-wasm
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libmtk-wasm-web
+          path: dist-wasm/mtk-wasm-web-*.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+
   publish-wheels:
-    name: Publish Wheels to Release
-    needs: build-wheels
+    name: Publish Wheels & WASM to Release
+    needs: [build-wheels, build-wasm]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -120,7 +158,13 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Verify wheel matrix
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: libmtk-wasm-web
+          path: dist
+
+      - name: Verify release artifacts
         run: |
           set -euo pipefail
           ls -lh dist/
@@ -128,11 +172,16 @@ jobs:
           # for each of the six supported targets, for both distributions.
           python3 tools/verify_wheels.py dist --prefix libmtk_py
           python3 tools/verify_wheels.py dist --prefix libmtk_blender_dna --max-size-bytes 1500000
+          wasm_count=$(find dist -maxdepth 1 -name 'mtk-wasm-web-*.tar.gz' | wc -l)
+          if [ "$wasm_count" -ne 1 ]; then
+            echo "::error::Expected exactly 1 mtk-wasm-web tarball, found $wasm_count"
+            exit 1
+          fi
 
       - name: Generate Checksums
         run: |
           cd dist
-          sha256sum *.whl > SHA256SUMS.txt
+          sha256sum *.whl *.tar.gz > SHA256SUMS.txt
           echo "=== SHA256SUMS.txt ==="
           cat SHA256SUMS.txt
 
@@ -181,7 +230,7 @@ jobs:
           # could be picked up by consumers.
           mapfile -t existing < <(
             gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
-              --json assets --jq '.assets[].name' | grep -E '\.whl$' || true
+              --json assets --jq '.assets[].name' | grep -E '(\.whl$|^mtk-wasm-.*\.tar\.gz$)' || true
           )
           for name in "${existing[@]}"; do
             if [ ! -f "dist/$name" ]; then

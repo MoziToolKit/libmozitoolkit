@@ -108,7 +108,7 @@ cargo check -p mtk-wasm --target wasm32-unknown-unknown
   ```
 
 ### 5. 持续集成 (GitHub Actions)
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) 在 push/PR 时执行：`fmt --check`、`clippy -D warnings`、`cargo test --workspace`（从临时 Release 注入真包）、`wasm32-unknown-unknown` 兼容性检查与 abi3 Python wheel 构建。
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) 在 push/PR 时执行：`fmt --check`、架构守卫、`clippy -D warnings`、`cargo test --workspace`（从资产 Release 注入真包）、`mtk-wasm` `wasm32` 编译 + Node.js 烟雾测试，以及 abi3 Python wheel 冒烟校验；[`.github/workflows/wheels-release.yml`](.github/workflows/wheels-release.yml) 负责发布 6 平台 Python wheels 与 `mtk-wasm-web-<version>.tar.gz` 到 GitHub Release。
 
 ---
 
