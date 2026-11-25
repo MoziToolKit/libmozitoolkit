@@ -116,10 +116,17 @@ pub(crate) fn is_mojang_online_uuid(clean_uuid: &str) -> bool {
 
 /// Returns current Unix epoch timestamp in seconds.
 pub(crate) fn current_unix_timestamp() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        0
+    }
 }
 
 impl SkinIndex {

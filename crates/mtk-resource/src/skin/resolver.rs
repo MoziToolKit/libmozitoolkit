@@ -1,6 +1,8 @@
 //! Multi-tier resolver for player and custom head skin textures.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+#[cfg(all(feature = "net", not(target_arch = "wasm32")))]
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -36,6 +38,7 @@ pub struct SkinResolver {
     #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     pub(crate) circuit: SkinCircuitBreaker,
     memory_cache: Arc<RwLock<HashMap<String, Vec<u8>>>>,
+    #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
     in_flight: Arc<RwLock<HashSet<String>>>,
     failed_keys: Arc<RwLock<HashMap<String, u64>>>,
     timeout_secs: u64,
@@ -93,6 +96,7 @@ impl SkinResolver {
             #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
             circuit: SkinCircuitBreaker::default(),
             memory_cache: Arc::new(RwLock::new(HashMap::new())),
+            #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
             in_flight: Arc::new(RwLock::new(HashSet::new())),
             failed_keys: Arc::new(RwLock::new(HashMap::new())),
             timeout_secs,
@@ -341,23 +345,34 @@ impl SkinResolver {
             return;
         }
 
-        // Dedup multiple requests in-flight
-        if let Ok(mut flights) = self.in_flight.write() {
-            if flights.contains(&key) {
-                return;
+        #[cfg(all(feature = "net", not(target_arch = "wasm32")))]
+        {
+            // Dedup multiple requests in-flight
+            if let Ok(mut flights) = self.in_flight.write() {
+                if flights.contains(&key) {
+                    return;
+                }
+                flights.insert(key.clone());
             }
-            flights.insert(key.clone());
-        }
 
-        let resolver = self.clone();
-        std::thread::spawn(move || {
-            let res =
-                resolver.resolve_skin_png(skin_url.as_deref(), uuid.as_deref(), name.as_deref());
-            if let Ok(mut flights) = resolver.in_flight.write() {
-                flights.remove(&key);
-            }
-            on_complete(key, res);
-        });
+            let resolver = self.clone();
+            std::thread::spawn(move || {
+                let res = resolver.resolve_skin_png(
+                    skin_url.as_deref(),
+                    uuid.as_deref(),
+                    name.as_deref(),
+                );
+                if let Ok(mut flights) = resolver.in_flight.write() {
+                    flights.remove(&key);
+                }
+                on_complete(key, res);
+            });
+        }
+        #[cfg(any(not(feature = "net"), target_arch = "wasm32"))]
+        {
+            let _ = (skin_url, uuid, name);
+            on_complete(key, None);
+        }
     }
 
     /// Checks online status in the background if cached data is stale or unverified,

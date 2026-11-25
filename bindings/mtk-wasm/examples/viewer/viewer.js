@@ -909,6 +909,7 @@ async function collectFromWebkitEntry(entry, prefix = '') {
 
 sceneFileInput.addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
+  sceneFileInput.value = '';
   if (!file) return;
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -921,6 +922,7 @@ sceneFileInput.addEventListener('change', async (e) => {
 
 cacheFileInput.addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
+  cacheFileInput.value = '';
   if (!file) return;
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -948,6 +950,7 @@ saveDirBtn.addEventListener('click', async () => {
 
 saveDirInput.addEventListener('change', async (e) => {
   const files = Array.from(e.target.files || []);
+  saveDirInput.value = '';
   if (files.length === 0) return;
   try {
     const folderName = (files[0].webkitRelativePath || '').split('/')[0] || '存档目录';
