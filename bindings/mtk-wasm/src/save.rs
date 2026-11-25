@@ -339,6 +339,7 @@ impl WasmSaveWorld {
         Ok(build_render_scene(
             mesh,
             self.world.config.atlas_address_map.as_deref(),
+            effective.weld_mode_value(),
         ))
     }
 }

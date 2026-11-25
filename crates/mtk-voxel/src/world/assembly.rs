@@ -67,13 +67,13 @@ impl VoxelWorld {
             None => collect_sorted_refs(),
         };
 
-        let weld = self.config.weld_vertices;
+        let weld_mode = self.config.weld_mode;
         let merge = || {
-            if !weld {
+            if weld_mode == mtk_core::WeldMode::None {
                 MeshData::merge_all_refs(&meshes)
             } else {
                 let seam = self.section_seam_predicate(1e-4);
-                MeshData::merge_welded_sections_filtered(&meshes, 1e-4, seam)
+                MeshData::merge_welded_sections_filtered(&meshes, 1e-4, weld_mode, seam)
             }
         };
         let mut merged = match profiler.as_deref_mut() {
@@ -211,8 +211,14 @@ mod tests {
 
         let world = VoxelWorld::from_storage(storage, Some(config), None, None);
         let seam = world.section_seam_predicate(1e-4);
-        let full = mtk_core::MeshData::merge_welded_sections(&refs, 1e-4);
-        let filtered = mtk_core::MeshData::merge_welded_sections_filtered(&refs, 1e-4, seam);
+        let full =
+            mtk_core::MeshData::merge_welded_sections(&refs, 1e-4, mtk_core::WeldMode::Manifold);
+        let filtered = mtk_core::MeshData::merge_welded_sections_filtered(
+            &refs,
+            1e-4,
+            mtk_core::WeldMode::Manifold,
+            seam,
+        );
 
         assert!(
             full.positions.len() < refs.iter().map(|m| m.positions.len()).sum(),

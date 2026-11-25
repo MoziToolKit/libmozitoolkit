@@ -81,8 +81,8 @@ impl SectionMesher {
         let world_offset_z = (padded.coord.z * 16) as f32;
         let world_origin = glam::Vec3::new(world_offset_x, world_offset_y, world_offset_z);
 
-        let mut grid_pool = if config.weld_vertices {
-            Some(super::grid_pool::GridVertexPool::new())
+        let mut grid_pool = if config.weld_mode != mtk_core::WeldMode::None {
+            Some(super::grid_pool::GridVertexPool::new(config.weld_mode))
         } else {
             None
         };
@@ -563,8 +563,8 @@ impl SectionMesher {
             tri_collector.attach_to_mesh(&mut tri_mesh);
             mesh.append_mesh(&tri_mesh);
         }
-        if config.weld_vertices && has_non_grid_geometry {
-            mesh.weld_vertices(1e-4);
+        if config.weld_mode != mtk_core::WeldMode::None && has_non_grid_geometry {
+            mesh.weld_vertices(1e-4, config.weld_mode);
         }
         mesh
     }

@@ -1,9 +1,9 @@
-use mtk_voxel::{MesherConfig, VoxelWorld};
+use mtk_voxel::{MesherConfig, VoxelWorld, WeldMode};
 
 #[test]
 fn test_voxel_world_lifecycle_and_used_chunks() {
     let config = MesherConfig {
-        weld_vertices: true,
+        weld_mode: WeldMode::Manifold,
         origin_centered: true,
         ..Default::default()
     };
@@ -154,7 +154,7 @@ fn assert_no_duplicate_vertex_positions(mesh: &mtk_core::MeshData) {
 #[test]
 fn test_incremental_rebuild_preserves_cross_section_seam_welding() {
     let config = MesherConfig {
-        weld_vertices: true,
+        weld_mode: WeldMode::Manifold,
         origin_centered: true,
         ..Default::default()
     };
@@ -197,7 +197,7 @@ fn test_incremental_rebuild_preserves_cross_section_seam_welding() {
 #[test]
 fn test_incremental_seam_welding_with_unaligned_selection_bounds() {
     let config = MesherConfig {
-        weld_vertices: true,
+        weld_mode: WeldMode::Manifold,
         origin_centered: true,
         ..Default::default()
     };
@@ -355,4 +355,41 @@ fn diagonal_edit_updates_neighbour_section_ao() {
         after.iter().any(|value| *value < 1.0),
         "at least one corner must be shaded, got {after:?}"
     );
+}
+
+#[test]
+fn test_per_vertex_weld_mode_preserves_normals_and_welds_coplanar_seams() {
+    use glam::Vec3;
+
+    let config = MesherConfig {
+        weld_mode: WeldMode::PerVertex,
+        origin_centered: false,
+        ..Default::default()
+    };
+
+    let mut world = VoxelWorld::new(Some(config), None, None);
+    world.set_bounds(0, 0, 0, 32, 16, 16);
+    world.set_block(15, 0, 0, "minecraft:stone", None);
+    world.set_block(16, 0, 0, "minecraft:stone", None);
+
+    let mesh = world.rebuild_all().unwrap();
+    // 10 exposed faces: 8 corners welded by (pos, normal) -> 4 * 6 + 4 * 2 = 32 vertices
+    // (vs 12 in Manifold or 40 in None).
+    assert_eq!(mesh.face_count(), 10);
+    assert_eq!(mesh.vertex_count(), 32);
+
+    let quads = mesh.reconstruct_quad_indices();
+    for q in quads.as_chunks::<4>().0 {
+        let p0 = Vec3::from_slice(&mesh.positions[q[0] as usize]);
+        let p1 = Vec3::from_slice(&mesh.positions[q[1] as usize]);
+        let p2 = Vec3::from_slice(&mesh.positions[q[2] as usize]);
+        let geom_n = (p1 - p0).cross(p2 - p0).normalize_or_zero();
+        for &vi in q {
+            let n = Vec3::from_slice(&mesh.normals[vi as usize]);
+            assert!(
+                geom_n.dot(n) > 0.99,
+                "vertex {vi} normal {n:?} disagrees with quad geometric normal {geom_n:?}"
+            );
+        }
+    }
 }

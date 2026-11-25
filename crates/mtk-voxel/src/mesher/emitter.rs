@@ -189,6 +189,7 @@ pub fn emit_unit_cube_face(
                 local_pos[0] + corners[0][0],
                 local_pos[1] + corners[0][1],
                 local_pos[2] + corners[0][2],
+                dir_idx,
                 n,
             );
             let idx1 = pool.get_or_create(
@@ -198,6 +199,7 @@ pub fn emit_unit_cube_face(
                 local_pos[0] + corners[1][0],
                 local_pos[1] + corners[1][1],
                 local_pos[2] + corners[1][2],
+                dir_idx,
                 n,
             );
             let idx2 = pool.get_or_create(
@@ -207,6 +209,7 @@ pub fn emit_unit_cube_face(
                 local_pos[0] + corners[2][0],
                 local_pos[1] + corners[2][1],
                 local_pos[2] + corners[2][2],
+                dir_idx,
                 n,
             );
             let idx3 = pool.get_or_create(
@@ -216,6 +219,7 @@ pub fn emit_unit_cube_face(
                 local_pos[0] + corners[3][0],
                 local_pos[1] + corners[3][1],
                 local_pos[2] + corners[3][2],
+                dir_idx,
                 n,
             );
             (idx0, idx1, idx2, idx3)

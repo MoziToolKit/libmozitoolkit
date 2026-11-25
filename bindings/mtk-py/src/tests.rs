@@ -106,11 +106,25 @@ fn test_python_voxel_storage_and_world_mesher() {
             .any(|s| s.name() == "merge_welded_seams" && s.depth() == 1));
 
         let mut unwelded_config = PyMesherConfig::default();
-        unwelded_config.inner.weld_vertices = false;
+        unwelded_config
+            .set_weld_mode("none")
+            .expect("valid none weld_mode");
+        assert_eq!(unwelded_config.weld_mode(), "none");
         let mut unwelded_world =
             PyVoxelWorld::from_storage(&storage, Some(&unwelded_config), None, None, None);
         let unwelded_mesh = unwelded_world.rebuild_all(py, None).unwrap();
         assert_eq!(unwelded_mesh.vertex_count(), 24); // 6 faces * 4 verts for isolated unwelded block
+
+        let mut per_vertex_config = PyMesherConfig::default();
+        per_vertex_config
+            .set_weld_mode("per_vertex")
+            .expect("valid per_vertex weld_mode");
+        assert_eq!(per_vertex_config.weld_mode(), "per_vertex");
+        assert!(per_vertex_config.set_weld_mode("bogus").is_err());
+        let mut per_vertex_world =
+            PyVoxelWorld::from_storage(&storage, Some(&per_vertex_config), None, None, None);
+        let per_vertex_mesh = per_vertex_world.rebuild_all(py, None).unwrap();
+        assert_eq!(per_vertex_mesh.vertex_count(), 24); // 8 corners * 3 face normals for isolated cube
 
         let mut dirty_world = PyVoxelWorld::from_storage(&storage, Some(&config), None, None, None);
         let rebuilt = dirty_world.rebuild_dirty(py).unwrap();

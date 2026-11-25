@@ -90,7 +90,7 @@ fn test_weld_vertices_policy_follows_uv_layout() {
         face_materials: vec![0],
         ..Default::default()
     };
-    per_loop.weld_vertices(1e-4);
+    per_loop.weld_vertices(1e-4, crate::WeldMode::Manifold);
     assert_eq!(per_loop.vertex_count(), 2);
     assert_eq!(per_loop.uvs.len(), 4, "per-loop UVs must survive welding");
 
@@ -103,10 +103,46 @@ fn test_weld_vertices_policy_follows_uv_layout() {
         face_materials: vec![0],
         ..Default::default()
     };
-    per_vertex.weld_vertices(1e-4);
+    per_vertex.weld_vertices(1e-4, crate::WeldMode::PerVertex);
     assert_eq!(per_vertex.vertex_count(), 1);
     assert_eq!(per_vertex.uvs.len(), 1);
     assert_eq!(per_vertex.indices, vec![0, 0, 0]);
+}
+
+#[test]
+fn test_weld_mode_per_vertex_preserves_distinct_normals() {
+    let mut corner = MeshData {
+        positions: vec![
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [1.0, 0.0, 0.0],
+        ],
+        normals: vec![
+            [0.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0],
+        ],
+        uvs: vec![[0.0, 0.0]; 6],
+        uv_layout: UvLayout::PerLoop,
+        indices: vec![0, 1, 2, 3, 4, 5],
+        face_materials: vec![0, 0],
+        ..Default::default()
+    };
+
+    let mut manifold = corner.clone();
+    manifold.weld_vertices(1e-4, crate::WeldMode::Manifold);
+    assert_eq!(manifold.vertex_count(), 4);
+
+    corner.weld_vertices(1e-4, crate::WeldMode::PerVertex);
+    assert_eq!(corner.vertex_count(), 6);
+    assert_eq!(corner.normals[0], [0.0, 1.0, 0.0]);
+    assert_eq!(corner.normals[3], [0.0, 0.0, 1.0]);
 }
 
 #[test]
@@ -204,7 +240,7 @@ fn test_mesh_merge_welded_sections() {
     m2.face_materials = vec![1];
     m2.face_tint_indices = vec![-1];
 
-    let merged = MeshData::merge_welded_sections(&[&m1, &m2], 1e-4);
+    let merged = MeshData::merge_welded_sections(&[&m1, &m2], 1e-4, crate::WeldMode::Manifold);
     // [1.0, 0.0, 0.0] should be welded into shared topology!
     assert_eq!(merged.vertex_count(), 3);
     assert_eq!(merged.positions[0], [0.0, 0.0, 0.0]);
@@ -227,8 +263,12 @@ fn test_mesh_merge_welded_sections_filtered() {
     m2.positions = vec![[0.5, 0.0, 0.0], [1.0, 0.0, 0.0]];
     m2.indices = vec![0, 1, 0];
 
-    let merged =
-        MeshData::merge_welded_sections_filtered(&[&m1, &m2], 1e-4, |key| key == [10_000, 0, 0]);
+    let merged = MeshData::merge_welded_sections_filtered(
+        &[&m1, &m2],
+        1e-4,
+        crate::WeldMode::Manifold,
+        |key| key == [10_000, 0, 0],
+    );
 
     assert_eq!(merged.vertex_count(), 3);
     assert_eq!(merged.positions[0], [0.5, 0.0, 0.0]);
@@ -488,7 +528,7 @@ fn test_mixed_quad_and_triangle_merging_all_paths() {
     assert_eq!(merged.colors.as_ref().unwrap().len(), 9);
 
     // 3. merge_welded_sections (quad + tri)
-    let welded = MeshData::merge_welded_sections(&[&quad, &tri], 1e-4);
+    let welded = MeshData::merge_welded_sections(&[&quad, &tri], 1e-4, crate::WeldMode::Manifold);
     assert!(!welded.is_quad_topology());
     assert!(welded.quad_indices.is_none());
     assert_eq!(welded.triangle_count(), 3);
@@ -526,7 +566,7 @@ fn test_weld_vertices_avoids_duplicate_face_index_sets() {
         ..Default::default()
     };
 
-    tri_mesh.weld_vertices(1e-4);
+    tri_mesh.weld_vertices(1e-4, crate::WeldMode::Manifold);
     // Adjacent edge welded cleanly, while colliding overlay split 1 vertex -> 5 unique vertices instead of 4 or 9
     assert_eq!(tri_mesh.vertex_count(), 5);
     let mut tri_sets = HashSet::new();
@@ -558,7 +598,7 @@ fn test_weld_vertices_avoids_duplicate_face_index_sets() {
         ..Default::default()
     };
 
-    quad_mesh.weld_vertices(1e-4);
+    quad_mesh.weld_vertices(1e-4, crate::WeldMode::Manifold);
     assert_eq!(quad_mesh.vertex_count(), 5);
     let quads = quad_mesh.quad_indices.as_ref().unwrap();
     let mut quad_sets = HashSet::new();

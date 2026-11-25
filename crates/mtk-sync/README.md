@@ -159,14 +159,14 @@ pub struct LiveSyncSession {
 use std::thread;
 use std::time::Duration;
 use mtk_sync::{LiveSyncSession, SyncEvent};
-use mtk_voxel::{CoordinateSystem, MesherConfig};
+use mtk_voxel::{CoordinateSystem, MesherConfig, WeldMode};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. 配置网格化参数
     let config = MesherConfig {
         coordinate_system: CoordinateSystem::ZUpRightHanded,
         origin_centered: true,
-        weld_vertices: true,
+        weld_mode: WeldMode::Manifold,
         ..Default::default()
     };
 

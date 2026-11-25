@@ -188,7 +188,7 @@ map_Kd testmod:entity/widget
     let culler = FaceCuller::default();
     let mesher_cfg = MesherConfig {
         atlas_address_map: Some(atlas_map),
-        weld_vertices: false,
+        weld_mode: mtk_voxel::WeldMode::None,
         ..Default::default()
     };
     let mesh =
@@ -331,10 +331,14 @@ fn test_real_obj_mod_jars_if_present() {
     let padded = world.get_section_padded_array(coords[0]);
     let culler = FaceCuller::default();
 
-    for weld_vertices in [false, true] {
+    for weld_mode in [
+        mtk_voxel::WeldMode::None,
+        mtk_voxel::WeldMode::Manifold,
+        mtk_voxel::WeldMode::PerVertex,
+    ] {
         let mesher_cfg = MesherConfig {
             atlas_address_map: Some(Arc::clone(&atlas_map)),
-            weld_vertices,
+            weld_mode,
             ..Default::default()
         };
         let mesh = SectionMesher::mesh_section(
@@ -349,7 +353,7 @@ fn test_real_obj_mod_jars_if_present() {
             .iter()
             .all(|p| p[0].is_finite() && p[1].is_finite() && p[2].is_finite()));
 
-        if weld_vertices {
+        if weld_mode != mtk_voxel::WeldMode::None {
             let mut seen_tris = HashSet::new();
             for tri in mesh.indices.as_chunks::<3>().0 {
                 let mut key = [tri[0], tri[1], tri[2]];

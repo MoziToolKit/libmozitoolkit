@@ -473,7 +473,7 @@ pub fn adaptive_pixel_split_mesh(
     out.uv_layout = UvLayout::PerLoop;
 
     if weld_dist > 0.0 {
-        out.weld_vertices(weld_dist);
+        out.weld_vertices(weld_dist, crate::geometry::WeldMode::Manifold);
     }
 
     out

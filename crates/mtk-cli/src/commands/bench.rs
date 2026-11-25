@@ -406,7 +406,11 @@ fn run_bench_world(args: BenchWorldArgs) -> Result<(), Box<dyn std::error::Error
     let mut config = MesherConfig {
         enable_ao: true,
         mesh_fluids: true,
-        weld_vertices: !args.no_weld,
+        weld_mode: if args.no_weld {
+            mtk_voxel::WeldMode::None
+        } else {
+            mtk_voxel::WeldMode::Manifold
+        },
         origin_centered: true,
         ctm_solver: ctm_solver.map(Arc::new),
         atlas_address_map: atlas.map(Arc::new),

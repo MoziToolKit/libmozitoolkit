@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use mtk_core::WeldMode;
 use mtk_cull::{FaceCuller, GlassCullMode, LeavesCullMode};
 use mtk_material::{BiomeResolver, VanillaColormaps};
 use mtk_resource::CtmSolver;
@@ -19,7 +20,7 @@ pub struct WasmMesherConfig {
     enable_animated_textures: bool,
     smooth_biome_blend: bool,
     origin_centered: bool,
-    weld_vertices: bool,
+    weld_mode: WeldMode,
     exclude_hidden_volume: bool,
     enable_alternate_blocks: bool,
     enable_random_offsets: bool,
@@ -38,7 +39,7 @@ impl Default for WasmMesherConfig {
             enable_animated_textures: true,
             smooth_biome_blend: true,
             origin_centered: true,
-            weld_vertices: false,
+            weld_mode: WeldMode::PerVertex,
             exclude_hidden_volume: true,
             enable_alternate_blocks: true,
             enable_random_offsets: true,
@@ -112,13 +113,15 @@ impl WasmMesherConfig {
         self.origin_centered = value;
     }
 
+    /// Vertex welding mode for Web/Three.js: `"per_vertex"` (default) or `"none"`.
     #[wasm_bindgen(getter)]
-    pub fn weld_vertices(&self) -> bool {
-        self.weld_vertices
+    pub fn weld_mode(&self) -> String {
+        self.weld_mode.as_str().to_string()
     }
     #[wasm_bindgen(setter)]
-    pub fn set_weld_vertices(&mut self, value: bool) {
-        self.weld_vertices = value;
+    pub fn set_weld_mode(&mut self, value: &str) -> Result<(), JsValue> {
+        self.weld_mode = parse_wasm_weld_mode(value).map_err(|e| JsValue::from_str(&e))?;
+        Ok(())
     }
 
     #[wasm_bindgen(getter)]
@@ -245,6 +248,19 @@ impl WasmMesherConfig {
     }
 }
 
+pub(crate) fn parse_wasm_weld_mode(value: &str) -> Result<WeldMode, String> {
+    match WeldMode::from_str_name(value) {
+        Some(WeldMode::PerVertex) => Ok(WeldMode::PerVertex),
+        Some(WeldMode::None) => Ok(WeldMode::None),
+        Some(WeldMode::Manifold) => Err(
+            "Invalid weld_mode 'manifold' for Web/Three.js: DCC manifold welding corrupts per-face normals; expected 'per_vertex' or 'none'".to_string(),
+        ),
+        Option::None => Err(format!(
+            "Invalid weld_mode '{value}', expected 'per_vertex' or 'none'"
+        )),
+    }
+}
+
 impl WasmMesherConfig {
     pub(crate) fn to_mesher_config(
         &self,
@@ -256,7 +272,7 @@ impl WasmMesherConfig {
         MesherConfig {
             coordinate_system: self.coordinate_system,
             origin_centered: self.origin_centered,
-            weld_vertices: self.weld_vertices,
+            weld_mode: self.weld_mode,
             selection_bounds: None,
             enable_ao: self.enable_ao,
             exclude_hidden_volume: self.exclude_hidden_volume,
@@ -272,6 +288,10 @@ impl WasmMesherConfig {
             unknown_block_strategy: self.unknown_block_strategy,
             smooth_biome_blend: self.smooth_biome_blend,
         }
+    }
+
+    pub(crate) fn weld_mode_value(&self) -> WeldMode {
+        self.weld_mode
     }
 
     pub(crate) fn to_face_culler(&self) -> FaceCuller {

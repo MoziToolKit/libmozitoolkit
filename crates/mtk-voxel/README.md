@@ -198,7 +198,7 @@ pub trait VoxelSource {
 pub struct MesherConfig {
     pub coordinate_system: CoordinateSystem, // Minecraft / ZUpRightHanded / YUpRightHanded
     pub origin_centered: bool,               // 是否将原点居中到底部中心
-    pub weld_vertices: bool,                 // 是否合并共面/重合顶点形成流形拓扑
+    pub weld_mode: WeldMode,                 // 顶点焊接策略（Manifold / PerVertex / None）
     pub selection_bounds: Option<([i32; 3], [i32; 3])>,
     pub enable_ao: bool,                     // 是否计算 4 顶点 AO 遮蔽
     pub exclude_hidden_volume: bool,         // 是否剔除复杂模型内部遮挡面
@@ -300,7 +300,7 @@ use mtk_cull::FaceCuller;
 use mtk_voxel::mesher::shading::ModelSource;
 use mtk_voxel::mesher::SectionMesher;
 use mtk_voxel::storage::VoxelStorage;
-use mtk_voxel::types::{CoordinateSystem, MesherConfig};
+use mtk_voxel::types::{CoordinateSystem, MesherConfig, WeldMode};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. 初始化 3D 稀疏世界容器
@@ -316,7 +316,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = MesherConfig {
         coordinate_system: CoordinateSystem::ZUpRightHanded, // 转换为 Blender / Unreal Z-Up
         origin_centered: true,                               // 底部中心对齐
-        weld_vertices: true,                                 // 空间顶点焊接
+        weld_mode: WeldMode::Manifold,                       // 空间流形顶点焊接
         enable_ao: true,                                     // 开启平滑 AO
         mesh_fluids: true,                                   // 生成流体曲面
         ..Default::default()

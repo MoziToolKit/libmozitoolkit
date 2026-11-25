@@ -5,7 +5,7 @@
 //! giving exactly 17 * 17 * 17 = 4,913 possible spatial vertex slots.
 
 use glam::Vec3;
-use mtk_core::MeshData;
+use mtk_core::{MeshData, WeldMode};
 
 use crate::types::MesherConfig;
 
@@ -34,18 +34,27 @@ pub(crate) const UNIT_CUBE_CORNERS: [[[usize; 3]; 4]; 6] = [
 /// Linear lookup pool for instant deduplication of unit cube vertices in a 16x16x16 Section.
 pub(crate) struct GridVertexPool {
     grid: Vec<u32>,
+    per_direction: bool,
 }
 
 impl GridVertexPool {
-    /// Creates a new `GridVertexPool` initialized with `u32::MAX`.
+    /// Creates a new `GridVertexPool` sized for the requested `WeldMode`.
     #[inline]
-    pub fn new() -> Self {
+    pub fn new(mode: WeldMode) -> Self {
+        let per_direction = mode == WeldMode::PerVertex;
+        let len = if per_direction {
+            GRID_POOL_SIZE * 6
+        } else {
+            GRID_POOL_SIZE
+        };
         Self {
-            grid: vec![u32::MAX; GRID_POOL_SIZE],
+            grid: vec![u32::MAX; len],
+            per_direction,
         }
     }
 
     /// Retrieves an existing vertex index or allocates a new vertex in `mesh.positions` and `mesh.normals`.
+    #[allow(clippy::too_many_arguments)]
     #[inline(always)]
     pub fn get_or_create(
         &mut self,
@@ -55,9 +64,15 @@ impl GridVertexPool {
         gx: usize,
         gy: usize,
         gz: usize,
+        dir_idx: usize,
         normal: [f32; 3],
     ) -> u32 {
-        let idx = (gx * 17 + gy) * 17 + gz;
+        let base_idx = (gx * 17 + gy) * 17 + gz;
+        let idx = if self.per_direction {
+            base_idx * 6 + dir_idx
+        } else {
+            base_idx
+        };
         let existing = self.grid[idx];
         if existing != u32::MAX {
             return existing;
@@ -75,7 +90,7 @@ impl GridVertexPool {
 
 impl Default for GridVertexPool {
     fn default() -> Self {
-        Self::new()
+        Self::new(WeldMode::Manifold)
     }
 }
 
@@ -85,23 +100,40 @@ mod tests {
 
     #[test]
     fn test_grid_vertex_pool_dedup() {
-        let mut pool = GridVertexPool::new();
+        let mut pool = GridVertexPool::new(WeldMode::Manifold);
         let mut mesh = MeshData::new();
         let config = MesherConfig::default();
         let origin = Vec3::ZERO;
 
-        let v1 = pool.get_or_create(&mut mesh, &config, origin, 1, 2, 3, [0.0, 1.0, 0.0]);
+        let v1 = pool.get_or_create(&mut mesh, &config, origin, 1, 2, 3, 2, [0.0, 1.0, 0.0]);
         assert_eq!(v1, 0);
         assert_eq!(mesh.vertex_count(), 1);
 
-        // Same coordinate should return existing index without adding a new vertex
-        let v2 = pool.get_or_create(&mut mesh, &config, origin, 1, 2, 3, [0.0, 1.0, 0.0]);
+        // Same coordinate in Manifold mode should return existing index regardless of direction
+        let v2 = pool.get_or_create(&mut mesh, &config, origin, 1, 2, 3, 0, [1.0, 0.0, 0.0]);
         assert_eq!(v2, 0);
         assert_eq!(mesh.vertex_count(), 1);
 
         // Different coordinate creates new index
-        let v3 = pool.get_or_create(&mut mesh, &config, origin, 2, 2, 3, [0.0, 1.0, 0.0]);
+        let v3 = pool.get_or_create(&mut mesh, &config, origin, 2, 2, 3, 2, [0.0, 1.0, 0.0]);
         assert_eq!(v3, 1);
         assert_eq!(mesh.vertex_count(), 2);
+    }
+
+    #[test]
+    fn test_grid_vertex_pool_per_vertex_preserves_direction_normals() {
+        let mut pool = GridVertexPool::new(WeldMode::PerVertex);
+        let mut mesh = MeshData::new();
+        let config = MesherConfig::default();
+        let origin = Vec3::ZERO;
+
+        let v_up = pool.get_or_create(&mut mesh, &config, origin, 1, 2, 3, 2, [0.0, 1.0, 0.0]);
+        let v_up_same = pool.get_or_create(&mut mesh, &config, origin, 1, 2, 3, 2, [0.0, 1.0, 0.0]);
+        let v_east = pool.get_or_create(&mut mesh, &config, origin, 1, 2, 3, 0, [1.0, 0.0, 0.0]);
+
+        assert_eq!(v_up, v_up_same);
+        assert_ne!(v_up, v_east);
+        assert_eq!(mesh.normals[v_up as usize], [0.0, 1.0, 0.0]);
+        assert_eq!(mesh.normals[v_east as usize], [1.0, 0.0, 0.0]);
     }
 }

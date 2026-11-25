@@ -34,13 +34,13 @@ impl Default for PyMesherConfig {
 #[pymethods]
 impl PyMesherConfig {
     #[new]
-    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_vertices=true, num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None, enable_alternate_blocks=true, enable_random_offsets=true, ctm_solver=None, enable_animated_textures=true, colormaps=None, unknown_block_strategy=None, smooth_biome_blend=true, coordinate_system=None, allow_network=true))]
+    #[pyo3(signature = (enable_ao=true, mesh_fluids=true, z_up_coordinates=true, origin_centered=true, weld_mode="manifold", num_threads=None, atlas=None, biome_resolver=None, custom_aliases=None, enable_alternate_blocks=true, enable_random_offsets=true, ctm_solver=None, enable_animated_textures=true, colormaps=None, unknown_block_strategy=None, smooth_biome_blend=true, coordinate_system=None, allow_network=true))]
     pub fn new(
         enable_ao: bool,
         mesh_fluids: bool,
         z_up_coordinates: bool,
         origin_centered: bool,
-        weld_vertices: bool,
+        weld_mode: &str,
         num_threads: Option<usize>,
         atlas: Option<&PyBakedAtlas>,
         biome_resolver: Option<&PyBiomeResolver>,
@@ -55,6 +55,12 @@ impl PyMesherConfig {
         coordinate_system: Option<&str>,
         allow_network: bool,
     ) -> PyResult<Self> {
+        let parsed_weld_mode = mtk_core::WeldMode::from_str_name(weld_mode).ok_or_else(|| {
+            pyo3::exceptions::PyValueError::new_err(format!(
+                "Invalid weld_mode '{}', expected 'manifold', 'per_vertex', or 'none'",
+                weld_mode
+            ))
+        })?;
         let strategy = match unknown_block_strategy {
             Some("IGNORE_AS_AIR") | Some("ignore_as_air") | Some("air") => {
                 mtk_voxel::UnknownBlockStrategy::IgnoreAsAir
@@ -82,7 +88,7 @@ impl PyMesherConfig {
             enable_ao,
             mesh_fluids,
             origin_centered,
-            weld_vertices,
+            weld_mode: parsed_weld_mode,
             coordinate_system: coord_sys,
             atlas_address_map: atlas.map(|a| Arc::new(a.inner.address_map.clone())),
             biome_resolver: biome_resolver.map(|r| Arc::new(r.inner.clone())),
@@ -130,8 +136,18 @@ impl PyMesherConfig {
     }
 
     #[getter]
-    pub fn weld_vertices(&self) -> bool {
-        self.inner.weld_vertices
+    pub fn weld_mode(&self) -> &'static str {
+        self.inner.weld_mode.as_str()
+    }
+
+    #[setter]
+    pub fn set_weld_mode(&mut self, value: &str) -> PyResult<()> {
+        self.inner.weld_mode = mtk_core::WeldMode::from_str_name(value).ok_or_else(|| {
+            pyo3::exceptions::PyValueError::new_err(format!(
+                "Invalid weld_mode '{value}', expected 'manifold', 'per_vertex', or 'none'"
+            ))
+        })?;
+        Ok(())
     }
 
     #[getter]
@@ -215,11 +231,11 @@ impl PyMesherConfig {
 
     fn __repr__(&self) -> String {
         format!(
-            "<MesherConfig ao={} fluids={} centered={} weld={} ctm={} coord={:?} threads={:?}>",
+            "<MesherConfig ao={} fluids={} centered={} weld_mode={} ctm={} coord={:?} threads={:?}>",
             self.inner.enable_ao,
             self.inner.mesh_fluids,
             self.inner.origin_centered,
-            self.inner.weld_vertices,
+            self.inner.weld_mode.as_str(),
             self.inner.ctm_solver.is_some(),
             self.inner.coordinate_system,
             self.num_threads

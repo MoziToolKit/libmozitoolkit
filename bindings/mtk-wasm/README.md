@@ -32,8 +32,8 @@
 - `set_hardware_concurrency(count: number)` / `get_hardware_concurrency() -> number`：配置并发线程数。
 
 ### 2.2 `WasmMesherConfig`
-- `new WasmMesherConfig()`：网格化与面剔除强类型配置 DTO（默认：`coordinate_system = "y_up"`, `origin_centered = true`, `weld_vertices = false`, `leaves_cull_mode = "fancy"`, `glass_cull_mode = "group"`, `unknown_block_strategy = "fallback_cube"`，AO/流体/CTM/动图/平滑生物群系均为 `true`）。
-- 支持读写属性：`enable_ao`、`mesh_fluids`、`enable_ctm`、`enable_animated_textures`、`smooth_biome_blend`、`origin_centered`、`weld_vertices`、`exclude_hidden_volume`、`enable_alternate_blocks`、`enable_random_offsets`、`coordinate_system`（`"y_up" | "z_up" | "minecraft"`）、`leaves_cull_mode`（`"fancy" | "fast" | "single_face" | "none"`）、`glass_cull_mode`（`"group" | "same_block" | "none"`）、`unknown_block_strategy`（`"fallback_cube" | "ignore_as_air"`）。
+- `new WasmMesherConfig()`：网格化与面剔除强类型配置 DTO（默认：`coordinate_system = "y_up"`, `origin_centered = true`, `weld_mode = "per_vertex"`, `leaves_cull_mode = "fancy"`, `glass_cull_mode = "group"`, `unknown_block_strategy = "fallback_cube"`，AO/流体/CTM/动图/平滑生物群系均为 `true`）。
+- 支持读写属性：`enable_ao`、`mesh_fluids`、`enable_ctm`、`enable_animated_textures`、`smooth_biome_blend`、`origin_centered`、`weld_mode`（`"per_vertex" | "none"`，拒绝破坏法线的 `"manifold"`）、`exclude_hidden_volume`、`enable_alternate_blocks`、`enable_random_offsets`、`coordinate_system`（`"y_up" | "z_up" | "minecraft"`）、`leaves_cull_mode`（`"fancy" | "fast" | "single_face" | "none"`）、`glass_cull_mode`（`"group" | "same_block" | "none"`）、`unknown_block_strategy`（`"fallback_cube" | "ignore_as_air"`）。
 
 ### 2.3 `WasmScenePackage`（S1 `.mtkscene` 查看器）
 - `WasmScenePackage.from_bytes(bytes: Uint8Array) -> WasmScenePackage`：从内存字节打开 `.mtkscene`。

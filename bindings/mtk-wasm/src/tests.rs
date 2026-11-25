@@ -320,6 +320,122 @@ fn test_stepped_scene_preserves_per_face_normals_and_ao() {
 }
 
 #[test]
+fn test_wasm_weld_mode_defaults_to_per_vertex_and_deduplicates_matching_gpu_corners() {
+    use mtk_core::attribute_constants::ATTR_AO;
+    use mtk_core::{
+        AttributeData, AttributeDomain, FaceAttributes, MeshAttribute, MeshData, Quad, WeldMode,
+    };
+
+    let mut cfg = WasmMesherConfig::new();
+    assert_eq!(cfg.weld_mode(), "per_vertex");
+    // Web/Three.js must reject DCC position-only manifold welding because it corrupts normals.
+    assert!(crate::config::parse_wasm_weld_mode("manifold").is_err());
+    assert!(crate::config::parse_wasm_weld_mode("invalid").is_err());
+    assert_eq!(
+        crate::config::parse_wasm_weld_mode("none").unwrap(),
+        WeldMode::None
+    );
+    assert_eq!(
+        crate::config::parse_wasm_weld_mode("per_vertex").unwrap(),
+        WeldMode::PerVertex
+    );
+    cfg.set_weld_mode("none").expect("allow none");
+    assert_eq!(cfg.weld_mode(), "none");
+    cfg.set_weld_mode("per_vertex").expect("allow per_vertex");
+    assert_eq!(cfg.weld_mode(), "per_vertex");
+
+    // Two adjacent coplanar quads sharing edge x=1 with identical mirrored UVs & AO,
+    // plus one perpendicular face sharing edge at (1, 0, 0)-(1, 0, 1).
+    let mut mesh = MeshData::new();
+    let attrs = FaceAttributes {
+        material_slot: 0,
+        tint_index: -1,
+        ..Default::default()
+    };
+    mesh.append_quad(
+        &Quad {
+            vertices: [
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec3::new(1.0, 0.0, 1.0),
+                Vec3::new(1.0, 0.0, 0.0),
+            ],
+            normal: Vec3::Y,
+            uvs: [
+                Vec2::new(0.0, 0.0),
+                Vec2::new(0.0, 1.0),
+                Vec2::new(1.0, 1.0),
+                Vec2::new(1.0, 0.0),
+            ],
+        },
+        &attrs,
+    );
+    mesh.append_quad(
+        &Quad {
+            vertices: [
+                Vec3::new(1.0, 0.0, 0.0),
+                Vec3::new(1.0, 0.0, 1.0),
+                Vec3::new(2.0, 0.0, 1.0),
+                Vec3::new(2.0, 0.0, 0.0),
+            ],
+            normal: Vec3::Y,
+            uvs: [
+                Vec2::new(1.0, 0.0),
+                Vec2::new(1.0, 1.0),
+                Vec2::new(0.0, 1.0),
+                Vec2::new(0.0, 0.0),
+            ],
+        },
+        &attrs,
+    );
+    mesh.append_quad(
+        &Quad {
+            vertices: [
+                Vec3::new(1.0, 0.0, 1.0),
+                Vec3::new(1.0, -1.0, 1.0),
+                Vec3::new(1.0, -1.0, 0.0),
+                Vec3::new(1.0, 0.0, 0.0),
+            ],
+            normal: Vec3::X,
+            uvs: [
+                Vec2::new(1.0, 1.0),
+                Vec2::new(1.0, 0.0),
+                Vec2::new(0.0, 0.0),
+                Vec2::new(0.0, 1.0),
+            ],
+        },
+        &attrs,
+    );
+    mesh.add_custom_attribute(MeshAttribute::new(
+        ATTR_AO,
+        AttributeDomain::Corner,
+        AttributeData::Float(vec![1.0; 12]),
+    ));
+
+    let unwelded = crate::render::build_render_scene(&mesh, None, WeldMode::None);
+    let mut welded = crate::render::build_render_scene(&mesh, None, WeldMode::PerVertex);
+    assert_eq!(unwelded.total_vertices(), 12);
+    assert_eq!(
+        welded.total_vertices(),
+        10,
+        "matching shared edge on coplanar quads must weld (12 -> 10), while perpendicular face stays split"
+    );
+
+    let batch = welded.take_batch(0).unwrap();
+    let norm = unsafe { std::slice::from_raw_parts(batch.normals_ptr(), batch.normals_len()) };
+    let idx = unsafe { std::slice::from_raw_parts(batch.indices_ptr(), batch.indices_len()) };
+    for t in 0..batch.triangle_count() {
+        let i0 = idx[t * 3] as usize;
+        let i1 = idx[t * 3 + 1] as usize;
+        let i2 = idx[t * 3 + 2] as usize;
+        let n0 = Vec3::from_slice(&norm[i0 * 3..i0 * 3 + 3]);
+        let n1 = Vec3::from_slice(&norm[i1 * 3..i1 * 3 + 3]);
+        let n2 = Vec3::from_slice(&norm[i2 * 3..i2 * 3 + 3]);
+        assert!((n0 - n1).length() < 1e-5 && (n1 - n2).length() < 1e-5);
+    }
+}
+
+#[test]
 fn test_wasm_concurrency_and_version() {
     assert_eq!(version(), env!("CARGO_PKG_VERSION"));
     set_hardware_concurrency(8);

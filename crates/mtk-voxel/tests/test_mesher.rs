@@ -28,7 +28,7 @@ fn test_solid_cube_culling_in_mesher() {
     assert_eq!(mesh.vertex_count(), 12); // Welded: 12 vertices
 
     let unwelded_config = MesherConfig {
-        weld_vertices: false,
+        weld_mode: mtk_voxel::WeldMode::None,
         ..Default::default()
     };
     let unwelded_mesh =
@@ -232,7 +232,7 @@ fn test_grass_block_meshing_no_duplicate_overlay_faces() {
     });
 
     let config = MesherConfig {
-        weld_vertices: false,
+        weld_mode: mtk_voxel::WeldMode::None,
         ..Default::default()
     };
 
@@ -603,7 +603,7 @@ fn test_alternate_blocks_variant_sampling() {
     let culler = FaceCuller::default();
     let config = MesherConfig {
         origin_centered: false,
-        weld_vertices: false,
+        weld_mode: mtk_voxel::WeldMode::None,
         enable_alternate_blocks: true,
         ..Default::default()
     };
@@ -624,7 +624,7 @@ fn test_alternate_blocks_variant_sampling() {
     // When enable_alternate_blocks is FALSE, only primary variant (dirt_var_0) must be sampled
     let disabled_config = MesherConfig {
         origin_centered: false,
-        weld_vertices: false,
+        weld_mode: mtk_voxel::WeldMode::None,
         enable_alternate_blocks: false,
         ..Default::default()
     };
@@ -658,7 +658,7 @@ fn test_plant_position_offsets() {
     // 1. With plant offsets enabled
     let config_enabled = MesherConfig {
         origin_centered: false,
-        weld_vertices: false,
+        weld_mode: mtk_voxel::WeldMode::None,
         enable_random_offsets: true,
         ..Default::default()
     };
@@ -693,7 +693,7 @@ fn test_plant_position_offsets() {
     // 2. With plant offsets disabled
     let config_disabled = MesherConfig {
         origin_centered: false,
-        weld_vertices: false,
+        weld_mode: mtk_voxel::WeldMode::None,
         enable_random_offsets: false,
         ..Default::default()
     };
@@ -735,7 +735,7 @@ fn test_submerged_seagrass_and_kelp_seamless_meshing() {
     let culler = FaceCuller::default();
     let config = MesherConfig {
         origin_centered: false,
-        weld_vertices: false,
+        weld_mode: mtk_voxel::WeldMode::None,
         mesh_fluids: true,
         ..Default::default()
     };
@@ -1146,7 +1146,7 @@ fn test_dirt_path_mesh_ao_neighbor_shading() {
     let culler = FaceCuller::default();
     let config = MesherConfig {
         enable_ao: true,
-        weld_vertices: false,
+        weld_mode: mtk_voxel::WeldMode::None,
         ..Default::default()
     };
 
@@ -1285,7 +1285,7 @@ fn test_dirt_path_adjacent_no_occlusion() {
     let culler = FaceCuller::default();
     let config = MesherConfig {
         enable_ao: true,
-        weld_vertices: false,
+        weld_mode: mtk_voxel::WeldMode::None,
         ..Default::default()
     };
 
@@ -1828,7 +1828,7 @@ fn test_mesher_mixed_vanilla_quad_and_obj_triangle_section() {
     let padded = sec.build_padded_array(|_, _, _| "minecraft:air");
     let culler = FaceCuller::default();
     let config = MesherConfig {
-        weld_vertices: false,
+        weld_mode: mtk_voxel::WeldMode::None,
         ..Default::default()
     };
 
@@ -1914,7 +1914,7 @@ fn test_waterlogged_modded_obj_block_emits_all_six_fluid_faces_and_does_not_cull
 
     let culler = FaceCuller::default();
     let config = MesherConfig {
-        weld_vertices: false,
+        weld_mode: mtk_voxel::WeldMode::None,
         ..Default::default()
     };
 

@@ -261,12 +261,12 @@ fn test_verify_100_percent_match_against_blender_mozi_toolkit() {
     );
     let culler = FaceCuller::default();
     let unwelded_config = MesherConfig {
-        weld_vertices: false,
+        weld_mode: mtk_core::WeldMode::None,
         origin_centered: false,
         ..Default::default()
     };
     let welded_config = MesherConfig {
-        weld_vertices: true,
+        weld_mode: mtk_core::WeldMode::Manifold,
         origin_centered: false,
         ..Default::default()
     };

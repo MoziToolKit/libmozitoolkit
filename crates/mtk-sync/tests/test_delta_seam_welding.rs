@@ -12,7 +12,7 @@ use std::sync::{Arc, RwLock};
 use crossbeam_channel::unbounded;
 use mtk_sync::unstable::testing::{check_debounced_remesh, SessionState};
 use mtk_sync::{SyncEvent, SyncLifecycle};
-use mtk_voxel::{MesherConfig, VoxelWorld};
+use mtk_voxel::{MesherConfig, VoxelWorld, WeldMode};
 
 fn assert_no_duplicate_positions(mesh: &mtk_core::MeshData) {
     let mut seen = HashSet::new();
@@ -27,7 +27,7 @@ fn assert_no_duplicate_positions(mesh: &mtk_core::MeshData) {
 #[test]
 fn test_live_delta_remesh_keeps_cross_section_seams_welded() {
     let config = MesherConfig {
-        weld_vertices: true,
+        weld_mode: WeldMode::Manifold,
         origin_centered: true,
         ..Default::default()
     };

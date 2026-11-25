@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 use super::merge_attributes::seed_custom_attributes;
 use super::{MeshData, UvLayout};
+use crate::geometry::{quantize_normal, WeldMode};
 
 struct MergedMeshPrealloc {
     merged: MeshData,
@@ -351,8 +352,8 @@ impl MeshData {
 
     /// Merges multiple internally-welded Section meshes into a single seamless unified mesh,
     /// deduplicating only co-located boundary vertices along chunk interfaces in a single streaming pass.
-    pub fn merge_welded_sections(meshes: &[&MeshData], tolerance: f32) -> Self {
-        Self::merge_welded_sections_with(meshes, tolerance, |_| true)
+    pub fn merge_welded_sections(meshes: &[&MeshData], tolerance: f32, mode: WeldMode) -> Self {
+        Self::merge_welded_sections_with(meshes, tolerance, mode, |_| true)
     }
 
     /// Merges multiple internally-welded Section meshes, welding only the vertices for which
@@ -360,17 +361,19 @@ impl MeshData {
     pub fn merge_welded_sections_filtered<F>(
         meshes: &[&MeshData],
         tolerance: f32,
+        mode: WeldMode,
         is_weld_candidate: F,
     ) -> Self
     where
         F: Fn([i32; 3]) -> bool,
     {
-        Self::merge_welded_sections_with(meshes, tolerance, is_weld_candidate)
+        Self::merge_welded_sections_with(meshes, tolerance, mode, is_weld_candidate)
     }
 
     fn merge_welded_sections_with<F>(
         meshes: &[&MeshData],
         tolerance: f32,
+        mode: WeldMode,
         is_weld_candidate: F,
     ) -> Self
     where
@@ -382,7 +385,7 @@ impl MeshData {
         if meshes.len() == 1 {
             return (*meshes[0]).clone();
         }
-        if tolerance <= 0.0 {
+        if mode == WeldMode::None || tolerance <= 0.0 {
             return Self::merge_all_refs(meshes);
         }
 
@@ -402,12 +405,14 @@ impl MeshData {
         let has_colors = pre.has_colors;
         let has_custom_attrs = pre.has_custom_attrs;
 
+        let match_normals = mode == WeldMode::PerVertex;
         let inv_dist = 1.0 / tolerance;
-        // Spatial hash map mapping discrete grid position [i32; 3] to global vertex index in merged.positions.
-        let mut coord_map = rustc_hash::FxHashMap::<[i32; 3], u32>::with_capacity_and_hasher(
-            (total_verts / 4).max(64),
-            Default::default(),
-        );
+        // Spatial hash map mapping (position [, quantized normal]) to global vertex index in merged.positions.
+        let mut coord_map =
+            rustc_hash::FxHashMap::<([i32; 3], [i32; 3]), u32>::with_capacity_and_hasher(
+                (total_verts / 4).max(64),
+                Default::default(),
+            );
 
         let mut local_remap = Vec::with_capacity(2048);
 
@@ -420,19 +425,25 @@ impl MeshData {
             local_remap.reserve(m.positions.len());
 
             for (i, &p) in m.positions.iter().enumerate() {
-                let key = [
+                let pos_key = [
                     (p[0] * inv_dist).round() as i32,
                     (p[1] * inv_dist).round() as i32,
                     (p[2] * inv_dist).round() as i32,
                 ];
 
-                if is_weld_candidate(key) {
-                    if let Some(&existing_idx) = coord_map.get(&key) {
+                if is_weld_candidate(pos_key) {
+                    let norm_key = if match_normals {
+                        quantize_normal(m.normals.get(i).copied().unwrap_or([0.0, 0.0, 1.0]))
+                    } else {
+                        [0, 0, 0]
+                    };
+                    let map_key = (pos_key, norm_key);
+                    if let Some(&existing_idx) = coord_map.get(&map_key) {
                         local_remap.push(existing_idx);
                         continue;
                     }
                     let new_idx = merged.positions.len() as u32;
-                    coord_map.insert(key, new_idx);
+                    coord_map.insert(map_key, new_idx);
                     local_remap.push(new_idx);
                 } else {
                     local_remap.push(merged.positions.len() as u32);

@@ -272,7 +272,7 @@ pub fn bake_item_model_mesh(
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
     let (mut mesh, _) = baked.to_mesh_with_textures(false);
     if weld {
-        mesh.weld_vertices(1e-4);
+        mesh.weld_vertices(1e-4, mtk_core::WeldMode::Manifold);
     }
     Ok(crate::mesh::PyMeshData::from(mesh))
 }

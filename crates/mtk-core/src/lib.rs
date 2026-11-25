@@ -38,8 +38,8 @@ pub use extrude::{
 // 4. Geometry & Math
 pub use geometry::{
     derive_quad_face_tangents, mc_rotation_to_z_up, mc_scale_to_z_up, mc_world_to_z_up,
-    z_up_rotation_to_mc, z_up_scale_to_mc, z_up_to_mc_world, Aabb2d, CoordinateSystem, Quad,
-    MC_TO_Z_UP_BASIS, Z_UP_TO_MC_BASIS,
+    quantize_normal, z_up_rotation_to_mc, z_up_scale_to_mc, z_up_to_mc_world, Aabb2d,
+    CoordinateSystem, Quad, WeldMode, MC_TO_Z_UP_BASIS, Z_UP_TO_MC_BASIS,
 };
 
 // 5. Mesh Data & Topology Analysis

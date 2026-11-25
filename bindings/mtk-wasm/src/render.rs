@@ -4,14 +4,14 @@
 //! corner AO attributes) into per-atlas-chunk `PerVertex` indexed geometry batches
 //! ready for zero-copy `THREE.BufferAttribute` construction.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use libmtk::{chunks, PackageManifest};
 use mtk_core::attribute_constants::{
     ATTR_ANIM_FRAME_SIZE, ATTR_ANIM_TIMING, ATTR_AO, ATTR_ATLAS_CHUNK_ID, ATTR_BIOME_TINT_COLOR,
     ATTR_BIOME_TINT_DATA,
 };
-use mtk_core::{AttributeData, MeshData, UvLayout};
+use mtk_core::{quantize_normal, AttributeData, MeshData, UvLayout, WeldMode};
 use mtk_texture::{
     dynamic_chunk_texture_id, AtlasAddressMap, AtlasChunkMeta, DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID,
 };
@@ -218,7 +218,71 @@ impl WasmRenderScene {
     }
 }
 
-#[derive(Default)]
+#[inline]
+fn norm_f32_bits(v: f32) -> u32 {
+    if v == 0.0 {
+        0
+    } else {
+        v.to_bits()
+    }
+}
+
+#[derive(Hash, PartialEq, Eq)]
+struct GpuVertexKey {
+    pos: [i32; 3],
+    norm: [i32; 3],
+    uv: [u32; 2],
+    color: [u32; 4],
+    tint_weight: [u32; 2],
+    anim_timing: Option<[u32; 3]>,
+    anim_frame_size: Option<[u32; 3]>,
+}
+
+impl GpuVertexKey {
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        pos: [f32; 3],
+        norm: [f32; 3],
+        uv: [f32; 2],
+        color: [f32; 4],
+        tint_weight: [f32; 2],
+        anim_timing: Option<[f32; 3]>,
+        anim_frame_size: Option<[f32; 3]>,
+    ) -> Self {
+        const INV_POS_TOL: f32 = 10_000.0;
+        Self {
+            pos: [
+                (pos[0] * INV_POS_TOL).round() as i32,
+                (pos[1] * INV_POS_TOL).round() as i32,
+                (pos[2] * INV_POS_TOL).round() as i32,
+            ],
+            norm: quantize_normal(norm),
+            uv: [norm_f32_bits(uv[0]), norm_f32_bits(uv[1])],
+            color: [
+                norm_f32_bits(color[0]),
+                norm_f32_bits(color[1]),
+                norm_f32_bits(color[2]),
+                norm_f32_bits(color[3]),
+            ],
+            tint_weight: [norm_f32_bits(tint_weight[0]), norm_f32_bits(tint_weight[1])],
+            anim_timing: anim_timing.map(|t| {
+                [
+                    norm_f32_bits(t[0]),
+                    norm_f32_bits(t[1]),
+                    norm_f32_bits(t[2]),
+                ]
+            }),
+            anim_frame_size: anim_frame_size.map(|s| {
+                [
+                    norm_f32_bits(s[0]),
+                    norm_f32_bits(s[1]),
+                    norm_f32_bits(s[2]),
+                ]
+            }),
+        }
+    }
+}
+
 struct BatchBuilder {
     positions: Vec<f32>,
     normals: Vec<f32>,
@@ -229,11 +293,80 @@ struct BatchBuilder {
     anim_timings: Vec<f32>,
     anim_frame_sizes: Vec<f32>,
     has_animated_faces: bool,
+    weld_per_vertex: bool,
+    vertex_map: HashMap<GpuVertexKey, u32>,
 }
 
 impl BatchBuilder {
+    fn new(weld_per_vertex: bool) -> Self {
+        Self {
+            positions: Vec::new(),
+            normals: Vec::new(),
+            uvs: Vec::new(),
+            colors: Vec::new(),
+            tint_weights: Vec::new(),
+            indices: Vec::new(),
+            anim_timings: Vec::new(),
+            anim_frame_sizes: Vec::new(),
+            has_animated_faces: false,
+            weld_per_vertex,
+            vertex_map: HashMap::new(),
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn push_vertex(
+        &mut self,
+        pos: [f32; 3],
+        norm: [f32; 3],
+        uv: [f32; 2],
+        color: [f32; 4],
+        tint_weight: [f32; 2],
+        anim_timing: Option<[f32; 3]>,
+        anim_frame_size: Option<[f32; 3]>,
+    ) -> u32 {
+        if self.weld_per_vertex {
+            let key = GpuVertexKey::new(
+                pos,
+                norm,
+                uv,
+                color,
+                tint_weight,
+                anim_timing,
+                anim_frame_size,
+            );
+            if let Some(&existing) = self.vertex_map.get(&key) {
+                return existing;
+            }
+            let new_idx = (self.positions.len() / 3) as u32;
+            self.vertex_map.insert(key, new_idx);
+            self.append_vertex_attrs(
+                pos,
+                norm,
+                uv,
+                color,
+                tint_weight,
+                anim_timing,
+                anim_frame_size,
+            );
+            return new_idx;
+        }
+
+        let new_idx = (self.positions.len() / 3) as u32;
+        self.append_vertex_attrs(
+            pos,
+            norm,
+            uv,
+            color,
+            tint_weight,
+            anim_timing,
+            anim_frame_size,
+        );
+        new_idx
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn append_vertex_attrs(
         &mut self,
         pos: [f32; 3],
         norm: [f32; 3],
@@ -487,7 +620,7 @@ impl<'a> FaceAttrRefs<'a> {
         tint_w: [f32; 2],
         anim_t: Option<[f32; 3]>,
         anim_s: Option<[f32; 3]>,
-    ) {
+    ) -> u32 {
         let pos = self.mesh.positions.get(v_idx).copied().unwrap_or([0.0; 3]);
         let norm = self
             .mesh
@@ -504,13 +637,14 @@ impl<'a> FaceAttrRefs<'a> {
             v_idx,
             corner_idx,
         );
-        builder.push_vertex(pos, norm, uv, color, tint_w, anim_t, anim_s);
+        builder.push_vertex(pos, norm, uv, color, tint_w, anim_t, anim_s)
     }
 }
 
 pub(crate) fn build_render_scene(
     mesh: &MeshData,
     atlas_mapping: Option<&AtlasAddressMap>,
+    weld_mode: WeldMode,
 ) -> WasmRenderScene {
     if mesh.is_empty() || mesh.indices.is_empty() {
         return WasmRenderScene {
@@ -520,6 +654,7 @@ pub(crate) fn build_render_scene(
         };
     }
 
+    let weld_per_vertex = weld_mode == WeldMode::PerVertex;
     let mut builders: BTreeMap<i32, BatchBuilder> = BTreeMap::new();
 
     if mesh.is_quad_topology() {
@@ -533,8 +668,9 @@ pub(crate) fn build_render_scene(
             let anim_t = attrs.anim_timings.and_then(|arr| arr.get(f).copied());
             let anim_s = attrs.anim_frame_sizes.and_then(|arr| arr.get(f).copied());
 
-            let builder = builders.entry(chunk_id).or_default();
-            let base = (builder.positions.len() / 3) as u32;
+            let builder = builders
+                .entry(chunk_id)
+                .or_insert_with(|| BatchBuilder::new(weld_per_vertex));
             let q_base = f * 4;
             let t_base = f * 6;
             let quad: [u32; 4] = quads[q_base..q_base + 4].try_into().unwrap_or([0; 4]);
@@ -542,8 +678,9 @@ pub(crate) fn build_render_scene(
                 .try_into()
                 .unwrap_or([0; 6]);
 
+            let mut corner_indices = [0u32; 4];
             for (c, &v_idx_u32) in quad.iter().enumerate() {
-                attrs.push_corner(
+                corner_indices[c] = attrs.push_corner(
                     builder,
                     v_idx_u32 as usize,
                     q_base + c,
@@ -553,7 +690,7 @@ pub(crate) fn build_render_scene(
                 );
             }
             for c in quad_tri_corner_map(&quad, &tris) {
-                builder.indices.push(base + c as u32);
+                builder.indices.push(corner_indices[c]);
             }
         }
     } else {
@@ -567,15 +704,16 @@ pub(crate) fn build_render_scene(
             let anim_t = attrs.anim_timings.and_then(|arr| arr.get(f).copied());
             let anim_s = attrs.anim_frame_sizes.and_then(|arr| arr.get(f).copied());
 
-            let builder = builders.entry(chunk_id).or_default();
-            let base = (builder.positions.len() / 3) as u32;
+            let builder = builders
+                .entry(chunk_id)
+                .or_insert_with(|| BatchBuilder::new(weld_per_vertex));
             let t_base = f * 3;
 
             for c in 0..3 {
                 let corner_idx = t_base + c;
                 let v_idx = mesh.indices[corner_idx] as usize;
-                attrs.push_corner(builder, v_idx, corner_idx, tint_w, anim_t, anim_s);
-                builder.indices.push(base + c as u32);
+                let out_idx = attrs.push_corner(builder, v_idx, corner_idx, tint_w, anim_t, anim_s);
+                builder.indices.push(out_idx);
             }
         }
     }

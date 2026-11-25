@@ -24,6 +24,54 @@ pub enum CoordinateSystem {
     YUpRightHanded,
 }
 
+/// Vertex welding strategy applied during meshing and section assembly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum WeldMode {
+    /// Disable vertex welding; every face retains unshared corner vertices.
+    None,
+    /// DCC manifold welding: keys on spatial position only on `PerLoop` meshes, keeping
+    /// 90° cube corners watertight for Blender SSS and modifiers.
+    #[default]
+    Manifold,
+    /// Web / Three.js / WebGPU / glTF-ready welding: preserves per-face normals
+    /// (`(position, normal)` on `PerLoop` meshes, plus full attribute matching on `PerVertex`).
+    PerVertex,
+}
+
+impl WeldMode {
+    /// Canonical lowercase identifier used in Python/WASM configuration APIs.
+    #[inline]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Manifold => "manifold",
+            Self::PerVertex => "per_vertex",
+        }
+    }
+
+    /// Parses a welding mode string (`"none"`, `"manifold"`, or `"per_vertex"`).
+    #[inline]
+    pub fn from_str_name(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "none" => Some(Self::None),
+            "manifold" => Some(Self::Manifold),
+            "per_vertex" => Some(Self::PerVertex),
+            _ => None,
+        }
+    }
+}
+
+/// Quantizes a unit normal vector at 1/1024 precision for stable hash-key comparison.
+#[inline]
+pub fn quantize_normal(normal: [f32; 3]) -> [i32; 3] {
+    [
+        (normal[0] * 1024.0).round() as i32,
+        (normal[1] * 1024.0).round() as i32,
+        (normal[2] * 1024.0).round() as i32,
+    ]
+}
+
 /// Change of basis matrix from Minecraft coordinates (+X East, +Y Up, +Z South)
 /// to standard Z-up right-handed coordinates (+X East, +Y North, +Z Up):
 /// v_z_up = M * v_mc = (x, -z, y).

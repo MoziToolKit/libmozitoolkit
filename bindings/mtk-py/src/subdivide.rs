@@ -101,7 +101,7 @@ pub fn adaptive_pixel_split_mesh(
                 split.positions.len(),
                 |_| {
                     split.uv_layout = mtk_core::UvLayout::PerLoop;
-                    split.weld_vertices(weld_dist);
+                    split.weld_vertices(weld_dist, mtk_core::WeldMode::Manifold);
                 },
             );
         }

@@ -1,5 +1,5 @@
 use glam::Vec3;
-pub use mtk_core::CoordinateSystem;
+pub use mtk_core::{CoordinateSystem, WeldMode};
 use mtk_resource::CtmSolver;
 use mtk_texture::AtlasAddressMap;
 #[cfg(feature = "serde")]
@@ -26,8 +26,8 @@ pub struct MesherConfig {
     pub coordinate_system: CoordinateSystem,
     /// Whether to center local geometry relative to active selection origin (bottom center).
     pub origin_centered: bool,
-    /// Whether to weld adjacent coplanar/shared vertices into manifold topology.
-    pub weld_vertices: bool,
+    /// Vertex welding strategy applied during section meshing and world assembly.
+    pub weld_mode: WeldMode,
     /// Optional selection bounds `(min_pos, size)`: `([min_x, min_y, min_z], [size_x, size_y, size_z])`.
     pub selection_bounds: Option<([i32; 3], [i32; 3])>,
     /// Whether to calculate 4-corner ambient occlusion on faces.
@@ -68,7 +68,7 @@ impl Default for MesherConfig {
         Self {
             coordinate_system: CoordinateSystem::Minecraft,
             origin_centered: true,
-            weld_vertices: true,
+            weld_mode: WeldMode::Manifold,
             selection_bounds: None,
             enable_ao: true,
             exclude_hidden_volume: true,

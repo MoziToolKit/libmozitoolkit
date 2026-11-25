@@ -3,26 +3,54 @@
 //! Provides spatial vertex deduplication and index remapping for general 3D meshes.
 
 use super::{MeshData, UvLayout};
+use crate::geometry::{quantize_normal, WeldMode};
+
+#[inline]
+fn pair_matches_2(a: Option<&[f32; 2]>, b: Option<&[f32; 2]>) -> bool {
+    match (a, b) {
+        (Some(x), Some(y)) => (x[0] - y[0]).abs().max((x[1] - y[1]).abs()) < 1e-4,
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+#[inline]
+fn pair_matches_4(a: Option<&[f32; 4]>, b: Option<&[f32; 4]>) -> bool {
+    match (a, b) {
+        (Some(x), Some(y)) => {
+            (x[0] - y[0])
+                .abs()
+                .max((x[1] - y[1]).abs())
+                .max((x[2] - y[2]).abs())
+                .max((x[3] - y[3]).abs())
+                < 1e-4
+        }
+        (None, None) => true,
+        _ => false,
+    }
+}
 
 impl MeshData {
-    /// Welds co-located vertices within `tolerance` distance into shared topology.
+    /// Welds co-located vertices within `tolerance` distance according to `mode`.
     ///
-    /// The `uv_layout` field selects the explicit policy:
-    /// - `UvLayout::PerLoop`: only positions/normals are welded; per-loop UVs, colors
-    ///   and secondary UVs stay attached to their loops, preserving UV seams.
-    /// - `UvLayout::PerVertex` / `UvLayout::None`: per-vertex attributes are welded
-    ///   together, refusing to merge vertices whose primary UVs differ.
-    pub fn weld_vertices(&mut self, tolerance: f32) {
-        if self.positions.is_empty() || tolerance <= 0.0 {
+    /// - `WeldMode::None`: no-op.
+    /// - `WeldMode::Manifold`: on `UvLayout::PerLoop`, keys on position only so 90° edges remain
+    ///   watertight for DCC tools; on `PerVertex` / `None`, preserves differing primary UVs.
+    /// - `WeldMode::PerVertex`: preserves distinct normals across hard edges (`(position, normal)`
+    ///   on `PerLoop`, plus matching UVs/secondary UVs/colors on `PerVertex`).
+    pub fn weld_vertices(&mut self, tolerance: f32, mode: WeldMode) {
+        if mode == WeldMode::None || self.positions.is_empty() || tolerance <= 0.0 {
             return;
         }
 
         let per_loop = self.uv_layout == UvLayout::PerLoop;
+        let match_normals = mode == WeldMode::PerVertex;
         let inv_dist = 1.0 / tolerance;
-        let mut coord_map = rustc_hash::FxHashMap::<[i32; 3], u32>::with_capacity_and_hasher(
-            self.positions.len(),
-            Default::default(),
-        );
+        let mut bucket_map =
+            rustc_hash::FxHashMap::<([i32; 3], [i32; 3]), Vec<u32>>::with_capacity_and_hasher(
+                self.positions.len(),
+                Default::default(),
+            );
         let mut remap: Vec<u32> = Vec::with_capacity(self.positions.len());
         let mut new_positions: Vec<[f32; 3]> = Vec::with_capacity(self.positions.len());
         let mut new_normals: Vec<[f32; 3]> = Vec::with_capacity(self.normals.len());
@@ -33,33 +61,52 @@ impl MeshData {
 
         for i in 0..self.positions.len() {
             let p = self.positions[i];
-            let key = [
+            let norm = self.normals.get(i).copied().unwrap_or([0.0, 0.0, 1.0]);
+            let pos_key = [
                 (p[0] * inv_dist).round() as i32,
                 (p[1] * inv_dist).round() as i32,
                 (p[2] * inv_dist).round() as i32,
             ];
+            let norm_key = if match_normals {
+                quantize_normal(norm)
+            } else {
+                [0, 0, 0]
+            };
 
-            if let Some(&existing_idx) = coord_map.get(&key) {
-                let uv_matches = per_loop || self.uvs.is_empty() || {
-                    let existing_uv = self.uvs.get(existing_idx as usize);
-                    let current_uv = self.uvs.get(i);
-                    match (existing_uv, current_uv) {
-                        (Some(a), Some(b)) => (a[0] - b[0]).abs().max((a[1] - b[1]).abs()) < 1e-4,
-                        (None, None) => true,
-                        _ => false,
-                    }
-                };
-                if uv_matches {
-                    remap.push(existing_idx);
-                    continue;
+            let bucket = bucket_map.entry((pos_key, norm_key)).or_default();
+            let matched = bucket.iter().copied().find(|&existing_idx| {
+                if per_loop {
+                    return true;
                 }
+                let e = existing_idx as usize;
+                let uv_ok = self.uvs.is_empty() || pair_matches_2(new_uvs.get(e), self.uvs.get(i));
+                if !uv_ok {
+                    return false;
+                }
+                if !match_normals {
+                    return true;
+                }
+                let sec_ok = match (&self.secondary_uvs, &new_sec_uvs) {
+                    (Some(sec_in), Some(sec_out)) => pair_matches_2(sec_out.get(e), sec_in.get(i)),
+                    _ => true,
+                };
+                let col_ok = match (&self.colors, &new_colors) {
+                    (Some(col_in), Some(col_out)) => pair_matches_4(col_out.get(e), col_in.get(i)),
+                    _ => true,
+                };
+                sec_ok && col_ok
+            });
+
+            if let Some(existing_idx) = matched {
+                remap.push(existing_idx);
+                continue;
             }
 
             let new_idx = new_positions.len() as u32;
-            coord_map.insert(key, new_idx);
+            bucket.push(new_idx);
             remap.push(new_idx);
             new_positions.push(p);
-            new_normals.push(self.normals.get(i).copied().unwrap_or([0.0, 0.0, 1.0]));
+            new_normals.push(norm);
 
             if !per_loop {
                 if let Some(uv) = self.uvs.get(i) {

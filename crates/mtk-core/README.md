@@ -42,7 +42,7 @@
 
 | 类型 / 结构体 | 说明 |
 | :--- | :--- |
-| [`MeshData`](src/mesh/mod.rs) | 核心连续网格缓冲，包含 `positions`, `normals`, `indices`, `uvs`, `uv_layout`, `secondary_uvs`, `colors`, `face_materials`, `face_tint_indices`, `quad_indices`, `custom_attributes`。提供零拷贝引用合并 `merge_all_refs(&[&MeshData])`、单阶段流式跨区块缝合合并 `merge_welded_sections(&[&MeshData], tolerance)`、按空间谓词限定焊接范围的 `merge_welded_sections_filtered(&[&MeshData], tolerance, predicate)` 以及显式 UV 布局策略的 `weld_vertices(tolerance)`。 |
+| [`MeshData`](src/mesh/mod.rs) | 核心连续网格缓冲，包含 `positions`, `normals`, `indices`, `uvs`, `uv_layout`, `secondary_uvs`, `colors`, `face_materials`, `face_tint_indices`, `quad_indices`, `custom_attributes`。提供零拷贝引用合并 `merge_all_refs(&[&MeshData])`、单阶段流式跨区块缝合合并 `merge_welded_sections(&[&MeshData], tolerance, mode)`、按空间谓词限定焊接范围的 `merge_welded_sections_filtered(&[&MeshData], tolerance, mode, predicate)` 以及显式策略的 `weld_vertices(tolerance, mode)`（`WeldMode::None | Manifold | PerVertex`）。 |
 | [`Quad`](src/geometry.rs) | 4 顶点平面四边形基元。支持 `Quad::unit_cube_face(Direction)` 生成标准单位立方体面（对齐 Minecraft 1.21+ FaceInfo 逆时针环绕规范）。 |
 | [`FlatPolygonMesh`](src/polygon.rs) | 连续 1D 循环拓扑网格表示，提供 `face_vertices(i)` 与 `face_uvs(i)` 零拷贝切片访问器。 |
 | [`Aabb2d`](src/geometry.rs) | 2D 轴对齐包围盒，提供相交判定与矩形布尔运算。 |
@@ -68,7 +68,7 @@
 | `calculate_face_target_grid` | `(&uvs, tex_w, tex_h, pixels_per_face, max_subdivisions) -> (u32, u32)`：根据 UV 坐标与贴图尺寸推算最优细分列数和行数。 |
 | `calculate_pixel_grid_cut_factors` | `(&uvs, tex_w, tex_h, pixels_per_face, max_subdivisions) -> (Vec<f32>, Vec<f32>)`：计算四边形在纹理整数像素边界上的归一化切分参数因子。 |
 | `adaptive_pixel_split_mesh` | `(mesh, face_resolutions, default_res, pixels_per_face, max_subdiv, weld_dist) -> MeshData`：全网格批量自适应像素细分，支持多边形属性双线性插值与顶点焊接。 |
-| `MeshData::weld_vertices` | `(&mut MeshData, tolerance: f32)`：基于 `uv_layout` 选择逐 loop 或逐顶点属性策略的原地顶点焊接。 |
+| `MeshData::weld_vertices` | `(&mut MeshData, tolerance: f32, mode: WeldMode)`：基于 `WeldMode`（`None` / `Manifold` / `PerVertex`）与 `uv_layout` 策略的原地顶点焊接。 |
 
 ### 2.4 智能挤出与 UV 修复 (`extrude`)
 

@@ -135,6 +135,10 @@ impl WasmScenePackage {
             .rebuild_all()
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-        Ok(build_render_scene(mesh, self.atlas_mapping.as_deref()))
+        Ok(build_render_scene(
+            mesh,
+            self.atlas_mapping.as_deref(),
+            cfg.weld_mode_value(),
+        ))
     }
 }

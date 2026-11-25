@@ -68,7 +68,7 @@ impl PyBakedModelDatabase {
             .map(|baked| {
                 let (mut mesh, textures) = baked.to_mesh_with_textures(clip_hidden);
                 if weld {
-                    mesh.weld_vertices(1e-4);
+                    mesh.weld_vertices(1e-4, mtk_core::WeldMode::Manifold);
                 }
                 (crate::mesh::PyMeshData::from_mesh(mesh), textures)
             })
@@ -181,7 +181,7 @@ impl PyBakedModelDatabase {
                 }
 
                 if weld {
-                    item_mesh.weld_vertices(1e-4);
+                    item_mesh.weld_vertices(1e-4, mtk_core::WeldMode::Manifold);
                 }
 
                 let col = total_items % cols;
