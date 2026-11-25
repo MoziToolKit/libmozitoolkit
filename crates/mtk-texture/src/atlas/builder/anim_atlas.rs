@@ -2,14 +2,30 @@ use std::collections::HashMap;
 
 use mtk_resource::ResourceLocation;
 
-use super::types::{AtlasBuilderConfig, BakedAtlasChunk};
+use super::types::{AtlasBuilderConfig, BakedAtlasChunk, SkippedAnimatedSprite};
 use crate::atlas::address_map::{AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation, SpriteKind};
 use crate::error::TextureError;
 use crate::image::apply_edge_clamping_padding;
-use crate::stitcher::Stitcher;
+use crate::stitcher::{smallest_encompassing_power_of_two, Stitcher};
 use crate::{DecodedSprite, RgbaBuffer};
 
+fn align_to_mip(dim: u32, mip_level: u32) -> u32 {
+    let align = 1u32.checked_shl(mip_level).unwrap_or(u32::MAX);
+    if align > 1 && !dim.is_multiple_of(align) {
+        dim.saturating_div(align)
+            .saturating_add(1)
+            .saturating_mul(align)
+    } else {
+        dim
+    }
+}
+
 /// Builds and bakes animated atlas chunks with full vertical animation strips and PBR alignment.
+///
+/// Animated sprites whose full padded strip exceeds `config.max_width x config.max_height` are
+/// skipped here (leaving their Frame 0 static slot intact in `address_map.sprites`) and recorded
+/// in `skipped_animations`.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn build_anim_atlas_chunks(
     anim_sprites: Vec<DecodedSprite>,
     config: &AtlasBuilderConfig,
@@ -18,6 +34,7 @@ pub(crate) fn build_anim_atlas_chunks(
     texture_id_counter: &mut u32,
     baked_chunks: &mut Vec<BakedAtlasChunk>,
     address_map: &mut AtlasAddressMap,
+    skipped_animations: &mut Vec<SkippedAnimatedSprite>,
 ) -> Result<(), TextureError> {
     if anim_sprites.is_empty() {
         return Ok(());
@@ -27,8 +44,32 @@ pub(crate) fn build_anim_atlas_chunks(
     let mut anim_sprite_map: HashMap<ResourceLocation, DecodedSprite> = HashMap::new();
 
     for sprite in anim_sprites {
-        let strip_w = sprite.frame_width + config.padding * 2;
-        let strip_h = sprite.albedo.height + config.padding * 2;
+        let strip_w = sprite.frame_width.saturating_add(config.padding * 2);
+        let strip_h = sprite.albedo.height.saturating_add(config.padding * 2);
+        let aligned_w = align_to_mip(strip_w, config.mip_level);
+        let aligned_h = align_to_mip(strip_h, config.mip_level);
+        let pow2_w = smallest_encompassing_power_of_two(aligned_w);
+        let pow2_h = smallest_encompassing_power_of_two(aligned_h);
+
+        if aligned_w > config.max_width
+            || aligned_h > config.max_height
+            || pow2_w > config.max_width
+            || pow2_h > config.max_height
+        {
+            skipped_animations.push(SkippedAnimatedSprite {
+                sprite_id: sprite.sprite_id,
+                category: category_name.to_string(),
+                strip_width: aligned_w,
+                strip_height: aligned_h,
+                frame_width: sprite.frame_width,
+                frame_height: sprite.frame_height,
+                frame_count: sprite.frame_count,
+                max_width: config.max_width,
+                max_height: config.max_height,
+            });
+            continue;
+        }
+
         anim_stitcher.register_sprite(
             sprite.sprite_id.clone(),
             strip_w,
@@ -36,6 +77,10 @@ pub(crate) fn build_anim_atlas_chunks(
             sprite.sprite_id.as_string(),
         );
         anim_sprite_map.insert(sprite.sprite_id.clone(), sprite);
+    }
+
+    if anim_sprite_map.is_empty() {
+        return Ok(());
     }
 
     let anim_stitched = anim_stitcher.stitch()?;

@@ -199,9 +199,22 @@ pub struct BakedAtlasChunk {
     pub aux: Option<RgbaBuffer>,
 }
 
+pub struct SkippedAnimatedSprite {
+    pub sprite_id: ResourceLocation,
+    pub category: String,
+    pub strip_width: u32,
+    pub strip_height: u32,
+    pub frame_width: u32,
+    pub frame_height: u32,
+    pub frame_count: u32,
+    pub max_width: u32,
+    pub max_height: u32,
+}
+
 pub struct BakedAtlas {
     pub chunks: Vec<BakedAtlasChunk>,
     pub address_map: AtlasAddressMap,
+    pub skipped_animations: Vec<SkippedAnimatedSprite>,
 }
 ```
 

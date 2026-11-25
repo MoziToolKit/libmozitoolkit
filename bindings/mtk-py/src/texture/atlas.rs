@@ -71,6 +71,7 @@ impl PyBakedAtlas {
             inner: BakedAtlas {
                 chunks: Vec::new(),
                 address_map,
+                skipped_animations: Vec::new(),
             },
             banner_baker: None,
         })

@@ -49,6 +49,7 @@ impl AtlasBuilder {
     ) -> Result<BakedAtlas, TextureError> {
         let mut baked_chunks = Vec::new();
         let mut address_map = AtlasAddressMap::new();
+        let mut skipped_animations = Vec::new();
         let mut global_chunk_counter = 0u16;
         let mut texture_id_counter = 0u32;
 
@@ -120,12 +121,20 @@ impl AtlasBuilder {
                 &mut texture_id_counter,
                 &mut baked_chunks,
                 &mut address_map,
+                &mut skipped_animations,
             )?;
         }
+
+        skipped_animations.sort_by(|a, b| {
+            a.category
+                .cmp(&b.category)
+                .then_with(|| a.sprite_id.cmp(&b.sprite_id))
+        });
 
         Ok(BakedAtlas {
             chunks: baked_chunks,
             address_map,
+            skipped_animations,
         })
     }
 
@@ -158,6 +167,7 @@ impl AtlasBuilder {
 
         let mut baked_chunks = Vec::new();
         let mut address_map = AtlasAddressMap::new();
+        let mut skipped_animations = Vec::new();
         let mut global_chunk_counter = 0u16;
         let mut texture_id_counter = 0u32;
 
@@ -179,11 +189,19 @@ impl AtlasBuilder {
             &mut texture_id_counter,
             &mut baked_chunks,
             &mut address_map,
+            &mut skipped_animations,
         )?;
+
+        skipped_animations.sort_by(|a, b| {
+            a.category
+                .cmp(&b.category)
+                .then_with(|| a.sprite_id.cmp(&b.sprite_id))
+        });
 
         Ok(BakedAtlas {
             chunks: baked_chunks,
             address_map,
+            skipped_animations,
         })
     }
 }

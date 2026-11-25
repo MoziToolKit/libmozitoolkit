@@ -318,6 +318,71 @@ class TestLibMtkPy(unittest.TestCase):
         self.assertFalse(fetched.materials_are_slots)
         self.assertEqual(sorted(fetched.used_materials()), [0, 6])
 
+    def test_precompile_oversized_animated_sprite_falls_back_with_warning(self):
+        from pathlib import Path
+        import struct
+        import tempfile
+        import zlib
+
+        def make_solid_png(width: int, height: int, rgba: tuple[int, int, int, int]) -> bytes:
+            row = b"\x00" + bytes(rgba) * width
+            raw = row * height
+
+            def chunk(tag: bytes, data: bytes) -> bytes:
+                crc = zlib.crc32(tag + data) & 0xFFFFFFFF
+                return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", crc)
+
+            ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+            return (
+                b"\x89PNG\r\n\x1a\n"
+                + chunk(b"IHDR", ihdr)
+                + chunk(b"IDAT", zlib.compress(raw))
+                + chunk(b"IEND", b"")
+            )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pack_dir = Path(tmpdir) / "vanilla_pack"
+            (pack_dir / "assets/minecraft/textures/block").mkdir(parents=True)
+            (pack_dir / "assets/minecraft/textures/item").mkdir(parents=True)
+            (pack_dir / "assets/minecraft/models/block").mkdir(parents=True)
+            (pack_dir / "assets/minecraft/blockstates").mkdir(parents=True)
+
+            (pack_dir / "assets/minecraft/textures/block/stone.png").write_bytes(
+                make_solid_png(16, 16, (128, 128, 128, 255))
+            )
+            (pack_dir / "assets/minecraft/models/block/stone.json").write_text(
+                '{"textures":{"all":"minecraft:block/stone"},"elements":[{"from":[0,0,0],"to":[16,16,16],"faces":{"up":{"texture":"#all"}}}]}',
+                encoding="utf-8",
+            )
+            (pack_dir / "assets/minecraft/blockstates/stone.json").write_text(
+                '{"variants":{"":{"model":"minecraft:block/stone"}}}',
+                encoding="utf-8",
+            )
+
+            (pack_dir / "assets/minecraft/textures/item/giant_anim.png").write_bytes(
+                make_solid_png(64, 320, (0, 200, 255, 255))
+            )
+            (pack_dir / "assets/minecraft/textures/item/giant_anim.png.mcmeta").write_text(
+                '{"animation":{"frametime":4}}',
+                encoding="utf-8",
+            )
+
+            stack = libmtk_py.ResourcePackStack()
+            stack.add_directory_pack(str(pack_dir), "TestOversizedPack")
+
+            cache_dir = Path(tmpdir) / "cache"
+            res = libmtk_py.precompile_all_assets(
+                stack,
+                str(cache_dir),
+                atlas_category="blocks",
+                max_atlas_width=256,
+                max_atlas_height=256,
+            )
+            self.assertTrue(res.success)
+            self.assertEqual(len(res.warnings), 1)
+            self.assertIn("minecraft:item/giant_anim", res.warnings[0])
+            self.assertIn("TestOversizedPack", res.warnings[0])
+
 
 if __name__ == "__main__":
     unittest.main()

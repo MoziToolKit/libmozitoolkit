@@ -85,6 +85,21 @@ impl ResourcePackStack {
         Ok(None)
     }
 
+    /// Returns the name of the highest-priority pack providing `asset_path`, respecting `pack.filter()`.
+    pub fn find_asset_pack_name(&self, asset_path: &str) -> Option<String> {
+        for pack in &self.packs {
+            if matches!(pack.open(asset_path), Ok(Some(_))) {
+                return Some(pack.name().to_string());
+            }
+            if let Some(filter) = pack.filter() {
+                if is_filtered_asset_path(filter, asset_path) {
+                    return None;
+                }
+            }
+        }
+        None
+    }
+
     /// List asset paths under `prefix`, with every pack's `filter.block` applied.
     ///
     /// Mirrors `FallbackResourceManager.listResources`: packs are visited lowest priority first, a

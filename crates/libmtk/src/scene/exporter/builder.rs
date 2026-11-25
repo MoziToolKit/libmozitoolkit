@@ -173,6 +173,20 @@ pub fn build_scene_atlas_and_models(
         }
     }
 
+    let mut warnings = Vec::new();
+    for skipped in &baked_atlas.skipped_animations {
+        warnings.push(format!(
+            "Skipped animated texture '{}' (strip {}x{}, {} frames of {}x{}): exceeds max scene atlas size ({}x{}), using static Frame 0.",
+            skipped.sprite_id,
+            skipped.strip_width,
+            skipped.strip_height,
+            skipped.frame_count,
+            skipped.frame_width,
+            skipped.frame_height,
+            skipped.max_width,
+            skipped.max_height,
+        ));
+    }
     let mini_atlas_map = baked_atlas.address_map;
 
     // 2. Tree-shake models & remap UV coordinates to mini-atlas
@@ -230,7 +244,6 @@ pub fn build_scene_atlas_and_models(
         has_dynamic_entities,
     };
 
-    let mut warnings = Vec::new();
     for rule in &ctm_rules {
         for tile in rule.tiles.iter().flatten() {
             if mini_atlas_map.lookup(tile).is_none() {

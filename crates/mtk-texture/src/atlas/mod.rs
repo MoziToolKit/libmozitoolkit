@@ -8,7 +8,9 @@ pub(crate) use address_map::AtlasKeySource;
 pub use address_map::{
     AtlasAddressMap, AtlasChunkMeta, AtlasSpriteLocation, AtlasTextureSlot, SpriteKind,
 };
-pub use builder::{AtlasBuilder, AtlasBuilderConfig, BakedAtlas, BakedAtlasChunk};
+pub use builder::{
+    AtlasBuilder, AtlasBuilderConfig, BakedAtlas, BakedAtlasChunk, SkippedAnimatedSprite,
+};
 pub use dynamic::{
     dynamic_chunk_texture_id, parse_dynamic_chunk_texture_id, DynamicAtlasChunk,
     DynamicAtlasManager, DynamicSlotInfo, DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID, DYNAMIC_ATLAS_HEIGHT,

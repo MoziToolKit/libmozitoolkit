@@ -127,6 +127,8 @@ pub struct PyPrecompileResult {
     pub package_path: String,
     #[pyo3(get)]
     pub cache_dir: String,
+    #[pyo3(get)]
+    pub warnings: Vec<String>,
     pub profile: Option<mtk_core::ExecutionProfile>,
 }
 
@@ -140,8 +142,12 @@ impl PyPrecompileResult {
 
     fn __repr__(&self) -> String {
         format!(
-            "<PrecompileResult packs={} atlas_chunks={} models={} package='{}'>",
-            self.pack_count, self.atlas_chunks, self.baked_models, self.package_path
+            "<PrecompileResult packs={} atlas_chunks={} models={} warnings={} package='{}'>",
+            self.pack_count,
+            self.atlas_chunks,
+            self.baked_models,
+            self.warnings.len(),
+            self.package_path
         )
     }
 }
@@ -221,6 +227,7 @@ impl PyAssetCache {
             inner: mtk_texture::BakedAtlas {
                 chunks: Vec::new(),
                 address_map: map,
+                skipped_animations: Vec::new(),
             },
             banner_baker,
         })
@@ -359,6 +366,7 @@ pub fn precompile_all_assets<'py>(
         fingerprint: res.fingerprint,
         package_path: res.package_path,
         cache_dir: res.cache_dir,
+        warnings: res.warnings,
         profile: res.profile,
     })
 }

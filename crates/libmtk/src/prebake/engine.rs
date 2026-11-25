@@ -56,6 +56,7 @@ pub struct PrecompileResult {
     pub fingerprint: String,
     pub package_path: String,
     pub cache_dir: String,
+    pub warnings: Vec<String>,
     pub profile: Option<mtk_core::ExecutionProfile>,
 }
 
@@ -184,6 +185,7 @@ fn precompile_all_assets_inner(
     let mut chunk_count = 0;
     let mut baked_count = 0;
     let mut baked_atlas_opt = None;
+    let mut warnings = Vec::new();
 
     let preloaded_opt = if config.compile_atlas || config.compile_models {
         Some(profiler.measure("models", "preload", |_| preload_model_and_obj_assets(stack))?)
@@ -377,6 +379,32 @@ fn precompile_all_assets_inner(
             Ok(baked_atlas)
         })?;
 
+        for skipped in &baked_atlas.skipped_animations {
+            let png_path = skipped.sprite_id.to_asset_path("textures", "png");
+            let mcmeta_path = skipped.sprite_id.to_mcmeta_asset_path("textures", "png");
+            let png_pack = stack.find_asset_pack_name(&png_path);
+            let mcmeta_pack = stack.find_asset_pack_name(&mcmeta_path);
+            let pack_desc = match (png_pack, mcmeta_pack) {
+                (Some(p), Some(m)) if p != m => format!("{p} (mcmeta: {m})"),
+                (Some(p), _) => p,
+                (None, Some(m)) => m,
+                (None, None) => "unknown pack".to_string(),
+            };
+            warnings.push(format!(
+                "Skipped animated texture '{}' (category '{}', strip {}x{}, {} frames of {}x{}) from pack '{}': exceeds max atlas size ({}x{}), using static Frame 0.",
+                skipped.sprite_id,
+                skipped.category,
+                skipped.strip_width,
+                skipped.strip_height,
+                skipped.frame_count,
+                skipped.frame_width,
+                skipped.frame_height,
+                pack_desc,
+                skipped.max_width,
+                skipped.max_height,
+            ));
+        }
+
         chunk_count = baked_atlas.chunks.len();
         baked_atlas_opt = Some(baked_atlas);
     }
@@ -474,6 +502,7 @@ fn precompile_all_assets_inner(
         fingerprint,
         package_path: package_path.to_string_lossy().to_string(),
         cache_dir: cache_dir_str,
+        warnings,
         profile: Some(profile),
     })
 }

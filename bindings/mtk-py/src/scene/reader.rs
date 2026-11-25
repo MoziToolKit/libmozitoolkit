@@ -87,6 +87,7 @@ impl PyScenePackageReader {
             inner: mtk_texture::BakedAtlas {
                 chunks: Vec::new(),
                 address_map: m,
+                skipped_animations: Vec::new(),
             },
             banner_baker: None,
         });

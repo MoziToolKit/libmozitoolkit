@@ -54,6 +54,7 @@ fn decode_baked_atlas_updates_mapping_metadata() {
             aux: None,
         }],
         address_map,
+        skipped_animations: Vec::new(),
     };
 
     let summary = decode_baked_atlas(&mut atlas).expect("decode atlas");
@@ -118,6 +119,7 @@ fn decode_baked_atlas_without_companions_leaves_metadata_empty() {
             aux: None,
         }],
         address_map,
+        skipped_animations: Vec::new(),
     };
 
     let summary = decode_baked_atlas(&mut atlas).expect("decode atlas");
@@ -181,6 +183,7 @@ fn decode_baked_atlas_injects_preset_transmission_and_ior_for_water() {
             aux: None,
         }],
         address_map,
+        skipped_animations: Vec::new(),
     };
 
     let summary = decode_baked_atlas(&mut atlas).expect("decode atlas");
@@ -262,6 +265,7 @@ fn decode_baked_atlas_injects_preset_for_glass_and_preserves_specular_when_prese
             aux: None,
         }],
         address_map,
+        skipped_animations: Vec::new(),
     };
 
     let summary = decode_baked_atlas(&mut atlas).expect("decode atlas");
@@ -365,6 +369,7 @@ fn decode_baked_atlas_matches_ctm_glass_tiles_and_rules() {
             aux: None,
         }],
         address_map,
+        skipped_animations: Vec::new(),
     };
 
     let summary = decode_baked_atlas(&mut atlas).expect("decode atlas");

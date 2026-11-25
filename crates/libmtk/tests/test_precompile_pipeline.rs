@@ -205,3 +205,75 @@ fn cache_header_validation_rejects_a_stale_manifest_format_version() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn precompile_oversized_animated_sprite_falls_back_to_static_with_warning() {
+    let mut stack = ResourcePackStack::new();
+
+    let mut vanilla = MemoryPack::new("TestVanilla");
+    let stone_img = image::RgbaImage::from_pixel(16, 16, image::Rgba([128, 128, 128, 255]));
+    let mut stone_png = Vec::new();
+    stone_img
+        .write_to(
+            &mut std::io::Cursor::new(&mut stone_png),
+            image::ImageFormat::Png,
+        )
+        .unwrap();
+    vanilla.insert("assets/minecraft/textures/block/stone.png", stone_png);
+    vanilla.insert(
+        "assets/minecraft/models/block/stone.json",
+        br##"{"textures":{"all":"minecraft:block/stone"},"elements":[{"from":[0,0,0],"to":[16,16,16],"faces":{"up":{"texture":"#all"}}}]}"##.to_vec(),
+    );
+    vanilla.insert(
+        "assets/minecraft/blockstates/stone.json",
+        br#"{"variants":{"":{"model":"minecraft:block/stone"}}}"#.to_vec(),
+    );
+    stack.append_pack(Box::new(vanilla));
+
+    let mut mod_pack = MemoryPack::new("OversizedAnimPack");
+    let giant_img = image::RgbaImage::from_pixel(64, 256, image::Rgba([0, 200, 255, 255]));
+    let mut giant_png = Vec::new();
+    giant_img
+        .write_to(
+            &mut std::io::Cursor::new(&mut giant_png),
+            image::ImageFormat::Png,
+        )
+        .unwrap();
+    mod_pack.insert("assets/minecraft/textures/item/giant_anim.png", giant_png);
+    mod_pack.insert(
+        "assets/minecraft/textures/item/giant_anim.png.mcmeta",
+        br#"{"animation":{"frametime":4,"frames":[0,1,2,3,2,1]}}"#.to_vec(),
+    );
+    stack.push_pack(Box::new(mod_pack));
+
+    let temp_cache_dir =
+        std::env::temp_dir().join(format!("mtk_test_oversized_anim_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&temp_cache_dir);
+
+    let config = PrecompileConfig {
+        max_atlas_width: 256,
+        max_atlas_height: 256,
+        atlas_category: "blocks".to_string(),
+        compile_atlas: true,
+        compile_models: true,
+        num_threads: None,
+        resolver_overrides: None,
+    };
+
+    let result = precompile_all_assets(&stack, &temp_cache_dir, &config).expect(
+        "oversized animated item sprite must fall back to static rather than failing precompile",
+    );
+    assert!(result.success);
+    assert_eq!(result.warnings.len(), 1);
+    assert!(result.warnings[0].contains("minecraft:item/giant_anim"));
+    assert!(result.warnings[0].contains("OversizedAnimPack"));
+    assert!(result.warnings[0].contains("static Frame 0"));
+
+    let reader = AssetCacheReader::open(&result.package_path).unwrap();
+    let atlas_map = reader.load_atlas_mapping().unwrap();
+    let loc = mtk_resource::ResourceLocation::parse("minecraft:item/giant_anim").unwrap();
+    assert!(atlas_map.lookup_static(&loc).is_some());
+    assert!(atlas_map.lookup_animated(&loc).is_none());
+
+    let _ = fs::remove_dir_all(&temp_cache_dir);
+}

@@ -202,3 +202,53 @@ fn baked_metadata_no_longer_lists_frames() {
     );
     assert_eq!(animation.frametime, 2, "timing must survive the reorder");
 }
+
+#[test]
+fn oversized_animated_sprite_falls_back_to_static_and_records_skip() {
+    let big_id = ResourceLocation::parse("minecraft:item/giant_eyes").unwrap();
+    let small_id = ResourceLocation::parse("minecraft:block/small_anim").unwrap();
+
+    let mut big_albedo = RgbaBuffer::new(64, 256); // 4 frames of 64x64 -> strip height 260 > 128
+    big_albedo.set_pixel(0, 0, [10, 20, 30, 255]);
+    let big_sprite = DecodedSprite {
+        sprite_id: big_id.clone(),
+        albedo: big_albedo,
+        normal: None,
+        specular: None,
+        overlay: None,
+        emissive: None,
+        normal_gl: None,
+        orm: None,
+        aux: None,
+        frame_width: 64,
+        frame_height: 64,
+        frame_count: 4,
+        metadata: Some(AnimationMetadata {
+            frametime: 2,
+            ..Default::default()
+        }),
+    };
+
+    let small_sprite = animated_sprite("minecraft:block/small_anim", None);
+
+    let baked = AtlasBuilder::new(AtlasBuilderConfig::production(128, 128, 0))
+        .build_from_sprites_with_category(vec![big_sprite, small_sprite], "items")
+        .expect("oversized animated strip must fall back to static rather than aborting bake");
+
+    // Static Frame 0 must remain available in `sprites`, while `anim_sprites` skips only the oversized strip.
+    assert!(baked.address_map.lookup_static(&big_id).is_some());
+    assert!(baked.address_map.lookup_animated(&big_id).is_none());
+    assert!(baked.address_map.lookup_animated(&small_id).is_some());
+
+    assert_eq!(baked.skipped_animations.len(), 1);
+    let skipped = &baked.skipped_animations[0];
+    assert_eq!(skipped.sprite_id, big_id);
+    assert_eq!(skipped.category, "items");
+    assert_eq!(skipped.strip_width, 68);
+    assert_eq!(skipped.strip_height, 260);
+    assert_eq!(skipped.frame_width, 64);
+    assert_eq!(skipped.frame_height, 64);
+    assert_eq!(skipped.frame_count, 4);
+    assert_eq!(skipped.max_width, 128);
+    assert_eq!(skipped.max_height, 128);
+}

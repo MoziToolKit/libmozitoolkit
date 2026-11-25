@@ -14,8 +14,8 @@ pub use atlas::{
     dynamic_chunk_texture_id, parse_dynamic_chunk_texture_id, AtlasAddressMap, AtlasBuilder,
     AtlasBuilderConfig, AtlasChunkMeta, AtlasSpriteLocation, AtlasTextureSlot, BakedAtlas,
     BakedAtlasChunk, DynamicAtlasChunk, DynamicAtlasManager, DynamicSlotInfo, IorEncoding,
-    NormalConvention, PbrLayout, PbrMeta, PbrSourceFormat, RoughnessSpace, SpriteKind,
-    DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID, DYNAMIC_ATLAS_HEIGHT, DYNAMIC_ATLAS_WIDTH,
+    NormalConvention, PbrLayout, PbrMeta, PbrSourceFormat, RoughnessSpace, SkippedAnimatedSprite,
+    SpriteKind, DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID, DYNAMIC_ATLAS_HEIGHT, DYNAMIC_ATLAS_WIDTH,
     DYNAMIC_CHUNK_START, FALLBACK_TEXTURE_KEY,
 };
 pub use banner::BannerBaker;

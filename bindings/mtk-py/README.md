@@ -120,7 +120,7 @@ Python 模块名：`libmtk_py`
 - **`path_provides_vanilla_client(path: str) -> bool`**：严格门禁检测路径/ZIP 是否提供原版客户端完整权威资产（核心方块模型、状态与纹理）。
 - **`evaluate_cache_status(cache_dir, stack_pack_count, has_vanilla, expected_fingerprint=None) -> str`**：缓存状态判定门禁（返回 `"NO_PACKS"` | `"NO_VANILLA"` | `"READY"` | `"STALE"` | `"MISSING"`）。
 - **`BakedAtlas`**：烘焙图集容器；测试/开发用的 `AtlasBuilder` 位于 `libmtk_py.unstable.testing`。
-- **`precompile_all_assets(..., resolver_overrides_json=None)`**：端到端一键无头预烘焙管线；可传入 Python 维护的兼容规则 JSON。
+- **`precompile_all_assets(..., resolver_overrides_json=None)`**：端到端一键无头预烘焙管线；可传入 Python 维护的兼容规则 JSON；返回的 `PrecompileResult.warnings` 包含超出单张图集上限而回退静态第 0 帧的动画材质告警列表。
 - **像素分析**：`batch_analyze_transparent_faces_f32`；单点采样 `sample_uv_alpha_f32` 位于 `unstable.testing`。
 
 ### 2.8 生物群系与材质解析 (`material`)

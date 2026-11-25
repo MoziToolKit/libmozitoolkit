@@ -81,11 +81,27 @@ impl BakedAtlasChunk {
     }
 }
 
+/// Metadata for an animated sprite whose full strip exceeded the atlas size limit
+/// and therefore fell back to its static Frame 0 slot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkippedAnimatedSprite {
+    pub sprite_id: mtk_resource::ResourceLocation,
+    pub category: String,
+    pub strip_width: u32,
+    pub strip_height: u32,
+    pub frame_width: u32,
+    pub frame_height: u32,
+    pub frame_count: u32,
+    pub max_width: u32,
+    pub max_height: u32,
+}
+
 /// Complete output containing all baked atlas sheets and authoritative address table.
 #[derive(Debug, Clone)]
 pub struct BakedAtlas {
     pub chunks: Vec<BakedAtlasChunk>,
     pub address_map: AtlasAddressMap,
+    pub skipped_animations: Vec<SkippedAnimatedSprite>,
 }
 
 impl BakedAtlas {
