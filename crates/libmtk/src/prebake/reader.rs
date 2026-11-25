@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use mtk_material::BiomeResolver;
 use mtk_model::BakedModelDatabase;
-use mtk_package::{MtkPackageReader, CURRENT_VERSION_MAJOR};
+use mtk_package::{MtkPackageReader, PackageProfile, CURRENT_VERSION_MAJOR};
 use mtk_texture::AtlasAddressMap;
 
 use crate::MtkError;
@@ -44,6 +44,28 @@ impl AssetCacheReader {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, MtkError> {
         let reader = MtkPackageReader::open_file(path)?;
         Ok(Self { reader })
+    }
+
+    /// Parses an in-memory `.mtkcache` package buffer and validates its profile & format version.
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, MtkError> {
+        let reader = MtkPackageReader::from_bytes(bytes)?;
+        let profile = reader.header().profile;
+        if profile != PackageProfile::AssetCache {
+            return Err(MtkError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "Invalid package profile for asset cache: expected AssetCache, found {profile:?}"
+                ),
+            )));
+        }
+        let instance = Self { reader };
+        let manifest = instance.manifest()?;
+        if manifest.format_version != ASSET_CACHE_FORMAT_VERSION {
+            return Err(MtkError::UnsupportedCacheFormatVersion {
+                found: manifest.format_version,
+            });
+        }
+        Ok(instance)
     }
 
     /// Checks whether `path` is a cache package this build can serve for `fingerprint`.
@@ -108,6 +130,23 @@ impl AssetCacheReader {
         self.contents()
             .atlas_mapping_json()?
             .ok_or_else(|| missing(crate::chunks::ATLAS_MAPPING))
+    }
+
+    /// Reads raw PNG bytes for an atlas texture chunk without decoding pixels in Rust.
+    pub fn read_texture_png(&self, chunk_id: &str) -> Result<Vec<u8>, MtkError> {
+        self.contents().texture_png(chunk_id)
+    }
+
+    /// Lists all atlas texture chunk identifiers present in this cache.
+    pub fn texture_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .reader
+            .iter_chunk_identifiers(*b"ATLS")
+            .filter(|id| id.starts_with(crate::chunks::ATLAS_TEXTURE_PREFIX))
+            .map(str::to_string)
+            .collect();
+        names.sort();
+        names
     }
 
     /// Reads and decodes a texture chunk (PNG) directly into an RgbaBuffer in memory.

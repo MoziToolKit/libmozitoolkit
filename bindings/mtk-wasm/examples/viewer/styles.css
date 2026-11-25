@@ -1,16 +1,18 @@
 :root {
   --bg-light: #eef2f6;
   --bg-dark: #0e131a;
-  --surface-light: rgba(255, 255, 255, 0.86);
-  --surface-dark: rgba(18, 24, 33, 0.84);
-  --border-light: rgba(15, 23, 42, 0.14);
-  --border-dark: rgba(226, 232, 240, 0.14);
+  --surface-light: rgba(255, 255, 255, 0.88);
+  --surface-dark: rgba(18, 24, 33, 0.86);
+  --border-light: rgba(15, 23, 42, 0.16);
+  --border-dark: rgba(226, 232, 240, 0.16);
   --text-light: #0f172a;
   --text-dark: #e2e8f0;
   --muted-light: #475569;
   --muted-dark: #94a3b8;
-  --accent-light: #16a34a;
+  --accent-light: #15803d;
   --accent-dark: #4ade80;
+  --danger-light: #b91c1c;
+  --danger-dark: #f87171;
 
   --bg: var(--bg-light);
   --surface: var(--surface-light);
@@ -18,6 +20,7 @@
   --text: var(--text-light);
   --muted: var(--muted-light);
   --accent: var(--accent-light);
+  --danger: var(--danger-light);
 
   @media (prefers-color-scheme: dark) {
     --bg: var(--bg-dark);
@@ -26,6 +29,7 @@
     --text: var(--text-dark);
     --muted: var(--muted-dark);
     --accent: var(--accent-dark);
+    --danger: var(--danger-dark);
   }
 
   @supports (color: light-dark(white, black)) {
@@ -35,6 +39,7 @@
     --text: light-dark(var(--text-light), var(--text-dark));
     --muted: light-dark(var(--muted-light), var(--muted-dark));
     --accent: light-dark(var(--accent-light), var(--accent-dark));
+    --danger: light-dark(var(--danger-light), var(--danger-dark));
   }
 
   color-scheme: light dark;
@@ -57,13 +62,26 @@ body {
   color: var(--text);
 }
 
-.sr-only {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+.visually-hidden:where(:not(:focus-within, :active)) {
+  position: absolute !important;
+  clip-path: inset(50%) !important;
+  overflow: hidden !important;
+  inline-size: 1px !important;
+  block-size: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  white-space: nowrap !important;
+}
+
+:where(button, select, input, summary, .btn):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input:focus-visible + label.btn {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .app-shell {
@@ -88,7 +106,8 @@ body {
 .brand {
   display: flex;
   align-items: safe center;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.65rem;
   min-inline-size: 0;
 }
 
@@ -109,30 +128,50 @@ body {
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: safe center;
   gap: 0.5rem;
+}
+
+.file-action {
+  position: relative;
+  display: inline-flex;
 }
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-block-size: 2.25rem;
   padding: 0.42rem 0.85rem;
   border-radius: 0.5rem;
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text);
+  font: inherit;
   font-size: 0.85rem;
   font-weight: 500;
   cursor: pointer;
   user-select: none;
 }
 
+.btn.small {
+  min-block-size: 2rem;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.8rem;
+}
+
 .btn.primary {
   background: var(--accent);
-  color: #062814;
+  color: #ffffff;
   border-color: transparent;
   font-weight: 600;
+}
+
+@media (prefers-color-scheme: dark) {
+  .btn.primary {
+    color: #052e16;
+  }
 }
 
 .btn:disabled {
@@ -167,7 +206,7 @@ body {
 }
 
 .drop-card {
-  max-inline-size: 28rem;
+  max-inline-size: 30rem;
   padding: 1.5rem 2rem;
   border-radius: 1rem;
   border: 2px dashed var(--border);
@@ -177,7 +216,7 @@ body {
 }
 
 .drop-title {
-  margin: 0 0 0.4rem;
+  margin: 0 0 0.45rem;
   font-size: 1.05rem;
   font-weight: 600;
 }
@@ -186,6 +225,7 @@ body {
   margin: 0;
   font-size: 0.85rem;
   color: var(--muted);
+  line-height: 1.45;
 }
 
 .viewport-wrap.drag-active .drop-card {
@@ -196,12 +236,18 @@ body {
   position: absolute;
   inset-block-start: 0.75rem;
   inset-inline-end: 0.75rem;
-  inline-size: min(19.5rem, calc(100% - 1.5rem));
+  inline-size: min(21rem, calc(100% - 1.5rem));
+  max-block-size: calc(100% - 1.5rem);
+  overflow-y: auto;
   border-radius: 0.75rem;
   border: 1px solid var(--border);
   background: var(--surface);
   backdrop-filter: blur(12px);
   font-size: 0.82rem;
+}
+
+.hud-panel details + details {
+  border-block-start: 1px solid var(--border);
 }
 
 .hud-panel summary {
@@ -214,7 +260,83 @@ body {
 .hud-body {
   padding: 0 0.85rem 0.85rem;
   display: grid;
-  gap: 0.75rem;
+  gap: 0.7rem;
+}
+
+.save-form {
+  margin: 0;
+}
+
+.bounds-fieldset {
+  margin: 0;
+  padding: 0.6rem 0.65rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.bounds-fieldset legend {
+  padding-inline: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.field-row {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.field-row label,
+.field-cell label {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.field-row select,
+.field-cell input {
+  inline-size: 100%;
+  min-block-size: 2rem;
+  padding: 0.25rem 0.45rem;
+  border-radius: 0.4rem;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: max(0.85rem, 12px);
+}
+
+.field-cell input:user-invalid {
+  border-color: var(--danger);
+}
+
+.bounds-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.field-cell {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.field-error {
+  margin: 0;
+  min-block-size: 1em;
+  font-size: 0.75rem;
+  color: var(--danger);
+}
+
+.field-error:empty {
+  display: none;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.45rem;
+  justify-content: flex-end;
 }
 
 .control-row {
@@ -226,6 +348,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.45rem;
+  min-block-size: 1.5rem;
   cursor: pointer;
 }
 
@@ -249,6 +372,11 @@ body {
   gap: 0.28rem 0.75rem;
 }
 
+.compact-grid {
+  padding-block-start: 0;
+  border-block-start: 0;
+}
+
 .stats-grid dt {
   color: var(--muted);
 }
@@ -256,5 +384,15 @@ body {
 .stats-grid dd {
   margin: 0;
   text-align: end;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+@supports not (accent-color: var(--accent)) {
+  .control-row input[type="checkbox"] {
+    inline-size: 1.1rem;
+    block-size: 1.1rem;
+  }
 }

@@ -47,18 +47,27 @@ impl RgbaBuffer {
         Ok(Self::from_image_buffer(rgba))
     }
 
-    /// Encode buffer into PNG byte vector without cloning pixel buffer.
-    pub fn to_png_bytes(&self) -> Result<Vec<u8>, TextureError> {
+    /// Encode raw RGBA pixel bytes into a PNG byte vector without cloning the source slice.
+    pub fn encode_png_bytes(
+        width: u32,
+        height: u32,
+        pixels: &[u8],
+    ) -> Result<Vec<u8>, TextureError> {
         let mut cursor = Cursor::new(Vec::new());
         let encoder = image::codecs::png::PngEncoder::new(&mut cursor);
         image::ImageEncoder::write_image(
             encoder,
-            &self.pixels,
-            self.width,
-            self.height,
+            pixels,
+            width,
+            height,
             image::ExtendedColorType::Rgba8,
         )?;
         Ok(cursor.into_inner())
+    }
+
+    /// Encode buffer into PNG byte vector without cloning pixel buffer.
+    pub fn to_png_bytes(&self) -> Result<Vec<u8>, TextureError> {
+        Self::encode_png_bytes(self.width, self.height, &self.pixels)
     }
 
     #[inline]

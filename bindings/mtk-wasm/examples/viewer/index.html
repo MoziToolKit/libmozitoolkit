@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MoziToolKit Web Viewer — .mtkscene 3D Preview</title>
+  <title>MoziToolKit Web Viewer — .mtkscene & Minecraft 存档 3D 预览</title>
   <link rel="stylesheet" href="./styles.css">
   <script type="importmap">
     {
@@ -18,12 +18,20 @@
   <div class="app-shell">
     <header class="topbar">
       <div class="brand">
-        <h1>MoziToolKit <code>.mtkscene</code> Viewer</h1>
+        <h1>MoziToolKit Web 3D Viewer</h1>
         <span id="status-badge" class="badge" role="status" aria-live="polite">WASM 初始化中…</span>
       </div>
       <div class="actions">
-        <label class="btn primary" for="file-input">选择 .mtkscene</label>
-        <input id="file-input" type="file" accept=".mtkscene" class="sr-only">
+        <div class="file-action">
+          <input id="file-scene" name="scene-file" type="file" accept=".mtkscene" class="visually-hidden">
+          <label class="btn primary" for="file-scene">打开 .mtkscene</label>
+        </div>
+        <div class="file-action">
+          <input id="file-cache" name="cache-file" type="file" accept=".mtkcache" class="visually-hidden">
+          <label class="btn" for="file-cache">选择 .mtkcache</label>
+        </div>
+        <button id="btn-pick-save" type="button" class="btn">选择存档目录</button>
+        <input id="dir-save" name="save-dir" type="file" webkitdirectory directory multiple class="visually-hidden" aria-label="选择 Minecraft 存档目录">
         <button id="btn-reset-cam" type="button" class="btn" disabled>重置视角</button>
       </div>
     </header>
@@ -33,32 +41,85 @@
 
       <div id="empty-overlay" class="empty-overlay">
         <div class="drop-card">
-          <p class="drop-title">拖放 <code>.mtkscene</code> 文件到此处</p>
-          <p class="drop-sub">或点击右上角按钮选择本地文件（纯浏览器端 WASM 解码与 Three.js PBR 渲染）</p>
+          <p class="drop-title">拖放 <code>.mtkscene</code>、<code>.mtkcache</code> 或存档文件夹到此处</p>
+          <p class="drop-sub">支持单文件 <code>.mtkscene</code> 独立预览，也支持加载 <code>.mtkcache</code> + 本地 Minecraft 存档目录按选区即时网格化。</p>
         </div>
       </div>
 
-      <aside class="hud-panel" aria-label="场景信息与渲染选项">
+      <aside class="hud-panel" aria-label="存档控制与场景统计">
+        <details id="save-details">
+          <summary>存档与资产缓存</summary>
+          <div class="hud-body">
+            <dl class="stats-grid compact-grid">
+              <dt>资产缓存</dt><dd id="stat-cache">未加载</dd>
+              <dt>存档目录</dt><dd id="stat-save">未选择</dd>
+              <dt>玩家皮肤</dt><dd id="stat-skins">—</dd>
+            </dl>
+            <form id="save-form" class="save-form" novalidate>
+              <fieldset class="bounds-fieldset">
+                <legend>存档维度与空间选区</legend>
+                <div class="field-row">
+                  <label for="save-dim">维度</label>
+                  <select id="save-dim" name="dimension" disabled>
+                    <option value="overworld">overworld</option>
+                  </select>
+                </div>
+                <div class="bounds-grid">
+                  <div class="field-cell">
+                    <label for="bound-min-x">Min X</label>
+                    <input id="bound-min-x" name="minX" type="text" inputmode="numeric" pattern="-?\d+" value="-64" required>
+                  </div>
+                  <div class="field-cell">
+                    <label for="bound-min-y">Min Y</label>
+                    <input id="bound-min-y" name="minY" type="text" inputmode="numeric" pattern="-?\d+" value="-64" required>
+                  </div>
+                  <div class="field-cell">
+                    <label for="bound-min-z">Min Z</label>
+                    <input id="bound-min-z" name="minZ" type="text" inputmode="numeric" pattern="-?\d+" value="-64" required>
+                  </div>
+                  <div class="field-cell">
+                    <label for="bound-max-x">Max X</label>
+                    <input id="bound-max-x" name="maxX" type="text" inputmode="numeric" pattern="-?\d+" value="64" required>
+                  </div>
+                  <div class="field-cell">
+                    <label for="bound-max-y">Max Y</label>
+                    <input id="bound-max-y" name="maxY" type="text" inputmode="numeric" pattern="-?\d+" value="320" required>
+                  </div>
+                  <div class="field-cell">
+                    <label for="bound-max-z">Max Z</label>
+                    <input id="bound-max-z" name="maxZ" type="text" inputmode="numeric" pattern="-?\d+" value="64" required>
+                  </div>
+                </div>
+                <p id="bounds-error" class="field-error" role="status" aria-live="polite"></p>
+                <div class="form-actions">
+                  <button id="btn-spawn-bounds" type="button" class="btn small" disabled>出生点 ±64</button>
+                  <button id="btn-load-save" type="submit" class="btn small primary" disabled>载入选区</button>
+                </div>
+              </fieldset>
+            </form>
+          </div>
+        </details>
+
         <details open>
           <summary>渲染与场景统计</summary>
           <div class="hud-body">
             <div class="control-row">
-              <label><input id="opt-ao" type="checkbox" checked> 顶点环境光遮蔽 (AO)</label>
-              <label><input id="opt-fluids" type="checkbox" checked> 流体网格</label>
-              <label><input id="opt-ctm" type="checkbox" checked> CTM 连接纹理</label>
-              <label><input id="opt-anim" type="checkbox" checked> 动画纹理</label>
+              <label for="opt-ao"><input id="opt-ao" name="enableAo" type="checkbox" checked> <span>顶点环境光遮蔽 (AO)</span></label>
+              <label for="opt-fluids"><input id="opt-fluids" name="meshFluids" type="checkbox" checked> <span>流体网格</span></label>
+              <label for="opt-ctm"><input id="opt-ctm" name="enableCtm" type="checkbox" checked> <span>CTM 连接纹理</span></label>
+              <label for="opt-anim"><input id="opt-anim" name="enableAnim" type="checkbox" checked> <span>动画纹理</span></label>
             </div>
             <div class="slider-row">
               <label for="opt-sun">日光强度 <output id="sun-val">2.4</output></label>
-              <input id="opt-sun" type="range" min="0.2" max="5.0" step="0.1" value="2.4">
+              <input id="opt-sun" name="sunIntensity" type="range" min="0.2" max="5.0" step="0.1" value="2.4">
             </div>
             <dl class="stats-grid" id="scene-stats">
               <dt>体素数</dt><dd id="stat-voxels">—</dd>
               <dt>包围盒</dt><dd id="stat-bounds">—</dd>
               <dt>批次数</dt><dd id="stat-batches">—</dd>
               <dt>三角形</dt><dd id="stat-tris">—</dd>
-              <dt>WASM 解析</dt><dd id="stat-open-ms">—</dd>
-              <dt>网格构建</dt><dd id="stat-mesh-ms">—</dd>
+              <dt>解析耗时</dt><dd id="stat-open-ms">—</dd>
+              <dt>网格耗时</dt><dd id="stat-mesh-ms">—</dd>
             </dl>
           </div>
         </details>

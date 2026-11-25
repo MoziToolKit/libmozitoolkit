@@ -8,19 +8,13 @@ use mtk_cull::{FaceCuller, GlassCullMode, LeavesCullMode};
 use mtk_material::{BiomeResolver, VanillaColormaps};
 use mtk_model::BakedModelDatabase;
 use mtk_resource::CtmSolver;
-use mtk_texture::{AtlasAddressMap, AtlasChunkMeta};
-use mtk_voxel::{CoordinateSystem, MesherConfig, VoxelWorld};
-use serde::Serialize;
+use mtk_texture::AtlasAddressMap;
+use mtk_voxel::VoxelWorld;
 use wasm_bindgen::prelude::*;
 
-use crate::render::{build_render_scene, WasmRenderScene};
-
-#[derive(Serialize)]
-struct WasmSceneMetadataPayload<'a> {
-    manifest: &'a PackageManifest,
-    texture_names: &'a [String],
-    atlas_chunks: &'a [AtlasChunkMeta],
-}
+use crate::render::{
+    build_mesher_config, build_render_scene, serialize_metadata_json, WasmRenderScene,
+};
 
 /// Self-contained `.mtkscene` viewer handle backed by in-memory package bytes.
 ///
@@ -89,17 +83,11 @@ impl WasmScenePackage {
 
     /// Returns manifest, texture chunk names, and atlas chunk descriptors as JSON.
     pub fn metadata_json(&self) -> Result<String, JsValue> {
-        let atlas_chunks: &[AtlasChunkMeta] = self
-            .atlas_mapping
-            .as_deref()
-            .map(|m| m.chunks.as_slice())
-            .unwrap_or(&[]);
-        let payload = WasmSceneMetadataPayload {
-            manifest: &self.metadata,
-            texture_names: &self.texture_names,
-            atlas_chunks,
-        };
-        serde_json::to_string(&payload).map_err(|e| JsValue::from_str(&e.to_string()))
+        serialize_metadata_json(
+            &self.metadata,
+            &self.texture_names,
+            self.atlas_mapping.as_deref(),
+        )
     }
 
     /// Returns all bundled atlas texture chunk identifiers (e.g. `"atlas/textures/blocks_chunk_001.png"`).
@@ -139,24 +127,16 @@ impl WasmScenePackage {
         let storage = sparse_voxels.reconstruct_storage();
         drop(sparse_voxels);
 
-        let use_ctm = enable_ctm.unwrap_or(true);
-        let config = MesherConfig {
-            coordinate_system: CoordinateSystem::YUpRightHanded,
-            origin_centered: true,
-            weld_vertices: false,
-            enable_ao: enable_ao.unwrap_or(true),
-            mesh_fluids: mesh_fluids.unwrap_or(true),
-            enable_animated_textures: enable_animated_textures.unwrap_or(true),
-            atlas_address_map: self.atlas_mapping.clone(),
-            biome_resolver: self.biome_resolver.clone(),
-            colormaps: self.colormaps.clone(),
-            ctm_solver: if use_ctm {
-                self.ctm_solver.clone()
-            } else {
-                None
-            },
-            ..Default::default()
-        };
+        let config = build_mesher_config(
+            enable_ao,
+            mesh_fluids,
+            enable_ctm,
+            enable_animated_textures,
+            self.atlas_mapping.clone(),
+            self.biome_resolver.clone(),
+            self.colormaps.clone(),
+            self.ctm_solver.clone(),
+        );
 
         let culler = FaceCuller::new(LeavesCullMode::Fancy, GlassCullMode::Group);
         let mut world =

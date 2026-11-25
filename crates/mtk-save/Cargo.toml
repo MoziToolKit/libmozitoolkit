@@ -12,13 +12,14 @@ glam = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true }
-rayon = { workspace = true }
+rayon = { workspace = true, optional = true }
 mtk-core = { workspace = true }
 mtk-model = { workspace = true }
 mtk-voxel = { workspace = true }
 
 [features]
-default = []
+default = ["parallel"]
+parallel = ["dep:rayon", "mtk-core/parallel", "mtk-model/parallel", "mtk-voxel/parallel"]
 serde = ["dep:serde", "mtk-core/serde", "mtk-voxel/serde"]
 
 [dev-dependencies]

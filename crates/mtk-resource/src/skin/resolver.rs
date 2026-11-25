@@ -19,6 +19,15 @@ pub(crate) fn is_valid_png_header(bytes: &[u8]) -> bool {
     bytes.len() >= 8 && &bytes[0..8] == b"\x89PNG\r\n\x1a\n"
 }
 
+/// Validates player skin PNG bytes (PNG magic signature + rejects known mirror fallback skins).
+pub fn is_valid_player_skin_png(bytes: &[u8]) -> bool {
+    if !is_valid_png_header(bytes) {
+        return false;
+    }
+    let hash = compute_sha256_hex(bytes);
+    !super::index::is_mirror_fallback_hash(&hash)
+}
+
 /// Multi-tier resolver for player and custom head skin textures.
 #[derive(Clone)]
 pub struct SkinResolver {

@@ -1,16 +1,21 @@
-//! # `mtk-wasm` (WebAssembly Bindings for Web `.mtkscene` Viewer)
+//! # `mtk-wasm` (WebAssembly Bindings for Web `.mtkscene` & Save Viewer)
 //!
 //! Provides WebAssembly bindings for loading `.mtkscene` interchange packages
-//! in the browser and emitting Three.js / WebGPU-ready `PerVertex` geometry
-//! batches with zero-copy buffer pointers and raw PNG atlas chunks.
+//! or `.mtkcache` + Minecraft save regions in the browser and emitting
+//! Three.js / WebGPU-ready `PerVertex` geometry batches with zero-copy buffer
+//! pointers and raw PNG atlas chunks.
 
+mod cache;
 mod render;
+mod save;
 mod scene;
 
 use mtk_core::threading;
 use wasm_bindgen::prelude::*;
 
+pub use cache::WasmAssetCache;
 pub use render::{WasmRenderBatch, WasmRenderScene};
+pub use save::WasmSaveWorld;
 pub use scene::WasmScenePackage;
 
 #[cfg(feature = "parallel")]
@@ -414,5 +419,177 @@ mod tests {
         assert_eq!(batch.colors_len(), v_count * 4);
         assert_eq!(batch.tint_weights_len(), v_count * 2);
         assert_eq!(batch.indices_len(), batch.triangle_count() * 3);
+    }
+
+    #[test]
+    fn test_save_and_cache_parity_against_untitled_mtkscene() {
+        let cache_path = std::path::Path::new(
+            "/Users/jaxlocke/Library/Application Support/Blender/5.2/extensions/.user/vscode_development/MoziToolKit/cache/mtk_fp_58d0c7fee81ad3bf.mtkcache",
+        );
+        let save_dir = std::path::Path::new(
+            "/Users/jaxlocke/Library/Application Support/PrismLauncher/instances/26.2/minecraft/saves/新的世界",
+        );
+        let scene_path = std::path::Path::new("/Users/jaxlocke/Untitled.mtkscene");
+        if !cache_path.exists() || !save_dir.exists() || !scene_path.exists() {
+            println!("SKIP test_save_and_cache_parity_against_untitled_mtkscene: host test assets missing");
+            return;
+        }
+
+        let cache_bytes = std::fs::read(cache_path).expect("read mtkcache");
+        let cache = WasmAssetCache::from_bytes(&cache_bytes).expect("open WasmAssetCache");
+
+        // Collect normalized save-relative file paths just as browser webkitdirectory/FSA would.
+        let mut rel_paths = Vec::new();
+        let mut stack = vec![save_dir.to_path_buf()];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).expect("read_dir").flatten() {
+                let p = entry.path();
+                if p.is_dir() {
+                    stack.push(p);
+                } else if let Ok(rel) = p.strip_prefix(save_dir) {
+                    rel_paths.push(rel.to_string_lossy().replace('\\', "/"));
+                }
+            }
+        }
+        let dims = mtk_save::SaveLoader::discover_dimensions_from_paths(
+            rel_paths.iter().map(String::as_str),
+        );
+        assert!(dims.contains(&"overworld".to_string()), "dims={dims:?}");
+
+        let level_bytes = std::fs::read(save_dir.join("level.dat")).expect("read level.dat");
+        let level = mtk_save::LevelData::from_bytes(&level_bytes).expect("parse level.dat");
+        assert!(!level.level_name.is_empty());
+
+        let min_b = glam::IVec3::new(-64, -64, -64);
+        let max_b = glam::IVec3::new(64, 320, 64);
+        let plan = mtk_save::SaveLoader::plan_dimension_region_files(
+            "overworld",
+            min_b,
+            max_b,
+            rel_paths.iter().map(String::as_str),
+        );
+        assert!(!plan.regions.is_empty());
+
+        let loaded_mca: Vec<(i32, i32, Vec<u8>)> = plan
+            .regions
+            .iter()
+            .map(|r| {
+                (
+                    r.rx,
+                    r.rz,
+                    std::fs::read(save_dir.join(&r.path)).expect("read mca"),
+                )
+            })
+            .collect();
+        let region_refs: Vec<mtk_save::RegionBytes<'_>> = loaded_mca
+            .iter()
+            .map(|(rx, rz, data)| mtk_save::RegionBytes {
+                rx: *rx,
+                rz: *rz,
+                data,
+            })
+            .collect();
+        let mut ext_map = HashMap::new();
+        for ext in &plan.external_chunks {
+            ext_map.insert(
+                (ext.cx, ext.cz),
+                std::fs::read(save_dir.join(&ext.path)).expect("read mcc"),
+            );
+        }
+
+        let mut save_world = WasmSaveWorld::from_cache_for_test(&cache).expect("new WasmSaveWorld");
+        let summary = save_world
+            .load_regions_internal(&region_refs, &ext_map, min_b, max_b)
+            .expect("load_regions");
+        let pending_skins = save_world.collect_pending_skin_requests();
+        let mut save_render = save_world
+            .build_render_scene_internal(Some(true), Some(true), Some(true), Some(true))
+            .expect("build save render scene");
+
+        // Compare against Untitled.mtkscene exported from the same selection.
+        let scene_bytes = std::fs::read(scene_path).expect("read Untitled.mtkscene");
+        let scene_pkg = WasmScenePackage::from_bytes(&scene_bytes).expect("open WasmScenePackage");
+        let scene_meta_json = scene_pkg.metadata_json().expect("scene meta");
+        let scene_meta: serde_json::Value = serde_json::from_str(&scene_meta_json).unwrap();
+        let mut scene_render = scene_pkg
+            .build_render_scene(Some(true), Some(true), Some(true), Some(true))
+            .expect("build scene render");
+
+        println!(
+            "PARITY COMPARISON:\n  save summary: sections={}, voxels={}, bounds={:?}, pending_skins={}\n  save render : batches={}, verts={}, tris={}\n  scene meta  : voxels={}, bounds={}\n  scene render: batches={}, verts={}, tris={}",
+            summary.loaded_sections,
+            summary.voxel_count,
+            summary.bounds,
+            pending_skins.len(),
+            save_render.batch_count(),
+            save_render.total_vertices(),
+            save_render.total_triangles(),
+            scene_meta["manifest"]["voxel_count"],
+            scene_meta["manifest"]["bounds"],
+            scene_render.batch_count(),
+            scene_render.total_vertices(),
+            scene_render.total_triangles(),
+        );
+
+        let save_batch_summary: Vec<(i32, usize, usize, Option<String>)> = (0..save_render
+            .batch_count())
+            .map(|i| {
+                let b = save_render.take_batch(i).unwrap();
+                (
+                    b.chunk_id(),
+                    b.vertex_count(),
+                    b.triangle_count(),
+                    b.albedo_chunk_id(),
+                )
+            })
+            .collect();
+        let scene_batch_summary: Vec<(i32, usize, usize, Option<String>)> = (0..scene_render
+            .batch_count())
+            .map(|i| {
+                let b = scene_render.take_batch(i).unwrap();
+                (
+                    b.chunk_id(),
+                    b.vertex_count(),
+                    b.triangle_count(),
+                    b.albedo_chunk_id(),
+                )
+            })
+            .collect();
+        println!("  save batches : {save_batch_summary:?}");
+        println!("  scene batches: {scene_batch_summary:?}");
+        println!("  pending skins: {pending_skins:?}");
+        println!("  save textures: {:?}", save_world.texture_names());
+
+        // Check dynamic entity PNG readability and assert zero collision with static entities atlas.
+        for (cid, _, _, albedo) in &save_batch_summary {
+            if *cid >= mtk_texture::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID as i32 {
+                let tex_id = albedo.as_deref().expect("dynamic albedo id");
+                assert!(tex_id.starts_with("dynamic/chunk_"));
+                let png = save_world
+                    .read_texture_png_bytes_internal(tex_id)
+                    .expect("encode dynamic atlas PNG");
+                assert!(png.starts_with(&[0x89, b'P', b'N', b'G']));
+            }
+        }
+        assert!(
+            save_world
+                .texture_names()
+                .contains(&"dynamic/chunk_65520.png".to_string()),
+            "expected dynamic/chunk_65520.png from prewarmed BannerBaker atlas"
+        );
+        assert!(save_world
+            .read_texture_png_bytes_internal("dynamic/chunk_65520.png")
+            .expect("read dynamic banner/skin atlas")
+            .starts_with(&[0x89, b'P', b'N', b'G']));
+
+        assert_eq!(
+            summary.voxel_count as u64,
+            scene_meta["manifest"]["voxel_count"].as_u64().unwrap()
+        );
+        assert_eq!(
+            save_render.total_triangles(),
+            scene_render.total_triangles()
+        );
+        assert_eq!(save_render.total_vertices(), scene_render.total_vertices());
     }
 }

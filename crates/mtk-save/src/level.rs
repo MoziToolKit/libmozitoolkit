@@ -52,8 +52,19 @@ impl LevelData {
             )));
         }
 
-        if raw.starts_with(&[0x1F, 0x8B]) {
-            let gz = GzDecoder::new(&raw[..]);
+        Self::from_bytes(&raw)
+    }
+
+    /// Parses GZip-compressed or uncompressed `level.dat` bytes.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, SaveError> {
+        if bytes.len() > MAX_LEVEL_DAT_SIZE {
+            return Err(SaveError::InvalidChunkData(format!(
+                "level.dat exceeded {MAX_LEVEL_DAT_SIZE} byte limit"
+            )));
+        }
+
+        if bytes.starts_with(&[0x1F, 0x8B]) {
+            let gz = GzDecoder::new(bytes);
             let mut decompressed = Vec::new();
             gz.take((MAX_LEVEL_DAT_SIZE as u64) + 1)
                 .read_to_end(&mut decompressed)
@@ -65,14 +76,14 @@ impl LevelData {
                     "Decompressed level.dat exceeded {MAX_LEVEL_DAT_SIZE} byte limit"
                 )));
             }
-            Self::read_from_bytes(&decompressed)
+            Self::parse_uncompressed_nbt(&decompressed)
         } else {
-            Self::read_from_bytes(&raw)
+            Self::parse_uncompressed_nbt(bytes)
         }
     }
 
-    /// Parses decompressed bytes of `level.dat` via lightweight NBT decoder.
-    pub(crate) fn read_from_bytes(bytes: &[u8]) -> Result<Self, SaveError> {
+    /// Parses uncompressed NBT payload of `level.dat`.
+    fn parse_uncompressed_nbt(bytes: &[u8]) -> Result<Self, SaveError> {
         let nbt = crate::nbt::read(&mut Cursor::new(bytes))?;
         let base = match nbt {
             Nbt::Some(b) => b,
@@ -201,7 +212,7 @@ mod tests {
     #[test]
     fn test_read_level_dat_classic_and_modern_spawn() {
         let classic_bytes = build_level_dat_nbt(None, Some([12, 72, -34]));
-        let classic = LevelData::read_from_bytes(&classic_bytes).unwrap();
+        let classic = LevelData::from_bytes(&classic_bytes).unwrap();
         assert_eq!(classic.level_name, "Test World");
         assert_eq!(classic.version_name, "26.2");
         assert_eq!(classic.data_version, 4903);
@@ -217,7 +228,7 @@ mod tests {
         assert!(old_1_8.is_pre_flattening());
 
         let modern_bytes = build_level_dat_nbt(Some([-120, 95, 440]), None);
-        let modern = LevelData::read_from_bytes(&modern_bytes).unwrap();
+        let modern = LevelData::from_bytes(&modern_bytes).unwrap();
         assert_eq!(modern.spawn, IVec3::new(-120, 95, 440));
     }
 

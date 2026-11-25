@@ -1,5 +1,6 @@
+use std::collections::HashMap;
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use flate2::read::{GzDecoder, ZlibDecoder};
@@ -40,35 +41,67 @@ impl ChunkLocation {
     }
 }
 
-/// Anvil MCA region file reader with direct sector seeking and zero unneeded decompression.
+/// Source for optional `.mcc` external oversized chunk streams.
 #[derive(Debug)]
-pub(crate) struct RegionFile {
-    dir: PathBuf,
-    file: File,
+pub(crate) enum ExternalChunkSource<'a> {
+    Dir(PathBuf),
+    Memory(&'a HashMap<(i32, i32), Vec<u8>>),
+}
+
+/// Anvil MCA region reader with direct sector seeking and zero unneeded decompression.
+#[derive(Debug)]
+pub(crate) struct RegionFile<'a, R: Read + Seek> {
+    external: ExternalChunkSource<'a>,
+    reader: R,
+    stream_len: u64,
     locations: [ChunkLocation; REGION_TOTAL_CHUNKS],
 }
 
-impl RegionFile {
-    /// Opens an Anvil `.mca` region file and loads its 4096-byte chunk location header.
+impl RegionFile<'static, File> {
+    /// Opens an Anvil `.mca` region file on disk and loads its 4096-byte chunk location header.
     pub(crate) fn open(path: &Path) -> Result<Self, SaveError> {
-        let mut file = File::open(path)?;
-        let file_len = file.metadata()?.len();
-        if file_len < REGION_HEADER_SIZE as u64 {
+        let file = File::open(path)?;
+        let dir = match path.parent() {
+            Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+            _ => PathBuf::from("."),
+        };
+        let label = path.display().to_string();
+        Self::from_reader(file, &label, ExternalChunkSource::Dir(dir))
+    }
+}
+
+impl<'a> RegionFile<'a, Cursor<&'a [u8]>> {
+    /// Opens an Anvil `.mca` region from an in-memory byte slice and optional `.mcc` lookup map.
+    pub(crate) fn from_bytes(
+        bytes: &'a [u8],
+        label: &str,
+        external_chunks: &'a HashMap<(i32, i32), Vec<u8>>,
+    ) -> Result<Self, SaveError> {
+        Self::from_reader(
+            Cursor::new(bytes),
+            label,
+            ExternalChunkSource::Memory(external_chunks),
+        )
+    }
+}
+
+impl<'a, R: Read + Seek> RegionFile<'a, R> {
+    fn from_reader(
+        mut reader: R,
+        label: &str,
+        external: ExternalChunkSource<'a>,
+    ) -> Result<Self, SaveError> {
+        let stream_len = reader.seek(SeekFrom::End(0))?;
+        if stream_len < REGION_HEADER_SIZE as u64 {
             return Err(SaveError::InvalidRegionHeader(format!(
-                "Region file {} size ({} bytes) is smaller than header size ({} bytes)",
-                path.display(),
-                file_len,
-                REGION_HEADER_SIZE
+                "Region {label} size ({stream_len} bytes) is smaller than header size ({REGION_HEADER_SIZE} bytes)"
             )));
         }
+        reader.seek(SeekFrom::Start(0))?;
 
         let mut header = [0u8; REGION_HEADER_SIZE];
-        file.read_exact(&mut header).map_err(|e| {
-            SaveError::InvalidRegionHeader(format!(
-                "Header read failed for {}: {}",
-                path.display(),
-                e
-            ))
+        reader.read_exact(&mut header).map_err(|e| {
+            SaveError::InvalidRegionHeader(format!("Header read failed for {label}: {e}"))
         })?;
 
         let mut locations = [ChunkLocation {
@@ -87,14 +120,10 @@ impl RegionFile {
             };
         }
 
-        let dir = match path.parent() {
-            Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
-            _ => PathBuf::from("."),
-        };
-
         Ok(Self {
-            dir,
-            file,
+            external,
+            reader,
+            stream_len,
             locations,
         })
     }
@@ -107,7 +136,7 @@ impl RegionFile {
         rel_x + rel_z * REGION_CHUNKS_AXIS
     }
 
-    /// Checks if a chunk at world chunk coordinates `(chunk_x, chunk_z)` exists in this region file.
+    /// Checks if a chunk at world chunk coordinates `(chunk_x, chunk_z)` exists in this region.
     #[inline]
     pub(crate) fn has_chunk(&self, chunk_x: i32, chunk_z: i32) -> bool {
         let idx = Self::chunk_index(chunk_x, chunk_z);
@@ -141,7 +170,7 @@ impl RegionFile {
             )));
         }
 
-        let file_len = self.file.metadata()?.len();
+        let stream_len = self.stream_len;
         let sector_end = (loc.sector_offset as u64)
             .checked_add(loc.sector_count as u64)
             .ok_or_else(|| {
@@ -152,18 +181,18 @@ impl RegionFile {
                 SaveError::InvalidRegionHeader("Sector byte offset calculation overflow".into())
             })?;
 
-        if sector_end > file_len {
+        if sector_end > stream_len {
             return Err(SaveError::InvalidRegionHeader(format!(
-                "Chunk ({chunk_x}, {chunk_z}) sector allocation extends past EOF ({sector_end} > {file_len})"
+                "Chunk ({chunk_x}, {chunk_z}) sector allocation extends past EOF ({sector_end} > {stream_len})"
             )));
         }
 
         // Seek to chunk sector offset
-        self.file.seek(SeekFrom::Start(loc.file_offset()))?;
+        self.reader.seek(SeekFrom::Start(loc.file_offset()))?;
 
         // 4 bytes: length of chunk payload (big endian)
         let mut len_buf = [0u8; 4];
-        self.file.read_exact(&mut len_buf).map_err(|e| {
+        self.reader.read_exact(&mut len_buf).map_err(|e| {
             SaveError::InvalidChunkData(format!(
                 "Failed to read chunk length for ({chunk_x}, {chunk_z}): {e}"
             ))
@@ -190,15 +219,15 @@ impl RegionFile {
             .ok_or_else(|| {
                 SaveError::InvalidChunkData("Chunk payload offset calculation overflow".into())
             })?;
-        if chunk_payload_end > file_len {
+        if chunk_payload_end > stream_len {
             return Err(SaveError::InvalidChunkData(format!(
-                "Chunk payload extends past file length ({chunk_payload_end} > {file_len})"
+                "Chunk payload extends past stream length ({chunk_payload_end} > {stream_len})"
             )));
         }
 
         // 1 byte: compression type (high bit 0x80 indicates external `.mcc` chunk stream)
         let mut comp_type = [0u8; 1];
-        self.file.read_exact(&mut comp_type)?;
+        self.reader.read_exact(&mut comp_type)?;
         let comp = comp_type[0];
 
         if (comp & EXTERNAL_STREAM_FLAG) != 0 {
@@ -210,7 +239,7 @@ impl RegionFile {
 
         let compressed_size = (chunk_len - 1) as usize;
         let mut compressed_data = vec![0u8; compressed_size];
-        self.file.read_exact(&mut compressed_data)?;
+        self.reader.read_exact(&mut compressed_data)?;
 
         Self::decompress_payload(comp, &compressed_data).map(Some)
     }
@@ -221,32 +250,47 @@ impl RegionFile {
         chunk_z: i32,
         inner_comp: u8,
     ) -> Result<Vec<u8>, SaveError> {
-        let ext_path = self.dir.join(format!("c.{chunk_x}.{chunk_z}.mcc"));
-        if !ext_path.is_file() {
-            return Err(SaveError::InvalidChunkData(format!(
-                "External chunk file missing: {}",
-                ext_path.display()
-            )));
-        }
-
-        let file = File::open(&ext_path)?;
-        // Cap compressed/uncompressed read safely before decoding.
         let read_cap = if inner_comp == 3 {
             MAX_DECOMPRESSED_CHUNK_SIZE as u64
         } else {
             (MAX_DECOMPRESSED_CHUNK_SIZE as u64) + 1024 * 1024
         };
-        let mut raw = Vec::new();
-        file.take(read_cap + 1).read_to_end(&mut raw)?;
-        if (raw.len() as u64) > read_cap {
-            return Err(SaveError::InvalidChunkData(format!(
-                "External chunk {} exceeds {} byte size limit",
-                ext_path.display(),
-                read_cap
-            )));
-        }
 
-        Self::decompress_payload(inner_comp, &raw)
+        match &self.external {
+            ExternalChunkSource::Dir(dir) => {
+                let ext_path = dir.join(format!("c.{chunk_x}.{chunk_z}.mcc"));
+                if !ext_path.is_file() {
+                    return Err(SaveError::InvalidChunkData(format!(
+                        "External chunk file missing: {}",
+                        ext_path.display()
+                    )));
+                }
+                let file = File::open(&ext_path)?;
+                let mut raw = Vec::new();
+                file.take(read_cap + 1).read_to_end(&mut raw)?;
+                if (raw.len() as u64) > read_cap {
+                    return Err(SaveError::InvalidChunkData(format!(
+                        "External chunk {} exceeds {} byte size limit",
+                        ext_path.display(),
+                        read_cap
+                    )));
+                }
+                Self::decompress_payload(inner_comp, &raw)
+            }
+            ExternalChunkSource::Memory(chunks) => {
+                let raw = chunks.get(&(chunk_x, chunk_z)).ok_or_else(|| {
+                    SaveError::InvalidChunkData(format!(
+                        "External chunk c.{chunk_x}.{chunk_z}.mcc missing from memory input"
+                    ))
+                })?;
+                if (raw.len() as u64) > read_cap {
+                    return Err(SaveError::InvalidChunkData(format!(
+                        "External chunk c.{chunk_x}.{chunk_z}.mcc exceeds {read_cap} byte size limit"
+                    )));
+                }
+                Self::decompress_payload(inner_comp, raw)
+            }
+        }
     }
 
     fn decompress_payload(comp_type: u8, data: &[u8]) -> Result<Vec<u8>, SaveError> {
@@ -267,7 +311,7 @@ impl RegionFile {
         }
     }
 
-    fn decompress_limited<R: Read>(mut reader: R, codec: &str) -> Result<Vec<u8>, SaveError> {
+    fn decompress_limited<RD: Read>(mut reader: RD, codec: &str) -> Result<Vec<u8>, SaveError> {
         let mut decompressed = Vec::new();
         let mut take = (&mut reader).take((MAX_DECOMPRESSED_CHUNK_SIZE as u64) + 1);
         take.read_to_end(&mut decompressed).map_err(|e| {
@@ -325,14 +369,14 @@ mod tests {
 
     #[test]
     fn test_region_chunk_indexing() {
-        assert_eq!(RegionFile::chunk_index(0, 0), 0);
-        assert_eq!(RegionFile::chunk_index(1, 0), 1);
-        assert_eq!(RegionFile::chunk_index(0, 1), 32);
-        assert_eq!(RegionFile::chunk_index(31, 31), 1023);
+        assert_eq!(RegionFile::<File>::chunk_index(0, 0), 0);
+        assert_eq!(RegionFile::<File>::chunk_index(1, 0), 1);
+        assert_eq!(RegionFile::<File>::chunk_index(0, 1), 32);
+        assert_eq!(RegionFile::<File>::chunk_index(31, 31), 1023);
 
         // Negative coordinates wrap using Euclidean remainder
-        assert_eq!(RegionFile::chunk_index(-1, -1), 31 + 31 * 32);
-        assert_eq!(RegionFile::chunk_index(-32, 0), 0);
+        assert_eq!(RegionFile::<File>::chunk_index(-1, -1), 31 + 31 * 32);
+        assert_eq!(RegionFile::<File>::chunk_index(-32, 0), 0);
     }
 
     #[test]

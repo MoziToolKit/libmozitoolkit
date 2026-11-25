@@ -403,6 +403,10 @@ impl BlockEntityTextureProvider for BlockEntityTextures {
         BlockEntityTextures::set_skin_resolved_callback(self, callback);
     }
 
+    fn register_memory_skin(&mut self, key: &str, png: Vec<u8>) {
+        BlockEntityTextures::register_memory_skin(self, key, png);
+    }
+
     fn invalidate_atlas_registration(&mut self) {
         self.registered = false;
     }

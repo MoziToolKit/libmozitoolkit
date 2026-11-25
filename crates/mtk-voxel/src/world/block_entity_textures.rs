@@ -87,6 +87,9 @@ pub trait BlockEntityTextureProvider: Send + Sync {
     /// Registers a callback fired when a background skin download completes.
     fn set_skin_resolved_callback(&mut self, callback: SkinResolvedCallback);
 
+    /// Registers an in-memory player skin PNG payload keyed by skin key/hash.
+    fn register_memory_skin(&mut self, _key: &str, _png: Vec<u8>) {}
+
     /// Marks previously merged atlas entries as stale so the next [`prepare`](Self::prepare)
     /// re-registers the provider's dynamic slots into a replacement `AtlasAddressMap`.
     fn invalidate_atlas_registration(&mut self) {}
@@ -187,6 +190,13 @@ impl VoxelWorld {
     {
         if let Some(textures) = self.block_textures.as_mut() {
             textures.set_skin_resolved_callback(SkinResolvedCallback(Arc::new(callback)));
+        }
+    }
+
+    /// Injects a decoded/downloaded player skin PNG directly into the runtime texture cache.
+    pub fn register_memory_skin(&mut self, key: &str, png: Vec<u8>) {
+        if let Some(textures) = self.block_textures.as_mut() {
+            textures.register_memory_skin(key, png);
         }
     }
 

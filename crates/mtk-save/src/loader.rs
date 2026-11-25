@@ -1,12 +1,27 @@
 use glam::IVec3;
 use mtk_core::{ProgressCallback, ProgressReport, ProgressThrottler};
 use mtk_voxel::{SectionStorage, VoxelStorage, VoxelWriter};
+use std::collections::HashMap;
+use std::io::{Read, Seek};
+use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 
 use crate::chunk::ChunkParser;
 use crate::error::SaveError;
 use crate::level::LevelData;
+use crate::plan::{
+    discover_dimensions_from_paths, plan_dimension_region_files, BoxSelectionBounds,
+    RegionSelectionPlan,
+};
 use crate::region::RegionFile;
+
+/// Raw in-memory bytes for a single Anvil `.mca` region file at `(rx, rz)`.
+#[derive(Debug, Clone, Copy)]
+pub struct RegionBytes<'a> {
+    pub rx: i32,
+    pub rz: i32,
+    pub data: &'a [u8],
+}
 
 /// High-level loader providing automatic Minecraft world directory discovery,
 /// metadata extraction, and on-demand spatial bounding box slicing.
@@ -116,6 +131,27 @@ impl SaveLoader {
         dims
     }
 
+    /// Discovers all available dimensions from normalized relative save paths (browser / VFS use).
+    pub fn discover_dimensions_from_paths<'a, I>(rel_paths: I) -> Vec<String>
+    where
+        I: IntoIterator<Item = &'a str>,
+    {
+        discover_dimensions_from_paths(rel_paths)
+    }
+
+    /// Resolves which `.mca` (and matching `.mcc`) relative paths inside a dimension intersect `[min_block, max_block]`.
+    pub fn plan_dimension_region_files<'a, I>(
+        dimension: &str,
+        min_block: IVec3,
+        max_block: IVec3,
+        rel_paths: I,
+    ) -> RegionSelectionPlan
+    where
+        I: IntoIterator<Item = &'a str>,
+    {
+        plan_dimension_region_files(dimension, min_block, max_block, rel_paths)
+    }
+
     /// Resolves the region directory for a given dimension name.
     pub(crate) fn resolve_dimension_region_dir(
         save_dir: &Path,
@@ -212,122 +248,164 @@ impl SaveLoader {
         let region_dir = Self::resolve_dimension_region_dir(save_dir, dimension)
             .ok_or_else(|| SaveError::RegionDirNotFound(save_dir.to_path_buf()))?;
 
-        // 1. Calculate bounding box ranges
-        let true_min = min_block.min(max_block);
-        let true_max = min_block.max(max_block);
-
-        let min_sec_x = true_min.x >> 4;
-        let max_sec_x = true_max.x >> 4;
-        let min_sec_y = true_min.y >> 4;
-        let max_sec_y = true_max.y >> 4;
-        let min_sec_z = true_min.z >> 4;
-        let max_sec_z = true_max.z >> 4;
-
-        let min_reg_x = min_sec_x >> 5;
-        let max_reg_x = max_sec_x >> 5;
-        let min_reg_z = min_sec_z >> 5;
-        let max_reg_z = max_sec_z >> 5;
-
-        let total_chunks =
-            (((max_sec_x - min_sec_x + 1).max(1)) * ((max_sec_z - min_sec_z + 1).max(1))) as usize;
-        let throttler = ProgressThrottler::new("load_chunks", total_chunks, progress)
+        let sel = BoxSelectionBounds::from_corners(min_block, max_block);
+        let throttler = ProgressThrottler::new("load_chunks", sel.total_chunks, progress)
             .with_prefix("Loading chunk");
 
-        // 2. Plan every region that overlaps the box, with the exact chunk range to read.
-        //    Only the files actually present are queued; missing regions count as skipped.
         let mut plans: Vec<RegionPlan> = Vec::new();
-        for rx in min_reg_x..=max_reg_x {
-            for rz in min_reg_z..=max_reg_z {
+        for rx in sel.min_reg_x..=sel.max_reg_x {
+            for rz in sel.min_reg_z..=sel.max_reg_z {
                 let mca_path = region_dir.join(format!("r.{}.{}.mca", rx, rz));
-                let xs = (rx * 32).max(min_sec_x)..=(rx * 32 + 31).min(max_sec_x);
-                let zs = (rz * 32).max(min_sec_z)..=(rz * 32 + 31).min(max_sec_z);
                 if !mca_path.exists() {
                     continue;
                 }
                 plans.push(RegionPlan {
                     path: mca_path,
-                    xs,
-                    zs,
+                    xs: sel.region_chunk_range_x(rx),
+                    zs: sel.region_chunk_range_z(rz),
                 });
             }
         }
 
-        // 3. Decode + parse regions in parallel; merging into the storage stays sequential and
-        //    order-independent (chunk sections occupy disjoint coordinates).
+        #[cfg(feature = "parallel")]
         let decoded: Result<Vec<Vec<(IVec3, SectionStorage)>>, SaveError> = {
             use rayon::prelude::*;
             mtk_core::threading::install(|| {
                 plans
                     .par_iter()
-                    .map(|plan| decode_region(plan, min_sec_y, max_sec_y, true_min, true_max))
+                    .map(|plan| decode_region_file(plan, &sel))
                     .collect()
             })
         };
 
-        let mut loaded_sections = 0usize;
-        for sections in decoded? {
-            for (coord, section) in sections {
-                storage.set_section(coord.x, coord.y, coord.z, section);
-                loaded_sections += 1;
-            }
-        }
+        #[cfg(not(feature = "parallel"))]
+        let decoded: Result<Vec<Vec<(IVec3, SectionStorage)>>, SaveError> = plans
+            .iter()
+            .map(|plan| decode_region_file(plan, &sel))
+            .collect();
 
-        // Reported from the calling thread, never from a rayon worker: hosts re-enter their own
-        // runtime (Python's GIL, Blender's main thread) from a progress callback, which must not
-        // happen on a pool thread. The stage is short enough that one final tick is honest.
-        throttler.inc_by(total_chunks);
-
-        // 4. Set the active world bounds on VoxelStorage
-        let size_x = (true_max.x - true_min.x + 1).max(1);
-        let size_y = (true_max.y - true_min.y + 1).max(1);
-        let size_z = (true_max.z - true_min.z + 1).max(1);
-        storage.set_bounds(true_min.x, true_min.y, true_min.z, size_x, size_y, size_z);
-
-        // 5. Derive biome metadata through the single shared implementation
-        storage.finalize_biome_metadata();
-
-        if let Some(cb) = progress {
-            cb(ProgressReport::new(
-                "load_chunks",
-                total_chunks,
-                total_chunks,
-                format!("Loaded {loaded_sections} chunk sections from {total_chunks} chunks"),
-            ));
-        }
-
-        Ok(loaded_sections)
+        Ok(finalize_loaded_sections(
+            storage, decoded?, &sel, &throttler, progress,
+        ))
     }
+
+    /// Loads chunk sections within `[min_block, max_block]` from caller-supplied in-memory `.mca` buffers.
+    pub fn load_box_from_regions_into_storage(
+        regions: &[RegionBytes<'_>],
+        external_chunks: &HashMap<(i32, i32), Vec<u8>>,
+        min_block: IVec3,
+        max_block: IVec3,
+        storage: &mut VoxelStorage,
+        progress: Option<ProgressCallback>,
+    ) -> Result<usize, SaveError> {
+        let sel = BoxSelectionBounds::from_corners(min_block, max_block);
+        let throttler = ProgressThrottler::new("load_chunks", sel.total_chunks, progress)
+            .with_prefix("Loading chunk");
+
+        let decode_one =
+            |region: &RegionBytes<'_>| -> Result<Vec<(IVec3, SectionStorage)>, SaveError> {
+                let label = format!("r.{}.{}.mca", region.rx, region.rz);
+                let mut region_file =
+                    match RegionFile::from_bytes(region.data, &label, external_chunks) {
+                        Ok(rf) => rf,
+                        Err(_) => return Ok(Vec::new()),
+                    };
+                decode_region_reader(
+                    &mut region_file,
+                    sel.region_chunk_range_x(region.rx),
+                    sel.region_chunk_range_z(region.rz),
+                    &sel,
+                )
+            };
+
+        #[cfg(feature = "parallel")]
+        let decoded: Result<Vec<Vec<(IVec3, SectionStorage)>>, SaveError> = {
+            use rayon::prelude::*;
+            mtk_core::threading::install(|| regions.par_iter().map(decode_one).collect())
+        };
+
+        #[cfg(not(feature = "parallel"))]
+        let decoded: Result<Vec<Vec<(IVec3, SectionStorage)>>, SaveError> =
+            regions.iter().map(decode_one).collect();
+
+        Ok(finalize_loaded_sections(
+            storage, decoded?, &sel, &throttler, progress,
+        ))
+    }
+}
+
+fn finalize_loaded_sections(
+    storage: &mut VoxelStorage,
+    decoded: Vec<Vec<(IVec3, SectionStorage)>>,
+    sel: &BoxSelectionBounds,
+    throttler: &ProgressThrottler,
+    progress: Option<ProgressCallback>,
+) -> usize {
+    let mut loaded_sections = 0usize;
+    for sections in decoded {
+        for (coord, section) in sections {
+            storage.set_section(coord.x, coord.y, coord.z, section);
+            loaded_sections += 1;
+        }
+    }
+
+    throttler.inc_by(sel.total_chunks);
+
+    let size_x = (sel.true_max.x - sel.true_min.x + 1).max(1);
+    let size_y = (sel.true_max.y - sel.true_min.y + 1).max(1);
+    let size_z = (sel.true_max.z - sel.true_min.z + 1).max(1);
+    storage.set_bounds(
+        sel.true_min.x,
+        sel.true_min.y,
+        sel.true_min.z,
+        size_x,
+        size_y,
+        size_z,
+    );
+    storage.finalize_biome_metadata();
+
+    if let Some(cb) = progress {
+        cb(ProgressReport::new(
+            "load_chunks",
+            sel.total_chunks,
+            sel.total_chunks,
+            format!(
+                "Loaded {loaded_sections} chunk sections from {} chunks",
+                sel.total_chunks
+            ),
+        ));
+    }
+
+    loaded_sections
 }
 
 /// One `.mca` file plus the chunk range of the selection that falls inside it.
 struct RegionPlan {
     path: std::path::PathBuf,
-    xs: std::ops::RangeInclusive<i32>,
-    zs: std::ops::RangeInclusive<i32>,
+    xs: RangeInclusive<i32>,
+    zs: RangeInclusive<i32>,
 }
 
-/// Reads, decompresses and parses every chunk of one region that the selection covers.
-///
-/// Regions are independent files, so this is the parallel unit: opening one `RegionFile` per task
-/// keeps the sector seeks local while letting the CPU-bound inflate + NBT parse run on all cores.
-fn decode_region(
+fn decode_region_file(
     plan: &RegionPlan,
-    min_sec_y: i32,
-    max_sec_y: i32,
-    true_min: IVec3,
-    true_max: IVec3,
+    sel: &BoxSelectionBounds,
 ) -> Result<Vec<(IVec3, SectionStorage)>, SaveError> {
-    let mut out: Vec<(IVec3, SectionStorage)> = Vec::new();
     let mut region_file = match RegionFile::open(&plan.path) {
         Ok(region_file) => region_file,
-        Err(_) => {
-            // Matches the previous behaviour: an unreadable region is skipped, not fatal.
-            return Ok(out);
-        }
+        Err(_) => return Ok(Vec::new()),
     };
+    decode_region_reader(&mut region_file, plan.xs.clone(), plan.zs.clone(), sel)
+}
 
-    for cx in plan.xs.clone() {
-        for cz in plan.zs.clone() {
+fn decode_region_reader<'a, R: Read + Seek>(
+    region_file: &mut RegionFile<'a, R>,
+    xs: RangeInclusive<i32>,
+    zs: RangeInclusive<i32>,
+    sel: &BoxSelectionBounds,
+) -> Result<Vec<(IVec3, SectionStorage)>, SaveError> {
+    let mut out: Vec<(IVec3, SectionStorage)> = Vec::new();
+    for cx in xs {
+        for cz in zs.clone() {
             if !region_file.has_chunk(cx, cz) {
                 continue;
             }
@@ -337,10 +415,9 @@ fn decode_region(
                 None => continue,
             };
 
-            let sections = ChunkParser::parse_chunk(&decompressed, min_sec_y, max_sec_y)?;
+            let sections = ChunkParser::parse_chunk(&decompressed, sel.min_sec_y, sel.max_sec_y)?;
 
             for mut section in sections {
-                // Filter block entities strictly within [true_min, true_max] bounding box
                 if !section.block_entities.is_empty() {
                     let sec_base_x = section.coord.x * 16;
                     let sec_base_y = section.coord.y * 16;
@@ -352,12 +429,12 @@ fn decode_region(
                         let wx = sec_base_x + lx;
                         let wy = sec_base_y + ly;
                         let wz = sec_base_z + lz;
-                        wx >= true_min.x
-                            && wx <= true_max.x
-                            && wy >= true_min.y
-                            && wy <= true_max.y
-                            && wz >= true_min.z
-                            && wz <= true_max.z
+                        wx >= sel.true_min.x
+                            && wx <= sel.true_max.x
+                            && wy >= sel.true_min.y
+                            && wy <= sel.true_max.y
+                            && wz >= sel.true_min.z
+                            && wz <= sel.true_max.z
                     });
                 }
 

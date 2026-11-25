@@ -5,14 +5,67 @@
 //! ready for zero-copy `THREE.BufferAttribute` construction.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
+use libmtk::PackageManifest;
 use mtk_core::attribute_constants::{
     ATTR_ANIM_FRAME_SIZE, ATTR_ANIM_TIMING, ATTR_AO, ATTR_ATLAS_CHUNK_ID, ATTR_BIOME_TINT_COLOR,
     ATTR_BIOME_TINT_DATA,
 };
 use mtk_core::{AttributeData, MeshData, UvLayout};
+use mtk_material::{BiomeResolver, VanillaColormaps};
+use mtk_resource::CtmSolver;
 use mtk_texture::{AtlasAddressMap, AtlasChunkMeta};
+use mtk_voxel::{CoordinateSystem, MesherConfig};
+use serde::Serialize;
 use wasm_bindgen::prelude::*;
+
+#[derive(Serialize)]
+struct WasmMetadataPayload<'a> {
+    manifest: &'a PackageManifest,
+    texture_names: &'a [String],
+    atlas_chunks: &'a [AtlasChunkMeta],
+}
+
+pub(crate) fn serialize_metadata_json(
+    manifest: &PackageManifest,
+    texture_names: &[String],
+    atlas_mapping: Option<&AtlasAddressMap>,
+) -> Result<String, JsValue> {
+    let atlas_chunks: &[AtlasChunkMeta] = atlas_mapping.map(|m| m.chunks.as_slice()).unwrap_or(&[]);
+    let payload = WasmMetadataPayload {
+        manifest,
+        texture_names,
+        atlas_chunks,
+    };
+    serde_json::to_string(&payload).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+pub(crate) fn build_mesher_config(
+    enable_ao: Option<bool>,
+    mesh_fluids: Option<bool>,
+    enable_ctm: Option<bool>,
+    enable_animated_textures: Option<bool>,
+    atlas_address_map: Option<Arc<AtlasAddressMap>>,
+    biome_resolver: Option<Arc<BiomeResolver>>,
+    colormaps: Option<Arc<VanillaColormaps>>,
+    ctm_solver: Option<Arc<CtmSolver>>,
+) -> MesherConfig {
+    let use_ctm = enable_ctm.unwrap_or(true);
+    MesherConfig {
+        coordinate_system: CoordinateSystem::YUpRightHanded,
+        origin_centered: true,
+        weld_vertices: false,
+        enable_ao: enable_ao.unwrap_or(true),
+        mesh_fluids: mesh_fluids.unwrap_or(true),
+        enable_animated_textures: enable_animated_textures.unwrap_or(true),
+        atlas_address_map,
+        biome_resolver,
+        colormaps,
+        ctm_solver: if use_ctm { ctm_solver } else { None },
+        ..Default::default()
+    }
+}
 
 /// Single atlas-chunk mesh batch with aligned `PerVertex` buffers for Three.js / WebGPU.
 #[wasm_bindgen]
@@ -283,6 +336,17 @@ fn resolve_chunk_textures(
     Option<String>,
     bool,
 ) {
+    if chunk_id >= mtk_texture::DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID as i32 {
+        return (
+            Some(format!("dynamic/chunk_{chunk_id}.png")),
+            None,
+            None,
+            None,
+            None,
+            false,
+        );
+    }
+
     let Some(meta) = meta else {
         let fallback = if chunk_id >= 0 {
             Some(format!(

@@ -12,13 +12,16 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 libmtk = { path = "../../crates/libmtk", version = "2.0.0", default-features = false }
+mtk-block-entity-textures = { path = "../../crates/mtk-block-entity-textures", version = "2.0.0", default-features = false }
 mtk-core = { workspace = true }
 mtk-cull = { workspace = true }
 mtk-material = { workspace = true }
 mtk-model = { workspace = true }
 mtk-resource = { workspace = true }
+mtk-save = { path = "../../crates/mtk-save", version = "2.0.0", default-features = false, features = ["serde"] }
 mtk-texture = { workspace = true }
 mtk-voxel = { workspace = true }
+glam = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 wasm-bindgen = { workspace = true }
@@ -31,10 +34,12 @@ default = []
 parallel = [
     "dep:wasm-bindgen-rayon",
     "libmtk/parallel",
+    "mtk-block-entity-textures/parallel",
     "mtk-core/parallel",
     "mtk-voxel/parallel",
     "mtk-model/parallel",
     "mtk-material/parallel",
+    "mtk-save/parallel",
 ]
 
 [dev-dependencies]

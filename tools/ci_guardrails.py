@@ -504,11 +504,13 @@ _INTERNAL_DEP_WHITELIST = {
     "mtk-jni": {"mtk-model", "mtk-sync"},
     "mtk-wasm": {
         "libmtk",
+        "mtk-block-entity-textures",
         "mtk-core",
         "mtk-cull",
         "mtk-material",
         "mtk-model",
         "mtk-resource",
+        "mtk-save",
         "mtk-texture",
         "mtk-voxel",
     },

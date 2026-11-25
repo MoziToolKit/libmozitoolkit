@@ -6,18 +6,21 @@
 [![Three.js](https://img.shields.io/badge/Three.js-Ready-green.svg)](https://threejs.org/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
-**`mtk-wasm`** 是基于 [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen) 构建的 WebAssembly 绑定库，用于浏览器内 `.mtkscene` 场景包加载、体素网格化并输出 Three.js / WebGPU 友好的零拷贝渲染批次。
+**`mtk-wasm`** 是基于 [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen) 构建的 WebAssembly 绑定库，用于浏览器内 `.mtkscene` 场景包加载、`.mtkcache` + Minecraft Java 版存档按需读取与体素网格化，并输出 Three.js / WebGPU 友好的零拷贝渲染批次。
 
 ---
 
-## 1. 核心定位（S1 精简版 3D 查看器）
+## 1. 核心定位（Web 3D 查看器管线）
 
-- **单向浏览器管线**：`.mtkscene`（`Uint8Array`） → `WasmScenePackage` → `WasmRenderScene` / `WasmRenderBatch` → `THREE.BufferGeometry`。
+- **场景包路线（S1）**：`.mtkscene`（`Uint8Array`） → `WasmScenePackage` → `WasmRenderScene` / `WasmRenderBatch` → `THREE.BufferGeometry`。
+- **缓存 + 本地存档路线（S2）**：
+  - `.mtkcache`（`Uint8Array`） → `WasmAssetCache`（提供烘焙模型、图集映射、生物群系、CTM 规则与 `BannerBaker` 旗帜合成模板）；
+  - 浏览器选择本地存档目录 → `WasmSaveWorld.inspect_level`（解析 `level.dat` 与维度清单） → `WasmSaveWorld.plan_region_files`（按 `[min, max]` 选区仅筛选相交的 `.mca`/`.mcc`） → `WasmSaveWorld.load_regions` → `WasmRenderScene`；
+  - 玩家皮肤走浏览器端异步跨域 `fetch`（`textures.minecraft.net` / `crafthead.net` / `minotar.net`）→ `register_skin_png` + `build_render_scene` 局部脏区块增量刷新。
 - **轻量内存策略**：
-  1. 贴图以原始 PNG 字节流暴露（`read_texture_png`），由浏览器通过 `Blob` + `createImageBitmap` 异步解码，不在 WASM 线性内存中持有大尺寸未压缩 RGBA 缓冲；
+  1. 静态贴图与动态实体图集（`dynamic/chunk_<id>.png`）以原始 PNG 字节流暴露（`read_texture_png`），由浏览器通过 `Blob` + `createImageBitmap` 异步解码；
   2. 几何网格在 Rust 内按图集分块（`atlas_chunk_id`）拆批，并将 `PerLoop` UV/染色/AO 对齐为 `PerVertex` 缓冲，通过 WASM 线性内存指针零拷贝构造 `THREE.BufferAttribute`；
-  3. `take_batch(index)` 将批次所有权直接转移给 JS，避免二次拷贝峰值；
-  4. `build_render_scene()` 在返回前释放临时 `VoxelStorage` / `VoxelWorld` 内存。
+  3. `take_batch(index)` 将批次所有权直接转移给 JS，避免二次拷贝峰值。
 
 ---
 
@@ -28,14 +31,28 @@
 - `version() -> string`：返回绑定版本号。
 - `set_hardware_concurrency(count: number)` / `get_hardware_concurrency() -> number`：配置并发线程数。
 
-### 2.2 `WasmScenePackage`
+### 2.2 `WasmScenePackage`（S1 `.mtkscene` 查看器）
 - `WasmScenePackage.from_bytes(bytes: Uint8Array) -> WasmScenePackage`：从内存字节打开 `.mtkscene`。
 - `metadata_json() -> string`：返回 `manifest`、`texture_names` 与 `atlas_chunks` 描述 JSON。
 - `texture_names() -> string[]`：列出包内所有 `atlas/textures/*.png` chunk ID。
 - `read_texture_png(chunk_id: string) -> Uint8Array`：读取原始 PNG 字节（不经过像素解码）。
 - `build_render_scene(enable_ao?: boolean, mesh_fluids?: boolean, enable_ctm?: boolean, enable_animated_textures?: boolean) -> WasmRenderScene`：按 Y-Up 右手坐标系构建 Three.js 渲染批次。
 
-### 2.3 `WasmRenderScene` & `WasmRenderBatch`
+### 2.3 `WasmAssetCache` & `WasmSaveWorld`（S2 `.mtkcache` + 本地存档查看器）
+- **`WasmAssetCache`**：
+  - `WasmAssetCache.from_bytes(bytes: Uint8Array) -> WasmAssetCache`：加载 `.mtkcache`。
+  - `metadata_json() -> string` / `texture_names() -> string[]` / `read_texture_png(chunk_id: string) -> Uint8Array`。
+- **`WasmSaveWorld`**：
+  - `WasmSaveWorld.inspect_level(level_dat_bytes: Uint8Array, relative_paths: string[]) -> string`：解析 `level.dat`（含 GZip / Raw NBT 与经典/现代出生点）及可用维度。
+  - `WasmSaveWorld.plan_region_files(dimension, min_x, min_y, min_z, max_x, max_y, max_z, relative_paths) -> string`：返回与选框相交的 `.mca` 与 `.mcc` 相对路径规划。
+  - `new WasmSaveWorld(cache: WasmAssetCache)`：创建绑定资产缓存与内置 `BannerBaker` 的存档会话。
+  - `load_regions(regions, external_chunks, min_x, min_y, min_z, max_x, max_y, max_z) -> string`：按选区读入命中的 region 字节，并返回体素统计。
+  - `pending_skin_requests_json() -> string`：返回未解析的玩家头颅 `{ key, skin_url, uuid, name }` 列表（已将 `http://textures.minecraft.net/` 规范为 `https://`）。
+  - `register_skin_png(key: string, png_bytes: Uint8Array) -> boolean`：校验皮肤 PNG 魔数并过滤镜像站默认兜底皮肤（Alex/Steve/Minotar），注入内存缓存并标脏关联区块。
+  - `texture_names() -> string[]` / `read_texture_png(chunk_id: string) -> Uint8Array`：统一读取静态 `.mtkcache` 图集与动态 `dynamic/chunk_<id>.png`（`0xFFF0+` 旗帜/皮肤图集，避免与静态 `entities_chunk_001.png` 命名冲突）。
+  - `build_render_scene(enable_ao?, mesh_fluids?, enable_ctm?, enable_animated_textures?) -> WasmRenderScene`：首次全量构建，后续皮肤回填仅增量重算脏区块。
+
+### 2.4 `WasmRenderScene` & `WasmRenderBatch`
 - `WasmRenderScene`：`batch_count`、`total_vertices`、`total_triangles`、`take_batch(index)`。
 - `WasmRenderBatch`：
   - 元数据：`chunk_id`、`is_animated`、`has_animation`、`vertex_count`、`triangle_count`、`albedo_chunk_id`、`overlay_chunk_id`、`normal_chunk_id`、`orm_chunk_id`、`aux_chunk_id`

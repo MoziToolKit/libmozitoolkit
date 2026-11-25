@@ -18,9 +18,11 @@ mod level;
 mod loader;
 mod lz4;
 mod nbt;
+mod plan;
 mod region;
 mod upgrade;
 
 pub use error::SaveError;
 pub use level::LevelData;
-pub use loader::SaveLoader;
+pub use loader::{RegionBytes, SaveLoader};
+pub use plan::{PlannedExternalChunk, PlannedRegionFile, RegionSelectionPlan};
