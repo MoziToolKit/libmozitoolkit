@@ -36,7 +36,8 @@ use pyo3::prelude::*;
 ///     `set_thread_count` / `threading_info` / `newest_cache_package` /
 ///     `MeshData.materials_are_slots`.
 /// v4: added `MesherConfig.allow_network` to gate outbound HTTP skin requests.
-pub const API_VERSION: u32 = 4;
+/// v5: replaced `MesherConfig.weld_vertices` with `weld_mode` ("manifold" | "per_vertex" | "none").
+pub const API_VERSION: u32 = 5;
 
 pub(crate) use ctm::PyCtmSolver;
 pub(crate) use cull::PyFaceCuller;

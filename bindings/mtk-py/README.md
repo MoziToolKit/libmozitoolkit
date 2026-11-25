@@ -40,7 +40,7 @@
 Python 模块名：`libmtk_py`
 
 - `version() -> str`：原生扩展包语义版本（如 `"0.1.0"`，同时支持属性 `__version__`）。
-- `api_version() -> int`：与 Blender 胶水层握手的整数 API 版本（当前 `4`）。
+- `api_version() -> int`：与 Blender 胶水层握手的整数 API 版本（当前 `5`）。
 - `set_thread_count(threads: int) -> None`：设置进程级线程预算；`0` 恢复默认策略
   `max(1, cores - 2)`。一次调用对**所有**并行入口生效（网格化、存档解码、图集烘焙、
   材质重映射、预烘），宿主不需要再逐个传 `num_threads`。

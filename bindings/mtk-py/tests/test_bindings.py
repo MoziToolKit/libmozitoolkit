@@ -17,7 +17,7 @@ def quad_mesh():
 
 class TestLibMtkPy(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(libmtk_py.api_version(), 4)
+        self.assertEqual(libmtk_py.api_version(), 5)
         self.assertTrue(len(libmtk_py.version()) > 0)
         self.assertEqual(libmtk_py.version(), libmtk_py.__version__)
 
