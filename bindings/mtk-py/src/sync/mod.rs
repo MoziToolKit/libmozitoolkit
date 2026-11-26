@@ -6,7 +6,7 @@ pub mod client;
 pub mod server;
 
 pub(crate) use client::PyLiveSyncSession;
-pub(crate) use server::PyLiveSyncServer;
+pub(crate) use server::{discover_local_sync_instances, PyLiveSyncServer};
 
 pub(crate) fn parse_uuid_hex(raw: &str) -> [u8; 16] {
     let mut out = [0u8; 16];

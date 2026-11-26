@@ -1,7 +1,13 @@
-use std::net::SocketAddr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crate::discovery::InstanceMetadata;
 use crate::protocol::ResyncReason;
+
+/// Default WebSocket port for Live Sync (above dev ports, below OS ephemeral ranges).
+pub const DEFAULT_WS_PORT: u16 = 21924;
+
+/// Default WebSocket bind address for local/loopback Live Sync servers.
+pub const DEFAULT_WS_BIND_ADDR: &str = "127.0.0.1:21924";
 
 /// Generates a unique 128-bit server instance UUID based on nanosecond timestamp and process ID.
 pub fn generate_unique_server_uuid() -> [u8; 16] {
@@ -20,12 +26,21 @@ pub fn generate_unique_server_uuid() -> [u8; 16] {
 /// Server configuration parameters.
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
-    /// Bind address (e.g., "127.0.0.1:8765" or "127.0.0.1:0" for ephemeral port).
-    pub bind_address: String,
-    /// Optional authentication token for remote clients.
+    /// Optional WebSocket bind address (e.g., "127.0.0.1:21924" or "127.0.0.1:0").
+    /// Set to `None` to run in pure local IPC mode without binding any TCP port.
+    pub bind_address: Option<String>,
+    /// Enable the local IPC listener (Unix Domain Socket on Unix, Named Pipe on Windows).
+    pub enable_ipc: bool,
+    /// Optional logical IPC endpoint name; auto-generated when `None` and `enable_ipc` is true.
+    pub ipc_name: Option<String>,
+    /// Optional descriptive metadata published to local instance discovery when `enable_ipc` is true.
+    pub instance_info: Option<InstanceMetadata>,
+    /// Optional authentication token for clients.
     pub auth_token: Option<String>,
-    /// Allow loopback clients to connect without a token even if auth_token is set.
+    /// Allow loopback WebSocket clients to connect without a token even if `auth_token` is set.
     pub allow_loopback_without_token: bool,
+    /// Require `auth_token` on local IPC connections (default: `false`; user opt-in).
+    pub require_token_on_ipc: bool,
     /// Unique 128-bit server instance UUID. If all zeros, a unique UUID is generated automatically.
     pub server_uuid: [u8; 16],
     /// Maximum concurrent client connections (default: 8).
@@ -39,9 +54,13 @@ pub struct ServerConfig {
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
-            bind_address: "127.0.0.1:8765".to_string(),
+            bind_address: Some(DEFAULT_WS_BIND_ADDR.to_string()),
+            enable_ipc: false,
+            ipc_name: None,
+            instance_info: None,
             auth_token: None,
             allow_loopback_without_token: true,
+            require_token_on_ipc: false,
             server_uuid: generate_unique_server_uuid(),
             max_connections: 8,
             handshake_timeout: Duration::from_millis(5000),
@@ -54,7 +73,7 @@ impl Default for ServerConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ServerEvent {
     /// A new client has connected and passed RFC handshake.
-    ClientConnected { client_id: u64, addr: SocketAddr },
+    ClientConnected { client_id: u64, endpoint: String },
     /// A client has disconnected or timed out.
     ClientDisconnected { client_id: u64, reason: String },
     /// A client requires a full Baseline snapshot.

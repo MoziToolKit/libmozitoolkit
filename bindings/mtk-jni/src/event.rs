@@ -46,9 +46,10 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerP
 
     for (i, ev) in events.iter().enumerate() {
         let (type_code, client_id, epoch, seq, msg) = match ev {
-            ServerEvent::ClientConnected { client_id, addr } => {
-                (1i32, *client_id as jlong, 0i64, 0i64, addr.to_string())
-            }
+            ServerEvent::ClientConnected {
+                client_id,
+                endpoint,
+            } => (1i32, *client_id as jlong, 0i64, 0i64, endpoint.clone()),
             ServerEvent::ClientDisconnected { client_id, reason } => {
                 (2i32, *client_id as jlong, 0i64, 0i64, reason.clone())
             }
@@ -116,9 +117,13 @@ mod tests {
         assert!(poll_server_events(-1).is_none());
 
         let config = ServerConfig {
-            bind_address: "127.0.0.1:0".to_string(),
+            bind_address: Some("127.0.0.1:0".to_string()),
+            enable_ipc: false,
+            ipc_name: None,
+            instance_info: None,
             auth_token: None,
             allow_loopback_without_token: true,
+            require_token_on_ipc: false,
             server_uuid: [0u8; 16],
             max_connections: 8,
             handshake_timeout: Duration::from_millis(5000),

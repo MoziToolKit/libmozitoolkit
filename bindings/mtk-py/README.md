@@ -94,25 +94,26 @@ Python 模块名：`libmtk_py`
   - `create_debug_world(config=None, culler=None, model_db=None, num_threads=None, states=None, stack=None)`：至少给 `states`、`stack` 或 `model_db` 之一。
   - `rebuild_all() -> MeshData`, `rebuild_dirty() -> Dict`, `get_world_mesh() -> MeshData`, `sync_from_storage(storage)`, `clear_cache()`, `hot_reload(config=None, model_db=None)`, `num_threads` (getter)
 - **`MesherConfig` (`PyMesherConfig`)**：网格化配置（AO 开关、平滑生物群系过渡 `smooth_biome_blend`、流体曲面、坐标系转换、线程数、顶点焊接模式 `weld_mode="manifold" | "per_vertex" | "none"`、`allow_network` 联网门禁开关）。
-- **`LiveSyncSession` (`PyLiveSyncSession`)**：原生 WebSocket 实时协同客户端。
-  - `start(url, auto_reconnect=True, max_reconnect_attempts=5, auth_token=None)`, `stop()`
+- **`LiveSyncSession` (`PyLiveSyncSession`)**：原生 WebSocket (`ws://`) 与本地 IPC (`ipc://`) 实时协同客户端。
+  - `start(url="ws://127.0.0.1:21924", auto_reconnect=True, max_reconnect_attempts=5, auth_token=None)`, `stop()`
   - `auth_token` 会随默认 HELLO 发送（RFC v3.1 §4.1；Python 侧先 `strip()`；
     两端令牌会各自 trim 后比较），启用 Yefira `authToken` 时必须传入。
   - `poll_events(coalesce_meshes=False)`：`True` 时只保留最新 `WORLD_MESH_READY` generation；事件类型包含 `STATUS_CHANGE`, `SELECTION_UPDATED`, `HANDSHAKE`, `WORLD_MESH_READY`, `STREAM_PROGRESS`, `STREAM_FINISHED`, `DELTA_APPLIED`, `VERIFIED`, `WARNING`, `ERROR`。
   - `get_dynamic_entity_atlases()`：`{chunk_id: RGBA bytes}` 动态实体图集映射（无单数访问器）
-  - `start_with_cache(url, auto_reconnect=True, max_reconnect_attempts=5, server_uuid="", epoch=0, sequence=0, min_pos=(0,0,0), size=(0,0,0), state_hash=0, dimension="minecraft:overworld", auth_token=None)`：携带缓存握手参数直连，服务端命中即返回 `0x00 VERIFIED_SKIP_REBUILD`，实现 0ms 零网格重建秒级直连。
+  - `start_with_cache(url="ws://127.0.0.1:21924", auto_reconnect=True, max_reconnect_attempts=5, server_uuid="", epoch=0, sequence=0, min_pos=(0,0,0), size=(0,0,0), state_hash=0, dimension="minecraft:overworld", auth_token=None)`：携带缓存握手参数直连，服务端命中即返回 `0x00 VERIFIED_SKIP_REBUILD`，实现 0ms 零网格重建秒级直连。
   - `load_from_point_cloud(point_cloud: VoxelPointCloud)`：从 Blender 原生持久化的伴生点云恢复底层 `VoxelStorage` 拓扑，使 0ms 快速路径可无缝衔接后续增量变更。
   - `get_storage() -> VoxelStorage`：获取当前底层 `VoxelStorage` 副本。
   - `client_generation`, `current_sequence`, `current_epoch`, `state_hash`, `server_uuid`
   - `clear_cache()`, `hot_reload(config=None, model_db=None)`, `request_resync()`
   - `STREAM_PROGRESS.percent` 已由 Rust 归一化为 0..100；`HANDSHAKE.decision_code` 为 RFC v3.1 原始值
-- **`LiveSyncServer` (`PyLiveSyncServer`)**：原生 RFC v3.1 / v3.2 WebSocket 实时协同服务端。
-  - `LiveSyncServer(bind_address="127.0.0.1:8765", auth_token=None, allow_loopback_without_token=True, server_uuid=None)`
-  - `stop()`, `is_running()`, `client_count()`, `local_addr()`, `server_uuid`
+- **`LiveSyncServer` (`PyLiveSyncServer`)**：原生 RFC v3.1 / v3.2 WebSocket 与本地 IPC 实时协同服务端。
+  - `LiveSyncServer(bind_address="127.0.0.1:21924", enable_ipc=False, ipc_name=None, auth_token=None, allow_loopback_without_token=True, require_token_on_ipc=False, server_uuid=None)`（传入 `bind_address=None, enable_ipc=True` 可启动纯本地 IPC 服务端）
+  - `stop()`, `is_running()`, `client_count()`, `local_addr()`, `ipc_url()`, `set_instance_metadata(world_name="", mc_version="", loader="", dimension="minecraft:overworld")`, `server_uuid`
   - `set_selection(min_pos, size, dimension="minecraft:overworld")`, `clear_selection()`
   - `submit_baseline(client_id, min_pos, size, dimension, raw_states, block_palette, raw_biomes, biome_palette, block_entities=None) -> int`：全自动计算 state_hash、建立选区与调色板、编码切片分帧并流式推送给客户端（返回计算的 `state_hash`）。
   - `submit_deltas(rel_coords, block_states, block_entities=None)`：全自动增量调色板注册、分片打包 DeltaOp 与 DeltaBlockEntity 并广播。
-  - `poll_events() -> List[dict]`（事件包含 `client_connected`, `client_disconnected`, `baseline_requested`, `client_resync`）。
+  - `poll_events() -> List[dict]`（事件包含 `client_connected` [`endpoint`], `client_disconnected`, `baseline_requested`, `client_resync`）。
+- **`discover_local_sync_instances() -> List[dict]`**：扫描并返回本机正在运行的 Minecraft `LiveSyncServer` IPC 实例列表（含 `pid`, `server_uuid`, `ipc_url`, `world_name`, `mc_version`, `loader`, `dimension`, `requires_token`, `ws_bind_address`, `started_at_ms`），并自动清理崩溃遗留的无效锁文件与 socket。
 
 ### 2.7 资源包预烘焙与图集 (`resource` & `texture`)
 - **`ResourcePackStack` (`PyResourcePackStack`)**：虚拟文件系统 (VFS) 资源包层叠加载器。

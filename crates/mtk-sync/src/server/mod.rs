@@ -13,4 +13,6 @@ pub use baseline::{
 };
 pub use decision::{decide_handshake, HandshakeContext, HandshakeResult};
 pub use delta::encode_delta_op;
-pub use service::{LiveSyncServer, ServerConfig, ServerEvent};
+pub use service::{
+    LiveSyncServer, ServerConfig, ServerEvent, DEFAULT_WS_BIND_ADDR, DEFAULT_WS_PORT,
+};

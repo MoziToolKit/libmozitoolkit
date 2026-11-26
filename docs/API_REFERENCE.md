@@ -244,7 +244,8 @@ cache_output_dir/
 ### 2.13 实时协同服务端控制面与 0ms 零重建直连契约 (`LiveSyncServer` & 0ms Reconnect SSOT)
 为实现 Minecraft 服务端（Yefira）与 DCC 前端（MoziToolKit）的无缝双向直连，实时协同底层由 Rust 提供统一的服务端与握手决策引擎：
 - **`LiveSyncServer` 控制面 (`mtk-sync::server`)**：
-  - 原生无阻塞 WebSocket 架构，支持通过 `ServerConfig` 配置 `bind_address`、`auth_token`、`allow_loopback_without_token` 与 `server_uuid`；
+  - 原生无阻塞 WebSocket（默认端口 `21924`）与跨平台本地 IPC（`interprocess`，`ipc://`）双传输架构，支持通过 `ServerConfig` 配置 `bind_address`、`enable_ipc`、`instance_info`、`auth_token`、`allow_loopback_without_token`、`require_token_on_ipc` 与 `server_uuid`；
+  - `discover_local_instances()`：自动枚举本机运行中的 Minecraft IPC 实例并清理崩溃残留锁文件；
   - `set_selection(min_pos, size, dimension)` / `clear_selection()`：维护权威选区与状态代际 (`epoch`)；
   - `submit_baseline(...)`：接收原始体素、生物群系与方块实体数据，全自动执行稀疏指纹计算、调色板注册、分块 Zstd 压缩并流式推送；
   - `submit_deltas(...)`：增量改动流式广播，自动维护调色板增量分片。

@@ -51,6 +51,7 @@ pub(crate) struct ServerInner {
     pub(crate) running: AtomicBool,
     pub(crate) epoch: AtomicU64,
     pub(crate) sequence: AtomicU64,
+    pub(crate) next_client_id: AtomicU64,
     /// Monotonic per-baseline id source; see [`ServerInner::next_snapshot_uuid`].
     pub(crate) snapshot_counter: AtomicU64,
     pub(crate) server_uuid: [u8; 16],
@@ -60,6 +61,7 @@ pub(crate) struct ServerInner {
     pub(crate) event_tx: Sender<ServerEvent>,
     pub(crate) event_rx: Receiver<ServerEvent>,
     pub(crate) local_addr: Mutex<Option<SocketAddr>>,
+    pub(crate) ipc_url: Mutex<Option<String>>,
 }
 
 impl ServerInner {
@@ -69,6 +71,7 @@ impl ServerInner {
             running: AtomicBool::new(true),
             epoch: AtomicU64::new(1),
             sequence: AtomicU64::new(1),
+            next_client_id: AtomicU64::new(1),
             snapshot_counter: AtomicU64::new(0),
             server_uuid,
             selection: Mutex::new(None),
@@ -77,6 +80,7 @@ impl ServerInner {
             event_tx,
             event_rx,
             local_addr: Mutex::new(None),
+            ipc_url: Mutex::new(None),
         }
     }
 
@@ -103,7 +107,8 @@ impl ServerInner {
     pub(crate) fn get_handshake_context(
         &self,
         config: &ServerConfig,
-        addr: SocketAddr,
+        is_ipc: bool,
+        is_loopback: bool,
     ) -> HandshakeContext {
         let selection_opt = lock_unpoisoned(&self.selection).clone();
         let (min_pos, size, dimension, state_hash) = match selection_opt {
@@ -125,8 +130,10 @@ impl ServerInner {
             state_hash,
             dimension,
             expected_auth_token: config.auth_token.clone(),
-            is_loopback: addr.ip().is_loopback(),
+            is_ipc,
+            is_loopback,
             allow_loopback_without_token: config.allow_loopback_without_token,
+            require_token_on_ipc: config.require_token_on_ipc,
         }
     }
 }
@@ -217,8 +224,7 @@ mod tests {
         assert!(handle.join().is_err());
         assert!(inner.selection.is_poisoned());
 
-        let ctx = inner
-            .get_handshake_context(&ServerConfig::default(), "127.0.0.1:12345".parse().unwrap());
+        let ctx = inner.get_handshake_context(&ServerConfig::default(), false, true);
         assert_eq!(ctx.min_pos, IVec3::new(1, 2, 3));
         assert_eq!(ctx.state_hash, 0xDEAD_BEEF);
     }

@@ -55,8 +55,18 @@ public static native long nativeXxHash64(byte[] data, long seed);
 
 ### 2.2 服务端生命周期控制
 ```java
-// 启动 LiveSyncServer 服务端实例，返回不透明句柄 ID（失败返回 0）
-public static native long nativeServerStart(String host, int port, String token, boolean allowLoopback);
+// 启动 LiveSyncServer 实例（支持本地 IPC 与可选 WebSocket 监听），返回不透明句柄 ID（失败返回 0）
+public static native long nativeServerStart(
+    boolean enableIpc, String worldName, String mcVersion, String loader, String dimension,
+    boolean requireTokenOnIpc,
+    boolean enableWs, String host, int port, String token, boolean allowLoopback
+);
+
+// 查询本地 IPC URL 与更新实例发现元数据
+public static native String nativeServerGetIpcUrl(long handle);
+public static native void nativeServerUpdateMetadata(
+    long handle, String worldName, String mcVersion, String loader, String dimension
+);
 
 // 停止服务端实例并注销句柄（安全释放底层 TCP 端口与工作线程）
 public static native void nativeServerStop(long handle);

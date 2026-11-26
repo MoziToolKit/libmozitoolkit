@@ -49,8 +49,9 @@
 
 | 类别 | 规范符号 | 职责与功能 |
 | :--- | :--- | :--- |
-| **会话客户端** | `LiveSyncSession` | 高阶实时会话控制器，管理 WebSocket 客户端、`VoxelWorld` 镜像与多线程网格化。 |
-| **会话服务端** | `LiveSyncServer`, `ServerConfig`, `ServerEvent` | 原生多线程 WebSocket 实时协同服务端，管理选区、权威握手仲裁与分块广播。 |
+| **会话客户端** | `LiveSyncSession` | 高阶实时会话控制器，同时支持 `ws://` WebSocket 与 `ipc://` 本地 IPC 通道、`VoxelWorld` 镜像与多线程网格化。 |
+| **会话服务端** | `LiveSyncServer`, `ServerConfig`, `ServerEvent`, `DEFAULT_WS_PORT` (`21924`) | 原生多线程 WebSocket / 本地 IPC 实时协同服务端，管理选区、权威握手仲裁与分块广播。 |
+| **实例发现** | `discover_local_instances`, `InstanceMetadata`, `LocalSyncInstance` | 基于咨询式文件锁的跨平台本机 Minecraft 实例发现与崩溃残留清理。 |
 | **服务端编解码** | `decide_handshake`, `encode_baseline_from_storage`, `encode_baseline_from_raw`, `encode_delta_op` | 服务端权威握手裁决、全量基线与增量分片流式编码器。 |
 | **会话状态** | `SyncLifecycle` | 会话生命周期状态枚举（`Connecting`, `ReceivingBaseline`, `ValidatingHash`, `Live`, 等）。 |
 | **事件流** | `SyncEvent` | 宿主订阅的高阶事件枚举（`WorldMeshReady`, `StreamProgress`, `DeltaApplied`, `SelectionUpdated`, 等）。 |

@@ -150,3 +150,77 @@ def test_live_sync_server_e2e_with_session():
 
     session.stop()
     server.stop()
+
+
+def test_live_sync_ipc_only_discovery_and_e2e():
+    server = libmtk_py.LiveSyncServer(
+        bind_address=None,
+        enable_ipc=True,
+        auth_token="ipc_secret",
+        require_token_on_ipc=False,
+    )
+    assert server.is_running()
+    assert server.local_addr() is None
+    ipc_url = server.ipc_url()
+    assert ipc_url is not None and ipc_url.startswith("ipc://")
+
+    server.set_instance_metadata(
+        world_name="PyTest IPC World",
+        mc_version="1.21.4",
+        loader="Fabric",
+        dimension="minecraft:overworld",
+    )
+
+    instances = libmtk_py.discover_local_sync_instances()
+    mine = next((inst for inst in instances if inst["ipc_url"] == ipc_url), None)
+    assert mine is not None
+    assert mine["world_name"] == "PyTest IPC World"
+    assert mine["mc_version"] == "1.21.4"
+    assert mine["loader"] == "Fabric"
+    assert mine["requires_token"] is False
+
+    session = libmtk_py.LiveSyncSession()
+    session.start(url=ipc_url, auto_reconnect=False)
+
+    client_id = None
+    start_time = time.time()
+    while time.time() - start_time < 3.0:
+        for ev in server.poll_events():
+            if ev.get("type") == "baseline_requested":
+                client_id = ev.get("client_id")
+                break
+        if client_id is not None:
+            break
+        time.sleep(0.02)
+
+    assert client_id is not None
+
+    size = (4, 4, 4)
+    server.submit_baseline(
+        client_id=client_id,
+        min_pos=(0, 64, 0),
+        size=size,
+        dimension="minecraft:overworld",
+        raw_states=[1] * (4 * 4 * 4),
+        block_palette=["minecraft:air", "minecraft:stone"],
+        raw_biomes=[0] * 64,
+        biome_palette=["minecraft:plains"],
+    )
+
+    mesh_ready = False
+    start_time = time.time()
+    while time.time() - start_time < 3.0:
+        for ev in session.poll_events():
+            if ev.get("type") == "WORLD_MESH_READY":
+                mesh_ready = True
+                break
+        if mesh_ready:
+            break
+        time.sleep(0.02)
+
+    assert mesh_ready, "IPC session must receive baseline and build mesh"
+
+    session.stop()
+    server.stop()
+    remaining = libmtk_py.discover_local_sync_instances()
+    assert all(inst["ipc_url"] != ipc_url for inst in remaining)

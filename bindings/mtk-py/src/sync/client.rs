@@ -105,10 +105,11 @@ impl PyLiveSyncSession {
             .set_skin_cache_dir(cache_dir.map(std::path::PathBuf::from));
     }
 
-    /// Starts the background sync client thread connecting to Minecraft at `url`,
-    /// authenticating the HELLO with the shared session token (RFC v3.1 §4.1).
+    /// Starts the background sync client thread connecting to Minecraft at `url`
+    /// (`ws://...`, `wss://...`, or `ipc://...`), authenticating the HELLO with
+    /// the shared session token (RFC v3.1 §4.1).
     #[pyo3(signature = (
-        url="ws://localhost:8765",
+        url="ws://127.0.0.1:21924",
         auto_reconnect=true,
         max_reconnect_attempts=5,
         auth_token=None
@@ -329,7 +330,7 @@ impl PyLiveSyncSession {
 
     /// Starts live sync using cached handshake parameters for 0ms zero-rebuild reconnect.
     #[pyo3(signature = (
-        url="ws://127.0.0.1:8765",
+        url="ws://127.0.0.1:21924",
         auto_reconnect=true,
         max_reconnect_attempts=5,
         server_uuid="",

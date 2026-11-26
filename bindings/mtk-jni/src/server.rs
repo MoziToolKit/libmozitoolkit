@@ -5,10 +5,11 @@
 
 use glam::IVec3;
 use jni::objects::{JByteArray, JClass, JIntArray, JObjectArray, JString};
-use jni::sys::{jboolean, jint, jlong};
+use jni::sys::{jboolean, jint, jlong, jstring};
 use jni::JNIEnv;
 
 use mtk_sync::server::{LiveSyncServer, ServerConfig};
+use mtk_sync::InstanceMetadata;
 
 use super::convert::{extract_int_array, extract_optional_string_array, extract_string_array};
 use crate::handle::HandleTable;
@@ -16,41 +17,86 @@ use crate::handle::HandleTable;
 /// Live native server instances, keyed by the opaque handle handed to the JVM.
 pub(crate) static SERVERS: HandleTable<LiveSyncServer> = HandleTable::new();
 
-/// Starts a native LiveSync WebSocket server. Returns an opaque handle (jlong) or 0 on error.
+fn read_optional_jstring(env: &mut JNIEnv, s: &JString) -> String {
+    if s.is_null() {
+        return String::new();
+    }
+    env.get_string(s)
+        .map(|js| {
+            let v: String = js.into();
+            v.trim().to_string()
+        })
+        .unwrap_or_default()
+}
+
+/// Starts a native LiveSync server (IPC and/or WebSocket). Returns an opaque handle (jlong) or 0 on error.
 #[no_mangle]
 pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerStart(
     mut env: JNIEnv,
     _class: JClass,
+    enable_ipc: jboolean,
+    world_name: JString,
+    mc_version: JString,
+    loader: JString,
+    dimension: JString,
+    require_token_on_ipc: jboolean,
+    enable_ws: jboolean,
     host: JString,
     port: jint,
     token: JString,
     allow_loopback: jboolean,
 ) -> jlong {
-    let host_str: String = match env.get_string(&host) {
-        Ok(s) => s.into(),
-        Err(_) => "127.0.0.1".to_string(),
-    };
-    let token_opt: Option<String> = if !token.is_null() {
-        match env.get_string(&token) {
-            Ok(s) => {
-                let trimmed: String = s.into();
-                if trimmed.trim().is_empty() {
-                    None
-                } else {
-                    Some(trimmed.trim().to_string())
-                }
-            }
-            Err(_) => None,
-        }
+    let ws_enabled = enable_ws != 0;
+    let ipc_enabled = enable_ipc != 0;
+    if !ws_enabled && !ipc_enabled {
+        return 0;
+    }
+
+    let bind_address = if ws_enabled {
+        let host_str = read_optional_jstring(&mut env, &host);
+        let resolved_host = if host_str.is_empty() {
+            "127.0.0.1".to_string()
+        } else {
+            host_str
+        };
+        Some(format!("{}:{}", resolved_host, port))
     } else {
         None
     };
 
-    let bind_address = format!("{}:{}", host_str, port);
+    let token_str = read_optional_jstring(&mut env, &token);
+    let token_opt = if token_str.is_empty() {
+        None
+    } else {
+        Some(token_str)
+    };
+
+    let instance_info = if ipc_enabled {
+        Some(InstanceMetadata {
+            world_name: read_optional_jstring(&mut env, &world_name),
+            mc_version: read_optional_jstring(&mut env, &mc_version),
+            loader: read_optional_jstring(&mut env, &loader),
+            dimension: {
+                let d = read_optional_jstring(&mut env, &dimension);
+                if d.is_empty() {
+                    "minecraft:overworld".to_string()
+                } else {
+                    d
+                }
+            },
+        })
+    } else {
+        None
+    };
+
     let config = ServerConfig {
         bind_address,
+        enable_ipc: ipc_enabled,
+        ipc_name: None,
+        instance_info,
         auth_token: token_opt,
         allow_loopback_without_token: allow_loopback != 0,
+        require_token_on_ipc: require_token_on_ipc != 0,
         server_uuid: [0u8; 16],
         max_connections: 8,
         handshake_timeout: std::time::Duration::from_millis(5000),
@@ -61,6 +107,47 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerS
         Ok(server) => SERVERS.insert(server) as jlong,
         Err(_) => 0,
     }
+}
+
+/// Returns the local IPC URL (`ipc://...`) of the native server, or null if IPC is disabled.
+#[no_mangle]
+pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerGetIpcUrl(
+    env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jstring {
+    let Some(server) = SERVERS.get(handle as u64) else {
+        return std::ptr::null_mut();
+    };
+    let Some(url) = server.ipc_url() else {
+        return std::ptr::null_mut();
+    };
+    match env.new_string(url) {
+        Ok(s) => s.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Updates descriptive discovery metadata on a running IPC server.
+#[no_mangle]
+pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerUpdateMetadata(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    world_name: JString,
+    mc_version: JString,
+    loader: JString,
+    dimension: JString,
+) {
+    let Some(server) = SERVERS.get(handle as u64) else {
+        return;
+    };
+    server.update_instance_metadata(InstanceMetadata {
+        world_name: read_optional_jstring(&mut env, &world_name),
+        mc_version: read_optional_jstring(&mut env, &mc_version),
+        loader: read_optional_jstring(&mut env, &loader),
+        dimension: read_optional_jstring(&mut env, &dimension),
+    });
 }
 
 /// Stops the native server and retires its handle.

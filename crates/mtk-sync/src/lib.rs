@@ -10,8 +10,10 @@
 //! and synchronizes chunk data into `mtk-voxel` storage containers with zero-copy handoff.
 
 mod client;
+mod discovery;
 pub mod protocol;
 pub mod server;
+mod transport_ipc;
 
 #[doc(hidden)]
 pub mod unstable {
@@ -23,6 +25,7 @@ pub mod unstable {
 pub use client::{
     normalize_stream_progress, BaselineAssembler, LiveSyncSession, SyncEvent, SyncLifecycle,
 };
+pub use discovery::{discover_local_instances, InstanceMetadata, LocalSyncInstance};
 pub use protocol::{
     compute_delta_batch_hash, compute_sparse_state_hash, compute_sparse_state_hash_for_point_cloud,
     compute_sparse_state_hash_for_storage, compute_sparse_state_hash_from_raw, decode_packet,
@@ -33,5 +36,5 @@ pub use protocol::{
 pub use server::{
     decide_handshake, encode_baseline_from_raw, encode_baseline_from_storage, encode_delta_op,
     BaselineEncoderConfig, BaselineStream, HandshakeContext, HandshakeResult, LiveSyncServer,
-    ServerConfig, ServerEvent,
+    ServerConfig, ServerEvent, DEFAULT_WS_BIND_ADDR, DEFAULT_WS_PORT,
 };

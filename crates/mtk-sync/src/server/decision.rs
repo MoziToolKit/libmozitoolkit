@@ -14,8 +14,10 @@ pub struct HandshakeContext {
     pub state_hash: u64,
     pub dimension: String,
     pub expected_auth_token: Option<String>,
+    pub is_ipc: bool,
     pub is_loopback: bool,
     pub allow_loopback_without_token: bool,
+    pub require_token_on_ipc: bool,
 }
 
 /// Result of evaluating a client's handshake request.
@@ -100,9 +102,12 @@ pub fn decide_handshake(
         let expected_trimmed = expected.trim();
         if !expected_trimmed.is_empty() {
             let provided_trimmed = auth_token.trim();
-            let is_loopback_bypass =
-                ctx.is_loopback && ctx.allow_loopback_without_token && provided_trimmed.is_empty();
-            if !is_loopback_bypass && expected_trimmed != provided_trimmed {
+            let bypass = if ctx.is_ipc {
+                !ctx.require_token_on_ipc
+            } else {
+                ctx.is_loopback && ctx.allow_loopback_without_token && provided_trimmed.is_empty()
+            };
+            if !bypass && expected_trimmed != provided_trimmed {
                 return Ok(HandshakeResult {
                     decision: SyncDecision::Rejected,
                     welcome_packet: Packet::Welcome {

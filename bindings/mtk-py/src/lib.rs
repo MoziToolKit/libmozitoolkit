@@ -55,7 +55,7 @@ pub(crate) use resource::{
     path_provides_vanilla_client, precompile_all_assets, probe_pack, resolve_active_cache_package,
     PyAssetCache, PyResourcePackStack,
 };
-pub(crate) use sync::{PyLiveSyncServer, PyLiveSyncSession};
+pub(crate) use sync::{discover_local_sync_instances, PyLiveSyncServer, PyLiveSyncSession};
 pub(crate) use texture::PyBakedAtlas;
 pub(crate) use voxel::{PyMesherConfig, PyVoxelStorage, PyVoxelWorld};
 
@@ -109,6 +109,7 @@ fn libmtk_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // 4. Live Sync & Protocol
     m.add_class::<PyLiveSyncSession>()?;
     m.add_class::<PyLiveSyncServer>()?;
+    m.add_function(wrap_pyfunction!(discover_local_sync_instances, m)?)?;
 
     // 5. Resource Pack & Textures
     m.add_class::<PyResourcePackStack>()?;

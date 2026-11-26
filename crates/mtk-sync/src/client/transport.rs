@@ -1,6 +1,8 @@
-//! # Native WebSocket Live Sync Client
+//! # Native Live Sync Client Transport
 //!
-//! Dedicated background thread client using `tungstenite` with auto-reconnect and packet routing.
+//! Dedicated background thread client supporting WebSocket (`ws://` / `wss://`) via
+//! `tungstenite` and cross-platform local IPC (`ipc://`) via `interprocess`, with
+//! auto-reconnect and packet routing.
 
 use std::net::TcpStream;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -13,6 +15,9 @@ use tungstenite::protocol::Message;
 use url::Url;
 
 use crate::protocol::{decode_packet, encode_packet, Packet, ProtocolError};
+use crate::transport_ipc::{
+    connect_ipc_stream, resolve_ipc_name_from_url, write_ipc_frame, IpcFrameReader, IpcReadError,
+};
 
 /// Encodes `packet` and queues it for the transport thread.
 ///
@@ -64,15 +69,25 @@ pub(crate) struct SyncClient {
 }
 
 impl SyncClient {
-    /// Spawns a new background WebSocket client connecting to `url`.
+    /// Spawns a new background client connecting to `url` (`ws://...`, `wss://...`, or `ipc://...`).
     pub(crate) fn connect(
         url_str: String,
         msg_sender: Sender<ClientMessage>,
         auto_reconnect: bool,
         max_reconnect_attempts: usize,
     ) -> Result<Self, String> {
-        let _parsed = Url::parse(&url_str)
-            .map_err(|e| format!("Invalid WebSocket URL '{}': {}", url_str, e))?;
+        let parsed =
+            Url::parse(&url_str).map_err(|e| format!("Invalid Sync URL '{}': {}", url_str, e))?;
+        let is_ipc = match parsed.scheme() {
+            "ipc" => {
+                resolve_ipc_name_from_url(&url_str)?;
+                true
+            }
+            "ws" | "wss" => false,
+            other => {
+                return Err(format!("Unsupported Sync URL scheme '{}'", other));
+            }
+        };
 
         let running = Arc::new(AtomicBool::new(true));
         let active_tcp = Arc::new(Mutex::new(None));
@@ -81,15 +96,26 @@ impl SyncClient {
         let running_clone = running.clone();
         let active_tcp_clone = active_tcp.clone();
         let handle = thread::spawn(move || {
-            Self::run_loop(
-                url_str,
-                msg_sender,
-                cmd_receiver,
-                running_clone,
-                active_tcp_clone,
-                auto_reconnect,
-                max_reconnect_attempts,
-            );
+            if is_ipc {
+                Self::run_ipc_loop(
+                    url_str,
+                    msg_sender,
+                    cmd_receiver,
+                    running_clone,
+                    auto_reconnect,
+                    max_reconnect_attempts,
+                );
+            } else {
+                Self::run_loop(
+                    url_str,
+                    msg_sender,
+                    cmd_receiver,
+                    running_clone,
+                    active_tcp_clone,
+                    auto_reconnect,
+                    max_reconnect_attempts,
+                );
+            }
         });
 
         Ok(Self {
@@ -288,6 +314,171 @@ impl SyncClient {
                 && attempts <= max_reconnect_attempts
             {
                 // Non-blocking backoff: wake up immediately if Stop command received
+                match cmd_receiver.recv_timeout(Duration::from_millis(1500)) {
+                    Ok(ClientCommand::Stop) => {
+                        let _ = msg_sender.send(ClientMessage::Disconnected);
+                        return;
+                    }
+                    Ok(ClientCommand::Send(_)) => {}
+                    Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
+                    Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
+                        let _ = msg_sender.send(ClientMessage::Disconnected);
+                        return;
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+
+        let _ = msg_sender.send(ClientMessage::Disconnected);
+    }
+
+    fn run_ipc_loop(
+        url_str: String,
+        msg_sender: Sender<ClientMessage>,
+        cmd_receiver: Receiver<ClientCommand>,
+        running: Arc<AtomicBool>,
+        auto_reconnect: bool,
+        max_reconnect_attempts: usize,
+    ) {
+        let mut attempts = 0;
+
+        while running.load(Ordering::Relaxed) {
+            if attempts > 0 {
+                let _ = msg_sender.send(ClientMessage::Status(format!(
+                    "RECONNECTING... ({}/{})",
+                    attempts, max_reconnect_attempts
+                )));
+            } else {
+                let _ = msg_sender.send(ClientMessage::Status("CONNECTING...".to_string()));
+            }
+
+            match connect_ipc_stream(&url_str) {
+                Ok(stream) => {
+                    if Self::drain_stale_commands(&cmd_receiver) {
+                        let _ = msg_sender.send(ClientMessage::Disconnected);
+                        return;
+                    }
+                    attempts = 0;
+                    let _ = msg_sender.send(ClientMessage::Status("CONNECTED".to_string()));
+
+                    let mut reader = IpcFrameReader::new();
+                    while running.load(Ordering::Relaxed) {
+                        let mut did_work = false;
+                        let mut connection_lost = false;
+
+                        while let Ok(cmd) = cmd_receiver.try_recv() {
+                            did_work = true;
+                            match cmd {
+                                ClientCommand::Send(data) => {
+                                    if let Err(e) = write_ipc_frame(&stream, &data) {
+                                        let _ = msg_sender.send(ClientMessage::Status(format!(
+                                            "IPC send error: {}",
+                                            e
+                                        )));
+                                        connection_lost = true;
+                                        break;
+                                    }
+                                }
+                                ClientCommand::Stop => {
+                                    let _ = msg_sender.send(ClientMessage::Disconnected);
+                                    return;
+                                }
+                            }
+                        }
+
+                        if connection_lost {
+                            break;
+                        }
+
+                        loop {
+                            match reader.poll_frame(&stream) {
+                                Ok(Some(bin)) => {
+                                    did_work = true;
+                                    let bytes = bin.len();
+                                    match decode_packet(&bin) {
+                                        Ok(packet) => {
+                                            let _ =
+                                                msg_sender.send(ClientMessage::PacketReceived {
+                                                    packet,
+                                                    bytes,
+                                                });
+                                        }
+                                        Err(e) => {
+                                            let _ = msg_sender.send(ClientMessage::Warning(
+                                                format!("Packet decode error: {}", e),
+                                            ));
+                                        }
+                                    }
+                                }
+                                Ok(None) => break,
+                                Err(IpcReadError::Closed) => {
+                                    let _ = msg_sender.send(ClientMessage::Status(
+                                        "Server closed the IPC connection".to_string(),
+                                    ));
+                                    connection_lost = true;
+                                    break;
+                                }
+                                Err(IpcReadError::InvalidFrameSize(sz)) => {
+                                    let _ = msg_sender.send(ClientMessage::Status(format!(
+                                        "IPC framing error: invalid frame length {}",
+                                        sz
+                                    )));
+                                    connection_lost = true;
+                                    break;
+                                }
+                                Err(IpcReadError::Io(e)) => {
+                                    if running.load(Ordering::Relaxed) {
+                                        let _ = msg_sender.send(ClientMessage::Status(format!(
+                                            "IPC connection error: {}",
+                                            e
+                                        )));
+                                    }
+                                    connection_lost = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if connection_lost {
+                            break;
+                        }
+
+                        if !did_work {
+                            thread::sleep(Duration::from_millis(2));
+                        }
+                    }
+
+                    if Self::drain_stale_commands(&cmd_receiver) {
+                        let _ = msg_sender.send(ClientMessage::Disconnected);
+                        return;
+                    }
+
+                    if running.load(Ordering::Relaxed) && auto_reconnect {
+                        let _ = msg_sender.send(ClientMessage::ConnectionLost);
+                    }
+                }
+                Err(e) => {
+                    attempts += 1;
+                    if !auto_reconnect || attempts > max_reconnect_attempts {
+                        let _ = msg_sender.send(ClientMessage::Status(format!(
+                            "DISCONNECTED (IPC connection failed: {})",
+                            e
+                        )));
+                        break;
+                    }
+                    let _ = msg_sender.send(ClientMessage::Status(format!(
+                        "IPC connection failed: {}. Retrying ({}/{})...",
+                        e, attempts, max_reconnect_attempts
+                    )));
+                }
+            }
+
+            if running.load(Ordering::Relaxed)
+                && auto_reconnect
+                && attempts <= max_reconnect_attempts
+            {
                 match cmd_receiver.recv_timeout(Duration::from_millis(1500)) {
                     Ok(ClientCommand::Stop) => {
                         let _ = msg_sender.send(ClientMessage::Disconnected);

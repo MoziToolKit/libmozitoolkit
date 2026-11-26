@@ -29,7 +29,7 @@ edition = "2021"
 authors = ["Mozi <mozi1924@arasaka.ltd>"]
 license = "GPL-3.0-or-later"
 repository = "https://github.com/MoziToolKit/libmozitoolkit"
-rust-version = "1.88.0"
+rust-version = "1.89.0"
 [workspace.dependencies]
 clap = { version = "4.6.7", default-features = false, features = ["derive", "std", "help", "usage", "error-context"] }
 glam = { version = "0.34.3", default-features = false, features = ["libm", "serde", "all-types"] }
@@ -47,6 +47,7 @@ wasm-bindgen = "0.2.130"
 js-sys = "0.3.107"
 console_error_panic_hook = { version = "0.1.7", default-features = false }
 tungstenite = { version = "0.30.0", default-features = false, features = ["handshake", "rustls-tls-webpki-roots"] }
+interprocess = { version = "2.4.10", default-features = false }
 ureq = { version = "3.5.2", default-features = false, features = ["rustls"] }
 crossbeam-channel = { version = "0.5.17", default-features = false, features = ["std"] }
 url = { version = "2.5.8", default-features = false }

@@ -1,112 +1,238 @@
 use std::collections::HashMap;
 use std::net::{SocketAddr, TcpListener};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use glam::IVec3;
+use interprocess::local_socket::traits::Listener as IpcListenerTrait;
 
+use crate::discovery::{
+    default_registry_dir, generate_endpoint_id, InstanceMetadata, InstanceRegistrationGuard,
+};
 use crate::protocol::{
     compute_sparse_state_hash_from_raw, encode_packet, CancelReason, DeltaChangeEntry, Packet,
     ProtocolError,
 };
 use crate::server::baseline::{encode_baseline_from_raw, BaselineEncoderConfig, BaselineStream};
 use crate::server::delta::encode_delta_op;
+use crate::transport_ipc::{bind_ipc_listener, format_ipc_url};
 
 use super::config::{generate_unique_server_uuid, ServerCommand, ServerConfig, ServerEvent};
 use super::state::{lock_unpoisoned, ClientHandle, PaletteState, SelectionContext, ServerInner};
-use super::worker::run_client_worker;
+use super::worker::{run_ipc_client_worker, run_ws_client_worker};
 
-/// The Native Live Sync WebSocket Server instance.
+/// The Native Live Sync Server instance (WebSocket and/or local IPC).
 pub struct LiveSyncServer {
     inner: Arc<ServerInner>,
     /// Mutex so `stop` can take `&self`: JNI hands the server out as a shared `Arc`, and an
     /// in-flight call must be able to observe the stopped state without exclusive access.
-    listener_thread: std::sync::Mutex<Option<JoinHandle<()>>>,
+    listener_threads: std::sync::Mutex<Vec<JoinHandle<()>>>,
+    ipc_registration: std::sync::Mutex<Option<InstanceRegistrationGuard>>,
 }
 
 impl LiveSyncServer {
-    /// Starts a new native WebSocket Live Sync server.
+    /// Starts a new native Live Sync server (WebSocket and/or local IPC).
     pub fn start(mut config: ServerConfig) -> Result<Self, ProtocolError> {
+        if config.bind_address.is_none() && !config.enable_ipc {
+            return Err(ProtocolError::TruncatedPayload {
+                field: "Neither bind_address nor enable_ipc is configured",
+            });
+        }
+
         if config.server_uuid == [0u8; 16] {
             config.server_uuid = generate_unique_server_uuid();
         }
 
-        let listener = TcpListener::bind(&config.bind_address).map_err(|_e| {
-            ProtocolError::TruncatedPayload {
-                field: "Failed to bind TcpListener address",
-            }
-        })?;
-
-        let local_addr = listener
-            .local_addr()
-            .map_err(|_| ProtocolError::TruncatedPayload {
-                field: "Failed to query local listener address",
-            })?;
-
-        listener
-            .set_nonblocking(true)
-            .map_err(|_| ProtocolError::TruncatedPayload {
-                field: "Failed to set listener non-blocking",
-            })?;
-
         let inner = Arc::new(ServerInner::new(config.server_uuid));
-        *lock_unpoisoned(&inner.local_addr) = Some(local_addr);
+        let mut listener_threads = Vec::new();
+        let mut ws_bound_str: Option<String> = None;
 
-        let inner_clone = inner.clone();
-        let config_clone = config.clone();
+        if let Some(ref bind_address) = config.bind_address {
+            let listener =
+                TcpListener::bind(bind_address).map_err(|_e| ProtocolError::TruncatedPayload {
+                    field: "Failed to bind TcpListener address",
+                })?;
 
-        let listener_thread = thread::spawn(move || {
-            let next_client_id = AtomicU64::new(1);
+            let local_addr =
+                listener
+                    .local_addr()
+                    .map_err(|_| ProtocolError::TruncatedPayload {
+                        field: "Failed to query local listener address",
+                    })?;
 
-            while inner_clone.is_running() {
-                match listener.accept() {
-                    Ok((stream, addr)) => {
-                        let mut clients = lock_unpoisoned(&inner_clone.clients);
+            listener
+                .set_nonblocking(true)
+                .map_err(|_| ProtocolError::TruncatedPayload {
+                    field: "Failed to set listener non-blocking",
+                })?;
 
-                        if clients.len() >= config_clone.max_connections {
-                            drop(stream);
-                            continue;
+            ws_bound_str = Some(local_addr.to_string());
+            *lock_unpoisoned(&inner.local_addr) = Some(local_addr);
+
+            let inner_clone = inner.clone();
+            let config_clone = config.clone();
+            let ws_thread = thread::spawn(move || {
+                while inner_clone.is_running() {
+                    match listener.accept() {
+                        Ok((stream, addr)) => {
+                            let mut clients = lock_unpoisoned(&inner_clone.clients);
+                            if clients.len() >= config_clone.max_connections {
+                                drop(stream);
+                                continue;
+                            }
+
+                            let client_id =
+                                inner_clone.next_client_id.fetch_add(1, Ordering::Relaxed);
+                            let (tx, rx) = crossbeam_channel::unbounded();
+                            clients.insert(client_id, ClientHandle { tx });
+                            drop(clients);
+
+                            let worker_inner = inner_clone.clone();
+                            let worker_config = config_clone.clone();
+                            thread::spawn(move || {
+                                run_ws_client_worker(
+                                    client_id,
+                                    stream,
+                                    addr,
+                                    rx,
+                                    worker_inner,
+                                    worker_config,
+                                );
+                            });
                         }
-
-                        let client_id = next_client_id.fetch_add(1, Ordering::Relaxed);
-                        let (tx, rx) = crossbeam_channel::unbounded();
-
-                        clients.insert(client_id, ClientHandle { tx });
-                        drop(clients);
-
-                        let worker_inner = inner_clone.clone();
-                        let worker_config = config_clone.clone();
-
-                        thread::spawn(move || {
-                            run_client_worker(
-                                client_id,
-                                stream,
-                                addr,
-                                rx,
-                                worker_inner,
-                                worker_config,
-                            );
-                        });
-                    }
-                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        thread::sleep(Duration::from_millis(10));
-                    }
-                    Err(_) => {
-                        thread::sleep(Duration::from_millis(10));
+                        Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            thread::sleep(Duration::from_millis(10));
+                        }
+                        Err(_) => {
+                            thread::sleep(Duration::from_millis(10));
+                        }
                     }
                 }
+            });
+            listener_threads.push(ws_thread);
+        }
+
+        let mut ipc_registration = None;
+        if config.enable_ipc {
+            let registry_dir = default_registry_dir();
+            if let Err(err) = std::fs::create_dir_all(&registry_dir) {
+                inner.running.store(false, Ordering::Relaxed);
+                for h in listener_threads {
+                    let _ = h.join();
+                }
+                let _ = inner.event_tx.send(ServerEvent::Warning(err.to_string()));
+                return Err(ProtocolError::TruncatedPayload {
+                    field: "Failed to create IPC registry directory",
+                });
             }
-        });
+
+            let endpoint_id = config
+                .ipc_name
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(crate::transport_ipc::sanitize_endpoint_id)
+                .unwrap_or_else(|| generate_endpoint_id(&config.server_uuid));
+
+            let ipc_listener = match bind_ipc_listener(&endpoint_id, &registry_dir) {
+                Ok(l) => l,
+                Err(_) => {
+                    inner.running.store(false, Ordering::Relaxed);
+                    for h in listener_threads {
+                        let _ = h.join();
+                    }
+                    return Err(ProtocolError::TruncatedPayload {
+                        field: "Failed to bind IPC listener",
+                    });
+                }
+            };
+
+            let ipc_url = format_ipc_url(&endpoint_id, &registry_dir, true);
+            let metadata = config.instance_info.clone().unwrap_or_default();
+            let requires_token = config.require_token_on_ipc
+                && config
+                    .auth_token
+                    .as_deref()
+                    .is_some_and(|t| !t.trim().is_empty());
+
+            let guard = match InstanceRegistrationGuard::create(
+                &registry_dir,
+                &endpoint_id,
+                ipc_url.clone(),
+                config.server_uuid,
+                metadata,
+                requires_token,
+                ws_bound_str,
+            ) {
+                Ok(g) => g,
+                Err(_) => {
+                    inner.running.store(false, Ordering::Relaxed);
+                    for h in listener_threads {
+                        let _ = h.join();
+                    }
+                    return Err(ProtocolError::TruncatedPayload {
+                        field: "Failed to register local IPC instance",
+                    });
+                }
+            };
+
+            *lock_unpoisoned(&inner.ipc_url) = Some(ipc_url.clone());
+            ipc_registration = Some(guard);
+
+            let inner_clone = inner.clone();
+            let config_clone = config.clone();
+            let ipc_thread = thread::spawn(move || {
+                while inner_clone.is_running() {
+                    match ipc_listener.accept() {
+                        Ok(stream) => {
+                            let mut clients = lock_unpoisoned(&inner_clone.clients);
+                            if clients.len() >= config_clone.max_connections {
+                                drop(stream);
+                                continue;
+                            }
+
+                            let client_id =
+                                inner_clone.next_client_id.fetch_add(1, Ordering::Relaxed);
+                            let (tx, rx) = crossbeam_channel::unbounded();
+                            clients.insert(client_id, ClientHandle { tx });
+                            drop(clients);
+
+                            let worker_inner = inner_clone.clone();
+                            let worker_config = config_clone.clone();
+                            let peer_label = ipc_url.clone();
+                            thread::spawn(move || {
+                                run_ipc_client_worker(
+                                    client_id,
+                                    stream,
+                                    peer_label,
+                                    rx,
+                                    worker_inner,
+                                    worker_config,
+                                );
+                            });
+                        }
+                        Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            thread::sleep(Duration::from_millis(5));
+                        }
+                        Err(_) => {
+                            thread::sleep(Duration::from_millis(5));
+                        }
+                    }
+                }
+            });
+            listener_threads.push(ipc_thread);
+        }
 
         Ok(Self {
             inner,
-            listener_thread: std::sync::Mutex::new(Some(listener_thread)),
+            listener_threads: std::sync::Mutex::new(listener_threads),
+            ipc_registration: std::sync::Mutex::new(ipc_registration),
         })
     }
 
-    /// Stops the server, closes all client connections, and terminates the listener.
+    /// Stops the server, closes all client connections, and terminates listeners.
     pub fn stop(&self) {
         self.inner.running.store(false, Ordering::Relaxed);
 
@@ -123,10 +249,17 @@ impl LiveSyncServer {
         *lock_unpoisoned(&self.inner.palette) = PaletteState::default();
         *lock_unpoisoned(&self.inner.selection) = None;
 
-        let listener_thread = lock_unpoisoned(&self.listener_thread).take();
-        if let Some(handle) = listener_thread {
+        let threads = {
+            let mut guard = lock_unpoisoned(&self.listener_threads);
+            std::mem::take(&mut *guard)
+        };
+        for handle in threads {
             let _ = handle.join();
         }
+
+        // Drop IPC registration after listener exits so the socket file is safely unlinked.
+        let _ = lock_unpoisoned(&self.ipc_registration).take();
+        *lock_unpoisoned(&self.inner.ipc_url) = None;
     }
 
     /// Returns whether the server is actively running.
@@ -144,9 +277,24 @@ impl LiveSyncServer {
         lock_unpoisoned(&self.inner.clients).len()
     }
 
-    /// Returns the bound local socket address.
+    /// Returns the bound local WebSocket socket address, if WebSocket is enabled.
     pub fn local_addr(&self) -> Option<SocketAddr> {
         *lock_unpoisoned(&self.inner.local_addr)
+    }
+
+    /// Returns the local IPC URL (e.g. `ipc://mtk-sync-...`), if IPC is enabled.
+    pub fn ipc_url(&self) -> Option<String> {
+        lock_unpoisoned(&self.inner.ipc_url).clone()
+    }
+
+    /// Updates descriptive metadata published in the local IPC discovery manifest.
+    pub fn update_instance_metadata(&self, metadata: InstanceMetadata) {
+        let mut guard = lock_unpoisoned(&self.ipc_registration);
+        if let Some(reg) = guard.as_mut() {
+            if let Err(err) = reg.update_metadata(metadata) {
+                self.warn(err);
+            }
+        }
     }
 
     /// Sets the active selection bounding box.

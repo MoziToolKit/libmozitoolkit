@@ -3,6 +3,27 @@ use pyo3::types::{PyDict, PyList};
 
 use super::parse_uuid_hex;
 
+/// Discovers running local Minecraft `LiveSyncServer` IPC instances.
+#[pyfunction]
+pub fn discover_local_sync_instances<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+    let list = PyList::empty(py);
+    for inst in mtk_sync::discover_local_instances() {
+        let dict = PyDict::new(py);
+        dict.set_item("pid", inst.pid)?;
+        dict.set_item("server_uuid", inst.server_uuid)?;
+        dict.set_item("ipc_url", inst.ipc_url)?;
+        dict.set_item("world_name", inst.world_name)?;
+        dict.set_item("mc_version", inst.mc_version)?;
+        dict.set_item("loader", inst.loader)?;
+        dict.set_item("dimension", inst.dimension)?;
+        dict.set_item("requires_token", inst.requires_token)?;
+        dict.set_item("ws_bind_address", inst.ws_bind_address)?;
+        dict.set_item("started_at_ms", inst.started_at_ms)?;
+        list.append(dict)?;
+    }
+    Ok(list)
+}
+
 /// Python wrapper for native RFC v3.1 `LiveSyncServer`.
 #[pyclass(name = "LiveSyncServer")]
 pub struct PyLiveSyncServer {
@@ -13,15 +34,21 @@ pub struct PyLiveSyncServer {
 impl PyLiveSyncServer {
     #[new]
     #[pyo3(signature = (
-        bind_address="127.0.0.1:8765".to_string(),
+        bind_address=Some("127.0.0.1:21924".to_string()),
+        enable_ipc=false,
+        ipc_name=None,
         auth_token=None,
         allow_loopback_without_token=true,
+        require_token_on_ipc=false,
         server_uuid=None
     ))]
     pub fn new(
-        bind_address: String,
+        bind_address: Option<String>,
+        enable_ipc: bool,
+        ipc_name: Option<String>,
         auth_token: Option<String>,
         allow_loopback_without_token: bool,
+        require_token_on_ipc: bool,
         server_uuid: Option<String>,
     ) -> PyResult<Self> {
         let mut uuid_bytes = [0u8; 16];
@@ -33,8 +60,12 @@ impl PyLiveSyncServer {
         }
         let config = mtk_sync::ServerConfig {
             bind_address,
+            enable_ipc,
+            ipc_name,
+            instance_info: None,
             auth_token,
             allow_loopback_without_token,
+            require_token_on_ipc,
             server_uuid: uuid_bytes,
             max_connections: 8,
             handshake_timeout: std::time::Duration::from_millis(5000),
@@ -59,11 +90,43 @@ impl PyLiveSyncServer {
         self.inner.as_ref().map(|s| s.is_running()).unwrap_or(false)
     }
 
-    /// Bound local address string (e.g. "127.0.0.1:8765").
+    /// Bound local WebSocket address string (e.g. "127.0.0.1:21924"), or None in IPC-only mode.
     pub fn local_addr(&self) -> Option<String> {
         self.inner
             .as_ref()
             .and_then(|s| s.local_addr().map(|a| a.to_string()))
+    }
+
+    /// Local IPC URL (e.g. "ipc://mtk-sync-..."), or None when IPC is disabled.
+    pub fn ipc_url(&self) -> Option<String> {
+        self.inner.as_ref().and_then(|s| s.ipc_url())
+    }
+
+    /// Updates descriptive metadata published in the local IPC discovery manifest.
+    #[pyo3(signature = (
+        world_name="",
+        mc_version="",
+        loader="",
+        dimension="minecraft:overworld"
+    ))]
+    pub fn set_instance_metadata(
+        &self,
+        world_name: &str,
+        mc_version: &str,
+        loader: &str,
+        dimension: &str,
+    ) -> PyResult<()> {
+        let server = self
+            .inner
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Server is stopped"))?;
+        server.update_instance_metadata(mtk_sync::InstanceMetadata {
+            world_name: world_name.to_string(),
+            mc_version: mc_version.to_string(),
+            loader: loader.to_string(),
+            dimension: dimension.to_string(),
+        });
+        Ok(())
     }
 
     /// Number of connected clients.
@@ -211,10 +274,13 @@ impl PyLiveSyncServer {
             for event in server.poll_events() {
                 let dict = PyDict::new(py);
                 match event {
-                    mtk_sync::ServerEvent::ClientConnected { client_id, addr } => {
+                    mtk_sync::ServerEvent::ClientConnected {
+                        client_id,
+                        endpoint,
+                    } => {
                         dict.set_item("type", "client_connected")?;
                         dict.set_item("client_id", client_id)?;
-                        dict.set_item("addr", addr.to_string())?;
+                        dict.set_item("endpoint", endpoint)?;
                     }
                     mtk_sync::ServerEvent::ClientDisconnected { client_id, reason } => {
                         dict.set_item("type", "client_disconnected")?;
