@@ -457,6 +457,32 @@ impl MaterialResolver {
             }
         }
 
+        // 6. Cross-version vanilla rename fallback (`chain` <-> `iron_chain`, `grass` <-> `short_grass`).
+        let is_vanilla_namespace =
+            !raw_material_name.contains(':') || raw_material_name.starts_with("minecraft:");
+        if is_vanilla_namespace {
+            if let Some(alias) = match cleaned.as_str() {
+                "iron_chain" => Some("chain"),
+                "chain" => Some("iron_chain"),
+                "short_grass" => Some("grass"),
+                "grass" => Some("short_grass"),
+                _ => None,
+            } {
+                let alias_cands = if raw_material_name.contains("item/") {
+                    [format!("item/{}", alias), format!("block/{}", alias)]
+                } else {
+                    [format!("block/{}", alias), format!("item/{}", alias)]
+                };
+                for cand in &alias_cands {
+                    if let Some(sprite_loc) = address_map.lookup_str(cand) {
+                        let res_loc = ResourceLocation::parse(cand)
+                            .unwrap_or_else(|_| ResourceLocation::new("minecraft", cand));
+                        return Some((res_loc, sprite_loc));
+                    }
+                }
+            }
+        }
+
         None
     }
 
@@ -518,5 +544,20 @@ mod tests {
         // Local UV should be around center (0.5, 0.5)
         assert!((local_uv[0] - 0.5).abs() < 1e-2);
         assert!((local_uv[1] - 0.5).abs() < 1e-2);
+    }
+
+    #[test]
+    fn test_cross_version_vanilla_rename_texture_fallback() {
+        let mut map = AtlasAddressMap::new();
+        map.sprites.insert(
+            ResourceLocation::new("minecraft", "block/chain"),
+            AtlasSpriteLocation {
+                category: "blocks".to_string(),
+                ..Default::default()
+            },
+        );
+        let (loc, _) = MaterialResolver::resolve("minecraft:block/iron_chain", None, &map)
+            .expect("iron_chain should fall back to block/chain when 1.21 pack has chain");
+        assert_eq!(loc.to_string(), "minecraft:block/chain");
     }
 }

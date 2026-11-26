@@ -182,21 +182,45 @@ impl BakedModelDatabase {
     /// 2. Normalized match with non-geometric properties stripped (e.g. `waterlogged`, `occupied`).
     /// 3. Best compatibility subset match against variant keys for this block ID.
     /// 4. Base unparameterized block ID fallback (e.g. `minecraft:chest`).
+    /// 5. Canonical Mojang version-rename peer fallback when a save/world and baked pack
+    ///    straddle a vanilla block ID rename (e.g. 1.21 `chain` <-> 1.21.9+ `iron_chain`).
     pub fn get(&self, state: &str) -> Option<&BakedModel> {
         // Tier 1: Fast exact match
         if let Some(model) = self.models.get(state) {
             return Some(model);
         }
 
-        let parsed = match crate::parser::blockstate::BlockState::parse(state) {
-            Ok(p) => p,
-            Err(_) => return None,
-        };
-
+        let parsed = crate::parser::blockstate::BlockState::parse(state).ok()?;
         let base_id = parsed.block_id();
-        let canon_str = parsed.to_canonical_string();
 
-        // Tier 1.5: Canonical match (handles whitespace and property ordering)
+        if let Some(model) = self.resolve_block_variants(&base_id, &parsed.name, &parsed.properties)
+        {
+            return Some(model);
+        }
+
+        if parsed.namespace == "minecraft" {
+            if let Some(alias) = vanilla_renamed_block_alias(&parsed.name) {
+                let alias_base = format!("minecraft:{}", alias);
+                if let Some(model) =
+                    self.resolve_block_variants(&alias_base, alias, &parsed.properties)
+                {
+                    return Some(model);
+                }
+            }
+        }
+
+        None
+    }
+
+    fn resolve_block_variants(
+        &self,
+        base_id: &str,
+        short_name: &str,
+        properties: &BTreeMap<String, String>,
+    ) -> Option<&BakedModel> {
+        let canon_str = format_canonical_blockstate(base_id, properties);
+
+        // Tier 1.5: Canonical match (handles whitespace, property ordering, and renamed base_id)
         if let Some(model) = self.models.get(&canon_str) {
             return Some(model);
         }
@@ -215,7 +239,7 @@ impl BakedModelDatabase {
         ];
 
         let mut has_non_geom = false;
-        let mut filtered_props = parsed.properties.clone();
+        let mut filtered_props = properties.clone();
         for &prop in NON_GEOMETRIC_PROPS {
             if filtered_props.remove(prop).is_some() {
                 has_non_geom = true;
@@ -223,15 +247,7 @@ impl BakedModelDatabase {
         }
 
         if has_non_geom {
-            let canon_filtered = if filtered_props.is_empty() {
-                base_id.clone()
-            } else {
-                let props_str: Vec<String> = filtered_props
-                    .iter()
-                    .map(|(k, v)| format!("{}={}", k, v))
-                    .collect();
-                format!("{}[{}]", base_id, props_str.join(","))
-            };
+            let canon_filtered = format_canonical_blockstate(base_id, &filtered_props);
 
             if let Some(model) = self.models.get(&canon_filtered) {
                 return Some(model);
@@ -377,12 +393,13 @@ impl BakedModelDatabase {
 
         // Tier 3: Cross-category block mappings for directional variants
         // If torch has a horizontal facing (north/south/east/west), it is a wall torch
+        let namespace = base_id.split_once(':').map_or("minecraft", |(ns, _)| ns);
         if let Some(facing) = filtered_props.get("facing").map(|s| s.as_str()) {
             if matches!(facing, "north" | "south" | "east" | "west") {
-                let wall_id = match parsed.name.as_str() {
-                    "torch" => Some(format!("{}:wall_torch", parsed.namespace)),
-                    "soul_torch" => Some(format!("{}:soul_wall_torch", parsed.namespace)),
-                    "redstone_torch" => Some(format!("{}:redstone_wall_torch", parsed.namespace)),
+                let wall_id = match short_name {
+                    "torch" => Some(format!("{}:wall_torch", namespace)),
+                    "soul_torch" => Some(format!("{}:soul_wall_torch", namespace)),
+                    "redstone_torch" => Some(format!("{}:redstone_wall_torch", namespace)),
                     _ => None,
                 };
                 if let Some(wid) = wall_id {
@@ -394,22 +411,22 @@ impl BakedModelDatabase {
         }
 
         // Tier 3.5: Compatibility match on base_id with filtered_props
-        if let Some(m) = find_best_variant(&base_id, &filtered_props) {
+        if let Some(m) = find_best_variant(base_id, &filtered_props) {
             return Some(m);
         }
 
         // Also try stripped short name (e.g. without "minecraft:" namespace)
-        if base_id != parsed.name {
-            if let Some(m) = find_best_variant(&parsed.name, &filtered_props) {
+        if base_id != short_name {
+            if let Some(m) = find_best_variant(short_name, &filtered_props) {
                 return Some(m);
             }
         }
 
         // Check wall_torch -> torch if facing is up or not found
-        let standing_id = match parsed.name.as_str() {
-            "wall_torch" => Some(format!("{}:torch", parsed.namespace)),
-            "soul_wall_torch" => Some(format!("{}:soul_torch", parsed.namespace)),
-            "redstone_wall_torch" => Some(format!("{}:redstone_torch", parsed.namespace)),
+        let standing_id = match short_name {
+            "wall_torch" => Some(format!("{}:torch", namespace)),
+            "soul_wall_torch" => Some(format!("{}:soul_torch", namespace)),
+            "redstone_wall_torch" => Some(format!("{}:redstone_torch", namespace)),
             _ => None,
         };
         if let Some(sid) = standing_id {
@@ -421,12 +438,12 @@ impl BakedModelDatabase {
         }
 
         // Tier 5: Base block ID fallback (e.g. "minecraft:chest")
-        if let Some(m) = self.models.get(&base_id) {
+        if let Some(m) = self.models.get(base_id) {
             return Some(m);
         }
 
         // Also try stripped short name (e.g. "chest")
-        self.models.get(&parsed.name)
+        self.models.get(short_name)
     }
 
     /// Resolves an item model by item identifier (e.g. "minecraft:diamond_sword", "diamond_sword", "item/diamond_sword")
@@ -466,6 +483,18 @@ impl BakedModelDatabase {
                     return Some(m);
                 }
             }
+            if namespace == "minecraft" {
+                if let Some(alias) = vanilla_renamed_block_alias(sub_path) {
+                    for cand in [
+                        format!("minecraft:item/{}", alias),
+                        format!("item/{}", alias),
+                    ] {
+                        if let Some(m) = self.models.get(&cand) {
+                            return Some(m);
+                        }
+                    }
+                }
+            }
             return None;
         }
 
@@ -478,6 +507,19 @@ impl BakedModelDatabase {
         for cand in &candidates {
             if let Some(m) = self.models.get(cand) {
                 return Some(m);
+            }
+        }
+
+        if namespace == "minecraft" {
+            if let Some(alias) = vanilla_renamed_block_alias(sub_path) {
+                for cand in [
+                    format!("minecraft:item/{}", alias),
+                    format!("item/{}", alias),
+                ] {
+                    if let Some(m) = self.models.get(&cand) {
+                        return Some(m);
+                    }
+                }
             }
         }
 
@@ -497,6 +539,27 @@ impl BakedModelDatabase {
 
     pub fn keys(&self) -> impl Iterator<Item = &String> {
         self.models.keys()
+    }
+}
+
+fn format_canonical_blockstate(base_id: &str, props: &BTreeMap<String, String>) -> String {
+    if props.is_empty() {
+        base_id.to_string()
+    } else {
+        let props_str: Vec<String> = props.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
+        format!("{}[{}]", base_id, props_str.join(","))
+    }
+}
+
+fn vanilla_renamed_block_alias(name: &str) -> Option<&'static str> {
+    match name {
+        // 1.21.9+ (`DataVersion >= 4541`) renamed `minecraft:chain` to `minecraft:iron_chain`.
+        "iron_chain" => Some("chain"),
+        "chain" => Some("iron_chain"),
+        // 1.20.3 (`DataVersion >= 3692`) renamed `minecraft:grass` to `minecraft:short_grass`.
+        "short_grass" => Some("grass"),
+        "grass" => Some("short_grass"),
+        _ => None,
     }
 }
 
@@ -538,5 +601,73 @@ mod tests {
         // Block item fallback
         assert!(db.get_item("minecraft:stone").is_some());
         assert!(db.get_item("stone").is_some());
+    }
+
+    #[test]
+    fn test_cross_version_vanilla_rename_fallback() {
+        // 1.21 pack stores `minecraft:chain`; save loader upgrades `<4541` `chain` -> `iron_chain`.
+        let mut db_121 = BakedModelDatabase::new();
+        let chain_x = BakedModel {
+            block_state: "minecraft:chain[axis=x]".to_string(),
+            ..Default::default()
+        };
+        let chain_item = BakedModel {
+            block_state: "minecraft:item/chain".to_string(),
+            ..Default::default()
+        };
+        db_121.insert("minecraft:chain[axis=x]".to_string(), chain_x);
+        db_121.insert("minecraft:item/chain".to_string(), chain_item);
+
+        let resolved_block = db_121
+            .get("minecraft:iron_chain[axis=x,waterlogged=false]")
+            .expect("1.21 chain must satisfy upgraded iron_chain blockstate");
+        assert_eq!(resolved_block.block_state, "minecraft:chain[axis=x]");
+
+        let resolved_item = db_121
+            .get_item("minecraft:item/iron_chain")
+            .expect("1.21 item/chain must satisfy item/iron_chain lookup");
+        assert_eq!(resolved_item.block_state, "minecraft:item/chain");
+
+        // Primary ID always wins over alias when the newer pack ships `iron_chain`.
+        let mut db_26 = BakedModelDatabase::new();
+        db_26.insert(
+            "minecraft:iron_chain[axis=x]".to_string(),
+            BakedModel {
+                block_state: "minecraft:iron_chain[axis=x]".to_string(),
+                ..Default::default()
+            },
+        );
+        db_26.insert(
+            "minecraft:chain[axis=x]".to_string(),
+            BakedModel {
+                block_state: "minecraft:chain[axis=x]".to_string(),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            db_26
+                .get("minecraft:iron_chain[axis=x]")
+                .expect("exact iron_chain must take priority")
+                .block_state,
+            "minecraft:iron_chain[axis=x]"
+        );
+        // Reverse direction (`chain` query against 26.2 pack having only `iron_chain`),
+        // and cross-version miss when neither exists.
+        assert!(db_121.get("minecraft:short_grass").is_none());
+        let mut db_120 = BakedModelDatabase::new();
+        db_120.insert(
+            "minecraft:grass".to_string(),
+            BakedModel {
+                block_state: "minecraft:grass".to_string(),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            db_120
+                .get("minecraft:short_grass")
+                .expect("1.20 grass must satisfy upgraded short_grass")
+                .block_state,
+            "minecraft:grass"
+        );
     }
 }
