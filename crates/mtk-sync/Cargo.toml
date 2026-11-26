@@ -25,6 +25,9 @@ url = { workspace = true }
 xxhash-rust = { workspace = true }
 zstd = { workspace = true }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true }
+
 [features]
 default = ["serde"]
 serde = []

@@ -5,7 +5,6 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crossbeam_channel::Receiver;
-use interprocess::local_socket::traits::Stream as _;
 use interprocess::local_socket::Stream as IpcStream;
 use tungstenite::protocol::WebSocketConfig;
 use tungstenite::WebSocket;
@@ -14,7 +13,9 @@ use crate::protocol::{
     decode_packet, encode_packet, BaselineAckResult, ErrorCode, Packet, ResyncReason, SyncDecision,
 };
 use crate::server::decision::decide_handshake;
-use crate::transport_ipc::{write_ipc_frame, IpcFrameReader, IpcReadError};
+use crate::transport_ipc::{
+    configure_accepted_ipc_stream, write_ipc_frame, IpcFrameReader, IpcReadError,
+};
 
 use super::config::{ServerCommand, ServerConfig, ServerEvent};
 use super::state::ServerInner;
@@ -51,7 +52,7 @@ impl PeerTransport {
     }
 
     fn from_ipc(stream: IpcStream) -> Self {
-        let _ = stream.set_nonblocking(true);
+        configure_accepted_ipc_stream(&stream);
         Self::Ipc {
             stream,
             reader: IpcFrameReader::new(),

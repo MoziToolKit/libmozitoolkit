@@ -48,6 +48,7 @@ js-sys = "0.3.107"
 console_error_panic_hook = { version = "0.1.7", default-features = false }
 tungstenite = { version = "0.30.0", default-features = false, features = ["handshake", "rustls-tls-webpki-roots"] }
 interprocess = { version = "2.4.10", default-features = false }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_Pipes"] }
 ureq = { version = "3.5.2", default-features = false, features = ["rustls"] }
 crossbeam-channel = { version = "0.5.17", default-features = false, features = ["std"] }
 url = { version = "2.5.8", default-features = false }
