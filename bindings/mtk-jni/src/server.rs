@@ -105,7 +105,10 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerS
 
     match LiveSyncServer::start(config) {
         Ok(server) => SERVERS.insert(server) as jlong,
-        Err(_) => 0,
+        Err(err) => {
+            eprintln!("[mtk-jni] nativeServerStart failed: {err}");
+            0
+        }
     }
 }
 
@@ -216,7 +219,10 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerS
     let bind_addr = format!("{}:{}", resolved_host, port);
     match server.start_ws(&bind_addr) {
         Ok(()) => 1,
-        Err(_) => 0,
+        Err(err) => {
+            eprintln!("[mtk-jni] nativeServerStartWs failed: {err}");
+            0
+        }
     }
 }
 
@@ -441,7 +447,10 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerS
         &block_entities,
     ) {
         Ok(_) => 1,
-        Err(_) => 0,
+        Err(err) => {
+            eprintln!("[mtk-jni] nativeServerSubmitBaseline failed: {err}");
+            0
+        }
     }
 }
 
@@ -514,5 +523,7 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerS
         entities.push((IVec3::new(rx, ry, rz), e_payloads[i].clone()));
     }
 
-    let _ = server.submit_deltas(&rel_positions, &state_list, &entities);
+    if let Err(err) = server.submit_deltas(&rel_positions, &state_list, &entities) {
+        eprintln!("[mtk-jni] nativeServerSubmitDeltas failed: {err}");
+    }
 }

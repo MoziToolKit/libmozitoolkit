@@ -241,6 +241,19 @@ impl<'de> Deserialize<'de> for ResourceLocation {
     }
 }
 
+/// Returns the cross-version Mojang rename peer for renamed vanilla block IDs, if any.
+pub fn vanilla_renamed_block_alias(name: &str) -> Option<&'static str> {
+    match name {
+        // 1.21.9+ (`DataVersion >= 4541`) renamed `minecraft:chain` to `minecraft:iron_chain`.
+        "iron_chain" => Some("chain"),
+        "chain" => Some("iron_chain"),
+        // 1.20.3 (`DataVersion >= 3692`) renamed `minecraft:grass` to `minecraft:short_grass`.
+        "short_grass" => Some("grass"),
+        "grass" => Some("short_grass"),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

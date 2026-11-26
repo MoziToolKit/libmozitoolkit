@@ -199,7 +199,7 @@ impl BakedModelDatabase {
         }
 
         if parsed.namespace == "minecraft" {
-            if let Some(alias) = vanilla_renamed_block_alias(&parsed.name) {
+            if let Some(alias) = mtk_resource::vanilla_renamed_block_alias(&parsed.name) {
                 let alias_base = format!("minecraft:{}", alias);
                 if let Some(model) =
                     self.resolve_block_variants(&alias_base, alias, &parsed.properties)
@@ -484,7 +484,7 @@ impl BakedModelDatabase {
                 }
             }
             if namespace == "minecraft" {
-                if let Some(alias) = vanilla_renamed_block_alias(sub_path) {
+                if let Some(alias) = mtk_resource::vanilla_renamed_block_alias(sub_path) {
                     for cand in [
                         format!("minecraft:item/{}", alias),
                         format!("item/{}", alias),
@@ -511,7 +511,7 @@ impl BakedModelDatabase {
         }
 
         if namespace == "minecraft" {
-            if let Some(alias) = vanilla_renamed_block_alias(sub_path) {
+            if let Some(alias) = mtk_resource::vanilla_renamed_block_alias(sub_path) {
                 for cand in [
                     format!("minecraft:item/{}", alias),
                     format!("item/{}", alias),
@@ -548,18 +548,6 @@ fn format_canonical_blockstate(base_id: &str, props: &BTreeMap<String, String>) 
     } else {
         let props_str: Vec<String> = props.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
         format!("{}[{}]", base_id, props_str.join(","))
-    }
-}
-
-fn vanilla_renamed_block_alias(name: &str) -> Option<&'static str> {
-    match name {
-        // 1.21.9+ (`DataVersion >= 4541`) renamed `minecraft:chain` to `minecraft:iron_chain`.
-        "iron_chain" => Some("chain"),
-        "chain" => Some("iron_chain"),
-        // 1.20.3 (`DataVersion >= 3692`) renamed `minecraft:grass` to `minecraft:short_grass`.
-        "short_grass" => Some("grass"),
-        "grass" => Some("short_grass"),
-        _ => None,
     }
 }
 

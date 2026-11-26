@@ -96,17 +96,42 @@ pub(crate) fn handle_delta_blocks(
 }
 
 pub(crate) fn handle_palette_update(
-    epoch: u64,
-    seq_id: u64,
-    new_revision: u32,
-    entries: Vec<(u16, String)>,
+    packet: Packet,
+    bytes_len: usize,
     state: &mut SessionState,
     cmd_sender: &Sender<ClientCommand>,
     event_sender: &Sender<SyncEvent>,
 ) {
+    let (epoch, seq_id) = match &packet {
+        Packet::PaletteUpdate { epoch, seq_id, .. } => (*epoch, *seq_id),
+        _ => return,
+    };
+
     if epoch != state.epoch {
         return;
     }
+
+    if state.lifecycle != SyncLifecycle::Live {
+        if state.staging.push(seq_id, packet, bytes_len).is_err() {
+            abort_baseline(
+                state,
+                cmd_sender,
+                event_sender,
+                ResyncReason::StateHashMismatch,
+                "Delta staging buffer overflow; requesting a fresh snapshot...",
+            );
+        }
+        return;
+    }
+
+    let (new_revision, entries) = match packet {
+        Packet::PaletteUpdate {
+            new_revision,
+            entries,
+            ..
+        } => (new_revision, entries),
+        _ => return,
+    };
 
     // The palette payload is self-describing (id -> name) and additive, so a replay is harmless.
     // The sequence still has to move, otherwise the next delta reads as a gap.
@@ -134,60 +159,156 @@ pub(crate) fn handle_palette_update(
 }
 
 pub(crate) fn handle_delta_block_entity(
-    epoch: u64,
-    seq_id: u64,
-    rel_pos: IVec3,
-    entity: &Option<mtk_model::BlockEntityData>,
+    packet: Packet,
+    bytes_len: usize,
     state: &mut SessionState,
     world: &Arc<RwLock<VoxelWorld>>,
     cmd_sender: &Sender<ClientCommand>,
     event_sender: &Sender<SyncEvent>,
 ) {
-    if epoch == state.epoch {
-        match advance_sequence(state, seq_id) {
-            SeqOutcome::Contiguous | SeqOutcome::Duplicate => {}
-            SeqOutcome::Gap { expected } => {
-                state.awaiting_baseline();
-                send_resync_request(
-                    state,
-                    cmd_sender,
-                    event_sender,
-                    ResyncReason::SequenceGap,
-                    &format!(
-                        "Block entity sequence gap (expected {}, got {}); resynchronizing...",
-                        expected, seq_id
-                    ),
-                );
-                return;
-            }
+    let (epoch, seq_id) = match &packet {
+        Packet::DeltaBlockEntity { epoch, seq_id, .. } => (*epoch, *seq_id),
+        _ => return,
+    };
+
+    if epoch != state.epoch {
+        return;
+    }
+
+    if state.lifecycle != SyncLifecycle::Live {
+        if state.staging.push(seq_id, packet, bytes_len).is_err() {
+            abort_baseline(
+                state,
+                cmd_sender,
+                event_sender,
+                ResyncReason::StateHashMismatch,
+                "Delta staging buffer overflow; requesting a fresh snapshot...",
+            );
         }
-        if rel_pos.x < 0
-            || rel_pos.x >= state.size.x
-            || rel_pos.y < 0
-            || rel_pos.y >= state.size.y
-            || rel_pos.z < 0
-            || rel_pos.z >= state.size.z
-        {
+        return;
+    }
+
+    let (rel_pos, entity) = match packet {
+        Packet::DeltaBlockEntity {
+            rel_pos, entity, ..
+        } => (rel_pos, entity),
+        _ => return,
+    };
+
+    match advance_sequence(state, seq_id) {
+        SeqOutcome::Contiguous | SeqOutcome::Duplicate => {}
+        SeqOutcome::Gap { expected } => {
+            state.awaiting_baseline();
+            send_resync_request(
+                state,
+                cmd_sender,
+                event_sender,
+                ResyncReason::SequenceGap,
+                &format!(
+                    "Block entity sequence gap (expected {}, got {}); resynchronizing...",
+                    expected, seq_id
+                ),
+            );
             return;
         }
-        let wx = state.min_pos.x + rel_pos.x;
-        let wy = state.min_pos.y + rel_pos.y;
-        let wz = state.min_pos.z + rel_pos.z;
-        let sec_coord = IVec3::new(wx >> 4, wy >> 4, wz >> 4);
-        let mut w = lock_world_write(world);
-        if let Some(sec) = w.storage.sections.get_mut(&sec_coord) {
-            let blx = (wx & 15) as usize;
-            let bly = (wy & 15) as usize;
-            let blz = (wz & 15) as usize;
-            let local_idx = mtk_voxel::block_index(blx, bly, blz) as u16;
-            sec.set_block_entity(local_idx, entity.clone());
-            w.storage.dirty_sections.insert(sec_coord);
+    }
+    apply_block_entity_to_world(rel_pos, &entity, state, world, true);
+}
+
+fn apply_block_entity_to_world(
+    rel_pos: IVec3,
+    entity: &Option<mtk_model::BlockEntityData>,
+    state: &mut SessionState,
+    world: &Arc<RwLock<VoxelWorld>>,
+    mark_dirty: bool,
+) {
+    if rel_pos.x < 0
+        || rel_pos.x >= state.size.x
+        || rel_pos.y < 0
+        || rel_pos.y >= state.size.y
+        || rel_pos.z < 0
+        || rel_pos.z >= state.size.z
+    {
+        return;
+    }
+    let wx = state.min_pos.x + rel_pos.x;
+    let wy = state.min_pos.y + rel_pos.y;
+    let wz = state.min_pos.z + rel_pos.z;
+    let sec_coord = IVec3::new(wx >> 4, wy >> 4, wz >> 4);
+    let mut w = lock_world_write(world);
+    if let Some(sec) = w.storage.sections.get_mut(&sec_coord) {
+        let blx = (wx & 15) as usize;
+        let bly = (wy & 15) as usize;
+        let blz = (wz & 15) as usize;
+        let local_idx = mtk_voxel::block_index(blx, bly, blz) as u16;
+        sec.set_block_entity(local_idx, entity.clone());
+        w.storage.dirty_sections.insert(sec_coord);
+        if mark_dirty {
+            let now = Instant::now();
             if state.dirty_since.is_none() {
-                state.dirty_since = Some(Instant::now());
+                state.dirty_since = Some(now);
             }
-            state.last_delta_at = Some(Instant::now());
+            state.last_delta_at = Some(now);
             state.pending_dirty_rebuild = true;
         }
+    }
+}
+
+pub(crate) fn apply_staged_packet(
+    pkt: Packet,
+    state: &mut SessionState,
+    world: &Arc<RwLock<VoxelWorld>>,
+    event_sender: &Sender<SyncEvent>,
+    mark_dirty: bool,
+) {
+    match pkt {
+        Packet::DeltaOp {
+            seq_id, changes, ..
+        } => {
+            state.sequence = seq_id;
+            let (_, rejected) = apply_delta_entries_to_world(
+                &changes,
+                &state.palette_map,
+                world,
+                state.min_pos,
+                state.size,
+            );
+            if rejected > 0 {
+                let _ = event_sender.send(SyncEvent::Warning(format!(
+                    "Dropped {rejected} staged delta entries outside the selection"
+                )));
+            }
+            if mark_dirty {
+                let now = Instant::now();
+                if state.dirty_since.is_none() {
+                    state.dirty_since = Some(now);
+                }
+                state.last_delta_at = Some(now);
+                state.pending_dirty_rebuild = true;
+            }
+        }
+        Packet::PaletteUpdate {
+            seq_id,
+            new_revision,
+            entries,
+            ..
+        } => {
+            state.sequence = seq_id;
+            state.palette_revision = new_revision;
+            for (id, str_val) in entries {
+                state.palette_map.insert(id, str_val);
+            }
+        }
+        Packet::DeltaBlockEntity {
+            seq_id,
+            rel_pos,
+            entity,
+            ..
+        } => {
+            state.sequence = seq_id;
+            apply_block_entity_to_world(rel_pos, &entity, state, world, mark_dirty);
+        }
+        _ => {}
     }
 }
 

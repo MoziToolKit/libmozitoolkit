@@ -5,6 +5,7 @@
 
 use std::io::{self, Read, Write};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 #[cfg(not(windows))]
@@ -142,8 +143,12 @@ fn read_ipc_bytes(mut stream: &Stream, buf: &mut [u8]) -> io::Result<usize> {
     stream.read(&mut buf[..to_read])
 }
 
-/// Writes one length-prefixed frame to a local socket stream.
-pub(crate) fn write_ipc_frame(mut stream: &Stream, payload: &[u8]) -> io::Result<()> {
+/// Writes one length-prefixed frame to a local socket stream, aborting early if `running` flips false.
+pub(crate) fn write_ipc_frame_cancellable(
+    mut stream: &Stream,
+    payload: &[u8],
+    running: Option<&AtomicBool>,
+) -> io::Result<()> {
     if payload.is_empty() || payload.len() > MAX_IPC_FRAME_SIZE {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -154,10 +159,15 @@ pub(crate) fn write_ipc_frame(mut stream: &Stream, payload: &[u8]) -> io::Result
     let mut frame = Vec::with_capacity(4 + payload.len());
     frame.extend_from_slice(&(payload.len() as u32).to_le_bytes());
     frame.extend_from_slice(payload);
-    write_all_with_timeout(&mut stream, &frame, WRITE_TIMEOUT)
+    write_all_with_timeout(&mut stream, &frame, WRITE_TIMEOUT, running)
 }
 
-fn write_all_with_timeout(stream: &mut &Stream, buf: &[u8], timeout: Duration) -> io::Result<()> {
+fn write_all_with_timeout(
+    stream: &mut &Stream,
+    buf: &[u8],
+    timeout: Duration,
+    running: Option<&AtomicBool>,
+) -> io::Result<()> {
     let deadline = Instant::now() + timeout;
     let mut written = 0usize;
     while written < buf.len() {
@@ -171,6 +181,12 @@ fn write_all_with_timeout(stream: &mut &Stream, buf: &[u8], timeout: Duration) -
             Ok(n) => written += n,
             Err(ref e) if e.kind() == io::ErrorKind::Interrupted => continue,
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                if running.is_some_and(|r| !r.load(Ordering::Relaxed)) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Interrupted,
+                        "IPC write cancelled",
+                    ));
+                }
                 if Instant::now() >= deadline {
                     return Err(io::Error::new(
                         io::ErrorKind::TimedOut,
@@ -371,7 +387,8 @@ mod tests {
                 "idle pipe read must report WouldBlock (Ok(None))"
             );
 
-            write_ipc_frame(&stream, b"hello-ipc").expect("client write small frame");
+            write_ipc_frame_cancellable(&stream, b"hello-ipc", None)
+                .expect("client write small frame");
 
             let large_expected = vec![0x5Au8; 128 * 1024];
             let deadline = Instant::now() + Duration::from_secs(3);
@@ -422,7 +439,8 @@ mod tests {
         assert_eq!(small, b"hello-ipc");
 
         let large_payload = vec![0x5Au8; 128 * 1024];
-        write_ipc_frame(&accepted, &large_payload).expect("server write large frame");
+        write_ipc_frame_cancellable(&accepted, &large_payload, None)
+            .expect("server write large frame");
 
         client_handle.join().expect("client thread join");
         assert!(done.load(Ordering::Acquire));

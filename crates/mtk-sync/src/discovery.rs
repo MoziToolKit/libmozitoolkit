@@ -53,7 +53,7 @@ pub struct LocalSyncInstance {
 
 /// Holds the active advisory lock and cleans up discovery artifacts on drop.
 pub(crate) struct InstanceRegistrationGuard {
-    _lock_file: File,
+    lock_file: Option<File>,
     lock_path: PathBuf,
     json_path: PathBuf,
     #[cfg(not(windows))]
@@ -120,7 +120,7 @@ impl InstanceRegistrationGuard {
         write_json_atomic(&json_path, &snapshot)?;
 
         Ok(Self {
-            _lock_file: lock_file,
+            lock_file: Some(lock_file),
             lock_path,
             json_path,
             #[cfg(not(windows))]
@@ -154,9 +154,11 @@ impl InstanceRegistrationGuard {
 impl Drop for InstanceRegistrationGuard {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.json_path);
-        let _ = fs::remove_file(&self.lock_path);
         #[cfg(not(windows))]
         let _ = fs::remove_file(&self.sock_path);
+        // Drop the file handle before removing `.lock` so Windows does not reject deletion.
+        drop(self.lock_file.take());
+        let _ = fs::remove_file(&self.lock_path);
     }
 }
 
@@ -269,8 +271,18 @@ fn write_json_atomic(path: &Path, instance: &LocalSyncInstance) -> Result<(), St
     let tmp_path = path.with_extension("json.tmp");
     fs::write(&tmp_path, json)
         .map_err(|e| format!("Failed to write '{}': {}", tmp_path.display(), e))?;
-    fs::rename(&tmp_path, path)
-        .map_err(|e| format!("Failed to commit '{}': {}", path.display(), e))?;
+    for attempt in 0..5 {
+        match fs::rename(&tmp_path, path) {
+            Ok(()) => return Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied && attempt < 4 => {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            Err(e) => {
+                let _ = fs::remove_file(&tmp_path);
+                return Err(format!("Failed to commit '{}': {}", path.display(), e));
+            }
+        }
+    }
     Ok(())
 }
 

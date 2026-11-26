@@ -8,7 +8,7 @@ use mtk_voxel::VoxelWorld;
 
 use super::assembler::BaselineAssembler;
 use super::dispatcher::lock_world_write;
-use super::handlers_delta::apply_delta_entries_to_world;
+use super::handlers_delta::apply_staged_packet;
 use super::state::{SessionState, SyncLifecycle};
 use super::watchdog::{abort_baseline, send_resync_request};
 use crate::client::ClientCommand;
@@ -214,30 +214,12 @@ pub(crate) fn handle_baseline_end(
                 // 3. Replay in-flight staged deltas (S + 1 .. latest)
                 state.lifecycle = SyncLifecycle::ReplayingStaged;
                 let mut replay_gap = false;
+                state.sequence = snapshot_seq;
                 match state.staging.drain_replaying_after_snapshot(snapshot_seq) {
                     Ok(replayed_packets) => {
-                        let mut current_seq = snapshot_seq;
                         for pkt in replayed_packets {
-                            if let Packet::DeltaOp {
-                                seq_id, changes, ..
-                            } = pkt
-                            {
-                                current_seq = seq_id;
-                                let (_, rejected) = apply_delta_entries_to_world(
-                                    &changes,
-                                    &state.palette_map,
-                                    world,
-                                    state.min_pos,
-                                    state.size,
-                                );
-                                if rejected > 0 {
-                                    let _ = event_sender.send(SyncEvent::Warning(format!(
-                                        "Dropped {rejected} staged delta entries outside the selection"
-                                    )));
-                                }
-                            }
+                            apply_staged_packet(pkt, state, world, event_sender, false);
                         }
-                        state.sequence = current_seq;
                     }
                     Err(_) => {
                         replay_gap = true;
@@ -310,29 +292,7 @@ pub(crate) fn handle_baseline_end(
                             state.staging.drain_replaying_after_snapshot(state.sequence)
                         {
                             for pkt in replayed_packets {
-                                if let Packet::DeltaOp {
-                                    seq_id, changes, ..
-                                } = pkt
-                                {
-                                    state.sequence = seq_id;
-                                    let (_, rejected) = apply_delta_entries_to_world(
-                                        &changes,
-                                        &state.palette_map,
-                                        world,
-                                        state.min_pos,
-                                        state.size,
-                                    );
-                                    if rejected > 0 {
-                                        let _ = event_sender.send(SyncEvent::Warning(format!(
-                                            "Dropped {rejected} replayed delta entries outside the selection"
-                                        )));
-                                    }
-                                    if state.dirty_since.is_none() {
-                                        state.dirty_since = Some(Instant::now());
-                                    }
-                                    state.last_delta_at = Some(Instant::now());
-                                    state.pending_dirty_rebuild = true;
-                                }
+                                apply_staged_packet(pkt, state, world, event_sender, true);
                             }
                         } else {
                             state.pending_dirty_rebuild = false;

@@ -16,7 +16,8 @@ use url::Url;
 
 use crate::protocol::{decode_packet, encode_packet, Packet, ProtocolError};
 use crate::transport_ipc::{
-    connect_ipc_stream, resolve_ipc_name_from_url, write_ipc_frame, IpcFrameReader, IpcReadError,
+    connect_ipc_stream, resolve_ipc_name_from_url, write_ipc_frame_cancellable, IpcFrameReader,
+    IpcReadError,
 };
 
 /// Encodes `packet` and queues it for the transport thread.
@@ -372,7 +373,9 @@ impl SyncClient {
                             did_work = true;
                             match cmd {
                                 ClientCommand::Send(data) => {
-                                    if let Err(e) = write_ipc_frame(&stream, &data) {
+                                    if let Err(e) =
+                                        write_ipc_frame_cancellable(&stream, &data, Some(&running))
+                                    {
                                         let _ = msg_sender.send(ClientMessage::Status(format!(
                                             "IPC send error: {}",
                                             e

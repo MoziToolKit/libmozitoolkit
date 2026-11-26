@@ -12,7 +12,7 @@ pub enum ProtocolError {
     #[error("Invalid magic header: expected [0x4D, 0x54] ('MT'), got [0x{0:02X}, 0x{1:02X}]")]
     InvalidMagic(u8, u8),
 
-    #[error("Unsupported protocol version: 0x{0:02X} (expected 0x03)")]
+    #[error("Unsupported protocol version: 0x{0:02X} (expected 0x04)")]
     UnsupportedVersion(u8),
 
     #[error("Unknown opcode: 0x{0:02X}")]
@@ -52,4 +52,7 @@ pub enum ProtocolError {
 
     #[error("Invalid JSON payload: {detail}")]
     InvalidPayload { detail: String },
+
+    #[error("Live sync server error: {0}")]
+    ServerError(String),
 }

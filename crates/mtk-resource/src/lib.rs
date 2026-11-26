@@ -21,7 +21,7 @@ pub use ctm::{
     extract_block_name, BlockMatch, ConnectLogic, CtmMethod, CtmRule, CtmSolver, CtmSymmetry,
 };
 pub use error::ResourceError;
-pub use identifier::ResourceLocation;
+pub use identifier::{vanilla_renamed_block_alias, ResourceLocation};
 pub use identifier_pattern::{FilterPattern, IdentifierPattern, ResourceFilterSection};
 pub use meta::{AnimationFrame, AnimationMetadata};
 #[cfg(feature = "zip")]

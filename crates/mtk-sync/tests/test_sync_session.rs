@@ -251,6 +251,130 @@ fn test_delta_staging_and_replay_after_baseline() {
 }
 
 #[test]
+fn test_staged_palette_update_delta_and_block_entity_replayed_after_baseline() {
+    let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None);
+
+    let min_pos = IVec3::new(0, 0, 0);
+    let size = IVec3::new(2, 2, 2);
+    let raw_voxels = vec![0u8; 8];
+
+    let mut encoder = zstd::stream::Encoder::new(Vec::new(), 1).unwrap();
+    encoder.write_all(&raw_voxels).unwrap();
+    let compressed = encoder.finish().unwrap();
+
+    let mut chunk_hasher = xxhash_rust::xxh64::Xxh64::new(0);
+    chunk_hasher.update(&compressed);
+    let chunk_hash = chunk_hasher.digest();
+
+    let expected_state_hash = compute_sparse_state_hash(
+        min_pos,
+        size,
+        "minecraft:overworld",
+        std::iter::empty::<SparseBlockEntry>(),
+    );
+
+    session.process_packet_direct(Packet::Welcome {
+        negotiated_version: 4,
+        server_uuid: [9u8; 16],
+        epoch: 1,
+        server_seq: 20,
+        current_min: min_pos,
+        current_size: size,
+        current_state_hash: expected_state_hash,
+        decision: SyncDecision::FullBaselineRequired,
+        message_or_dimension: "minecraft:overworld".to_string(),
+    });
+
+    session.process_packet_direct(Packet::BaselineBegin {
+        epoch: 1,
+        snapshot_uuid: [8u8; 16],
+        snapshot_seq: 20,
+        min_pos,
+        size,
+        state_hash: expected_state_hash,
+        palette_revision: 1,
+        total_chunks: 1,
+        total_encoded_bytes: compressed.len() as u64,
+        total_decoded_bytes: 8,
+        compression_mode: 1,
+        palette_bits_per_block: 8,
+        biome_bits_per_quart: 8,
+        dimension: "minecraft:overworld".to_string(),
+        block_palette: vec!["minecraft:air".to_string()],
+        biome_palette: vec!["minecraft:plains".to_string()],
+    });
+
+    session.process_packet_direct(Packet::BaselineChunk {
+        epoch: 1,
+        snapshot_uuid: [8u8; 16],
+        chunk_index: 0,
+        total_chunks: 1,
+        first_voxel_index: 0,
+        voxel_count: 8,
+        payload_len: compressed.len() as u32,
+        decoded_target_bytes: 8,
+        chunk_xxhash64: chunk_hash,
+        payload: compressed,
+    });
+
+    // In-flight PaletteUpdate (S+1), DeltaOp (S+2), and DeltaBlockEntity (S+3) during baseline.
+    session.process_packet_direct(Packet::PaletteUpdate {
+        epoch: 1,
+        seq_id: 21,
+        base_revision: 1,
+        new_revision: 2,
+        entries: vec![(1, "minecraft:gold_block".to_string())],
+    });
+    let change = DeltaChangeEntry {
+        rel_pos: IVec3::new(1, 1, 1),
+        state_id: 1,
+    };
+    session.process_packet_direct(Packet::DeltaOp {
+        epoch: 1,
+        seq_id: 22,
+        palette_revision: 2,
+        count: 1,
+        batch_xxhash64: compute_delta_batch_hash(std::slice::from_ref(&change)),
+        changes: vec![change],
+    });
+    let pot_data = mtk_model::BlockEntityData::DecoratedPot {
+        sherds: [
+            Some("minecraft:archer_pottery_sherd".to_string()),
+            None,
+            None,
+            None,
+        ],
+    };
+    session.process_packet_direct(Packet::DeltaBlockEntity {
+        epoch: 1,
+        seq_id: 23,
+        rel_pos: IVec3::new(1, 1, 1),
+        entity: Some(pot_data.clone()),
+    });
+
+    session.process_packet_direct(Packet::BaselineEnd {
+        epoch: 1,
+        snapshot_uuid: [8u8; 16],
+        snapshot_seq: 20,
+        total_chunks_sent: 1,
+        final_state_hash: expected_state_hash,
+        status: 0,
+    });
+
+    let events = session.poll_events();
+    assert!(
+        !events.iter().any(|e| matches!(e, SyncEvent::Warning(_) | SyncEvent::Error(_))),
+        "staged PaletteUpdate + DeltaOp + DeltaBlockEntity must replay cleanly without gap warnings/errors: {events:?}"
+    );
+    assert_eq!(session.lifecycle(), SyncLifecycle::Live);
+    assert_eq!(session.current_sequence(), 23);
+
+    let storage = session.get_storage();
+    assert_eq!(storage.get_block(1, 1, 1), "minecraft:gold_block");
+    assert_eq!(storage.get_block_entity(1, 1, 1), Some(&pot_data));
+}
+
+#[test]
 fn test_baseline_and_delta_entity_integration() {
     let session = LiveSyncSession::new(Some(MesherConfig::default()), None, None);
 

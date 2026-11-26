@@ -419,34 +419,19 @@ pub(crate) fn handle_packet(
                 event_sender,
             );
         }
-        Packet::PaletteUpdate {
-            epoch,
-            seq_id,
-            new_revision,
-            entries,
-            ..
-        } => {
+        packet @ Packet::PaletteUpdate { .. } => {
             super::handlers_delta::handle_palette_update(
-                epoch,
-                seq_id,
-                new_revision,
-                entries,
+                packet,
+                bytes_len,
                 state,
                 cmd_sender,
                 event_sender,
             );
         }
-        Packet::DeltaBlockEntity {
-            epoch,
-            seq_id,
-            rel_pos,
-            ref entity,
-        } => {
+        packet @ Packet::DeltaBlockEntity { .. } => {
             super::handlers_delta::handle_delta_block_entity(
-                epoch,
-                seq_id,
-                rel_pos,
-                entity,
+                packet,
+                bytes_len,
                 state,
                 world,
                 cmd_sender,

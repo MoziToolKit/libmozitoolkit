@@ -461,13 +461,7 @@ impl MaterialResolver {
         let is_vanilla_namespace =
             !raw_material_name.contains(':') || raw_material_name.starts_with("minecraft:");
         if is_vanilla_namespace {
-            if let Some(alias) = match cleaned.as_str() {
-                "iron_chain" => Some("chain"),
-                "chain" => Some("iron_chain"),
-                "short_grass" => Some("grass"),
-                "grass" => Some("short_grass"),
-                _ => None,
-            } {
+            if let Some(alias) = mtk_resource::vanilla_renamed_block_alias(cleaned.as_str()) {
                 let alias_cands = if raw_material_name.contains("item/") {
                     [format!("item/{}", alias), format!("block/{}", alias)]
                 } else {

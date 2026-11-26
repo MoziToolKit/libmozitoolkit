@@ -26,6 +26,8 @@ use super::worker::{run_ipc_client_worker, run_ws_client_worker};
 /// The Native Live Sync Server instance (WebSocket and/or local IPC).
 pub struct LiveSyncServer {
     inner: Arc<ServerInner>,
+    /// Serializes `start_ws` / `stop_ws` / `stop` lifecycle transitions.
+    lifecycle_lock: std::sync::Mutex<()>,
     /// Mutex so `stop` / `stop_ws` can take `&self`: JNI hands the server out as a shared `Arc`,
     /// and an in-flight call must be able to observe the stopped state without exclusive access.
     ws_listener_thread: std::sync::Mutex<Option<JoinHandle<()>>>,
@@ -37,22 +39,19 @@ fn spawn_ws_listener(
     inner: &Arc<ServerInner>,
     bind_address: &str,
 ) -> Result<(SocketAddr, JoinHandle<()>), ProtocolError> {
-    let listener =
-        TcpListener::bind(bind_address).map_err(|_e| ProtocolError::TruncatedPayload {
-            field: "Failed to bind TcpListener address",
-        })?;
+    let listener = TcpListener::bind(bind_address).map_err(|e| {
+        ProtocolError::ServerError(format!(
+            "Failed to bind WebSocket address '{bind_address}': {e}"
+        ))
+    })?;
 
-    let local_addr = listener
-        .local_addr()
-        .map_err(|_| ProtocolError::TruncatedPayload {
-            field: "Failed to query local listener address",
-        })?;
+    let local_addr = listener.local_addr().map_err(|e| {
+        ProtocolError::ServerError(format!("Failed to query local listener address: {e}"))
+    })?;
 
-    listener
-        .set_nonblocking(true)
-        .map_err(|_| ProtocolError::TruncatedPayload {
-            field: "Failed to set listener non-blocking",
-        })?;
+    listener.set_nonblocking(true).map_err(|e| {
+        ProtocolError::ServerError(format!("Failed to set listener non-blocking: {e}"))
+    })?;
 
     *lock_unpoisoned(&inner.local_addr) = Some(local_addr);
     inner.ws_running.store(true, Ordering::Relaxed);
@@ -95,9 +94,9 @@ impl LiveSyncServer {
     /// Starts a new native Live Sync server (WebSocket and/or local IPC).
     pub fn start(mut config: ServerConfig) -> Result<Self, ProtocolError> {
         if config.bind_address.is_none() && !config.enable_ipc {
-            return Err(ProtocolError::TruncatedPayload {
-                field: "Neither bind_address nor enable_ipc is configured",
-            });
+            return Err(ProtocolError::ServerError(
+                "Neither bind_address nor enable_ipc is configured".to_string(),
+            ));
         }
 
         if config.server_uuid == [0u8; 16] {
@@ -125,9 +124,9 @@ impl LiveSyncServer {
                     let _ = h.join();
                 }
                 let _ = inner.event_tx.send(ServerEvent::Warning(err.to_string()));
-                return Err(ProtocolError::TruncatedPayload {
-                    field: "Failed to create IPC registry directory",
-                });
+                return Err(ProtocolError::ServerError(format!(
+                    "Failed to create IPC registry directory: {err}"
+                )));
             }
 
             let endpoint_id = config
@@ -140,15 +139,13 @@ impl LiveSyncServer {
 
             let ipc_listener = match bind_ipc_listener(&endpoint_id, &registry_dir) {
                 Ok(l) => l,
-                Err(_) => {
+                Err(err) => {
                     inner.running.store(false, Ordering::Relaxed);
                     inner.ws_running.store(false, Ordering::Relaxed);
                     if let Some(h) = ws_listener_thread {
                         let _ = h.join();
                     }
-                    return Err(ProtocolError::TruncatedPayload {
-                        field: "Failed to bind IPC listener",
-                    });
+                    return Err(ProtocolError::ServerError(err));
                 }
             };
 
@@ -170,15 +167,13 @@ impl LiveSyncServer {
                 ws_bound_str,
             ) {
                 Ok(g) => g,
-                Err(_) => {
+                Err(err) => {
                     inner.running.store(false, Ordering::Relaxed);
                     inner.ws_running.store(false, Ordering::Relaxed);
                     if let Some(h) = ws_listener_thread {
                         let _ = h.join();
                     }
-                    return Err(ProtocolError::TruncatedPayload {
-                        field: "Failed to register local IPC instance",
-                    });
+                    return Err(ProtocolError::ServerError(err));
                 }
             };
 
@@ -229,6 +224,7 @@ impl LiveSyncServer {
 
         Ok(Self {
             inner,
+            lifecycle_lock: std::sync::Mutex::new(()),
             ws_listener_thread: std::sync::Mutex::new(ws_listener_thread),
             ipc_listener_thread: std::sync::Mutex::new(ipc_listener_thread),
             ipc_registration: std::sync::Mutex::new(ipc_registration),
@@ -237,12 +233,13 @@ impl LiveSyncServer {
 
     /// Starts or rebinds the WebSocket listener on an already running server without disturbing IPC.
     pub fn start_ws(&self, bind_address: &str) -> Result<(), ProtocolError> {
+        let _lifecycle = lock_unpoisoned(&self.lifecycle_lock);
         if !self.is_running() {
-            return Err(ProtocolError::TruncatedPayload {
-                field: "Server is not running",
-            });
+            return Err(ProtocolError::ServerError(
+                "Server is not running".to_string(),
+            ));
         }
-        self.stop_ws();
+        self.stop_ws_locked();
         let (local_addr, handle) = spawn_ws_listener(&self.inner, bind_address)?;
         *lock_unpoisoned(&self.ws_listener_thread) = Some(handle);
         let mut guard = lock_unpoisoned(&self.ipc_registration);
@@ -256,6 +253,11 @@ impl LiveSyncServer {
 
     /// Stops only the WebSocket listener and WS client sessions while keeping local IPC intact.
     pub fn stop_ws(&self) {
+        let _lifecycle = lock_unpoisoned(&self.lifecycle_lock);
+        self.stop_ws_locked();
+    }
+
+    fn stop_ws_locked(&self) {
         self.inner.ws_running.store(false, Ordering::Relaxed);
         {
             let mut clients = lock_unpoisoned(&self.inner.clients);
@@ -306,6 +308,7 @@ impl LiveSyncServer {
 
     /// Stops the server, closes all client connections, and terminates listeners.
     pub fn stop(&self) {
+        let _lifecycle = lock_unpoisoned(&self.lifecycle_lock);
         self.inner.running.store(false, Ordering::Relaxed);
         self.inner.ipc_running.store(false, Ordering::Relaxed);
         self.inner.ws_running.store(false, Ordering::Relaxed);
@@ -516,9 +519,9 @@ impl LiveSyncServer {
             let _ = client.tx.send(ServerCommand::SendPacket(bytes));
             Ok(())
         } else {
-            Err(ProtocolError::TruncatedPayload {
-                field: "client_id not found or disconnected",
-            })
+            Err(ProtocolError::ServerError(format!(
+                "client_id {client_id} not found or disconnected"
+            )))
         }
     }
 
@@ -652,9 +655,9 @@ impl LiveSyncServer {
             }
             Ok(())
         } else {
-            Err(ProtocolError::TruncatedPayload {
-                field: "client_id not found or disconnected",
-            })
+            Err(ProtocolError::ServerError(format!(
+                "client_id {client_id} not found or disconnected"
+            )))
         }
     }
 

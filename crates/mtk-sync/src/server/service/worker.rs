@@ -1,5 +1,5 @@
 use std::net::TcpStream;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -14,7 +14,7 @@ use crate::protocol::{
 };
 use crate::server::decision::decide_handshake;
 use crate::transport_ipc::{
-    configure_accepted_ipc_stream, write_ipc_frame, IpcFrameReader, IpcReadError,
+    configure_accepted_ipc_stream, write_ipc_frame_cancellable, IpcFrameReader, IpcReadError,
 };
 
 use super::config::{ServerCommand, ServerEvent};
@@ -63,7 +63,7 @@ impl PeerTransport {
         matches!(self, Self::Ipc { .. })
     }
 
-    fn send_binary(&mut self, bytes: Vec<u8>) -> Result<(), ()> {
+    fn send_binary(&mut self, bytes: Vec<u8>, ipc_running: &AtomicBool) -> Result<(), ()> {
         match self {
             Self::Ws { ws } => {
                 if ws
@@ -76,7 +76,9 @@ impl PeerTransport {
                     Ok(())
                 }
             }
-            Self::Ipc { stream, .. } => write_ipc_frame(stream, &bytes).map_err(|_| ()),
+            Self::Ipc { stream, .. } => {
+                write_ipc_frame_cancellable(stream, &bytes, Some(ipc_running)).map_err(|_| ())
+            }
         }
     }
 
@@ -89,7 +91,7 @@ impl PeerTransport {
         }
     }
 
-    fn send_heartbeat(&mut self) -> Result<(), ()> {
+    fn send_heartbeat(&mut self, ipc_running: &AtomicBool) -> Result<(), ()> {
         match self {
             Self::Ws { ws } => {
                 if ws
@@ -108,7 +110,7 @@ impl PeerTransport {
                     .unwrap_or_default()
                     .as_millis() as u64;
                 let bytes = encode_packet(&Packet::Ping { timestamp: ts }).map_err(|_| ())?;
-                write_ipc_frame(stream, &bytes).map_err(|_| ())
+                write_ipc_frame_cancellable(stream, &bytes, Some(ipc_running)).map_err(|_| ())
             }
         }
     }
@@ -204,7 +206,10 @@ fn run_client_worker(
                                 inner.remove_client(client_id);
                                 return;
                             };
-                            if transport.send_binary(welcome_bytes).is_err() {
+                            if transport
+                                .send_binary(welcome_bytes, &inner.ipc_running)
+                                .is_err()
+                            {
                                 break;
                             }
 
@@ -230,7 +235,10 @@ fn run_client_worker(
                                             send_failed = true;
                                             break;
                                         };
-                                        if transport.send_binary(pal_bytes).is_err() {
+                                        if transport
+                                            .send_binary(pal_bytes, &inner.ipc_running)
+                                            .is_err()
+                                        {
                                             send_failed = true;
                                             break;
                                         }
@@ -265,7 +273,7 @@ fn run_client_worker(
                                 error_code: ErrorCode::UnknownOpcode,
                                 message: "Malformed handshake".to_string(),
                             }) {
-                                let _ = transport.send_binary(err_bytes);
+                                let _ = transport.send_binary(err_bytes, &inner.ipc_running);
                             }
                             transport.close();
                             inner.remove_client(client_id);
@@ -279,7 +287,7 @@ fn run_client_worker(
                         error_code: ErrorCode::UnknownOpcode,
                         message: "Expected HELLO packet".to_string(),
                     }) {
-                        let _ = transport.send_binary(err_bytes);
+                        let _ = transport.send_binary(err_bytes, &inner.ipc_running);
                     }
                     transport.close();
                     inner.remove_client(client_id);
@@ -318,7 +326,7 @@ fn run_client_worker(
             did_work = true;
             match cmd {
                 ServerCommand::SendPacket(bytes) => {
-                    if transport.send_binary(bytes).is_err() {
+                    if transport.send_binary(bytes, &inner.ipc_running).is_err() {
                         transport.close();
                         let _ = inner.event_tx.send(ServerEvent::ClientDisconnected {
                             client_id,
@@ -349,7 +357,10 @@ fn run_client_worker(
                                 let pong_pkt = Packet::Pong { timestamp };
                                 match encode_packet(&pong_pkt) {
                                     Ok(pong_bytes) => {
-                                        if transport.send_binary(pong_bytes).is_err() {
+                                        if transport
+                                            .send_binary(pong_bytes, &inner.ipc_running)
+                                            .is_err()
+                                        {
                                             close_connection = true;
                                             break;
                                         }
@@ -390,7 +401,7 @@ fn run_client_worker(
                             message: "Malformed packet".to_string(),
                         };
                         if let Ok(err_bytes) = encode_packet(&err_pkt) {
-                            let _ = transport.send_binary(err_bytes);
+                            let _ = transport.send_binary(err_bytes, &inner.ipc_running);
                         }
                         close_connection = true;
                         break;
@@ -420,7 +431,7 @@ fn run_client_worker(
         // C. Heartbeat Ping dispatch
         if last_ping.elapsed() >= inner.ping_interval {
             last_ping = Instant::now();
-            if transport.send_heartbeat().is_err() {
+            if transport.send_heartbeat(&inner.ipc_running).is_err() {
                 break;
             }
         }
