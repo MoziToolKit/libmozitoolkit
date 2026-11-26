@@ -391,3 +391,101 @@ fn test_ipc_require_token_and_dual_stack_broadcast() {
     good_ws.stop();
     server.stop();
 }
+
+#[test]
+fn test_decoupled_ws_lifecycle_preserves_ipc_client() {
+    let config = ServerConfig {
+        bind_address: None,
+        enable_ipc: true,
+        ipc_name: None,
+        instance_info: Some(InstanceMetadata {
+            world_name: "DecoupledWorld".to_string(),
+            mc_version: "1.21.4".to_string(),
+            loader: "Fabric".to_string(),
+            dimension: "minecraft:overworld".to_string(),
+        }),
+        auth_token: None,
+        allow_loopback_without_token: true,
+        require_token_on_ipc: false,
+        server_uuid: [91u8; 16],
+        max_connections: 4,
+        handshake_timeout: Duration::from_millis(2000),
+        ping_interval: Duration::from_millis(1000),
+    };
+
+    let server = LiveSyncServer::start(config).expect("IPC-only server must start");
+    assert!(server.is_ipc_running());
+    assert!(!server.is_ws_running());
+    let ipc_url = server.ipc_url().expect("ipc url");
+
+    // 1. Connect IPC client before WS is ever started
+    let mut ipc_client = LiveSyncSession::new(None, None, None);
+    ipc_client.start(&ipc_url, false, 1).expect("start ipc");
+
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < deadline {
+        let _ = ipc_client.poll_events();
+        if server.ipc_client_count() == 1 {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(15));
+    }
+    assert_eq!(server.ipc_client_count(), 1);
+    assert_eq!(server.ws_client_count(), 0);
+
+    // 2. Dynamically attach WS listener and update auth without disturbing IPC
+    server.update_auth(Some("dynamic-secret".to_string()), false, false);
+    server
+        .start_ws("127.0.0.1:0")
+        .expect("start_ws must succeed");
+    assert!(server.is_ws_running());
+    let ws_addr = server.local_addr().expect("ws addr must exist");
+    let ws_url = format!("ws://{}", ws_addr);
+
+    assert!(
+        discover_local_instances()
+            .iter()
+            .any(|inst| inst.ipc_url == ipc_url
+                && inst.ws_bind_address.as_deref() == Some(&ws_addr.to_string())
+                && !inst.requires_token),
+        "discovery must reflect dynamic ws_bind_address and IPC token flag"
+    );
+
+    // Connect WS client using updated dynamic token
+    let mut ws_client = LiveSyncSession::new(None, None, None);
+    ws_client.set_auth_token("dynamic-secret");
+    ws_client.start(&ws_url, false, 1).expect("start ws");
+
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < deadline {
+        let _ = ws_client.poll_events();
+        if server.ws_client_count() == 1 {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(15));
+    }
+    assert_eq!(server.ipc_client_count(), 1);
+    assert_eq!(server.ws_client_count(), 1);
+
+    // 3. Stop WS only — IPC client must remain connected!
+    server.stop_ws();
+    assert!(!server.is_ws_running());
+    assert!(server.is_ipc_running());
+    assert!(server.local_addr().is_none());
+    assert_eq!(server.ws_client_count(), 0);
+    assert_eq!(
+        server.ipc_client_count(),
+        1,
+        "IPC client must stay connected when WS stops"
+    );
+    assert!(
+        discover_local_instances()
+            .iter()
+            .any(|inst| inst.ipc_url == ipc_url && inst.ws_bind_address.is_none()),
+        "discovery must clear ws_bind_address when WS stops"
+    );
+
+    ws_client.stop();
+    ipc_client.stop();
+    server.stop();
+}

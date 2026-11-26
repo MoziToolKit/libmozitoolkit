@@ -17,7 +17,7 @@ use crate::transport_ipc::{
     configure_accepted_ipc_stream, write_ipc_frame, IpcFrameReader, IpcReadError,
 };
 
-use super::config::{ServerCommand, ServerConfig, ServerEvent};
+use super::config::{ServerCommand, ServerEvent};
 use super::state::ServerInner;
 
 pub(crate) enum PeerTransport {
@@ -152,7 +152,6 @@ pub(crate) fn run_ws_client_worker(
     addr: std::net::SocketAddr,
     cmd_rx: Receiver<ServerCommand>,
     inner: Arc<ServerInner>,
-    config: ServerConfig,
 ) {
     let Some(transport) = PeerTransport::from_tcp(stream) else {
         inner.remove_client(client_id);
@@ -165,7 +164,6 @@ pub(crate) fn run_ws_client_worker(
         addr.ip().is_loopback(),
         cmd_rx,
         inner,
-        config,
     );
 }
 
@@ -175,10 +173,9 @@ pub(crate) fn run_ipc_client_worker(
     endpoint: String,
     cmd_rx: Receiver<ServerCommand>,
     inner: Arc<ServerInner>,
-    config: ServerConfig,
 ) {
     let transport = PeerTransport::from_ipc(stream);
-    run_client_worker(client_id, transport, endpoint, true, cmd_rx, inner, config);
+    run_client_worker(client_id, transport, endpoint, true, cmd_rx, inner);
 }
 
 fn run_client_worker(
@@ -188,7 +185,6 @@ fn run_client_worker(
     is_loopback: bool,
     cmd_rx: Receiver<ServerCommand>,
     inner: Arc<ServerInner>,
-    config: ServerConfig,
 ) {
     let is_ipc = transport.is_ipc();
 
@@ -196,11 +192,11 @@ fn run_client_worker(
     let start_time = Instant::now();
     let mut handshake_ok = false;
 
-    while start_time.elapsed() < config.handshake_timeout && inner.is_running() {
+    while start_time.elapsed() < inner.handshake_timeout && inner.is_transport_running(is_ipc) {
         match transport.read_frame() {
             PeerRead::Binary(bytes) => match decode_packet(&bytes) {
                 Ok(hello_pkt @ Packet::Hello { .. }) => {
-                    let ctx = inner.get_handshake_context(&config, is_ipc, is_loopback);
+                    let ctx = inner.get_handshake_context(is_ipc, is_loopback);
                     match decide_handshake(&hello_pkt, &ctx) {
                         Ok(res) => {
                             let Ok(welcome_bytes) = encode_packet(&res.welcome_packet) else {
@@ -285,7 +281,7 @@ fn run_client_worker(
     let mut last_ping = Instant::now();
     let mut last_activity = Instant::now();
 
-    while inner.is_running() {
+    while inner.is_transport_running(is_ipc) {
         let mut did_work = false;
 
         // A. Drain outbound messages to client
@@ -393,7 +389,7 @@ fn run_client_worker(
         }
 
         // C. Heartbeat Ping dispatch
-        if last_ping.elapsed() >= config.ping_interval {
+        if last_ping.elapsed() >= inner.ping_interval {
             last_ping = Instant::now();
             if transport.send_heartbeat().is_err() {
                 break;

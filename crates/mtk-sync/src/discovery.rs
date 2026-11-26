@@ -136,6 +136,19 @@ impl InstanceRegistrationGuard {
         self.snapshot.dimension = metadata.dimension;
         write_json_atomic(&self.json_path, &self.snapshot)
     }
+
+    pub(crate) fn update_ws_bind_address(
+        &mut self,
+        ws_bind_address: Option<String>,
+    ) -> Result<(), String> {
+        self.snapshot.ws_bind_address = ws_bind_address;
+        write_json_atomic(&self.json_path, &self.snapshot)
+    }
+
+    pub(crate) fn update_requires_token(&mut self, requires_token: bool) -> Result<(), String> {
+        self.snapshot.requires_token = requires_token;
+        write_json_atomic(&self.json_path, &self.snapshot)
+    }
 }
 
 impl Drop for InstanceRegistrationGuard {

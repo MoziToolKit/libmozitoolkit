@@ -135,7 +135,8 @@ pub struct LiveSyncSession {
 ### 4.2 原生协同服务端 (`LiveSyncServer`)
 
 `LiveSyncServer` 是纯 Rust 实现的 RFC v3.1 / v3.2 权威实时协同服务端：
-- **`start(config: ServerConfig) -> Result<Self, ProtocolError>`**：绑定指定端口启动后台 WebSocket 服务与事件泵；
+- **`start(config: ServerConfig) -> Result<Self, ProtocolError>`**：按配置启动本地 IPC 与/或后台 WebSocket 服务与事件泵；
+- **独立 WebSocket 启停与鉴权热更新**：`start_ws(bind_address)` / `stop_ws()` / `update_auth(...)` 支持在不中断现有本地 IPC 会话的前提下独立控制 WebSocket 监听并同步更新 discovery manifest；
 - **权威选区管理**：`set_selection(min_pos, size, dimension)` / `clear_selection()`；
 - **全量基线极速分帧**：`submit_baseline(...)` 自动计算 xxHash64 稀疏指纹、构建调色板、切片并以 Zstd 压缩流式推送；
 - **增量操作广播**：`submit_deltas(...)` 自动增量调色板注册并广播 `DeltaOp`。

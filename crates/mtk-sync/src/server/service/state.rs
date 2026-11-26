@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::time::Duration;
 
 use crossbeam_channel::{Receiver, Sender};
 use glam::IVec3;
@@ -9,6 +10,13 @@ use glam::IVec3;
 use crate::server::decision::HandshakeContext;
 
 use super::config::{ServerCommand, ServerConfig, ServerEvent};
+
+#[derive(Debug, Clone)]
+pub(crate) struct AuthSettings {
+    pub(crate) auth_token: Option<String>,
+    pub(crate) allow_loopback_without_token: bool,
+    pub(crate) require_token_on_ipc: bool,
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct SelectionContext {
@@ -20,6 +28,7 @@ pub(crate) struct SelectionContext {
 
 pub(crate) struct ClientHandle {
     pub(crate) tx: Sender<ServerCommand>,
+    pub(crate) is_ipc: bool,
 }
 
 #[derive(Debug)]
@@ -49,12 +58,18 @@ pub(crate) fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 pub(crate) struct ServerInner {
     pub(crate) running: AtomicBool,
+    pub(crate) ipc_running: AtomicBool,
+    pub(crate) ws_running: AtomicBool,
     pub(crate) epoch: AtomicU64,
     pub(crate) sequence: AtomicU64,
     pub(crate) next_client_id: AtomicU64,
     /// Monotonic per-baseline id source; see [`ServerInner::next_snapshot_uuid`].
     pub(crate) snapshot_counter: AtomicU64,
     pub(crate) server_uuid: [u8; 16],
+    pub(crate) max_connections: usize,
+    pub(crate) handshake_timeout: Duration,
+    pub(crate) ping_interval: Duration,
+    pub(crate) auth: Mutex<AuthSettings>,
     pub(crate) selection: Mutex<Option<SelectionContext>>,
     pub(crate) palette: Mutex<PaletteState>,
     pub(crate) clients: Mutex<HashMap<u64, ClientHandle>>,
@@ -65,15 +80,25 @@ pub(crate) struct ServerInner {
 }
 
 impl ServerInner {
-    pub(crate) fn new(server_uuid: [u8; 16]) -> Self {
+    pub(crate) fn new(config: &ServerConfig) -> Self {
         let (event_tx, event_rx) = crossbeam_channel::unbounded();
         Self {
             running: AtomicBool::new(true),
+            ipc_running: AtomicBool::new(false),
+            ws_running: AtomicBool::new(false),
             epoch: AtomicU64::new(1),
             sequence: AtomicU64::new(1),
             next_client_id: AtomicU64::new(1),
             snapshot_counter: AtomicU64::new(0),
-            server_uuid,
+            server_uuid: config.server_uuid,
+            max_connections: config.max_connections,
+            handshake_timeout: config.handshake_timeout,
+            ping_interval: config.ping_interval,
+            auth: Mutex::new(AuthSettings {
+                auth_token: config.auth_token.clone(),
+                allow_loopback_without_token: config.allow_loopback_without_token,
+                require_token_on_ipc: config.require_token_on_ipc,
+            }),
             selection: Mutex::new(None),
             palette: Mutex::new(PaletteState::default()),
             clients: Mutex::new(HashMap::new()),
@@ -86,6 +111,22 @@ impl ServerInner {
 
     pub(crate) fn is_running(&self) -> bool {
         self.running.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn is_ipc_running(&self) -> bool {
+        self.is_running() && self.ipc_running.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn is_ws_running(&self) -> bool {
+        self.is_running() && self.ws_running.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn is_transport_running(&self, is_ipc: bool) -> bool {
+        if is_ipc {
+            self.is_ipc_running()
+        } else {
+            self.is_ws_running()
+        }
     }
 
     /// Allocates the identity of one baseline stream.
@@ -106,7 +147,6 @@ impl ServerInner {
 
     pub(crate) fn get_handshake_context(
         &self,
-        config: &ServerConfig,
         is_ipc: bool,
         is_loopback: bool,
     ) -> HandshakeContext {
@@ -120,6 +160,7 @@ impl ServerInner {
                 0u64,
             ),
         };
+        let auth = lock_unpoisoned(&self.auth).clone();
 
         HandshakeContext {
             server_uuid: self.server_uuid,
@@ -129,11 +170,11 @@ impl ServerInner {
             size,
             state_hash,
             dimension,
-            expected_auth_token: config.auth_token.clone(),
+            expected_auth_token: auth.auth_token,
             is_ipc,
             is_loopback,
-            allow_loopback_without_token: config.allow_loopback_without_token,
-            require_token_on_ipc: config.require_token_on_ipc,
+            allow_loopback_without_token: auth.allow_loopback_without_token,
+            require_token_on_ipc: auth.require_token_on_ipc,
         }
     }
 }
@@ -171,7 +212,11 @@ mod tests {
 
     #[test]
     fn snapshot_ids_are_unique_per_baseline() {
-        let inner = ServerInner::new([0x11; 16]);
+        let cfg = ServerConfig {
+            server_uuid: [0x11; 16],
+            ..Default::default()
+        };
+        let inner = ServerInner::new(&cfg);
         let mut seen = std::collections::HashSet::new();
         for _ in 0..1024 {
             assert!(
@@ -183,8 +228,16 @@ mod tests {
 
     #[test]
     fn snapshot_ids_do_not_collide_across_server_restarts() {
-        let first = ServerInner::new([0x22; 16]);
-        let second = ServerInner::new([0x33; 16]);
+        let cfg1 = ServerConfig {
+            server_uuid: [0x22; 16],
+            ..Default::default()
+        };
+        let cfg2 = ServerConfig {
+            server_uuid: [0x33; 16],
+            ..Default::default()
+        };
+        let first = ServerInner::new(&cfg1);
+        let second = ServerInner::new(&cfg2);
         assert_ne!(
             first.next_snapshot_uuid(),
             second.next_snapshot_uuid(),
@@ -205,7 +258,11 @@ mod tests {
 
     #[test]
     fn handshake_context_recovers_after_selection_mutex_poisoning() {
-        let inner = Arc::new(ServerInner::new([0x44; 16]));
+        let cfg = ServerConfig {
+            server_uuid: [0x44; 16],
+            ..Default::default()
+        };
+        let inner = Arc::new(ServerInner::new(&cfg));
         {
             let mut sel = lock_unpoisoned(&inner.selection);
             *sel = Some(SelectionContext {
@@ -224,7 +281,7 @@ mod tests {
         assert!(handle.join().is_err());
         assert!(inner.selection.is_poisoned());
 
-        let ctx = inner.get_handshake_context(&ServerConfig::default(), false, true);
+        let ctx = inner.get_handshake_context(false, true);
         assert_eq!(ctx.min_pos, IVec3::new(1, 2, 3));
         assert_eq!(ctx.state_hash, 0xDEAD_BEEF);
     }

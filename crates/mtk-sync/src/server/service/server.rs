@@ -20,16 +20,77 @@ use crate::server::delta::encode_delta_op;
 use crate::transport_ipc::{bind_ipc_listener, format_ipc_url};
 
 use super::config::{generate_unique_server_uuid, ServerCommand, ServerConfig, ServerEvent};
-use super::state::{lock_unpoisoned, ClientHandle, PaletteState, SelectionContext, ServerInner};
+use super::state::{
+    lock_unpoisoned, AuthSettings, ClientHandle, PaletteState, SelectionContext, ServerInner,
+};
 use super::worker::{run_ipc_client_worker, run_ws_client_worker};
 
 /// The Native Live Sync Server instance (WebSocket and/or local IPC).
 pub struct LiveSyncServer {
     inner: Arc<ServerInner>,
-    /// Mutex so `stop` can take `&self`: JNI hands the server out as a shared `Arc`, and an
-    /// in-flight call must be able to observe the stopped state without exclusive access.
-    listener_threads: std::sync::Mutex<Vec<JoinHandle<()>>>,
+    /// Mutex so `stop` / `stop_ws` can take `&self`: JNI hands the server out as a shared `Arc`,
+    /// and an in-flight call must be able to observe the stopped state without exclusive access.
+    ws_listener_thread: std::sync::Mutex<Option<JoinHandle<()>>>,
+    ipc_listener_thread: std::sync::Mutex<Option<JoinHandle<()>>>,
     ipc_registration: std::sync::Mutex<Option<InstanceRegistrationGuard>>,
+}
+
+fn spawn_ws_listener(
+    inner: &Arc<ServerInner>,
+    bind_address: &str,
+) -> Result<(SocketAddr, JoinHandle<()>), ProtocolError> {
+    let listener =
+        TcpListener::bind(bind_address).map_err(|_e| ProtocolError::TruncatedPayload {
+            field: "Failed to bind TcpListener address",
+        })?;
+
+    let local_addr = listener
+        .local_addr()
+        .map_err(|_| ProtocolError::TruncatedPayload {
+            field: "Failed to query local listener address",
+        })?;
+
+    listener
+        .set_nonblocking(true)
+        .map_err(|_| ProtocolError::TruncatedPayload {
+            field: "Failed to set listener non-blocking",
+        })?;
+
+    *lock_unpoisoned(&inner.local_addr) = Some(local_addr);
+    inner.ws_running.store(true, Ordering::Relaxed);
+
+    let inner_clone = Arc::clone(inner);
+    let ws_thread = thread::spawn(move || {
+        while inner_clone.is_ws_running() {
+            match listener.accept() {
+                Ok((stream, addr)) => {
+                    let mut clients = lock_unpoisoned(&inner_clone.clients);
+                    if clients.len() >= inner_clone.max_connections {
+                        drop(stream);
+                        continue;
+                    }
+
+                    let client_id = inner_clone.next_client_id.fetch_add(1, Ordering::Relaxed);
+                    let (tx, rx) = crossbeam_channel::unbounded();
+                    clients.insert(client_id, ClientHandle { tx, is_ipc: false });
+                    drop(clients);
+
+                    let worker_inner = inner_clone.clone();
+                    thread::spawn(move || {
+                        run_ws_client_worker(client_id, stream, addr, rx, worker_inner);
+                    });
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(_) => {
+                    thread::sleep(Duration::from_millis(10));
+                }
+            }
+        }
+    });
+
+    Ok((local_addr, ws_thread))
 }
 
 impl LiveSyncServer {
@@ -45,81 +106,24 @@ impl LiveSyncServer {
             config.server_uuid = generate_unique_server_uuid();
         }
 
-        let inner = Arc::new(ServerInner::new(config.server_uuid));
-        let mut listener_threads = Vec::new();
+        let inner = Arc::new(ServerInner::new(&config));
+        let mut ws_listener_thread = None;
         let mut ws_bound_str: Option<String> = None;
 
         if let Some(ref bind_address) = config.bind_address {
-            let listener =
-                TcpListener::bind(bind_address).map_err(|_e| ProtocolError::TruncatedPayload {
-                    field: "Failed to bind TcpListener address",
-                })?;
-
-            let local_addr =
-                listener
-                    .local_addr()
-                    .map_err(|_| ProtocolError::TruncatedPayload {
-                        field: "Failed to query local listener address",
-                    })?;
-
-            listener
-                .set_nonblocking(true)
-                .map_err(|_| ProtocolError::TruncatedPayload {
-                    field: "Failed to set listener non-blocking",
-                })?;
-
+            let (local_addr, handle) = spawn_ws_listener(&inner, bind_address)?;
             ws_bound_str = Some(local_addr.to_string());
-            *lock_unpoisoned(&inner.local_addr) = Some(local_addr);
-
-            let inner_clone = inner.clone();
-            let config_clone = config.clone();
-            let ws_thread = thread::spawn(move || {
-                while inner_clone.is_running() {
-                    match listener.accept() {
-                        Ok((stream, addr)) => {
-                            let mut clients = lock_unpoisoned(&inner_clone.clients);
-                            if clients.len() >= config_clone.max_connections {
-                                drop(stream);
-                                continue;
-                            }
-
-                            let client_id =
-                                inner_clone.next_client_id.fetch_add(1, Ordering::Relaxed);
-                            let (tx, rx) = crossbeam_channel::unbounded();
-                            clients.insert(client_id, ClientHandle { tx });
-                            drop(clients);
-
-                            let worker_inner = inner_clone.clone();
-                            let worker_config = config_clone.clone();
-                            thread::spawn(move || {
-                                run_ws_client_worker(
-                                    client_id,
-                                    stream,
-                                    addr,
-                                    rx,
-                                    worker_inner,
-                                    worker_config,
-                                );
-                            });
-                        }
-                        Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                            thread::sleep(Duration::from_millis(10));
-                        }
-                        Err(_) => {
-                            thread::sleep(Duration::from_millis(10));
-                        }
-                    }
-                }
-            });
-            listener_threads.push(ws_thread);
+            ws_listener_thread = Some(handle);
         }
 
+        let mut ipc_listener_thread = None;
         let mut ipc_registration = None;
         if config.enable_ipc {
             let registry_dir = default_registry_dir();
             if let Err(err) = std::fs::create_dir_all(&registry_dir) {
                 inner.running.store(false, Ordering::Relaxed);
-                for h in listener_threads {
+                inner.ws_running.store(false, Ordering::Relaxed);
+                if let Some(h) = ws_listener_thread {
                     let _ = h.join();
                 }
                 let _ = inner.event_tx.send(ServerEvent::Warning(err.to_string()));
@@ -140,7 +144,8 @@ impl LiveSyncServer {
                 Ok(l) => l,
                 Err(_) => {
                     inner.running.store(false, Ordering::Relaxed);
-                    for h in listener_threads {
+                    inner.ws_running.store(false, Ordering::Relaxed);
+                    if let Some(h) = ws_listener_thread {
                         let _ = h.join();
                     }
                     return Err(ProtocolError::TruncatedPayload {
@@ -169,7 +174,8 @@ impl LiveSyncServer {
                 Ok(g) => g,
                 Err(_) => {
                     inner.running.store(false, Ordering::Relaxed);
-                    for h in listener_threads {
+                    inner.ws_running.store(false, Ordering::Relaxed);
+                    if let Some(h) = ws_listener_thread {
                         let _ = h.join();
                     }
                     return Err(ProtocolError::TruncatedPayload {
@@ -179,16 +185,16 @@ impl LiveSyncServer {
             };
 
             *lock_unpoisoned(&inner.ipc_url) = Some(ipc_url.clone());
+            inner.ipc_running.store(true, Ordering::Relaxed);
             ipc_registration = Some(guard);
 
             let inner_clone = inner.clone();
-            let config_clone = config.clone();
             let ipc_thread = thread::spawn(move || {
-                while inner_clone.is_running() {
+                while inner_clone.is_ipc_running() {
                     match ipc_listener.accept() {
                         Ok(stream) => {
                             let mut clients = lock_unpoisoned(&inner_clone.clients);
-                            if clients.len() >= config_clone.max_connections {
+                            if clients.len() >= inner_clone.max_connections {
                                 drop(stream);
                                 continue;
                             }
@@ -196,11 +202,10 @@ impl LiveSyncServer {
                             let client_id =
                                 inner_clone.next_client_id.fetch_add(1, Ordering::Relaxed);
                             let (tx, rx) = crossbeam_channel::unbounded();
-                            clients.insert(client_id, ClientHandle { tx });
+                            clients.insert(client_id, ClientHandle { tx, is_ipc: true });
                             drop(clients);
 
                             let worker_inner = inner_clone.clone();
-                            let worker_config = config_clone.clone();
                             let peer_label = ipc_url.clone();
                             thread::spawn(move || {
                                 run_ipc_client_worker(
@@ -209,7 +214,6 @@ impl LiveSyncServer {
                                     peer_label,
                                     rx,
                                     worker_inner,
-                                    worker_config,
                                 );
                             });
                         }
@@ -222,19 +226,91 @@ impl LiveSyncServer {
                     }
                 }
             });
-            listener_threads.push(ipc_thread);
+            ipc_listener_thread = Some(ipc_thread);
         }
 
         Ok(Self {
             inner,
-            listener_threads: std::sync::Mutex::new(listener_threads),
+            ws_listener_thread: std::sync::Mutex::new(ws_listener_thread),
+            ipc_listener_thread: std::sync::Mutex::new(ipc_listener_thread),
             ipc_registration: std::sync::Mutex::new(ipc_registration),
         })
+    }
+
+    /// Starts or rebinds the WebSocket listener on an already running server without disturbing IPC.
+    pub fn start_ws(&self, bind_address: &str) -> Result<(), ProtocolError> {
+        if !self.is_running() {
+            return Err(ProtocolError::TruncatedPayload {
+                field: "Server is not running",
+            });
+        }
+        self.stop_ws();
+        let (local_addr, handle) = spawn_ws_listener(&self.inner, bind_address)?;
+        *lock_unpoisoned(&self.ws_listener_thread) = Some(handle);
+        let mut guard = lock_unpoisoned(&self.ipc_registration);
+        if let Some(reg) = guard.as_mut() {
+            if let Err(err) = reg.update_ws_bind_address(Some(local_addr.to_string())) {
+                self.warn(err);
+            }
+        }
+        Ok(())
+    }
+
+    /// Stops only the WebSocket listener and WS client sessions while keeping local IPC intact.
+    pub fn stop_ws(&self) {
+        self.inner.ws_running.store(false, Ordering::Relaxed);
+        {
+            let mut clients = lock_unpoisoned(&self.inner.clients);
+            clients.retain(|_, client| {
+                if !client.is_ipc {
+                    let _ = client.tx.send(ServerCommand::Close);
+                    false
+                } else {
+                    true
+                }
+            });
+        }
+        if let Some(handle) = lock_unpoisoned(&self.ws_listener_thread).take() {
+            let _ = handle.join();
+        }
+        *lock_unpoisoned(&self.inner.local_addr) = None;
+        let mut guard = lock_unpoisoned(&self.ipc_registration);
+        if let Some(reg) = guard.as_mut() {
+            if let Err(err) = reg.update_ws_bind_address(None) {
+                self.warn(err);
+            }
+        }
+    }
+
+    /// Updates authentication settings dynamically without restarting IPC or WS listeners.
+    pub fn update_auth(
+        &self,
+        auth_token: Option<String>,
+        allow_loopback_without_token: bool,
+        require_token_on_ipc: bool,
+    ) {
+        let normalized = auth_token
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty());
+        let requires_ipc_token = require_token_on_ipc && normalized.is_some();
+        *lock_unpoisoned(&self.inner.auth) = AuthSettings {
+            auth_token: normalized,
+            allow_loopback_without_token,
+            require_token_on_ipc,
+        };
+        let mut guard = lock_unpoisoned(&self.ipc_registration);
+        if let Some(reg) = guard.as_mut() {
+            if let Err(err) = reg.update_requires_token(requires_ipc_token) {
+                self.warn(err);
+            }
+        }
     }
 
     /// Stops the server, closes all client connections, and terminates listeners.
     pub fn stop(&self) {
         self.inner.running.store(false, Ordering::Relaxed);
+        self.inner.ipc_running.store(false, Ordering::Relaxed);
+        self.inner.ws_running.store(false, Ordering::Relaxed);
 
         {
             let mut clients = lock_unpoisoned(&self.inner.clients);
@@ -249,22 +325,32 @@ impl LiveSyncServer {
         *lock_unpoisoned(&self.inner.palette) = PaletteState::default();
         *lock_unpoisoned(&self.inner.selection) = None;
 
-        let threads = {
-            let mut guard = lock_unpoisoned(&self.listener_threads);
-            std::mem::take(&mut *guard)
-        };
-        for handle in threads {
+        if let Some(handle) = lock_unpoisoned(&self.ws_listener_thread).take() {
+            let _ = handle.join();
+        }
+        if let Some(handle) = lock_unpoisoned(&self.ipc_listener_thread).take() {
             let _ = handle.join();
         }
 
         // Drop IPC registration after listener exits so the socket file is safely unlinked.
         let _ = lock_unpoisoned(&self.ipc_registration).take();
+        *lock_unpoisoned(&self.inner.local_addr) = None;
         *lock_unpoisoned(&self.inner.ipc_url) = None;
     }
 
     /// Returns whether the server is actively running.
     pub fn is_running(&self) -> bool {
         self.inner.is_running()
+    }
+
+    /// Returns whether the local IPC transport is currently active.
+    pub fn is_ipc_running(&self) -> bool {
+        self.inner.is_ipc_running()
+    }
+
+    /// Returns whether the WebSocket transport is currently active.
+    pub fn is_ws_running(&self) -> bool {
+        self.inner.is_ws_running()
     }
 
     /// Returns the assigned server instance UUID.
@@ -275,6 +361,22 @@ impl LiveSyncServer {
     /// Returns the number of currently connected clients.
     pub fn client_count(&self) -> usize {
         lock_unpoisoned(&self.inner.clients).len()
+    }
+
+    /// Returns the number of currently connected local IPC clients.
+    pub fn ipc_client_count(&self) -> usize {
+        lock_unpoisoned(&self.inner.clients)
+            .values()
+            .filter(|c| c.is_ipc)
+            .count()
+    }
+
+    /// Returns the number of currently connected WebSocket clients.
+    pub fn ws_client_count(&self) -> usize {
+        lock_unpoisoned(&self.inner.clients)
+            .values()
+            .filter(|c| !c.is_ipc)
+            .count()
     }
 
     /// Returns the bound local WebSocket socket address, if WebSocket is enabled.

@@ -195,6 +195,100 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerG
     server.local_addr().map(|a| a.port() as jint).unwrap_or(0)
 }
 
+/// Starts or rebinds the WebSocket listener on an existing native server without interrupting IPC.
+#[no_mangle]
+pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerStartWs(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    host: JString,
+    port: jint,
+) -> jboolean {
+    let Some(server) = SERVERS.get(handle as u64) else {
+        return 0;
+    };
+    let host_str = read_optional_jstring(&mut env, &host);
+    let resolved_host = if host_str.is_empty() {
+        "127.0.0.1".to_string()
+    } else {
+        host_str
+    };
+    let bind_addr = format!("{}:{}", resolved_host, port);
+    match server.start_ws(&bind_addr) {
+        Ok(()) => 1,
+        Err(_) => 0,
+    }
+}
+
+/// Stops only the WebSocket listener on an existing native server while keeping IPC running.
+#[no_mangle]
+pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerStopWs(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) {
+    let Some(server) = SERVERS.get(handle as u64) else {
+        return;
+    };
+    server.stop_ws();
+}
+
+/// Returns whether the local IPC transport is running.
+#[no_mangle]
+pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerIsIpcRunning(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jboolean {
+    let Some(server) = SERVERS.get(handle as u64) else {
+        return 0;
+    };
+    if server.is_ipc_running() {
+        1
+    } else {
+        0
+    }
+}
+
+/// Returns whether the WebSocket transport is running.
+#[no_mangle]
+pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerIsWsRunning(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jboolean {
+    let Some(server) = SERVERS.get(handle as u64) else {
+        return 0;
+    };
+    if server.is_ws_running() {
+        1
+    } else {
+        0
+    }
+}
+
+/// Updates authentication settings on a running native server without restarting transports.
+#[no_mangle]
+pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerUpdateAuth(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    token: JString,
+    allow_loopback: jboolean,
+    require_token_on_ipc: jboolean,
+) {
+    let Some(server) = SERVERS.get(handle as u64) else {
+        return;
+    };
+    let token_str = read_optional_jstring(&mut env, &token);
+    let token_opt = if token_str.is_empty() {
+        None
+    } else {
+        Some(token_str)
+    };
+    server.update_auth(token_opt, allow_loopback != 0, require_token_on_ipc != 0);
+}
+
 /// Returns the number of connected clients on the native server.
 #[no_mangle]
 pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerGetClientCount(
@@ -206,6 +300,32 @@ pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerG
         return 0;
     };
     server.client_count() as jint
+}
+
+/// Returns the number of connected local IPC clients on the native server.
+#[no_mangle]
+pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerGetIpcClientCount(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jint {
+    let Some(server) = SERVERS.get(handle as u64) else {
+        return 0;
+    };
+    server.ipc_client_count() as jint
+}
+
+/// Returns the number of connected WebSocket clients on the native server.
+#[no_mangle]
+pub extern "system" fn Java_com_mozi1924_yefira_encoder_NativeSync_nativeServerGetWsClientCount(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jint {
+    let Some(server) = SERVERS.get(handle as u64) else {
+        return 0;
+    };
+    server.ws_client_count() as jint
 }
 
 /// Updates the authoritative selection on the native server.

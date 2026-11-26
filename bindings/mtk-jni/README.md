@@ -68,13 +68,24 @@ public static native void nativeServerUpdateMetadata(
     long handle, String worldName, String mcVersion, String loader, String dimension
 );
 
-// 停止服务端实例并注销句柄（安全释放底层 TCP 端口与工作线程）
+// 停止服务端实例并注销句柄（安全释放底层 TCP 端口、IPC 端点与工作线程）
 public static native void nativeServerStop(long handle);
 
-// 运行状态与端口查询
+// 动态启停 WebSocket 监听与热更新鉴权配置（保持本地 IPC 连接不中断）
+public static native boolean nativeServerStartWs(long handle, String host, int port);
+public static native void nativeServerStopWs(long handle);
+public static native void nativeServerUpdateAuth(
+    long handle, String token, boolean allowLoopback, boolean requireTokenOnIpc
+);
+
+// 运行状态、传输通道状态与端口/连接数查询
 public static native boolean nativeServerIsRunning(long handle);
+public static native boolean nativeServerIsIpcRunning(long handle);
+public static native boolean nativeServerIsWsRunning(long handle);
 public static native int nativeServerGetPort(long handle);
 public static native int nativeServerGetClientCount(long handle);
+public static native int nativeServerGetIpcClientCount(long handle);
+public static native int nativeServerGetWsClientCount(long handle);
 ```
 
 ### 2.3 选区与数据流式提交
