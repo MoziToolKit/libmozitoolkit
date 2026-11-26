@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::net::{SocketAddr, TcpListener};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -12,8 +11,7 @@ use crate::discovery::{
     default_registry_dir, generate_endpoint_id, InstanceMetadata, InstanceRegistrationGuard,
 };
 use crate::protocol::{
-    compute_sparse_state_hash_from_raw, encode_packet, CancelReason, DeltaChangeEntry, Packet,
-    ProtocolError,
+    encode_packet, CancelReason, DeltaChangeEntry, Packet, ProtocolError, MAX_PALETTE_ENTRIES,
 };
 use crate::server::baseline::{encode_baseline_from_raw, BaselineEncoderConfig, BaselineStream};
 use crate::server::delta::encode_delta_op;
@@ -321,7 +319,7 @@ impl LiveSyncServer {
         }
 
         self.inner.epoch.fetch_add(1, Ordering::Relaxed);
-        self.inner.sequence.store(1, Ordering::Relaxed);
+        self.inner.sequence.store(0, Ordering::Relaxed);
         *lock_unpoisoned(&self.inner.palette) = PaletteState::default();
         *lock_unpoisoned(&self.inner.selection) = None;
 
@@ -402,12 +400,19 @@ impl LiveSyncServer {
     /// Sets the active selection bounding box.
     pub fn set_selection(&self, min_pos: IVec3, size: IVec3, dimension: String) {
         let mut sel = lock_unpoisoned(&self.inner.selection);
-        let existing_hash = sel.as_ref().map(|s| s.state_hash).unwrap_or(0);
+        if let Some(existing) = sel.as_ref() {
+            if existing.min_pos == min_pos
+                && existing.size == size
+                && existing.dimension == dimension
+            {
+                return;
+            }
+        }
         *sel = Some(SelectionContext {
             min_pos,
             size,
             dimension,
-            state_hash: existing_hash,
+            state_hash: 0,
         });
         self.inner.sequence.fetch_add(1, Ordering::Relaxed);
     }
@@ -440,55 +445,16 @@ impl LiveSyncServer {
         biome_palette: &[String],
         block_entities: &[(IVec3, String)],
     ) -> Result<u64, ProtocolError> {
-        let entity_map: HashMap<IVec3, &str> = block_entities
-            .iter()
-            .map(|(p, s)| (*p, s.as_str()))
-            .collect();
-
-        let state_hash = compute_sparse_state_hash_from_raw(
-            min_pos,
-            size,
-            &dimension,
-            voxel_indices,
-            block_palette,
-            raw_biomes,
-            biome_palette,
-            &entity_map,
-        );
-
-        // Update selection context with computed state_hash
-        {
-            let mut sel = lock_unpoisoned(&self.inner.selection);
-            *sel = Some(SelectionContext {
-                min_pos,
-                size,
-                dimension: dimension.clone(),
-                state_hash,
-            });
-        }
-
-        // Initialize authoritative palette from baseline
-        {
-            let mut pal = lock_unpoisoned(&self.inner.palette);
-            pal.lookup = block_palette
-                .iter()
-                .enumerate()
-                .map(|(idx, s)| (s.clone(), idx as u32))
-                .collect();
-            pal.list = block_palette.to_vec();
-            pal.revision = 1;
-        }
-
         // Unique per baseline so a client assembling a newer stream drops chunks that arrive
         // late from an aborted one.
         let snapshot_uuid = self.inner.next_snapshot_uuid();
-        let seq = self.inner.sequence.fetch_add(1, Ordering::Relaxed);
+        let seq = self.inner.sequence.fetch_add(1, Ordering::Relaxed) + 1;
         let ep = self.inner.epoch.load(Ordering::Relaxed);
 
         let encoder_config = BaselineEncoderConfig {
             max_chunk_size: 65536,
-            compression_mode: 1, // LZ4
-            compression_level: 0,
+            compression_mode: 1, // Zstd
+            compression_level: 3,
             epoch: ep,
             snapshot_uuid,
             snapshot_seq: seq,
@@ -507,8 +473,32 @@ impl LiveSyncServer {
             &encoder_config,
         )?;
 
+        // Update selection context with computed state_hash
+        {
+            let mut sel = lock_unpoisoned(&self.inner.selection);
+            *sel = Some(SelectionContext {
+                min_pos,
+                size,
+                dimension,
+                state_hash: stream.state_hash,
+            });
+        }
+
+        // Initialize authoritative palette from the compacted baseline palette
+        {
+            let mut pal = lock_unpoisoned(&self.inner.palette);
+            pal.lookup = stream
+                .block_palette
+                .iter()
+                .enumerate()
+                .map(|(idx, s)| (s.clone(), idx as u32))
+                .collect();
+            pal.list = stream.block_palette.clone();
+            pal.revision = 1;
+        }
+
         self.stream_baseline(client_id, &stream)?;
-        Ok(state_hash)
+        Ok(stream.state_hash)
     }
 
     /// Broadcasts a pre-encoded raw RFC frame to all connected clients.
@@ -550,6 +540,17 @@ impl LiveSyncServer {
                 let state_id = if let Some(&id) = pal.lookup.get(state) {
                     id as u16
                 } else {
+                    if pal.list.len() >= MAX_PALETTE_ENTRIES {
+                        for (_, added) in new_palette_entries {
+                            pal.lookup.remove(&added);
+                            pal.list.pop();
+                        }
+                        return Err(ProtocolError::ResourceLimitExceeded {
+                            resource: "Palette Entries",
+                            limit: MAX_PALETTE_ENTRIES,
+                            actual: pal.list.len() + 1,
+                        });
+                    }
                     let id = pal.list.len() as u16;
                     pal.list.push(state.clone());
                     pal.lookup.insert(state.clone(), id as u32);
@@ -566,7 +567,7 @@ impl LiveSyncServer {
             if !new_palette_entries.is_empty() {
                 let old_rev = pal.revision;
                 pal.revision += 1;
-                let seq = self.inner.sequence.fetch_add(1, Ordering::Relaxed);
+                let seq = self.inner.sequence.fetch_add(1, Ordering::Relaxed) + 1;
                 let pal_pkt = Packet::PaletteUpdate {
                     epoch,
                     seq_id: seq,
@@ -579,7 +580,7 @@ impl LiveSyncServer {
 
             if !changes.is_empty() {
                 for chunk in changes.chunks(16384) {
-                    let seq = self.inner.sequence.fetch_add(1, Ordering::Relaxed);
+                    let seq = self.inner.sequence.fetch_add(1, Ordering::Relaxed) + 1;
                     let delta_packets = encode_delta_op(epoch, seq, pal.revision, chunk.to_vec());
                     for pkt in &delta_packets {
                         self.broadcast_packet(pkt)?;
@@ -590,7 +591,7 @@ impl LiveSyncServer {
 
         // Broadcast block entity changes
         for (coord, payload_opt) in block_entities {
-            let seq = self.inner.sequence.fetch_add(1, Ordering::Relaxed);
+            let seq = self.inner.sequence.fetch_add(1, Ordering::Relaxed) + 1;
             let entity_data = payload_opt
                 .as_deref()
                 .and_then(mtk_model::BlockEntityData::from_visual_json);
@@ -601,6 +602,13 @@ impl LiveSyncServer {
                 entity: entity_data,
             };
             self.broadcast_packet(&ent_pkt)?;
+        }
+
+        if !changes.is_empty() || !block_entities.is_empty() {
+            let mut sel = lock_unpoisoned(&self.inner.selection);
+            if let Some(s) = sel.as_mut() {
+                s.state_hash = 0;
+            }
         }
 
         Ok(())

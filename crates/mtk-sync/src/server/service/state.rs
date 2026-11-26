@@ -87,7 +87,7 @@ impl ServerInner {
             ipc_running: AtomicBool::new(false),
             ws_running: AtomicBool::new(false),
             epoch: AtomicU64::new(1),
-            sequence: AtomicU64::new(1),
+            sequence: AtomicU64::new(0),
             next_client_id: AtomicU64::new(1),
             snapshot_counter: AtomicU64::new(0),
             server_uuid: config.server_uuid,
@@ -143,6 +143,17 @@ impl ServerInner {
     pub(crate) fn remove_client(&self, client_id: u64) {
         let mut clients = lock_unpoisoned(&self.clients);
         clients.remove(&client_id);
+    }
+
+    pub(crate) fn palette_snapshot(&self) -> (u32, Vec<(u16, String)>) {
+        let pal = lock_unpoisoned(&self.palette);
+        let entries = pal
+            .list
+            .iter()
+            .enumerate()
+            .map(|(idx, name)| (idx as u16, name.clone()))
+            .collect();
+        (pal.revision, entries)
     }
 
     pub(crate) fn get_handshake_context(

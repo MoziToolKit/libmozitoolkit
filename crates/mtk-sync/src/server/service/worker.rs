@@ -214,6 +214,35 @@ fn run_client_worker(
                                 return;
                             }
 
+                            if res.decision == SyncDecision::VerifiedSkipRebuild {
+                                let (revision, entries) = inner.palette_snapshot();
+                                if !entries.is_empty() {
+                                    let mut send_failed = false;
+                                    for chunk in entries.chunks(2048) {
+                                        let pal_pkt = Packet::PaletteUpdate {
+                                            epoch: ctx.epoch,
+                                            seq_id: ctx.sequence,
+                                            base_revision: revision,
+                                            new_revision: revision,
+                                            entries: chunk.to_vec(),
+                                        };
+                                        let Ok(pal_bytes) = encode_packet(&pal_pkt) else {
+                                            send_failed = true;
+                                            break;
+                                        };
+                                        if transport.send_binary(pal_bytes).is_err() {
+                                            send_failed = true;
+                                            break;
+                                        }
+                                    }
+                                    if send_failed {
+                                        transport.close();
+                                        inner.remove_client(client_id);
+                                        return;
+                                    }
+                                }
+                            }
+
                             let _ = inner.event_tx.send(ServerEvent::ClientConnected {
                                 client_id,
                                 endpoint: endpoint.clone(),

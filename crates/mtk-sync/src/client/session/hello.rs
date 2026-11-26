@@ -7,6 +7,7 @@
 
 use glam::IVec3;
 
+use super::state::SessionState;
 use crate::protocol::{Packet, PROTOCOL_VERSION};
 
 /// Builds the HELLO used when the host has no persisted session state.
@@ -45,6 +46,42 @@ pub(crate) fn with_auth_token(mut hello: Packet, auth_token: &str) -> Packet {
     hello
 }
 
+/// Builds the HELLO packet for a (re)connection attempt.
+///
+/// When the session already holds a valid server-confirmed snapshot state (non-zero
+/// `server_uuid`, `current_state_hash`, and `size`), reconnecting uses those live
+/// coordinates and sequence instead of re-sending a stale `initial_hello`.
+pub(crate) fn reconnect_hello(initial_hello: &Packet, state: &SessionState) -> Packet {
+    if state.server_uuid != [0u8; 16] && state.current_state_hash != 0 && state.size != IVec3::ZERO
+    {
+        if let Packet::Hello {
+            min_version,
+            max_version,
+            capabilities,
+            flags,
+            auth_token,
+            ..
+        } = initial_hello
+        {
+            return Packet::Hello {
+                min_version: *min_version,
+                max_version: *max_version,
+                capabilities: *capabilities,
+                flags: *flags,
+                cached_world_uuid: state.server_uuid,
+                cached_epoch: state.epoch,
+                cached_seq: state.sequence,
+                cached_min: state.min_pos,
+                cached_size: state.size,
+                cached_state_hash: state.current_state_hash,
+                auth_token: auth_token.clone(),
+                cached_dimension: state.dimension.clone(),
+            };
+        }
+    }
+    initial_hello.clone()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -78,6 +115,46 @@ mod tests {
                     0,
                     "protocol 4.0 no longer advertises the visual entity stream"
                 );
+            }
+            other => panic!("expected HELLO, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn reconnect_hello_uses_live_session_state_when_available() {
+        let initial = default_hello("tok-1");
+        let empty_state = SessionState::new();
+        assert_eq!(reconnect_hello(&initial, &empty_state), initial);
+
+        let mut live_state = SessionState::new();
+        live_state.server_uuid = [0xAB; 16];
+        live_state.epoch = 4;
+        live_state.sequence = 17;
+        live_state.min_pos = IVec3::new(-16, 64, 32);
+        live_state.size = IVec3::new(16, 16, 16);
+        live_state.current_state_hash = 0x1234_5678_9ABC_DEF0;
+        live_state.dimension = "minecraft:the_nether".to_string();
+
+        match reconnect_hello(&initial, &live_state) {
+            Packet::Hello {
+                cached_world_uuid,
+                cached_epoch,
+                cached_seq,
+                cached_min,
+                cached_size,
+                cached_state_hash,
+                auth_token,
+                cached_dimension,
+                ..
+            } => {
+                assert_eq!(cached_world_uuid, [0xAB; 16]);
+                assert_eq!(cached_epoch, 4);
+                assert_eq!(cached_seq, 17);
+                assert_eq!(cached_min, IVec3::new(-16, 64, 32));
+                assert_eq!(cached_size, IVec3::new(16, 16, 16));
+                assert_eq!(cached_state_hash, 0x1234_5678_9ABC_DEF0);
+                assert_eq!(auth_token, "tok-1");
+                assert_eq!(cached_dimension, "minecraft:the_nether");
             }
             other => panic!("expected HELLO, got {other:?}"),
         }

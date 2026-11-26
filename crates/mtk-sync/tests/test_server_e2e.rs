@@ -489,3 +489,260 @@ fn test_decoupled_ws_lifecycle_preserves_ipc_client() {
     ipc_client.stop();
     server.stop();
 }
+
+fn parse_uuid_hex_16(hex: &str) -> [u8; 16] {
+    assert_eq!(hex.len(), 32, "expected 32-char uuid hex, got '{hex}'");
+    let mut out = [0u8; 16];
+    for (i, slot) in out.iter_mut().enumerate() {
+        *slot = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).expect("valid hex byte");
+    }
+    out
+}
+
+fn run_fast_reconnect_verified_skip_rebuild_case(url: &str, server: &LiveSyncServer) {
+    let min_pos = IVec3::new(0, 64, 0);
+    let size = IVec3::new(4, 4, 4);
+    let total_voxels = (size.x * size.y * size.z) as usize;
+
+    // Deliberately use a non-canonical palette order where "minecraft:air" is NOT index 0
+    // to prove server palette state initializes from the compacted stream palette.
+    let state_to_name = vec![
+        "minecraft:dirt".to_string(),
+        "minecraft:stone".to_string(),
+        "minecraft:air".to_string(),
+    ];
+    let biome_to_name = vec!["minecraft:plains".to_string()];
+    let mut raw_states = vec![2u32; total_voxels];
+    raw_states[0] = 0; // (0, 0, 0) -> minecraft:dirt
+    raw_states[1] = 1; // (1, 0, 0) -> minecraft:stone
+    let raw_biomes = vec![0u32; 1];
+
+    server.set_selection(min_pos, size, "minecraft:overworld".to_string());
+
+    // 1. Initial client connects and receives full baseline.
+    let mut client1 = LiveSyncSession::new(None, None, None);
+    client1.start(url, false, 1).expect("client1 start");
+
+    let mut client1_id = None;
+    let mut server_events_log = Vec::new();
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < deadline {
+        for ev in server.poll_events() {
+            server_events_log.push(ev.clone());
+            if let ServerEvent::BaselineRequested { client_id, .. } = ev {
+                client1_id = Some(client_id);
+            }
+        }
+        if client1_id.is_some() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(15));
+    }
+    let client1_id = client1_id.expect("server must request baseline for client1");
+
+    let submit_res = server.submit_baseline(
+        client1_id,
+        min_pos,
+        size,
+        "minecraft:overworld".to_string(),
+        &raw_states,
+        &state_to_name,
+        &raw_biomes,
+        &biome_to_name,
+        &[],
+    );
+    if let Err(err) = submit_res {
+        let extra_server_events = server.poll_events();
+        let c1_events = client1.poll_events();
+        panic!(
+            "submit_baseline failed for url={url} client1_id={client1_id}: {err:?}; server_events={server_events_log:?}; extra_server_events={extra_server_events:?}; client1_events={c1_events:?}"
+        );
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(3);
+    let mut client1_events = Vec::new();
+    while Instant::now() < deadline {
+        client1_events.extend(client1.poll_events());
+        if client1.lifecycle() == SyncLifecycle::Live {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(15));
+    }
+    assert_eq!(
+        client1.lifecycle(),
+        SyncLifecycle::Live,
+        "client1 did not reach Live for url={url}; events={client1_events:?}; server_events={:?}",
+        server.poll_events()
+    );
+
+    let uuid_bytes = parse_uuid_hex_16(&client1.server_uuid_hex());
+    let epoch = client1.current_epoch();
+    let seq = client1.current_sequence();
+    let state_hash = client1.current_state_hash();
+    assert_ne!(state_hash, 0, "baseline state_hash must be non-zero");
+    assert!(seq > 0, "baseline sequence must be non-zero");
+
+    client1.stop();
+    // Drain server events from client1 before reconnecting.
+    std::thread::sleep(Duration::from_millis(30));
+    let _ = server.poll_events();
+
+    // 2. Second client reconnects with cached state -> must hit 0ms VERIFIED_SKIP_REBUILD.
+    let mut client2 = LiveSyncSession::new(None, None, None);
+    client2
+        .start_with_cache(
+            url,
+            false,
+            1,
+            uuid_bytes,
+            epoch,
+            seq,
+            min_pos,
+            size,
+            state_hash,
+            "minecraft:overworld".to_string(),
+        )
+        .expect("client2 start_with_cache");
+
+    let deadline = Instant::now() + Duration::from_secs(3);
+    let mut handshake_code = None;
+    let mut saw_verified = false;
+    while Instant::now() < deadline {
+        for ev in client2.poll_events() {
+            match ev {
+                SyncEvent::Handshake { decision_code, .. } => handshake_code = Some(decision_code),
+                SyncEvent::Verified { is_verified, .. } => saw_verified = is_verified,
+                _ => {}
+            }
+        }
+        if handshake_code.is_some() && saw_verified && client2.lifecycle() == SyncLifecycle::Live {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(15));
+    }
+
+    assert_eq!(
+        handshake_code,
+        Some(0x00),
+        "fast reconnect must negotiate VERIFIED_SKIP_REBUILD (0x00)"
+    );
+    assert!(saw_verified, "client2 must emit SyncEvent::Verified(true)");
+    assert_eq!(client2.lifecycle(), SyncLifecycle::Live);
+
+    for ev in server.poll_events() {
+        assert!(
+            !matches!(ev, ServerEvent::BaselineRequested { .. }),
+            "server must not emit BaselineRequested on VerifiedSkipRebuild, got {ev:?}"
+        );
+    }
+
+    // 3. Submit a delta referencing an existing baseline block ("minecraft:stone").
+    //    If VerifiedSkipRebuild didn't restore palette_map or server palette IDs drifted,
+    //    this would fall back to minecraft:air or dirt instead of minecraft:stone.
+    server
+        .submit_deltas(
+            &[IVec3::new(0, 0, 0)],
+            &["minecraft:stone".to_string()],
+            &[],
+        )
+        .expect("submit_deltas must succeed");
+
+    let deadline = Instant::now() + Duration::from_secs(3);
+    let mut delta_applied = false;
+    while Instant::now() < deadline {
+        for ev in client2.poll_events() {
+            if let SyncEvent::DeltaApplied { change_count, .. } = ev {
+                if change_count == 1 {
+                    delta_applied = true;
+                }
+            }
+        }
+        if delta_applied {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(15));
+    }
+    assert!(
+        delta_applied,
+        "client2 must apply delta after VerifiedSkipRebuild"
+    );
+    assert_eq!(
+        client2
+            .get_storage()
+            .get_block(min_pos.x, min_pos.y, min_pos.z),
+        "minecraft:stone",
+        "fast-reconnected client must resolve existing palette entries in subsequent deltas"
+    );
+    client2.stop();
+
+    // 4. After delta mutation, stale cached state must fall back to FullBaselineRequired (0x02).
+    let mut client3 = LiveSyncSession::new(None, None, None);
+    client3
+        .start_with_cache(
+            url,
+            false,
+            1,
+            uuid_bytes,
+            epoch,
+            seq,
+            min_pos,
+            size,
+            state_hash,
+            "minecraft:overworld".to_string(),
+        )
+        .expect("client3 start_with_cache");
+
+    let deadline = Instant::now() + Duration::from_secs(3);
+    let mut client3_decision = None;
+    while Instant::now() < deadline {
+        for ev in client3.poll_events() {
+            if let SyncEvent::Handshake { decision_code, .. } = ev {
+                client3_decision = Some(decision_code);
+            }
+        }
+        if client3_decision.is_some() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(15));
+    }
+    assert_eq!(
+        client3_decision,
+        Some(0x02),
+        "stale cached state after delta must require FullBaselineRequired (0x02)"
+    );
+    client3.stop();
+
+    // Wait for client3's server worker to unregister and drain its leftover events
+    // before reusing the same server instance for the next transport case.
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while server.client_count() > 0 && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let _ = server.poll_events();
+}
+
+#[test]
+fn test_fast_reconnect_verified_skip_rebuild_and_subsequent_delta_ws_and_ipc() {
+    let config = ServerConfig {
+        bind_address: Some("127.0.0.1:0".to_string()),
+        enable_ipc: true,
+        ipc_name: None,
+        instance_info: None,
+        auth_token: None,
+        allow_loopback_without_token: true,
+        require_token_on_ipc: false,
+        server_uuid: [0x55; 16],
+        max_connections: 8,
+        handshake_timeout: Duration::from_millis(3000),
+        ping_interval: Duration::from_millis(1000),
+    };
+
+    let server = LiveSyncServer::start(config).expect("dual-stack server must start");
+    let ws_url = format!("ws://{}", server.local_addr().expect("ws addr"));
+    let ipc_url = server.ipc_url().expect("ipc url");
+
+    run_fast_reconnect_verified_skip_rebuild_case(&ws_url, &server);
+    run_fast_reconnect_verified_skip_rebuild_case(&ipc_url, &server);
+
+    server.stop();
+}

@@ -162,13 +162,13 @@ fn dispatch_single_client_message(
             let _ = event_sender.send(SyncEvent::StatusChange(status));
 
             if conn {
-                {
+                let hello_pkt = {
                     let mut state = lock_state(state_lock);
                     state.lifecycle = SyncLifecycle::Negotiating;
                     state.last_progress_at = Instant::now();
-                }
+                    super::hello::reconnect_hello(initial_hello, &state)
+                };
                 // Every worker start supplies a HELLO carrying the session auth token.
-                let hello_pkt = initial_hello.clone();
                 if let Err(err) = crate::client::transport::queue_packet(cmd_sender, &hello_pkt) {
                     let _ = event_sender
                         .send(SyncEvent::Warning(format!("failed to encode HELLO: {err}")));
