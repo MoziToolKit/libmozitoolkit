@@ -476,6 +476,8 @@ fn test_emissive_companion_animation_synthesis() {
             interpolate: false,
             ..Default::default()
         }),
+        unstitch: None,
+        palette: None,
     };
 
     let decoded = DecodedSprite::from_discovered(discovered).unwrap();
@@ -495,4 +497,235 @@ fn test_emissive_companion_animation_synthesis() {
     assert_eq!(decoded.albedo.get_pixel(0, 16), [0, 180, 0, 255]);
     assert_eq!(decoded.albedo.get_pixel(2, 2 + 16), [0, 180, 0, 255]);
     assert_eq!(decoded.albedo.get_pixel(8, 8 + 16), [255, 255, 0, 255]); // Firefly pixel blended
+}
+
+fn encode_png(buf: &RgbaBuffer) -> Vec<u8> {
+    buf.to_png_bytes().expect("encode png")
+}
+
+#[test]
+fn test_unstitch_crops_region_and_later_source_overwrites() {
+    let mut sheet = RgbaBuffer::new(32, 16);
+    for y in 0..16 {
+        for x in 0..16 {
+            sheet.set_pixel(x, y, [255, 0, 0, 255]);
+            sheet.set_pixel(16 + x, y, [0, 0, 255, 255]);
+        }
+    }
+
+    let mut pack = mtk_resource::MemoryPack::new("UnstitchAndOverwrite");
+    pack.insert(
+        "assets/minecraft/textures/misc/sheet.png",
+        encode_png(&sheet),
+    );
+    pack.insert(
+        "assets/minecraft/textures/block/stone.png",
+        encode_png(&RgbaBuffer::solid(16, 16, 10, 10, 10, 255)),
+    );
+    pack.insert(
+        "assets/minecraft/textures/custom/stone_override.png",
+        encode_png(&RgbaBuffer::solid(16, 16, 0, 255, 0, 255)),
+    );
+
+    let def = mtk_resource::AtlasDefinition::parse_json(
+        r#"{
+            "sources": [
+                {"type": "minecraft:directory", "source": "block", "prefix": "block/"},
+                {"type": "minecraft:single", "resource": "minecraft:custom/stone_override", "sprite": "minecraft:block/stone"},
+                {
+                    "type": "minecraft:unstitch",
+                    "resource": "minecraft:misc/sheet",
+                    "divisor_x": 2.0,
+                    "divisor_y": 1.0,
+                    "regions": [
+                        {"sprite": "minecraft:block/left_half", "x": 0.0, "y": 0.0, "width": 1.0, "height": 1.0},
+                        {"sprite": "minecraft:block/right_half", "x": 1.0, "y": 0.0, "width": 1.0, "height": 1.0}
+                    ]
+                }
+            ]
+        }"#,
+    )
+    .unwrap();
+
+    let mut stack = mtk_resource::ResourcePackStack::new();
+    stack.push_pack(Box::new(pack));
+
+    let baked = AtlasBuilder::new(AtlasBuilderConfig::production(512, 512, 0))
+        .build_with_category(&stack, &def, "blocks")
+        .unwrap();
+
+    let chunk = &baked.chunks[0];
+    let stone_loc = baked
+        .address_map
+        .lookup_static_str("minecraft:block/stone")
+        .unwrap();
+    assert_eq!(
+        chunk
+            .albedo
+            .get_pixel(stone_loc.pixel_rect[0] + 4, stone_loc.pixel_rect[1] + 4),
+        [0, 255, 0, 255],
+        "later `single` source must overwrite earlier `directory` sprite"
+    );
+
+    let left_loc = baked
+        .address_map
+        .lookup_static_str("minecraft:block/left_half")
+        .unwrap();
+    assert_eq!(left_loc.frame_size, [16, 16]);
+    assert_eq!(
+        chunk
+            .albedo
+            .get_pixel(left_loc.pixel_rect[0] + 4, left_loc.pixel_rect[1] + 4),
+        [255, 0, 0, 255]
+    );
+
+    let right_loc = baked
+        .address_map
+        .lookup_static_str("minecraft:block/right_half")
+        .unwrap();
+    assert_eq!(right_loc.frame_size, [16, 16]);
+    assert_eq!(
+        chunk
+            .albedo
+            .get_pixel(right_loc.pixel_rect[0] + 4, right_loc.pixel_rect[1] + 4),
+        [0, 0, 255, 255]
+    );
+}
+
+#[test]
+fn test_standalone_overlays_and_same_pack_mcmeta_isolation() {
+    let mut base = mtk_resource::MemoryPack::new("Base");
+    base.insert(
+        "assets/minecraft/textures/block/redstone_dust_overlay.png",
+        encode_png(&RgbaBuffer::solid(16, 16, 255, 255, 255, 255)),
+    );
+    base.insert(
+        "assets/minecraft/textures/item/potion.png",
+        encode_png(&RgbaBuffer::solid(16, 16, 200, 200, 200, 255)),
+    );
+    base.insert(
+        "assets/minecraft/textures/item/potion_overlay.png",
+        encode_png(&RgbaBuffer::solid(16, 16, 0, 128, 255, 255)),
+    );
+    base.insert(
+        "assets/minecraft/textures/block/lava_still.png",
+        encode_png(&RgbaBuffer::solid(16, 32, 255, 80, 0, 255)),
+    );
+    base.insert(
+        "assets/minecraft/textures/block/lava_still.png.mcmeta",
+        br#"{"animation":{"frametime":2}}"#.to_vec(),
+    );
+
+    // Higher pack replaces lava_still.png with a static 16x16 PNG and NO .mcmeta.
+    let mut top = mtk_resource::MemoryPack::new("Top");
+    top.insert(
+        "assets/minecraft/textures/block/lava_still.png",
+        encode_png(&RgbaBuffer::solid(16, 16, 255, 160, 0, 255)),
+    );
+
+    let mut stack = mtk_resource::ResourcePackStack::new();
+    stack.append_pack(Box::new(base));
+    stack.push_pack(Box::new(top));
+
+    let blocks_def = mtk_resource::AtlasCategory::Blocks.default_definition();
+    let items_def = mtk_resource::AtlasCategory::Items.default_definition();
+    let baked = AtlasBuilder::new(AtlasBuilderConfig::production(512, 512, 0))
+        .build_categories(
+            &stack,
+            &[
+                ("blocks".to_string(), blocks_def),
+                ("items".to_string(), items_def),
+            ],
+        )
+        .unwrap();
+
+    assert!(
+        baked
+            .address_map
+            .lookup_static_str("minecraft:block/redstone_dust_overlay")
+            .is_some(),
+        "standalone block *_overlay textures must not be dropped"
+    );
+    let potion_overlay = baked
+        .address_map
+        .lookup_static_str("minecraft:item/potion_overlay")
+        .expect("item/potion_overlay must remain an independent sprite");
+    let potion_chunk = baked
+        .chunks
+        .iter()
+        .find(|c| c.chunk_id == potion_overlay.chunk_id)
+        .unwrap();
+    assert_eq!(
+        potion_chunk.albedo.get_pixel(
+            potion_overlay.pixel_rect[0] + 4,
+            potion_overlay.pixel_rect[1] + 4
+        ),
+        [0, 128, 255, 255]
+    );
+
+    assert!(
+        baked
+            .address_map
+            .lookup_animated_str("minecraft:block/lava_still")
+            .is_none(),
+        "static override PNG without .mcmeta must not inherit lower pack's .mcmeta"
+    );
+}
+
+#[test]
+fn test_blocks_atlas_does_not_wipe_out_items_or_entities() {
+    let mut pack = mtk_resource::MemoryPack::new("ModdedBlocksOverlap");
+    pack.insert(
+        "assets/minecraft/textures/block/stone.png",
+        encode_png(&RgbaBuffer::solid(16, 16, 128, 128, 128, 255)),
+    );
+    pack.insert(
+        "assets/minecraft/textures/item/diamond.png",
+        encode_png(&RgbaBuffer::solid(16, 16, 0, 220, 255, 255)),
+    );
+    pack.insert(
+        "assets/minecraft/textures/entity/pig/pig.png",
+        encode_png(&RgbaBuffer::solid(64, 32, 255, 180, 180, 255)),
+    );
+    // Simulate a modpack blocks.json that also declares item/ and entity/
+    pack.insert(
+        "assets/minecraft/atlases/blocks.json",
+        br#"{
+            "sources": [
+                {"type": "minecraft:directory", "source": "block", "prefix": "block/"},
+                {"type": "minecraft:directory", "source": "item", "prefix": "item/"},
+                {"type": "minecraft:directory", "source": "entity", "prefix": "entity/"}
+            ]
+        }"#
+        .to_vec(),
+    );
+
+    let mut stack = mtk_resource::ResourcePackStack::new();
+    stack.push_pack(Box::new(pack));
+
+    let blocks_def = stack
+        .load_atlas_category(&mtk_resource::AtlasCategory::Blocks)
+        .unwrap();
+    let items_def = stack
+        .load_atlas_category(&mtk_resource::AtlasCategory::Items)
+        .unwrap();
+
+    let baked = AtlasBuilder::new(AtlasBuilderConfig::production(512, 512, 0))
+        .build_categories(
+            &stack,
+            &[
+                ("blocks".to_string(), blocks_def),
+                ("items".to_string(), items_def),
+            ],
+        )
+        .unwrap();
+
+    assert!(
+        baked
+            .address_map
+            .chunks
+            .iter()
+            .any(|c| c.category == "items"),
+        "items category must still bake its own atlas chunk independently of blocks"
+    );
 }

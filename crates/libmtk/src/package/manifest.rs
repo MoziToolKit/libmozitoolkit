@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// Bump whenever the baked payloads change meaning (geometry, atlas layout, manifest layout): old
 /// packages are rejected rather than served.
+/// v16: `uniqueFrames` animated strips (no duplicate ping-pong frames), MaxRects atlas packing,
+///      per-category atlas isolation, and non-block catch-all directory filtering in `blocks.json`.
 /// v15: `BakedObjFace` stores pre-mapped Atlas UVs, chunk/texture IDs, and declarative OBJ/composite models.
 /// v14: CTM rules gained `inner_seams`/`biomes_negated` and the method enum lost its per-variant
 ///      `inner_seams` field (invalid rules are dropped, so rule sets can shrink).
@@ -22,10 +24,11 @@ use serde::{Deserialize, Serialize};
 ///      neighbour sprite; sprite rects and UVs are unchanged.
 /// v11: unified manifest (scene fields are present but defaulted).
 /// v10: chest up/down faces carry the corrected v orientation; copper/ender sheet selection.
-pub const ASSET_CACHE_FORMAT_VERSION: u32 = 15;
+pub const ASSET_CACHE_FORMAT_VERSION: u32 = 16;
 
 /// Payload revision of a scene interchange package.
 ///
+/// v9: `uniqueFrames` animated strips and MaxRects mini-atlas packing matching asset-cache v16.
 /// v8: `SparseVoxelColumns` widens `state_indices` and `biome_indices` from `u16` to `u32`
 ///     (supports >65,536 distinct blockstates such as modded debug worlds).
 /// v7: `BakedObjFace` payload matches asset-cache v15 (declarative OBJ & composite model support).
@@ -34,7 +37,7 @@ pub const ASSET_CACHE_FORMAT_VERSION: u32 = 15;
 /// v4: every atlas sprite is padded (replicated edges), matching asset-cache v12.
 /// v3: unified manifest; the continuous visual entity payload is gone.
 /// v2: removed the continuous visual entity payload.
-pub const SCENE_PACKAGE_FORMAT_VERSION: u32 = 8;
+pub const SCENE_PACKAGE_FORMAT_VERSION: u32 = 9;
 
 /// Capability flags a package may advertise.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

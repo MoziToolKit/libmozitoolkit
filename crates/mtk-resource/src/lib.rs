@@ -27,8 +27,8 @@ pub use meta::{AnimationFrame, AnimationMetadata};
 #[cfg(feature = "zip")]
 pub use pack::ZipPack;
 pub use pack::{
-    DirectoryPack, DiscoveredSprite, MemoryPack, PbrCompanions, ResourcePack, ResourcePackStack,
-    CURRENT_CLIENT_RESOURCE_FORMAT,
+    DirectoryPack, DiscoveredSprite, MemoryPack, PalettedPermutationSpec, PbrCompanions,
+    ResourcePack, ResourcePackStack, UnstitchRegionSpec, CURRENT_CLIENT_RESOURCE_FORMAT,
 };
 pub use probe::{path_provides_vanilla_client, probe_pack, AssetSummary, PackProbe};
 pub use texture_key::TextureKeyVariants;

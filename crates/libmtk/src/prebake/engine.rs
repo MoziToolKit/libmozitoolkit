@@ -253,17 +253,25 @@ fn precompile_all_assets_inner(
                 }
             }
 
-            if let Some(ref preloaded) = preloaded_opt {
-                if !preloaded.extra_atlas_textures.is_empty() {
-                    if let Some((_, blocks_def)) =
-                        def_list.iter_mut().find(|(cat, _)| cat == "blocks")
-                    {
-                        for loc in &preloaded.extra_atlas_textures {
-                            blocks_def.sources.push(mtk_resource::AtlasSource::Single {
-                                resource: loc.clone(),
-                                sprite: None,
-                            });
-                        }
+            if let Some((_, blocks_def)) = def_list.iter_mut().find(|(cat, _)| cat == "blocks") {
+                // Modpacks (e.g. Yuushya) sometimes inject catch-all non-block directories
+                // (`entity`, `misc`, `item`, `gui`, etc.) into `atlases/blocks.json`.
+                // Those belong to their own dedicated atlases; keep only block/custom sources and
+                // specific block-entity directories (e.g. `entity/conduit`), while `preload`
+                // injects any exact non-block textures actually referenced by block/OBJ models.
+                blocks_def.sources.retain(|src| match src {
+                    mtk_resource::AtlasSource::Directory { source, .. } => {
+                        !is_non_block_catchall_directory(source)
+                    }
+                    _ => true,
+                });
+
+                if let Some(ref preloaded) = preloaded_opt {
+                    for loc in &preloaded.extra_atlas_textures {
+                        blocks_def.sources.push(mtk_resource::AtlasSource::Single {
+                            resource: loc.clone(),
+                            sprite: None,
+                        });
                     }
                 }
             }
@@ -505,4 +513,29 @@ fn precompile_all_assets_inner(
         warnings,
         profile: Some(profile),
     })
+}
+
+/// Returns `true` when an `atlases/blocks.json` directory source sweeps an entire dedicated
+/// non-block atlas root (entity skins, UI/screen overlays, items, particles, etc.).
+fn is_non_block_catchall_directory(source: &str) -> bool {
+    let clean = source.trim_matches('/');
+    matches!(
+        clean,
+        "item"
+            | "entity"
+            | "misc"
+            | "gui"
+            | "gui/sprites"
+            | "particle"
+            | "painting"
+            | "environment"
+            | "environment/celestial"
+            | "trims"
+            | "mob_effect"
+            | "map"
+            | "map/decorations"
+            | "models/armor"
+            | "font"
+            | "colormap"
+    )
 }

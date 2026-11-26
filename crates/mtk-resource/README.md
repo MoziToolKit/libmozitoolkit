@@ -36,7 +36,7 @@
 `mtk-resource` 是 `libmozitoolkit` 体系中的资产发现与虚拟文件系统（VFS）底座，具备以下核心职责与边界：
 
 - **多源 VFS 抽象**：统一抽象物理目录 (`DirectoryPack`)、内存文件表 (`MemoryPack`) 以及 ZIP/JAR 压缩包 (`ZipPack`)，支持多层资源包自顶向下按优先级覆盖叠加 (`ResourcePackStack`)。
-- **细粒度 PBR 伴随贴图解算**：支持按通道独立探测并合并法线贴图 (`_n.png`, `_N.png`)、高光粗糙度贴图 (`_s.png`, `_S.png`)、叠加层 (`_overlay.png`, `grass_block_side_overlay.png`) 与动画元数据 (`.png.mcmeta`)。
+- **细粒度 PBR 伴随贴图解算**：支持按通道独立探测并合并法线贴图 (`_n.png`, `_N.png`)、高光粗糙度贴图 (`_s.png`, `_S.png`)、草方块侧面叠加层 (`grass_block_side_overlay.png`, `grass_side_overlay.png`) 与同包作用域动画元数据 (`.png.mcmeta`)。
 - **原版图集配置解析**：完整支持 Minecraft 1.20+ 数据驱动的 `atlases/*.json` 规范（`directory`, `single`, `filter`, `unstitch`, `paletted_permutations`）以及内置默认图集模板。
 - **CTM 连接纹理规则引擎**：解析 OptiFine 与 Continuity 规范的 `.properties` 文件，提供 CTM 47、CTM 17、水平/垂直连接、重复模式与加权伪随机变体解算。
 - **纯数据无头设计**：零宿主依赖，纯数据输入输出，全面支持 Rayon 多线程与 `serde` 序列化。
@@ -120,7 +120,7 @@ pub struct AnimationMetadata {
     pub width: Option<u32>,
     pub height: Option<u32>,
     /// 播放顺序。可重排、可重复，帧数因此可以多于图片内的帧数。
-    /// 图集烘焙会把它折叠进条带顺序，导出的地址表里该字段为 `None`。
+    /// 图集烘焙按 `uniqueFrames` 仅在条带中保留去重帧，必要时保留重映射后的调度表。
     pub frames: Option<Vec<AnimationFrame>>,
 }
 ```
@@ -144,6 +144,7 @@ pub enum AtlasSource {
         palette_key: ResourceLocation,
         permutations: HashMap<String, ResourceLocation>,
         textures: Vec<ResourceLocation>,
+        separator: String,
     },
 }
 

@@ -192,30 +192,31 @@ fn a_real_pack_stack_bakes_deterministically() {
         assert!(a == b, "chunk `{id}` differs between two real bakes");
     }
 
-    // `.mcmeta` frame lists are baked into the strip, so the exported metadata must not list them
-    // again. Vanilla exercises this heavily (lava_still lists 38 entries over a 20-frame image).
+    // Animated strips store only unique referenced frames (`uniqueFrames`) to avoid physical frame
+    // duplication; `lava_still` has a 20-frame image and a 38-step ping-pong `frames` schedule.
     let mapping = AssetCacheReader::open(&first)
         .expect("reader")
         .load_atlas_mapping()
         .expect("atlas mapping");
-    for (id, loc) in mapping.sprites.iter().chain(mapping.anim_sprites.iter()) {
-        if let Some(animation) = loc.animation.as_ref() {
-            assert!(
-                animation.frames.is_none(),
-                "{id}: baked strips must not re-export `frames`"
-            );
-        }
-    }
     let lava = mapping
         .lookup_animated(
             &mtk_resource::ResourceLocation::parse("minecraft:block/lava_still").expect("id"),
         )
         .expect("lava_still in the vanilla atlas");
-    assert!(
-        lava.frame_count > 20,
-        "lava_still's mcmeta lists more frames than its 20-frame image (ping-pong), so the baked \
-         strip must be longer than file order would give; got {}",
+    assert_eq!(
+        lava.frame_count, 20,
+        "lava_still's baked strip must contain only its 20 unique frames; got {}",
         lava.frame_count
+    );
+    let schedule_len = lava
+        .animation
+        .as_ref()
+        .and_then(|anim| anim.frames.as_ref())
+        .map(|frames| frames.len())
+        .unwrap_or(0);
+    assert!(
+        schedule_len > 20,
+        "lava_still's remapped `frames` schedule must preserve the 38-step ping-pong sequence; got {schedule_len}"
     );
 
     let _ = fs::remove_dir_all(first.parent().unwrap_or(Path::new(".")));

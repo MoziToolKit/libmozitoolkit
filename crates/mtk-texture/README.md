@@ -5,7 +5,7 @@
 [![Rayon](https://img.shields.io/badge/Rayon-Parallel-red.svg)](https://github.com/rayon-rs/rayon)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../../LICENSE)
 
-**`mtk-texture`** 是 `libmozitoolkit` (`libmtk`) 体系中的无头图像处理、2D 空间二叉装箱图集生成器 (Stitcher)、多通道 PBR 伴随贴图对齐与双图集（静态 / 动画）烘焙核心。遵循 **Host-Agnostic（宿主无关）** 原则，为上层材质映射 (`mtk-material`)、端到端预编译 (`libmtk`) 与 DCC 宿主提供极速像素处理、静态/动态双图集装箱与边缘抗渗色保护。
+**`mtk-texture`** 是 `libmozitoolkit` (`libmtk`) 体系中的无头图像处理、2D MaxRects 装箱图集生成器 (Stitcher)、多通道 PBR 伴随贴图对齐与双图集（静态 / 动画）烘焙核心。遵循 **Host-Agnostic（宿主无关）** 原则，为上层材质映射 (`mtk-material`)、端到端预编译 (`libmtk`) 与 DCC 宿主提供极速像素处理、静态/动态双图集装箱与边缘抗渗色保护。
 
 ---
 
@@ -31,7 +31,7 @@
 
 `mtk-texture` 是 `libmozitoolkit` 体系中的图像处理、多通道 PBR 对齐与空间装箱图集生成核心，具备以下核心职责与边界：
 
-- **2D 空间二叉装箱算法 (Stitcher)**：实现原版风格的 2D 矩形空间分割算法，自动按 2 的幂次动态扩容与多 Chunk 分片，支持 Mipmap 像素对齐。
+- **2D MaxRects 装箱算法 (Stitcher)**：采用 Best Short Side Fit (MaxRects-BSSF) 矩形装箱，自动按 2 的幂次动态扩容与多 Chunk 分片，支持 Mipmap 像素对齐。
 - **PBR 多通道对齐与动图分流 (Dual-Mode Architecture)**：
   - **静态图集 (Static Atlas)**：包含 100% 纹理覆盖（动态纹理截取 Frame 0 方块），保障通用着色器极致性能与零采样溢出；
   - **动态图集 (Animated Atlas)**：包含长条竖直动画帧（Full Strip），自动将静态或短帧 Normal/Specular 通道按需循环垂向平铺 (`tile_vertical`)，实现 PBR 通道 1:1 帧对齐。
@@ -92,8 +92,8 @@ pub struct AtlasSpriteLocation {
     pub strip_pixel_rect: [u32; 4],
     pub frame_size: [u32; 2],
     pub frame_count: u32,
-    /// 调度元数据。`frames` 在烘焙后恒为 `None`：条带已按 `.mcmeta` 的播放顺序排好，
-    /// 宿主按 `frame_count` 顺序播放即可（详见 §2.3 下方说明）。
+    /// 调度元数据。条带按 `uniqueFrames` 仅保留去重后的唯一帧（不重复物理帧）；
+    /// 当 `.mcmeta` 存在重排或重复帧序列时，`frames` 保留重映射后的播放索引表（详见 §2.3 下方说明）。
     pub animation: Option<AnimationMetadata>,
     pub has_normal: bool,
     pub has_specular: bool,
@@ -169,10 +169,12 @@ padding 区域由 `apply_edge_clamping_padding` 用精灵自身边缘像素复�
 `AtlasBuilderConfig::default()` 等价于 `production(4096, 4096, 0)`——`padding: 0` 不再是默认值，
 只有显式构造才会得到无 padding 的布局（仅用于需要精确布局的测试）。
 
-**动画帧顺序**：`.png.mcmeta` 的 `frames` 列表可以重排、重复帧，播放帧数因此可以与图片内的帧数
-不同（原版 `lava_still` 是 20 帧图片、38 帧序列；`prismarine` 22 帧）。烘焙时条带按 `frames`
-重排/重复，静态 sheet 取"第一个播放的帧"，随后把导出的 `animation.frames` 清空——否则宿主会把
-顺序应用两次。逐帧 `time` 只解析不消费：宿主按统一 `frametime` 播放。
+**动画帧顺序（`uniqueFrames` 去重）**：参考原版 `SpriteContents.uniqueFrames`，`.png.mcmeta` 的
+`frames` 列表若包含 ping-pong 等重复帧（如原版 `lava_still` 为 20 帧图片、38 步序列；
+`prismarine` 为 4 帧图片、22 步序列），烘焙时条带仅保留首次出现顺序去重后的唯一帧，
+不再物理复制重复帧；静态 sheet 取"第一个播放的帧"。若序列与顺序 `0..N-1` 一致且无重复，
+`animation.frames` 置为 `None`；若含重复或自定义步长，则保留重映射后的索引表。逐帧
+`time` 只解析不消费：宿主按统一 `frametime` 播放。
 
 ---
 

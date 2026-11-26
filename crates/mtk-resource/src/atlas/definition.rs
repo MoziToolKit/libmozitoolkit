@@ -52,11 +52,17 @@ pub enum AtlasSource {
         palette_key: ResourceLocation,
         permutations: HashMap<String, ResourceLocation>,
         textures: Vec<ResourceLocation>,
+        #[serde(default = "default_separator")]
+        separator: String,
     },
 }
 
 fn default_divisor() -> f64 {
     1.0
+}
+
+fn default_separator() -> String {
+    "_".to_string()
 }
 
 /// Top-level container for atlas JSON configuration (`assets/<namespace>/atlases/*.json`).

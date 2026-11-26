@@ -1,5 +1,4 @@
 use crate::error::TextureError;
-use crate::stitcher::region::StitcherRegion;
 use std::cmp::Ordering;
 
 /// Helper: find smallest power of two greater than or equal to `val`.
@@ -15,6 +14,17 @@ pub(crate) fn smallest_encompassing_power_of_two(val: u32) -> u32 {
     v |= v >> 8;
     v |= v >> 16;
     v + 1
+}
+
+/// Align `input` up to a multiple of `1 << mip_level` (`Stitcher.smallestFittingMinTexel`).
+#[inline]
+fn smallest_fitting_min_texel(input: u32, mip_level: u32) -> u32 {
+    let align = 1u32.checked_shl(mip_level).unwrap_or(u32::MAX);
+    if align <= 1 || input.is_multiple_of(align) {
+        input
+    } else {
+        ((input / align) + 1) * align
+    }
 }
 
 /// An entry registered into the Stitcher before layout.
@@ -51,7 +61,19 @@ pub(crate) struct StitchedChunk<T> {
     pub(crate) slots: Vec<StitchedSlot<T>>,
 }
 
-/// Vanilla-style binary partitioning 2D Texture Stitcher.
+#[derive(Debug, Clone, Copy)]
+struct FreeRect {
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+}
+
+/// Power-of-2 MaxRects-BSSF 2D Texture Stitcher.
+///
+/// Sorts holders following Minecraft's `HOLDER_COMPARATOR` (`Height desc -> Width desc -> Name asc`)
+/// and packs them into unified maximal free rectangles across power-of-2 sheets (avoiding the
+/// internal seam holes created by isolated power-of-2 expansion islands when sprites carry padding).
 pub(crate) struct Stitcher<T> {
     max_width: u32,
     max_height: u32,
@@ -80,58 +102,31 @@ impl<T: Clone> Stitcher<T> {
         height: u32,
         name: impl Into<String>,
     ) {
-        let align = 1 << self.mip_level;
-        let padded_w = if !width.is_multiple_of(align) {
-            ((width / align) + 1) * align
-        } else {
-            width
-        };
-        let padded_h = if !height.is_multiple_of(align) {
-            ((height / align) + 1) * align
-        } else {
-            height
-        };
-
         self.pinned_holder = Some(StitcherHolder {
             entry,
-            width: padded_w,
-            height: padded_h,
+            width: smallest_fitting_min_texel(width, self.mip_level),
+            height: smallest_fitting_min_texel(height, self.mip_level),
             name: name.into(),
         });
     }
 
     /// Register a sprite entry with its single-frame width, height, and canonical name.
     pub fn register_sprite(&mut self, entry: T, width: u32, height: u32, name: impl Into<String>) {
-        // Enforce mipmap alignment: width and height must be aligned to 1 << mip_level
-        let align = 1 << self.mip_level;
-        let padded_w = if !width.is_multiple_of(align) {
-            ((width / align) + 1) * align
-        } else {
-            width
-        };
-        let padded_h = if !height.is_multiple_of(align) {
-            ((height / align) + 1) * align
-        } else {
-            height
-        };
-
         self.holders.push(StitcherHolder {
             entry,
-            width: padded_w,
-            height: padded_h,
+            width: smallest_fitting_min_texel(width, self.mip_level),
+            height: smallest_fitting_min_texel(height, self.mip_level),
             name: name.into(),
         });
     }
 
-    /// Execute the vanilla layout algorithm.
-    /// Sorts entries by Height desc, Width desc, Name asc, then packs into binary partitioned regions.
-    /// If entries exceed max dimensions, automatically allocates subsequent atlas chunks (pages).
+    /// Execute the layout algorithm, automatically splitting into subsequent chunks if needed.
     pub fn stitch(&mut self) -> Result<StitchedAtlas<T>, TextureError> {
         if self.holders.is_empty() && self.pinned_holder.is_none() {
             return Ok(StitchedAtlas { chunks: Vec::new() });
         }
 
-        // 1. Sort holders strictly following Minecraft vanilla HOLDER_COMPARATOR:
+        // Sort holders strictly following Minecraft vanilla HOLDER_COMPARATOR:
         // Height desc -> Width desc -> Name asc
         self.holders.sort_by(|a, b| {
             let h_ord = b.height.cmp(&a.height);
@@ -147,14 +142,10 @@ impl<T: Clone> Stitcher<T> {
 
         let mut chunks = Vec::new();
         let mut unplaced = self.holders.clone();
+        let mut pinned = self.pinned_holder.clone();
 
-        // 2. If a pinned holder is registered (e.g. fallback missingno), pin it at index 0 of chunk 0
-        if let Some(ref pinned) = self.pinned_holder {
-            unplaced.insert(0, pinned.clone());
-        }
-
-        while !unplaced.is_empty() {
-            let (chunk, remaining) = self.stitch_single_chunk(unplaced)?;
+        while !unplaced.is_empty() || pinned.is_some() {
+            let (chunk, remaining) = self.stitch_single_chunk(pinned.take(), unplaced)?;
             chunks.push(chunk);
             unplaced = remaining;
         }
@@ -164,198 +155,250 @@ impl<T: Clone> Stitcher<T> {
 
     fn stitch_single_chunk(
         &self,
+        pinned: Option<StitcherHolder<T>>,
         candidates: Vec<StitcherHolder<T>>,
     ) -> Result<(StitchedChunk<T>, Vec<StitcherHolder<T>>), TextureError> {
-        let mut storage: Vec<StitcherRegion<StitcherHolder<T>>> = Vec::new();
-        let mut storage_x = 0u32;
-        let mut storage_y = 0u32;
-        let mut unplaced = Vec::new();
+        let mut min_req_w = 1u32;
+        let mut min_req_h = 1u32;
+        let mut total_area = 0u64;
 
-        for holder in candidates {
-            let w = holder.width;
-            let h = holder.height;
-
-            if w > self.max_width || h > self.max_height {
+        for holder in pinned.iter().chain(candidates.iter()) {
+            if holder.width > self.max_width || holder.height > self.max_height {
                 return Err(TextureError::Stitcher(format!(
                     "Sprite '{}' dimensions ({}x{}) exceed maximum atlas size ({}x{})",
-                    holder.name, w, h, self.max_width, self.max_height
+                    holder.name, holder.width, holder.height, self.max_width, self.max_height
                 )));
             }
+            min_req_w = min_req_w.max(holder.width);
+            min_req_h = min_req_h.max(holder.height);
+            total_area += holder.width as u64 * holder.height as u64;
+        }
 
-            // 1. Try placing into existing storage regions
-            let mut placed = false;
-            for region in storage.iter_mut() {
-                if region.add(holder.clone(), w, h).is_none() {
-                    placed = true;
-                    break;
+        let max_area = self.max_width as u64 * self.max_height as u64;
+        if total_area <= max_area {
+            let mut pow_ws = Vec::new();
+            let mut w = smallest_encompassing_power_of_two(min_req_w);
+            while w <= self.max_width {
+                pow_ws.push(w);
+                match w.checked_mul(2) {
+                    Some(next) if next > w => w = next,
+                    _ => break,
+                }
+            }
+            let mut pow_hs = Vec::new();
+            let mut h = smallest_encompassing_power_of_two(min_req_h);
+            while h <= self.max_height {
+                pow_hs.push(h);
+                match h.checked_mul(2) {
+                    Some(next) if next > h => h = next,
+                    _ => break,
                 }
             }
 
-            if placed {
-                continue;
+            let mut dims: Vec<(u64, u32, bool, u32, u32)> = Vec::new();
+            for &cw in &pow_ws {
+                for &ch in &pow_hs {
+                    let area = cw as u64 * ch as u64;
+                    if area >= total_area {
+                        dims.push((area, cw.max(ch), cw < ch, cw, ch));
+                    }
+                }
             }
+            dims.sort_unstable();
 
-            // 2. Try expanding storage canvas
-            if self.expand(&mut storage, &mut storage_x, &mut storage_y, &holder) {
-                continue;
+            for (_, _, _, cw, ch) in dims {
+                if let Some((slots, unplaced)) =
+                    pack_maxrects(cw, ch, pinned.as_ref(), &candidates, false)
+                {
+                    if unplaced.is_empty() {
+                        return Ok((
+                            StitchedChunk {
+                                width: cw,
+                                height: ch,
+                                slots,
+                            },
+                            Vec::new(),
+                        ));
+                    }
+                }
             }
-
-            // 3. Cannot fit in current chunk -> push to unplaced for next chunk
-            unplaced.push(holder);
         }
 
-        // Collect all placed slots
-        let mut slots = Vec::new();
-        for region in &storage {
-            region.walk(&mut |h, x, y, _rw, _rh| {
-                slots.push(StitchedSlot {
-                    entry: h.entry.clone(),
-                    x,
-                    y,
-                    #[cfg(test)]
-                    width: _rw,
-                    #[cfg(test)]
-                    height: _rh,
-                });
-            });
-        }
+        // Spillover onto max-sized sheet (or multi-chunk split)
+        let cw = smallest_encompassing_power_of_two(min_req_w).max(self.max_width);
+        let ch = smallest_encompassing_power_of_two(min_req_h).max(self.max_height);
+        let cw = cw.min(self.max_width);
+        let ch = ch.min(self.max_height);
 
-        let final_w = smallest_encompassing_power_of_two(storage_x);
-        let final_h = smallest_encompassing_power_of_two(storage_y);
+        let (slots, unplaced) = pack_maxrects(cw, ch, pinned.as_ref(), &candidates, true)
+            .ok_or_else(|| {
+                TextureError::Stitcher("Failed to place pinned sprite into max atlas".to_string())
+            })?;
+
+        if slots.is_empty() {
+            return Err(TextureError::Stitcher(
+                "No sprites could be placed in chunk".to_string(),
+            ));
+        }
 
         Ok((
             StitchedChunk {
-                width: final_w,
-                height: final_h,
+                width: cw,
+                height: ch,
                 slots,
             },
             unplaced,
         ))
     }
+}
 
-    fn expand(
-        &self,
-        storage: &mut Vec<StitcherRegion<StitcherHolder<T>>>,
-        storage_x: &mut u32,
-        storage_y: &mut u32,
-        holder: &StitcherHolder<T>,
-    ) -> bool {
-        // Initial empty storage
-        if *storage_x == 0 || *storage_y == 0 {
-            let init_w = smallest_encompassing_power_of_two(holder.width);
-            let init_h = smallest_encompassing_power_of_two(holder.height);
-            if init_w > self.max_width || init_h > self.max_height {
-                return false;
+fn pack_maxrects<T: Clone>(
+    canvas_w: u32,
+    canvas_h: u32,
+    pinned: Option<&StitcherHolder<T>>,
+    candidates: &[StitcherHolder<T>],
+    allow_unplaced: bool,
+) -> Option<(Vec<StitchedSlot<T>>, Vec<StitcherHolder<T>>)> {
+    let mut free_rects = vec![FreeRect {
+        x: 0,
+        y: 0,
+        w: canvas_w,
+        h: canvas_h,
+    }];
+    let mut slots = Vec::with_capacity(candidates.len() + usize::from(pinned.is_some()));
+    let mut unplaced = Vec::new();
+
+    if let Some(pin) = pinned {
+        if pin.width > canvas_w || pin.height > canvas_h {
+            return None;
+        }
+        place_rect_and_split(&mut free_rects, 0, 0, pin.width, pin.height);
+        slots.push(StitchedSlot {
+            entry: pin.entry.clone(),
+            x: 0,
+            y: 0,
+            #[cfg(test)]
+            width: pin.width,
+            #[cfg(test)]
+            height: pin.height,
+        });
+    }
+
+    for holder in candidates {
+        let w = holder.width;
+        let h = holder.height;
+
+        let mut best: Option<((u32, u32, u32, u32), u32, u32)> = None;
+        for rect in &free_rects {
+            if w <= rect.w && h <= rect.h {
+                let short_side = (rect.w - w).min(rect.h - h);
+                let long_side = (rect.w - w).max(rect.h - h);
+                let score = (short_side, long_side, rect.y, rect.x);
+                if best.as_ref().is_none_or(|(b_score, _, _)| score < *b_score) {
+                    best = Some((score, rect.x, rect.y));
+                }
             }
-            let mut region = StitcherRegion::new(0, 0, init_w, init_h);
-            if region
-                .add(holder.clone(), holder.width, holder.height)
-                .is_some()
-            {
-                return false;
-            }
-            *storage_x = init_w;
-            *storage_y = init_h;
-            storage.push(region);
-            return true;
         }
 
-        let cur_pow_x = smallest_encompassing_power_of_two(*storage_x);
-        let cur_pow_y = smallest_encompassing_power_of_two(*storage_y);
-        let next_pow_x = smallest_encompassing_power_of_two(*storage_x + holder.width);
-        let next_pow_y = smallest_encompassing_power_of_two(*storage_y + holder.height);
-
-        let can_expand_x = next_pow_x <= self.max_width;
-        let can_expand_y = next_pow_y <= self.max_height;
-
-        if !can_expand_x && !can_expand_y {
-            return false;
-        }
-
-        let fits_in_y = holder.height <= *storage_y;
-        let fits_in_x = holder.width <= *storage_x;
-
-        if fits_in_y && fits_in_x {
-            // Both single-axis expansions can accommodate the holder's other dimension.
-            let is_expand_x_diff = can_expand_x && (cur_pow_x != next_pow_x);
-            let is_expand_y_diff = can_expand_y && (cur_pow_y != next_pow_y);
-
-            let expand_horizontal = if is_expand_x_diff ^ is_expand_y_diff {
-                is_expand_x_diff
-            } else {
-                can_expand_x && cur_pow_x <= cur_pow_y
-            };
-
-            if expand_horizontal {
-                let mut new_region =
-                    StitcherRegion::new(*storage_x, 0, next_pow_x - *storage_x, *storage_y);
-                *storage_x = next_pow_x;
-                if new_region
-                    .add(holder.clone(), holder.width, holder.height)
-                    .is_some()
-                {
-                    return false;
-                }
-                storage.push(new_region);
-            } else {
-                let mut new_region =
-                    StitcherRegion::new(0, *storage_y, *storage_x, next_pow_y - *storage_y);
-                *storage_y = next_pow_y;
-                if new_region
-                    .add(holder.clone(), holder.width, holder.height)
-                    .is_some()
-                {
-                    return false;
-                }
-                storage.push(new_region);
-            }
-            true
-        } else if fits_in_y && can_expand_x {
-            // Only horizontal expansion can fit the holder's height
-            let mut new_region =
-                StitcherRegion::new(*storage_x, 0, next_pow_x - *storage_x, *storage_y);
-            *storage_x = next_pow_x;
-            if new_region
-                .add(holder.clone(), holder.width, holder.height)
-                .is_some()
-            {
-                return false;
-            }
-            storage.push(new_region);
-            true
-        } else if fits_in_x && can_expand_y {
-            // Only vertical expansion can fit the holder's width
-            let mut new_region =
-                StitcherRegion::new(0, *storage_y, *storage_x, next_pow_y - *storage_y);
-            *storage_y = next_pow_y;
-            if new_region
-                .add(holder.clone(), holder.width, holder.height)
-                .is_some()
-            {
-                return false;
-            }
-            storage.push(new_region);
-            true
-        } else if can_expand_x && can_expand_y {
-            // Neither axis is large enough alone; expand both axes
-            let right_region =
-                StitcherRegion::new(*storage_x, 0, next_pow_x - *storage_x, *storage_y);
-            storage.push(right_region);
-
-            let mut bottom_region =
-                StitcherRegion::new(0, *storage_y, next_pow_x, next_pow_y - *storage_y);
-            *storage_x = next_pow_x;
-            *storage_y = next_pow_y;
-            if bottom_region
-                .add(holder.clone(), holder.width, holder.height)
-                .is_some()
-            {
-                return false;
-            }
-            storage.push(bottom_region);
-            true
+        if let Some((_, px, py)) = best {
+            place_rect_and_split(&mut free_rects, px, py, w, h);
+            slots.push(StitchedSlot {
+                entry: holder.entry.clone(),
+                x: px,
+                y: py,
+                #[cfg(test)]
+                width: w,
+                #[cfg(test)]
+                height: h,
+            });
+        } else if allow_unplaced {
+            unplaced.push(holder.clone());
         } else {
-            false
+            return None;
+        }
+    }
+
+    Some((slots, unplaced))
+}
+
+fn place_rect_and_split(free_rects: &mut Vec<FreeRect>, bx: u32, by: u32, bw: u32, bh: u32) {
+    let bx2 = bx + bw;
+    let by2 = by + bh;
+    let orig_len = free_rects.len();
+    let mut i = 0;
+
+    while i < orig_len {
+        let f = free_rects[i];
+        let fx2 = f.x + f.w;
+        let fy2 = f.y + f.h;
+        if bx >= fx2 || bx2 <= f.x || by >= fy2 || by2 <= f.y {
+            i += 1;
+            continue;
+        }
+        // Remove intersecting rect by swapping with the tail of the original slice or push replacements
+        if bx > f.x {
+            free_rects.push(FreeRect {
+                x: f.x,
+                y: f.y,
+                w: bx - f.x,
+                h: f.h,
+            });
+        }
+        if bx2 < fx2 {
+            free_rects.push(FreeRect {
+                x: bx2,
+                y: f.y,
+                w: fx2 - bx2,
+                h: f.h,
+            });
+        }
+        if by > f.y {
+            free_rects.push(FreeRect {
+                x: f.x,
+                y: f.y,
+                w: f.w,
+                h: by - f.y,
+            });
+        }
+        if by2 < fy2 {
+            free_rects.push(FreeRect {
+                x: f.x,
+                y: by2,
+                w: f.w,
+                h: fy2 - by2,
+            });
+        }
+        free_rects[i].w = 0;
+        i += 1;
+    }
+
+    // Drop zero-sized rects and any rect fully contained within another
+    free_rects.retain(|r| r.w > 0 && r.h > 0);
+    prune_contained(free_rects);
+}
+
+fn prune_contained(free_rects: &mut Vec<FreeRect>) {
+    let mut i = 0;
+    while i < free_rects.len() {
+        let a = free_rects[i];
+        let ax2 = a.x + a.w;
+        let ay2 = a.y + a.h;
+        let mut contained = false;
+        let mut j = 0;
+        while j < free_rects.len() {
+            if i != j {
+                let b = free_rects[j];
+                if a.x >= b.x && a.y >= b.y && ax2 <= b.x + b.w && ay2 <= b.y + b.h {
+                    contained = true;
+                    break;
+                }
+            }
+            j += 1;
+        }
+        if contained {
+            free_rects.swap_remove(i);
+        } else {
+            i += 1;
         }
     }
 }

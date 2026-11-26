@@ -82,6 +82,7 @@ impl AtlasCategory {
                                 ResourceLocation::vanilla("trims/items/leggings_trim"),
                                 ResourceLocation::vanilla("trims/items/boots_trim"),
                             ],
+                            separator: "_".to_string(),
                         },
                     ],
                 }
@@ -204,6 +205,7 @@ impl AtlasCategory {
                                 ResourceLocation::vanilla("trims/entity/humanoid/bolt"),
                                 ResourceLocation::vanilla("trims/entity/humanoid_leggings/bolt"),
                             ],
+                            separator: "_".to_string(),
                         },
                     ],
                 }

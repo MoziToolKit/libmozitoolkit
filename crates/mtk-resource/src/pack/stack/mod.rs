@@ -1,7 +1,7 @@
 pub mod collector;
 pub mod sprite;
 
-pub use sprite::{DiscoveredSprite, PbrCompanions};
+pub use sprite::{DiscoveredSprite, PalettedPermutationSpec, PbrCompanions, UnstitchRegionSpec};
 
 use crate::atlas::AtlasDefinition;
 use crate::error::ResourceError;
@@ -72,9 +72,17 @@ impl ResourcePackStack {
     /// `FallbackResourceManager.getResource` does: the pack's own resource wins, then its filter
     /// hides the path from every lower pack.
     pub fn open_asset_raw(&self, asset_path: &str) -> Result<Option<Vec<u8>>, ResourceError> {
-        for pack in &self.packs {
+        Ok(self.open_asset_with_pack_index(asset_path)?.map(|(_, b)| b))
+    }
+
+    /// Open a file by its explicit asset path, returning both the winning pack index and bytes.
+    pub(crate) fn open_asset_with_pack_index(
+        &self,
+        asset_path: &str,
+    ) -> Result<Option<(usize, Vec<u8>)>, ResourceError> {
+        for (idx, pack) in self.packs.iter().enumerate() {
             if let Some(bytes) = pack.open(asset_path)? {
-                return Ok(Some(bytes));
+                return Ok(Some((idx, bytes)));
             }
             if let Some(filter) = pack.filter() {
                 if is_filtered_asset_path(filter, asset_path) {
@@ -83,6 +91,18 @@ impl ResourcePackStack {
             }
         }
         Ok(None)
+    }
+
+    /// Open an asset directly from the specified pack index (for same-pack `.mcmeta` lookup).
+    pub(crate) fn open_pack_asset_raw(
+        &self,
+        pack_idx: usize,
+        asset_path: &str,
+    ) -> Result<Option<Vec<u8>>, ResourceError> {
+        let Some(pack) = self.packs.get(pack_idx) else {
+            return Ok(None);
+        };
+        pack.open(asset_path)
     }
 
     /// Returns the name of the highest-priority pack providing `asset_path`, respecting `pack.filter()`.

@@ -4,18 +4,17 @@
 //! layer alignment, and paletted permutations baking.
 
 mod anim_atlas;
-mod paletted;
 mod static_atlas;
 mod types;
 
 pub(crate) use anim_atlas::build_anim_atlas_chunks;
-pub(crate) use paletted::process_paletted_permutations;
 pub(crate) use static_atlas::build_static_atlas_chunks;
 pub use types::*;
 
 use crate::error::TextureError;
 use crate::{AtlasAddressMap, DecodedSprite, RgbaBuffer};
-use mtk_resource::{AtlasDefinition, ResourcePackStack};
+use mtk_resource::{AnimationFrame, AtlasDefinition, ResourcePackStack};
+use std::collections::{HashMap, HashSet};
 
 impl AtlasBuilder {
     pub fn new(config: AtlasBuilderConfig) -> Self {
@@ -73,20 +72,19 @@ impl AtlasBuilder {
             // 2. Decode discovered sprites in parallel
             let mut decoded = DecodedSprite::decode_batch(discovered)?;
 
-            // 3. Process PalettedPermutations sources if any
-            process_paletted_permutations(&definition.sources, stack, &mut decoded)?;
-
             if decoded.is_empty() {
                 continue;
             }
 
-            // Filter out sprites that have already been allocated to an authoritative atlas
-            decoded.retain(|sp| !address_map.sprites.contains_key(&sp.sprite_id));
-
             // Dedicated independent atlases (e.g. banner_patterns, decorated_pot, chests, etc.)
-            // must never be swept into the catch-all "entities" sheet.
+            // and block-entity sprites in `blocks` must never be duplicated into the synthetic
+            // catch-all "entities" sheet. Standard Minecraft atlases (items, chests, shulker_boxes,
+            // etc.) remain isolated per AtlasManager.java and are never suppressed by `blocks`.
             if category_name == "entities" {
                 decoded.retain(|sp| {
+                    if address_map.sprites.contains_key(&sp.sprite_id) {
+                        return false;
+                    }
                     let cat =
                         mtk_resource::AtlasCategory::classify_texture_path(&sp.sprite_id.path);
                     cat == mtk_resource::AtlasCategory::Entities
@@ -206,18 +204,16 @@ impl AtlasBuilder {
     }
 }
 
-/// Helper function to separate sprites into static frame 0 representations and full animation strips.
-/// Rewrites animated sprite strips into `.mcmeta` playback order.
+/// Compacts animated sprite strips to only unique referenced frames (matching `SpriteContents.uniqueFrames`),
+/// ordered by first appearance in `.mcmeta` `frames` so Frame 0 in the strip is always the first played frame.
 ///
-/// `frames` may reorder and repeat entries, so the played animation can be longer than the source
-/// image. The baked strip is what the host plays top to bottom, and the static slot must show the
-/// first *played* frame, so this runs before the static/animated split. The exported metadata then
-/// drops `frames`, because the strip already encodes the order.
-fn apply_animation_frame_order(sprites: Vec<DecodedSprite>) -> Vec<DecodedSprite> {
+/// Repeated frames (e.g. ping-pong animations) are NOT duplicated into the atlas image strip;
+/// instead `metadata.frames` preserves the remapped playback schedule when it differs from `0..N-1`.
+fn compact_animation_unique_frames(sprites: Vec<DecodedSprite>) -> Vec<DecodedSprite> {
     sprites
         .into_iter()
         .map(|mut sprite| {
-            let Some(order) = playback_order(&sprite) else {
+            let Some((unique_order, remapped_frames)) = compute_unique_frame_plan(&sprite) else {
                 return sprite;
             };
             let frame_height = sprite.frame_height;
@@ -226,66 +222,111 @@ fn apply_animation_frame_order(sprites: Vec<DecodedSprite>) -> Vec<DecodedSprite
                 return sprite;
             }
 
-            let is_identity = order.len() == source_frames as usize
-                && order
+            let is_identity = unique_order.len() == source_frames as usize
+                && unique_order
                     .iter()
                     .enumerate()
                     .all(|(i, &index)| index == i as u32);
             if !is_identity {
-                sprite.albedo = reorder_strip(&sprite.albedo, &order, frame_height);
+                sprite.albedo = reorder_strip(&sprite.albedo, &unique_order, frame_height);
                 sprite.normal = sprite
                     .normal
                     .as_ref()
-                    .map(|buf| reorder_companion(buf, &order, frame_height, source_frames));
+                    .map(|buf| reorder_companion(buf, &unique_order, frame_height, source_frames));
                 sprite.specular = sprite
                     .specular
                     .as_ref()
-                    .map(|buf| reorder_companion(buf, &order, frame_height, source_frames));
+                    .map(|buf| reorder_companion(buf, &unique_order, frame_height, source_frames));
                 sprite.overlay = sprite
                     .overlay
                     .as_ref()
-                    .map(|buf| reorder_companion(buf, &order, frame_height, source_frames));
+                    .map(|buf| reorder_companion(buf, &unique_order, frame_height, source_frames));
                 sprite.emissive = sprite
                     .emissive
                     .as_ref()
-                    .map(|buf| reorder_companion(buf, &order, frame_height, source_frames));
+                    .map(|buf| reorder_companion(buf, &unique_order, frame_height, source_frames));
                 sprite.normal_gl = sprite
                     .normal_gl
                     .as_ref()
-                    .map(|buf| reorder_companion(buf, &order, frame_height, source_frames));
+                    .map(|buf| reorder_companion(buf, &unique_order, frame_height, source_frames));
                 sprite.orm = sprite
                     .orm
                     .as_ref()
-                    .map(|buf| reorder_companion(buf, &order, frame_height, source_frames));
+                    .map(|buf| reorder_companion(buf, &unique_order, frame_height, source_frames));
                 sprite.aux = sprite
                     .aux
                     .as_ref()
-                    .map(|buf| reorder_companion(buf, &order, frame_height, source_frames));
-                sprite.frame_count = order.len() as u32;
+                    .map(|buf| reorder_companion(buf, &unique_order, frame_height, source_frames));
+                sprite.frame_count = unique_order.len() as u32;
             }
 
             if let Some(metadata) = sprite.metadata.as_mut() {
-                metadata.frames = None;
+                metadata.frames = remapped_frames;
             }
             sprite
         })
         .collect()
 }
 
-/// Returns the frame indices to play, or `None` when the sprite keeps file order.
+/// Computes `(unique_source_indices, remapped_schedule)` matching `SpriteContents.uniqueFrames`.
 ///
-/// An out-of-range index invalidates the whole list: playing a truncated sequence would silently
-/// shorten the animation.
-fn playback_order(sprite: &DecodedSprite) -> Option<Vec<u32>> {
+/// Returns `None` when the sprite has no `frames` override or no valid frame entries.
+fn compute_unique_frame_plan(
+    sprite: &DecodedSprite,
+) -> Option<(Vec<u32>, Option<Vec<AnimationFrame>>)> {
     let frames = sprite.metadata.as_ref()?.frames.as_ref()?;
     if frames.is_empty() || sprite.frame_count == 0 {
         return None;
     }
-    let order: Vec<u32> = frames.iter().map(|frame| frame.index()).collect();
-    if order.iter().any(|&index| index >= sprite.frame_count) {
+
+    let valid: Vec<AnimationFrame> = frames
+        .iter()
+        .filter(|frame| {
+            let valid_idx = frame.index() < sprite.frame_count;
+            let valid_time = match frame {
+                AnimationFrame::Index(_) => true,
+                AnimationFrame::Detailed { time, .. } => *time > 0,
+            };
+            valid_idx && valid_time
+        })
+        .cloned()
+        .collect();
+
+    if valid.is_empty() {
         return None;
     }
-    Some(order)
+
+    let mut seen = HashSet::new();
+    let mut unique_indices = Vec::new();
+    let mut index_remap = HashMap::new();
+    for frame in &valid {
+        let orig = frame.index();
+        if seen.insert(orig) {
+            let new_idx = unique_indices.len() as u32;
+            unique_indices.push(orig);
+            index_remap.insert(orig, new_idx);
+        }
+    }
+
+    let remapped: Vec<AnimationFrame> = valid
+        .into_iter()
+        .map(|frame| match frame {
+            AnimationFrame::Index(idx) => AnimationFrame::Index(index_remap[&idx]),
+            AnimationFrame::Detailed { index, time } => AnimationFrame::Detailed {
+                index: index_remap[&index],
+                time,
+            },
+        })
+        .collect();
+
+    let is_sequential = remapped.len() == unique_indices.len()
+        && remapped
+            .iter()
+            .enumerate()
+            .all(|(i, f)| matches!(f, AnimationFrame::Index(idx) if *idx == i as u32));
+
+    let final_frames = if is_sequential { None } else { Some(remapped) };
+    Some((unique_indices, final_frames))
 }
 
 fn reorder_strip(source: &RgbaBuffer, order: &[u32], frame_height: u32) -> RgbaBuffer {
@@ -321,7 +362,7 @@ fn reorder_companion(
 fn separate_static_and_anim_sprites(
     sprites: Vec<DecodedSprite>,
 ) -> (Vec<DecodedSprite>, Vec<DecodedSprite>) {
-    let sprites = apply_animation_frame_order(sprites);
+    let sprites = compact_animation_unique_frames(sprites);
     let mut static_sprites = Vec::with_capacity(sprites.len());
     let mut anim_sprites = Vec::new();
 

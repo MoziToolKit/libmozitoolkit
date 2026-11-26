@@ -1,8 +1,9 @@
 //! `.png.mcmeta` can list its frames explicitly (`frames: [2, 0, 1]`), including repeats.
 //!
-//! The atlas bakes every animation as a vertical strip and the host plays it top to bottom, so the
-//! strip must already be in *playback* order. Parsing `frames` and then ignoring it plays the
-//! animation in file order, which is wrong for any pack that reorders or repeats frames.
+//! Matching `Minecraft_Source/.../SpriteContents.java` (`uniqueFrames`), the baked strip keeps
+//! only unique referenced frames (ordered by first appearance so frame 0 is the first played
+//! frame) instead of physically duplicating ping-pong / repeated frames. When the schedule differs
+//! from simple sequential `0..N-1`, `animation.frames` preserves the remapped playback indices.
 
 use mtk_resource::{AnimationFrame, AnimationMetadata, ResourceLocation};
 use mtk_texture::{
@@ -91,13 +92,14 @@ fn explicit_frame_order_is_baked_into_the_strip() {
     assert_eq!(
         frames,
         vec![BLUE, RED, GREEN],
-        "the strip must follow `frames`, not file order"
+        "the strip must follow first-appearance `frames`, not file order"
     );
 }
 
 #[test]
-fn repeated_frames_are_repeated_in_the_strip() {
-    // Four entries over a three-frame source: the strip (and the frame count) must grow.
+fn repeated_frames_deduplicate_strip_and_preserve_schedule() {
+    // Four playback steps over three unique frames: strip keeps 3 unique frames (no duplicates),
+    // while `animation.frames` preserves the remapped 4-step schedule.
     let baked = AtlasBuilder::new(AtlasBuilderConfig::production(512, 512, 0))
         .build_from_sprites_with_category(
             vec![animated_sprite(
@@ -123,23 +125,38 @@ fn repeated_frames_are_repeated_in_the_strip() {
         .find(|chunk| chunk.chunk_id == loc.chunk_id)
         .expect("chunk");
     assert_eq!(
-        loc.frame_count, 4,
-        "the played animation is longer than the image"
+        loc.frame_count, 3,
+        "strip must contain only the 3 unique frames"
     );
     assert_eq!(
         loc.strip_pixel_rect[3],
-        4 * 16,
-        "strip must hold every entry"
+        3 * 16,
+        "strip height must cover only unique frames"
     );
 
-    let sampled: Vec<[u8; 4]> = (0..4)
+    let sampled: Vec<[u8; 4]> = (0..3)
         .map(|frame| {
             let py = loc.strip_pixel_rect[1] + frame * 16 + 8;
             let px = chunk.albedo.get_pixel(loc.strip_pixel_rect[0] + 8, py);
             [px[0], px[1], px[2], px[3]]
         })
         .collect();
-    assert_eq!(sampled, vec![RED, BLUE, RED, GREEN]);
+    assert_eq!(sampled, vec![RED, BLUE, GREEN]);
+
+    let schedule = loc
+        .animation
+        .as_ref()
+        .and_then(|m| m.frames.as_ref())
+        .expect("repeated playback schedule must be preserved");
+    assert_eq!(
+        schedule,
+        &vec![
+            AnimationFrame::Index(0),
+            AnimationFrame::Index(1),
+            AnimationFrame::Index(0),
+            AnimationFrame::Index(2),
+        ]
+    );
 }
 
 #[test]
@@ -177,10 +194,9 @@ fn static_slot_uses_the_first_played_frame() {
     );
 }
 
-/// After the bake the strip *is* the playback order, so the exported metadata must not ask the
-/// host to reorder again.
+/// When `frames` has no repeats, the compacted strip *is* the playback order, so `frames` is cleared.
 #[test]
-fn baked_metadata_no_longer_lists_frames() {
+fn non_repeating_reordered_metadata_drops_redundant_frames() {
     let baked = AtlasBuilder::new(AtlasBuilderConfig::production(512, 512, 0))
         .build_from_sprites_with_category(
             vec![animated_sprite(
@@ -198,7 +214,7 @@ fn baked_metadata_no_longer_lists_frames() {
     assert_eq!(loc.frame_count, 2);
     assert!(
         animation.frames.is_none(),
-        "the strip is already reordered; leaving `frames` would make a host apply it twice"
+        "the strip is already reordered without repeats; leaving `frames` is redundant"
     );
     assert_eq!(animation.frametime, 2, "timing must survive the reorder");
 }

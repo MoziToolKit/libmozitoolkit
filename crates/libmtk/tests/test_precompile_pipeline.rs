@@ -277,3 +277,85 @@ fn precompile_oversized_animated_sprite_falls_back_to_static_with_warning() {
 
     let _ = fs::remove_dir_all(&temp_cache_dir);
 }
+
+#[test]
+fn precompile_filters_catchall_non_block_directories_from_blocks_json() {
+    let mut stack = ResourcePackStack::new();
+    let mut pack = MemoryPack::new("YuushyaStylePack");
+
+    let mk_png = |rgba: [u8; 4], w: u32, h: u32| -> Vec<u8> {
+        let img = image::RgbaImage::from_pixel(w, h, image::Rgba(rgba));
+        let mut out = Vec::new();
+        img.write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
+            .unwrap();
+        out
+    };
+
+    pack.insert(
+        "assets/minecraft/textures/block/stone.png",
+        mk_png([120, 120, 120, 255], 16, 16),
+    );
+    pack.insert(
+        "assets/minecraft/textures/entity/zombie/zombie.png",
+        mk_png([0, 180, 0, 255], 64, 64),
+    );
+    pack.insert(
+        "assets/minecraft/textures/misc/cpr.png",
+        mk_png([255, 255, 255, 255], 64, 64),
+    );
+    pack.insert(
+        "assets/minecraft/textures/misc/pt.png",
+        mk_png([200, 100, 50, 255], 16, 16),
+    );
+    pack.insert(
+        "assets/minecraft/textures/item/apple.png",
+        mk_png([255, 0, 0, 255], 16, 16),
+    );
+    pack.insert(
+        "assets/minecraft/models/block/monitor.json",
+        br##"{"textures":{"screen":"minecraft:misc/pt"},"elements":[{"from":[0,0,0],"to":[16,16,16],"faces":{"north":{"texture":"#screen"}}}]}"##.to_vec(),
+    );
+    pack.insert(
+        "assets/minecraft/atlases/blocks.json",
+        br#"{
+            "sources": [
+                {"type": "minecraft:directory", "source": "block", "prefix": "block/"},
+                {"type": "minecraft:directory", "source": "entity", "prefix": "entity/"},
+                {"type": "minecraft:directory", "source": "misc", "prefix": "misc/"},
+                {"type": "minecraft:directory", "source": "item", "prefix": "item/"}
+            ]
+        }"#
+        .to_vec(),
+    );
+    stack.push_pack(Box::new(pack));
+
+    let temp_cache_dir =
+        std::env::temp_dir().join(format!("mtk_test_blocks_hygiene_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&temp_cache_dir);
+
+    let res = precompile_all_assets(&stack, &temp_cache_dir, &PrecompileConfig::default())
+        .expect("precompile");
+    let reader = AssetCacheReader::open(&res.package_path).unwrap();
+    let mapping = reader.load_atlas_mapping().unwrap();
+
+    // Unreferenced misc/cpr must NOT be swept into blocks; model-referenced misc/pt MUST be kept.
+    assert!(mapping.lookup_str("minecraft:misc/cpr").is_none());
+    assert_eq!(
+        mapping.lookup_str("minecraft:misc/pt").unwrap().category,
+        "blocks"
+    );
+    // Dedicated items and entities atlases must keep their own sprites.
+    assert_eq!(
+        mapping.lookup_str("minecraft:item/apple").unwrap().category,
+        "items"
+    );
+    assert_eq!(
+        mapping
+            .lookup_str("minecraft:entity/zombie/zombie")
+            .unwrap()
+            .category,
+        "entities"
+    );
+
+    let _ = fs::remove_dir_all(&temp_cache_dir);
+}

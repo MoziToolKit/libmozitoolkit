@@ -8,4 +8,3 @@ pub use alpha::{batch_analyze_transparent_faces_f32, sample_alpha_f32, SampleMod
 pub use buffer::RgbaBuffer;
 pub use loader::DecodedSprite;
 pub(crate) use padding::apply_edge_clamping_padding;
-pub(crate) use palette::bake_paletted_permutation;
