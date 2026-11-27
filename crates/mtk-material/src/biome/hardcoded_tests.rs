@@ -154,3 +154,26 @@ fn test_unit_cube_tint_indices() {
     let stone_indices = get_unit_cube_tint_indices("stone");
     assert_eq!(stone_indices, [-1; 6]);
 }
+
+#[test]
+fn test_numeric_variant_suffix_tint_classification() {
+    assert_eq!(
+        classify_tint_category("grass_block_top_0", None, None),
+        "grass"
+    );
+    assert_eq!(
+        classify_tint_category("grass_block_top_12", None, None),
+        "grass"
+    );
+    assert_eq!(
+        classify_tint_category("tall_grass_top_0", None, None),
+        "grass"
+    );
+    assert_eq!(classify_tint_category("fern_0", None, None), "grass");
+    assert_eq!(
+        classify_tint_category("lily_pad_0", None, None),
+        "hardcoded"
+    );
+    assert_eq!(get_hardcoded_tint_hex("lily_pad_0"), Some("#208030"));
+    assert_eq!(classify_tint_category("stone_0", None, None), "none");
+}

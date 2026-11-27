@@ -132,7 +132,7 @@ pub enum MtkError {
 ---
 
 ### 2.6 资产预编译缓存格式规范 (`ASSET_CACHE_FORMAT_VERSION`)
-由 `libmtk::prebake` 产出的资产预编译缓存容器结构受全局版本号严格约束（当前：`ASSET_CACHE_FORMAT_VERSION = 16`，场景包：`SCENE_PACKAGE_FORMAT_VERSION = 9`，同步协议：`PROTOCOL_VERSION = 4`，Python 握手 API：`API_VERSION = 4`）：
+由 `libmtk::prebake` 产出的资产预编译缓存容器结构受全局版本号严格约束（当前：`ASSET_CACHE_FORMAT_VERSION = 17`，场景包：`SCENE_PACKAGE_FORMAT_VERSION = 9`，同步协议：`PROTOCOL_VERSION = 4`，Python 握手 API：`API_VERSION = 4`）：
 ```
 cache_output_dir/
 ├── cache_manifest.json     # 全局清单、时间戳、CRC 校验与版本号

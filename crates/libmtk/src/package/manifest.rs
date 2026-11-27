@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// Bump whenever the baked payloads change meaning (geometry, atlas layout, manifest layout): old
 /// packages are rejected rather than served.
+/// v17: `BiomeResolver` registers tinted variant textures via blockstate ownership & parent chains,
+///      and `ResourcePackStack` resolves per-pack vanilla renamed assets (`grass`/`short_grass`, `chain`/`iron_chain`).
 /// v16: `uniqueFrames` animated strips (no duplicate ping-pong frames), MaxRects atlas packing,
 ///      per-category atlas isolation, and non-block catch-all directory filtering in `blocks.json`.
 /// v15: `BakedObjFace` stores pre-mapped Atlas UVs, chunk/texture IDs, and declarative OBJ/composite models.
@@ -24,7 +26,7 @@ use serde::{Deserialize, Serialize};
 ///      neighbour sprite; sprite rects and UVs are unchanged.
 /// v11: unified manifest (scene fields are present but defaulted).
 /// v10: chest up/down faces carry the corrected v orientation; copper/ender sheet selection.
-pub const ASSET_CACHE_FORMAT_VERSION: u32 = 16;
+pub const ASSET_CACHE_FORMAT_VERSION: u32 = 17;
 
 /// Payload revision of a scene interchange package.
 ///

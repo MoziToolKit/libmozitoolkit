@@ -312,6 +312,16 @@ pub fn is_water(stem: &str) -> bool {
         || s.contains("bubble_column")
 }
 
+/// Strips a trailing `_<digits>` alternate-texture variant suffix (e.g. `grass_block_top_0` -> `grass_block_top`).
+fn strip_numeric_variant_suffix(stem: &str) -> Option<&str> {
+    let (prefix, suffix) = stem.rsplit_once('_')?;
+    if !prefix.is_empty() && !suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_digit()) {
+        Some(prefix)
+    } else {
+        None
+    }
+}
+
 /// Retrieve the hardcoded hex string for a block or texture stem, if any.
 pub(crate) fn get_hardcoded_tint_hex(name: &str) -> Option<&'static str> {
     let clean = name.trim().to_ascii_lowercase();
@@ -321,6 +331,13 @@ pub(crate) fn get_hardcoded_tint_hex(name: &str) -> Option<&'static str> {
     for &(k, hex) in HARDCODED_BLOCK_TINTS {
         if k == stem {
             return Some(hex);
+        }
+    }
+    if let Some(base) = strip_numeric_variant_suffix(stem) {
+        for &(k, hex) in HARDCODED_BLOCK_TINTS {
+            if k == base {
+                return Some(hex);
+            }
         }
     }
     None
@@ -396,18 +413,21 @@ pub(crate) fn classify_tint_category(
         return "hardcoded";
     }
 
-    // 4. Canonical known stems
-    if KNOWN_DRY_FOLIAGE_STEMS.contains(&s_stem) {
-        return "dry_foliage";
-    }
-    if KNOWN_GRASS_STEMS.contains(&s_stem) {
-        return "grass";
-    }
-    if KNOWN_FOLIAGE_STEMS.contains(&s_stem) {
-        return "foliage";
-    }
-    if KNOWN_WATER_STEMS.contains(&s_stem) {
-        return "water";
+    // 4. Canonical known stems (including resource-pack numeric variant suffixes such as `grass_block_top_0`)
+    let stem_candidates = [Some(s_stem), strip_numeric_variant_suffix(s_stem)];
+    for cand in stem_candidates.into_iter().flatten() {
+        if KNOWN_DRY_FOLIAGE_STEMS.contains(&cand) {
+            return "dry_foliage";
+        }
+        if KNOWN_GRASS_STEMS.contains(&cand) {
+            return "grass";
+        }
+        if KNOWN_FOLIAGE_STEMS.contains(&cand) {
+            return "foliage";
+        }
+        if KNOWN_WATER_STEMS.contains(&cand) {
+            return "water";
+        }
     }
 
     // 5. Heuristic fallback for leaves

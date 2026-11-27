@@ -80,9 +80,15 @@ impl ResourcePackStack {
         &self,
         asset_path: &str,
     ) -> Result<Option<(usize, Vec<u8>)>, ResourceError> {
+        let alias_path = vanilla_renamed_asset_path_alias(asset_path);
         for (idx, pack) in self.packs.iter().enumerate() {
             if let Some(bytes) = pack.open(asset_path)? {
                 return Ok(Some((idx, bytes)));
+            }
+            if let Some(ref alias) = alias_path {
+                if let Some(bytes) = pack.open(alias)? {
+                    return Ok(Some((idx, bytes)));
+                }
             }
             if let Some(filter) = pack.filter() {
                 if is_filtered_asset_path(filter, asset_path) {
@@ -102,14 +108,26 @@ impl ResourcePackStack {
         let Some(pack) = self.packs.get(pack_idx) else {
             return Ok(None);
         };
-        pack.open(asset_path)
+        if let Some(bytes) = pack.open(asset_path)? {
+            return Ok(Some(bytes));
+        }
+        if let Some(alias) = vanilla_renamed_asset_path_alias(asset_path) {
+            return pack.open(&alias);
+        }
+        Ok(None)
     }
 
     /// Returns the name of the highest-priority pack providing `asset_path`, respecting `pack.filter()`.
     pub fn find_asset_pack_name(&self, asset_path: &str) -> Option<String> {
+        let alias_path = vanilla_renamed_asset_path_alias(asset_path);
         for pack in &self.packs {
             if matches!(pack.open(asset_path), Ok(Some(_))) {
                 return Some(pack.name().to_string());
+            }
+            if let Some(ref alias) = alias_path {
+                if matches!(pack.open(alias), Ok(Some(_))) {
+                    return Some(pack.name().to_string());
+                }
             }
             if let Some(filter) = pack.filter() {
                 if is_filtered_asset_path(filter, asset_path) {
@@ -339,6 +357,37 @@ fn asset_path_location(asset_path: &str) -> Option<ResourceLocation> {
     Some(ResourceLocation::new(namespace, path))
 }
 
+/// Maps a vanilla renamed asset path (`grass` <-> `short_grass`, `chain` <-> `iron_chain`)
+/// to its cross-version peer path under `assets/minecraft/`.
+///
+/// Only applies to exact canonical vanilla paths (`blockstates`, `models/block`, `models/item`,
+/// `textures/block`, `textures/item`) so higher-priority 1.20.x packs override lower-priority
+/// 1.21+/26.x vanilla assets cleanly without affecting non-renamed resources.
+fn vanilla_renamed_asset_path_alias(asset_path: &str) -> Option<String> {
+    const PREFIXES: &[(&str, &[&str])] = &[
+        ("assets/minecraft/blockstates/", &[".json"]),
+        ("assets/minecraft/models/block/", &[".json"]),
+        ("assets/minecraft/models/item/", &[".json"]),
+        ("assets/minecraft/textures/block/", &[".png.mcmeta", ".png"]),
+        ("assets/minecraft/textures/item/", &[".png.mcmeta", ".png"]),
+    ];
+
+    for &(prefix, suffixes) in PREFIXES {
+        let Some(rest) = asset_path.strip_prefix(prefix) else {
+            continue;
+        };
+        for &suffix in suffixes {
+            if let Some(stem) = rest.strip_suffix(suffix) {
+                if !stem.contains('/') {
+                    let alias = crate::identifier::vanilla_renamed_block_alias(stem)?;
+                    return Some(format!("{prefix}{alias}{suffix}"));
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Whether `filter` hides `asset_path` (paths outside `assets/` are never filtered).
 fn is_filtered_asset_path(
     filter: &crate::identifier_pattern::ResourceFilterSection,
@@ -391,5 +440,103 @@ fn hash_pack_content(
         hasher.update(entry.path.as_bytes());
         hasher.update(&entry.size.to_le_bytes());
         hasher.update(&entry.modified_secs.to_le_bytes());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pack::source::PackContentEntry;
+
+    struct MemoryPack {
+        name: String,
+        files: BTreeMap<String, Vec<u8>>,
+    }
+
+    impl ResourcePack for MemoryPack {
+        fn name(&self) -> &str {
+            &self.name
+        }
+        fn open(&self, asset_path: &str) -> Result<Option<Vec<u8>>, ResourceError> {
+            Ok(self.files.get(asset_path).cloned())
+        }
+        fn list_files(&self, prefix: &str) -> Vec<String> {
+            self.files
+                .keys()
+                .filter(|k| k.starts_with(prefix))
+                .cloned()
+                .collect()
+        }
+        fn content_entries(&self) -> Vec<PackContentEntry> {
+            Vec::new()
+        }
+    }
+
+    #[test]
+    fn test_per_pack_vanilla_rename_alias_override() {
+        let mut legacy_pack = MemoryPack {
+            name: "legacy_1_20".into(),
+            files: BTreeMap::new(),
+        };
+        legacy_pack.files.insert(
+            "assets/minecraft/blockstates/grass.json".into(),
+            b"legacy_grass_bs".to_vec(),
+        );
+        legacy_pack.files.insert(
+            "assets/minecraft/textures/block/chain.png".into(),
+            b"legacy_chain_png".to_vec(),
+        );
+
+        let mut modern_vanilla = MemoryPack {
+            name: "vanilla_26".into(),
+            files: BTreeMap::new(),
+        };
+        modern_vanilla.files.insert(
+            "assets/minecraft/blockstates/short_grass.json".into(),
+            b"vanilla_short_grass_bs".to_vec(),
+        );
+        modern_vanilla.files.insert(
+            "assets/minecraft/models/block/short_grass.json".into(),
+            b"vanilla_short_grass_model".to_vec(),
+        );
+        modern_vanilla.files.insert(
+            "assets/minecraft/textures/block/iron_chain.png".into(),
+            b"vanilla_iron_chain_png".to_vec(),
+        );
+
+        let mut stack = ResourcePackStack::new();
+        stack.append_pack(Box::new(legacy_pack));
+        stack.append_pack(Box::new(modern_vanilla));
+
+        // High-priority 1.20 pack's `grass.json` overrides vanilla `short_grass.json`
+        assert_eq!(
+            stack
+                .open_asset_raw("assets/minecraft/blockstates/short_grass.json")
+                .unwrap()
+                .as_deref(),
+            Some(b"legacy_grass_bs".as_slice())
+        );
+        // High-priority 1.20 pack's `chain.png` overrides vanilla `iron_chain.png`
+        assert_eq!(
+            stack
+                .open_asset_raw("assets/minecraft/textures/block/iron_chain.png")
+                .unwrap()
+                .as_deref(),
+            Some(b"legacy_chain_png".as_slice())
+        );
+        // Missing `models/block/grass.json` falls back to vanilla `models/block/short_grass.json`
+        assert_eq!(
+            stack
+                .open_asset_raw("assets/minecraft/models/block/grass.json")
+                .unwrap()
+                .as_deref(),
+            Some(b"vanilla_short_grass_model".as_slice())
+        );
+        assert_eq!(
+            stack
+                .find_asset_pack_name("assets/minecraft/textures/block/iron_chain.png")
+                .as_deref(),
+            Some("legacy_1_20")
+        );
     }
 }
